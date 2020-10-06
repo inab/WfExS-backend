@@ -1,7 +1,13 @@
 import shutil
 import zipfile
+import platform
 
 from urllib import request
+
+if platform.system() == "Darwin":
+    import ssl
+
+    ssl._create_default_https_context = ssl._create_unverified_context
 
 
 class WF:
