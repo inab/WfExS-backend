@@ -19,7 +19,6 @@ import os
 from lib.workflow import WF
 
 if __name__ == '__main__':
-
     current_path = os.getcwd() + "/"
 
     # workflow proprieties
@@ -31,10 +30,10 @@ if __name__ == '__main__':
     wf = WF(id, version_id, descriptor_type)
 
     # download RO-Crate from WorkflowHub
-    wf.downloadROcrate(current_path)
+    # wf.downloadROcrate(current_path)
 
-    # unzip RO-Crate
-    wf.unzipROcrate(current_path)
+    # unzip RO-Crate to current path
+    # wf.unzipROcrate(current_path)
 
-    # download main workflow from RO-Crate
+    # download main workflow and his repository from RO-Crate
     wf.downloadWorkflow(current_path)
