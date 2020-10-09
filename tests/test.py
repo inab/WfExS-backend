@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import absolute_import
 
 import os
 
@@ -22,18 +23,18 @@ if __name__ == '__main__':
     current_path = os.getcwd() + "/"
 
     # workflow proprieties
-    id = 126
+    id = 119
     version_id = 1
-    descriptor_type = "NFL"  # Nextflow
+    descriptor_type = "CWL"
 
     # workflow object
     wf = WF(id, version_id, descriptor_type)
 
     # download RO-Crate from WorkflowHub
-    # wf.downloadROcrate(current_path)
+    wf.downloadROcrate(current_path)
 
     # unzip RO-Crate to current path
-    # wf.unzipROcrate(current_path)
+    wf.unzipROcrate(current_path)
 
     # download main workflow and his repository from RO-Crate
     wf.downloadWorkflow(current_path)
