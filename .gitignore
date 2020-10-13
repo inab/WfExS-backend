@@ -1,6 +1,7 @@
 # Environments
-.env
-.venv
+.env/
+.venv/
+.py*[eE]nv/
 env/
 venv/
 ENV/
@@ -11,3 +12,8 @@ venv.bak/
 __pycache__/
 
 .idea/
+
+# setuptools leftovers
+build/
+dist/
+*.egg-info/

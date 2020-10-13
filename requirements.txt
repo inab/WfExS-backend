@@ -1,2 +1,3 @@
+pyyaml
 GitPython
 git+https://github.com/inab/ro-crate-py.git

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 # Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
 #
@@ -13,29 +14,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import sys
 
-sys.path.insert(1, os.path.abspath(".."))
+__author__ = 'Laura Rodriguez-Navas <https://orcid.org/0000-0003-4929-1219>, José M. Fernández <https://orcid.org/0000-0002-4806-5140>'
+__copyright__ = '© 2020 Barcelona Supercomputing Center (BSC), ES'
+__license__ = 'Apache 2.0'
 
-from wes_backend.workflow import WF
-
-if __name__ == '__main__':
-    current_path = os.getcwd() + "/"
-
-    # workflow proprieties
-    id = 119
-    version_id = 1
-    descriptor_type = "CWL"
-
-    # workflow object
-    wf = WF(id, version_id, descriptor_type)
-
-    # download RO-Crate from WorkflowHub
-    wf.downloadROcrate(current_path)
-
-    # unzip RO-Crate to current path
-    wf.unzipROcrate(current_path)
-
-    # download main workflow and his repository from RO-Crate
-    wf.downloadWorkflow(current_path)
+# https://www.python.org/dev/peps/pep-0396/
+__version__ = '0.0.1'

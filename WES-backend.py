@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 # Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
 #
@@ -13,29 +14,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import sys
 
-sys.path.insert(1, os.path.abspath(".."))
+import sys
+import os
+import argparse
+import yaml
+# We have preference for the C based loader and dumper, but the code
+# should fallback to default implementations when C ones are not present
+try:
+	from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
+except ImportError:
+	from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from wes_backend.workflow import WF
 
-if __name__ == '__main__':
-    current_path = os.getcwd() + "/"
-
-    # workflow proprieties
-    id = 119
-    version_id = 1
-    descriptor_type = "CWL"
-
-    # workflow object
-    wf = WF(id, version_id, descriptor_type)
-
-    # download RO-Crate from WorkflowHub
-    wf.downloadROcrate(current_path)
-
-    # unzip RO-Crate to current path
-    wf.unzipROcrate(current_path)
-
-    # download main workflow and his repository from RO-Crate
-    wf.downloadWorkflow(current_path)
+if __name__ == "__main__":
+	ap = argparse.ArgumentParser(description="WES backend")
+	ap.add_argument('-C','--config',dest="configFilename",required=True,help="Configuration file, describing workflow, inputs and needed credentials")
+	args = ap.parse_args()

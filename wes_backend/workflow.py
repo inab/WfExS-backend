@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 # Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
 #
@@ -38,7 +39,10 @@ class WF:
     filename = "crate.zip"
     root_url = "https://dev.workflowhub.eu/ga4gh/trs/v2/tools/"  # the root of GA4GH TRS API
     rocrate_path = "/ro/"
-
+    
+    def __init__(self,config):
+        
+    
     def __init__(self, id, version_id, descriptor_type):
         """
         Init function
