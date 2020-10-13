@@ -37,27 +37,43 @@ class WF:
     """
 
     filename = "crate.zip"
-    root_url = "https://dev.workflowhub.eu/ga4gh/trs/v2/tools/"  # the root of GA4GH TRS API
+    DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/tools/"  # the root of GA4GH TRS API
     rocrate_path = "/ro/"
     
-    def __init__(self,config):
-        
+    @classmethod
+    def fromDescription(cls,config):
+        return cls(
+            config['workflow_id'],
+            config['version'],
+            descriptor_type=config.get('workflow_type'),
+            trs_endpoint=config.get('trs_endpoint',cls.DEFAULT_TRS_ENDPOINT),
+            params=config.get('params',{})
+        )
     
-    def __init__(self, id, version_id, descriptor_type):
+    def __init__(self, id, version_id, descriptor_type=None,trs_endpoint=DEFAULT_TRS_ENDPOINT,params={}):
         """
         Init function
 
-        :param id: A unique identifier of the workflow
-        :param version_id: An identifier of the workflow version
+        :param id: A unique identifier of the workflow. Although it is an integer in WorkflowHub,
+        we cannot assume it is so in all the GA4GH TRS implementations which are exposing workflows.
+        :param version_id: An identifier of the workflow version. Although it is an integer in
+        WorkflowHub, we cannot assume the format of the version id, as it could follow semantic
+        versioning, providing an UUID, etc...
         :param descriptor_type: The type of descriptor that represents this version of the workflow
-        (e.g. CWL, WDL, NFL, or GALAXY)
-        :type id: int
-        :type version_id: int
+        (e.g. CWL, WDL, NFL, or GALAXY). It is optional, so it is guessed from
+        the calls to the API
+        :param trs_endpoint: The TRS endpoint used to find the workflow
+        :param params: Optional params for the workflow execution
+        :type id: str
+        :type version_id: str
         :type descriptor_type: str
+        :type trs_endpoint: str
+        :type params: dict
         """
         self.id = id
         self.version_id = version_id
         self.descriptor_type = descriptor_type
+        self.trs_endpoint = trs_endpoint
 
     def downloadROcrate(self, path):
         """
@@ -68,7 +84,7 @@ class WF:
         :type path: str
         """
         try:
-            endpoint = "{}{}/versions/{}/{}/files?format=zip".format(self.root_url, self.id, self.version_id,
+            endpoint = "{}{}/versions/{}/{}/files?format=zip".format(self.trs_endpoint, self.id, self.version_id,
                                                                      self.descriptor_type)
 
             with request.urlopen(endpoint) as url_response, open(path + self.filename, "wb") as download_file:
