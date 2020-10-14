@@ -34,14 +34,14 @@ from wes_backend.workflow import WF
 
 if __name__ == "__main__":
 	ap = argparse.ArgumentParser(description="WES backend")
-	ap.add_argument('-C','--config',dest="configFilename",help="Local installation configuration file")
+	ap.add_argument('-L','--local-config',dest="localConfigFilename",help="Local installation configuration file")
 	ap.add_argument('--cache-dir',dest="cacheDir",help="Caching directory")
 	ap.add_argument('-W','--workflow-config',dest="workflowConfigFilename",required=True,help="Configuration file, describing workflow, inputs and needed credentials")
 	args = ap.parse_args()
 	
 	# First, try loading the configuration file
-	if args.configFilename:
-		with open(args.configFilename,"r",encoding="utf-8") as cf:
+	if args.localConfigFilename:
+		with open(args.localConfigFilename,"r",encoding="utf-8") as cf:
 			local_config = yaml.load(cf,Loader=YAMLLoader)
 	else:
 		local_config = {}

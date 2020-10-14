@@ -26,6 +26,7 @@ import atexit
 import shutil
 import urllib.parse
 import json
+import hashlib
 
 from urllib import request
 from rocrate import rocrate
@@ -50,7 +51,21 @@ class WF:
     
     DEFAULT_GIT_CMD = 'git'
     
-    RECOGNIZED_DESCRIPTORS = ['NFL','CWL']
+    WORKFLOW_ENGINES = [
+        {
+            'engine': 'nextflow',
+            'trs_descriptor': 'NFL',
+            'rocrate_programming_language': '#nextflow',
+        },
+        {
+            'engine': 'cwl',
+            'trs_descriptor': 'CWL',
+            'rocrate_programming_language': '#cwl',
+        },
+    ]
+    
+    RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t['trs_descriptor'],t), WORKFLOW_ENGINES))
+    RECOGNIZED_ROCRATE_PROG_LANG = dict(map(lambda t: (t['rocrate_programming_language'],t), WORKFLOW_ENGINES))
     
     @classmethod
     def fromDescription(cls,workflow_config,local_config):
@@ -110,7 +125,7 @@ class WF:
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree,cacheDir)
             
-        self.git_cmd = local_config.get('gitCommand',DEFAULT_GIT_CMD)
+        self.git_cmd = local_config.get('gitCommand',self.DEFAULT_GIT_CMD)
         
         self.cacheDir = cacheDir
         self.cacheWorkflowDir = os.path.join(cacheDir,'wf-cache')
@@ -131,21 +146,27 @@ class WF:
         
         # It is not an absolute URL, so it is being an identifier in the workflow
         if parsedRepoURL.scheme == '':
-            repoURL , repoTag , repoRelDir = self.getWorkflowRepoFromTRS()
+            engineDesc , repoURL , repoTag , repoRelPath = self.getWorkflowRepoFromTRS()
         else:
             repoURL = self.id
             repoTag = self.version_id
-            repoRelDir = None
+            repoRelPath = None
+            engineDesc = None
         
         self.repoURL = repoURL
         self.repoTag = repoTag
+        # It can be either a relative path to a directory or to a file
+        # It could be even empty!
+        if repoRelPath == '':
+            repoRelPath = None
+        self.repoRelPath = repoRelPath
         
-        repoDir = self.doMaterializeRepo(repoURL,repoTag)
-        # This is needed for specific cases
-        if repoRelDir is not None:
-            repoDir = os.path.join(repoDir,repoRelDir)
+        repoDir , repoEngineDesc = self.doMaterializeRepo(repoURL,repoTag)
+        if engineDesc is None:
+            engineDesc = repoEngineDesc
         
         self.repoDir = repoDir
+        self.engineDesc = engineDesc
     
     def setupEngine(self):
         pass
@@ -166,7 +187,7 @@ class WF:
             try:
                 os.makedirs(repo_destdir)
             except IOError as error:
-                errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(repoURL,);
+                errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(repoURL);
                 raise WFException(errstr)
         
         repo_tag_destdir = os.path.join(repo_destdir,repo_hashed_tag_id)
@@ -208,8 +229,9 @@ class WF:
                         
                         errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(repoURL,repoTag,retval,git_stdout_v,git_stderr_v)
                         raise WFException(errstr)
-	 
-        return repo_tag_destdir
+        
+        # TODO: guess engine desc, currently hardcoded
+        return repo_tag_destdir , self.WORKFLOW_ENGINES[0]
     
     def getWorkflowRepoFromTRS(self):
         # First, check the tool does exist in the TRS, and the version
@@ -248,7 +270,7 @@ class WF:
         toolVersionId = self.version_id
         if (toolVersionId is not None) and len(toolVersionId) > 0:
             for possibleToolVersion in possibleToolVersions:
-                if isinstance(possibleToolVersion,dict) and str(possibleToolVersion.get('id','')) == self.version_id;
+                if isinstance(possibleToolVersion,dict) and str(possibleToolVersion.get('id','')) == self.version_id:
                     toolVersion = possibleToolVersion
                     break
             else:
@@ -272,7 +294,7 @@ class WF:
         # Now, realize whether it matches
         chosenDescriptorType = self.descriptor_type
         if chosenDescriptorType is None:
-            for candidateDescriptorType in self.RECOGNIZED_DESCRIPTORS:
+            for candidateDescriptorType in self.RECOGNIZED_TRS_DESCRIPTORS.keys():
                 if candidateDescriptorType in toolDescriptorTypes:
                     chosenDescriptorType = candidateDescriptorType
                     break
@@ -280,28 +302,61 @@ class WF:
                 raise WFException('Version {} of workflow {} from {} has no acknowledged "descriptor_type". Raw answer:\n{}'.format(self.version_id,self.id,self.trs_endpoint,rawToolDesc))
         elif chosenDescriptorType not in toolVersion['descriptor_type']:
             raise WFException('Descriptor type {} not available for version {} of workflow {} from {} . Raw answer:\n{}'.format(self.descriptor_type,self.version_id,self.id,self.trs_endpoint,rawToolDesc))
-        elif chosenDescriptorType not in self.RECOGNIZED_DESCRIPTORS:
+        elif chosenDescriptorType not in self.RECOGNIZED_TRS_DESCRIPTORS:
             raise WFException('Descriptor type {} is not among the acknowledged ones by this backend. Version {} of workflow {} from {} . Raw answer:\n{}'.format(self.descriptor_type,self.version_id,self.id,self.trs_endpoint,rawToolDesc))
         
         
         # And this is the moment where the RO-Crate must be fetched
         roCrateURL = trs_tool_url + '/versions/'+urllib.parse.quote(toolVersionId,safe='')+'/'+urllib.parse.quote(chosenDescriptorType,safe='')+'/files?'+urllib.parse.urlencode({'format': 'zip'})
         
-        return self.getWorkflowRepoFromROCrate(roCrateURL)
+        return self.getWorkflowRepoFromROCrate(roCrateURL,expectedProgrammingLanguage=self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]['rocrate_programming_language'])
     
-    def getWorkflowRepoFromROCrate(self,roCrateURL)
+    def getWorkflowRepoFromROCrate(self,roCrateURL,expectedProgrammingLanguage=None):
         roCrateFile = self.downloadROcrate(roCrateURL)
         roCrateObj = rocrate.ROCrate(roCrateFile)
+        
+        # TODO: get roCrateObj mainEntity programming language
+        # to learn the kind of workflow it holds
+        # Currently hardcoded to something wrong
+        mainEntityProgrammingLanguage = '#FIXME'
+        
+        if mainEntityProgrammingLanguage not in self.RECOGNIZED_ROCRATE_PROG_LANG:
+            raise WFException('Found programming language {} in RO-Crate manifest is not among the acknowledged ones'.format(mainEntityProgrammingLanguage))
+        elif (expectedProgrammingLanguage is not None) and mainEntityProgrammingLanguage!=expectedProgrammingLanguage:
+            raise WFException('Expected programming language {} does not match found one {} in RO-Crate manifest'.format(expectedProgrammingLanguage,mainEntityProgrammingLanguage))
         
         # This workflow URL, in the case of github, can provide the repo,
         # the branch/tag/checkout , and the relative directory in the
         # fetched content (needed by Nextflow)
         wf_url = roCrateObj.root_dataset['isBasedOn']
         
-        # TO BE CONTINUED
+        repoTag = None
+        repoRelPath = None
+        parsed_wf_url = urllib.parse.urlparse(wf_url)
+        if parsed_wf_url.netloc == 'github.com':
+            wf_path = parsed_wf_url.path.split('/')
+            
+            if len(wf_path) >= 3:
+                repoGitPath = parsed_wf_url.path.split('/')[:3]
+                if not repoGitPath[-1].endswith('.git'):
+                    repoGitPath[-1] += '.git'
+                
+                # Rebuilding repo git path
+                repoURL = urllib.parse.urlunparse((parsed_wf_url.scheme,parsed_wf_url.netloc,'/'.join(repoGitPath),'','',''))
+                
+                # And now, guessing the tag and the relative path
+                if len(wf_path) >= 5 and wf_path[3]=='blob':
+                    repoTag = wf_path[4]
+                    
+                    if len(wf_path) >= 6:
+                        repoRelPath = '/'.join(wf_path[5:])
+        else:
+            raise WFException('Unable to guess repository from RO-Crate manifest')
         
-        # It must return three elements:
-        # repoURL , repoTag , repoRelDir
+        # TODO handling other additional cases
+        
+        # It must return four elements:
+        return self.RECOGNIZED_ROCRATE_PROG_LANG[mainEntityProgrammingLanguage] , repoURL , repoTag , repoRelPath
         
     def downloadROcrate(self, roCrateURL):
         """
