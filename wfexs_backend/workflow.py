@@ -201,7 +201,7 @@ class WF:
         :return:
         """
         repo_hashed_id = hashlib.sha1(repoURL.encode('utf-8')).hexdigest()
-        repo_hashed_tag_id = hashlib.sha1(repoTag.encode('utf-8')).hexdigest()
+        repo_hashed_tag_id = hashlib.sha1(b''  if repoTag is None  else repoTag.encode('utf-8')).hexdigest()
 
         # Assure directory exists before next step
         repo_destdir = os.path.join(self.cacheWorkflowDir, repo_hashed_id)
@@ -216,14 +216,22 @@ class WF:
         # We are assuming that, if the directory does exist, it contains the repo
         if not os.path.exists(repo_tag_destdir):
             # Try cloning the repository without initial checkout
-            gitclone_params = [
-                self.git_cmd, 'clone', '-n', '--recurse-submodules', repoURL, repo_tag_destdir
-            ]
+            if repoTag is not None:
+                gitclone_params = [
+                    self.git_cmd, 'clone', '-n', '--recurse-submodules', repoURL, repo_tag_destdir
+                ]
 
-            # Now, checkout the specific commit
-            gitcheckout_params = [
-                self.git_cmd, 'checkout', repoTag
-            ]
+                # Now, checkout the specific commit
+                gitcheckout_params = [
+                    self.git_cmd, 'checkout', repoTag
+                ]
+            else:
+                # We know nothing about the tag, or checkout
+                gitclone_params = [
+                    self.git_cmd, 'clone','--recurse-submodules', repoURL, repo_tag_destdir
+                ]
+                
+                gitcheckout_params = None
 
             # Last, initialize submodules
             gitsubmodule_params = [
@@ -232,10 +240,10 @@ class WF:
 
             with tempfile.NamedTemporaryFile() as git_stdout:
                 with tempfile.NamedTemporaryFile() as git_stderr:
-                    # First, bare clone
+                    # First, (bare) clone
                     retval = subprocess.call(gitclone_params, stdout=git_stdout, stderr=git_stderr)
-                    # Then, checkout
-                    if retval == 0:
+                    # Then, checkout (which can be optional)
+                    if retval == 0 and (gitcheckout_params is not None):
                         retval = subprocess.Popen(gitcheckout_params, stdout=git_stdout, stderr=git_stderr,
                                                   cwd=repo_tag_destdir).wait()
                     # Last, submodule preparation
