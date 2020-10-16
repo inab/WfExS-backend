@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(1, os.path.abspath(".."))
 
-from wes_backend.workflow import WF
+from wfexs_backend.workflow import WF
 
 if __name__ == '__main__':
     current_path = os.getcwd() + "/"
@@ -29,13 +29,13 @@ if __name__ == '__main__':
     descriptor_type = "CWL"
 
     # workflow object
-    wf = WF(id, version_id, descriptor_type)
+    wf = WF(id, str(version_id), descriptor_type)
 
     # download RO-Crate from WorkflowHub
-    wf.downloadROcrate(current_path)
+    wf.downloadROcrate("https://dev.workflowhub.eu/ga4gh/trs/v2/tools/")
 
     # unzip RO-Crate to current path
-    wf.unzipROcrate(current_path)
+    # wf.unzipROcrate(current_path)
 
     # download main workflow and his repository from RO-Crate
-    wf.downloadWorkflow(current_path)
+    # wf.downloadWorkflow(current_path)

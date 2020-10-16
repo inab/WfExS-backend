@@ -23,43 +23,41 @@ import sys
 # In this way, we are sure we are getting
 # the installer's version of the library
 # not the system's one
-sys.path.insert(0,os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(__file__))
 
-from wes_backend import __version__ as wes_backend_version
-from wes_backend import __author__ as wes_backend_author
-from wes_backend import __copyright__ as wes_backend_copyright
-from wes_backend import __license__ as wes_backend_license
+from wfexs_backend import __version__ as wfexs_backend_version
+from wfexs_backend import __author__ as wfexs_backend_author
+from wfexs_backend import __license__ as wfexs_backend_license
 
 # Populating the long description
 with open("README.md", "r") as fh:
-	long_description = fh.read()
+    long_description = fh.read()
 
 # Populating the install requirements
 with open('requirements.txt') as f:
-	requirements = []
-	egg = re.compile(r"#[^#]*egg=([^=&]+)")
-	for line in f.read().splitlines():
-		m = egg.search(line)
-		requirements.append(line  if m is None  else m.group(1))
-
+    requirements = []
+    egg = re.compile(r"#[^#]*egg=([^=&]+)")
+    for line in f.read().splitlines():
+        m = egg.search(line)
+        requirements.append(line if m is None else m.group(1))
 
 setuptools.setup(
-	name="wes_backend",
-	version=wes_backend_version,
-	scripts=["WES-backend.py"],
-	author=wes_backend_author,
-	author_email="lrodrin@users.noreply.github.com",
-	license=wes_backend_license,
-	description="Workflow Execution Service backend",
-	long_description=long_description,
-	long_description_content_type="text/markdown",
-	url="https://github.com/inab/WES-backend",
-	packages=setuptools.find_packages(),
-	install_requires=requirements,
-	classifiers=[
-		"Programming Language :: Python :: 3",
-		"Development Status :: 3 - Alpha",
-		"License :: OSI Approved :: Apache Software License",
-		"Operating System :: OS Independent",
-	],
+    name="wfexs_backend",
+    version=wfexs_backend_version,
+    scripts=["WfExS-backend.py"],
+    author=wfexs_backend_author,
+    author_email="lrodrin@users.noreply.github.com",
+    license=wfexs_backend_license,
+    description="Workflow Execution Service backend",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/inab/WfExS-backend",
+    packages=setuptools.find_packages(),
+    install_requires=requirements,
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "Development Status :: 3 - Alpha",
+        "License :: OSI Approved :: Apache Software License",
+        "Operating System :: OS Independent",
+    ],
 )

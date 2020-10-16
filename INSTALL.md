@@ -1,4 +1,4 @@
-# Installing the WES backend
+# Installing the Workflow Execution Service backend
 
 This workflow execution service backend is written for Python 3.6 and later.
 
@@ -13,7 +13,7 @@ This workflow execution service backend is written for Python 3.6 and later.
 python3 -m venv .pyWEenv
 source .pyWEenv/bin/activate
 pip install --upgrade pip wheel
-pip install -r requirements.txt -c constraints.txt
+pip install -r requirements.txt
 ```
 
 * If you upgrade your Python installation (from version 3.6 to 3.7, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.

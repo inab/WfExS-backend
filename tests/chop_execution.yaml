@@ -1,6 +1,0 @@
-trs_endpoint: https://dev.workflowhub.eu/ga4gh/trs/v2/tools/
-workflow_id: 119
-version: 1
-# All the inputs must be URLs or CURIEs from identifiers.org
-params:
-# TO BE FINISHED
