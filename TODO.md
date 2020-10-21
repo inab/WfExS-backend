@@ -1,6 +1,6 @@
 # TODO
 
-- [ ] Paso 0: conseguir materializar workflows (Nextflow o CWL) a partir de 
+- [x] Paso 0: conseguir materializar workflows (Nextflow o CWL) a partir de 
 WorkflowHub. Eso significa descargar el RO-Crate que proporcione WorkflowHub 
 (usando la TRS API de WorkflowHub) para descargar el workflow.
 
