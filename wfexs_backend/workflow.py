@@ -25,10 +25,8 @@ import platform
 import shutil
 import subprocess
 import tempfile
-import urllib.parse
 
-from urllib import request
-
+from urllib import request, parse
 from rocrate import rocrate
 
 if platform.system() == "Darwin":
@@ -47,9 +45,7 @@ class WF:
     """
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
-    DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/tools/"  # the root of GA4GH TRS API
-    # rocrate_path = "/ro/"
-
+    DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/tools/"  # root of GA4GH TRS API
     DEFAULT_GIT_CMD = 'git'
     WORKFLOW_ENGINES = [
         {
@@ -72,11 +68,11 @@ class WF:
         """
         
         :param workflow_config: The configuration describing both the workflow
-        and the inputs to use when it is being instantiated
-        :param local_config: Relevant local configuration, like the cache directory
+        and the inputs to use when it is being instantiated.
+        :param local_config: Relevant local configuration, like the cache directory.
         :type workflow_config: dict
         :type local_config: dict
-        :return:
+        :return: workflow configuration
         """
         return cls(
             workflow_config['workflow_id'],
@@ -96,12 +92,11 @@ class WF:
         we cannot assume it is so in all the GA4GH TRS implementations which are exposing workflows.
         :param version_id: An identifier of the workflow version. Although it is an integer in
         WorkflowHub, we cannot assume the format of the version id, as it could follow semantic
-        versioning, providing an UUID, etc...
+        versioning, providing an UUID, etc.
         :param descriptor_type: The type of descriptor that represents this version of the workflow
-        (e.g. CWL, WDL, NFL, or GALAXY). It is optional, so it is guessed from
-        the calls to the API
-        :param trs_endpoint: The TRS endpoint used to find the workflow
-        :param params: Optional params for the workflow execution
+        (e.g. CWL, WDL, NFL, or GALAXY). It is optional, so it is guessed from the calls to the API.
+        :param trs_endpoint: The TRS endpoint used to find the workflow.
+        :param params: Optional params for the workflow execution.
         :type workflow_id: str
         :type version_id: str
         :type descriptor_type: str
@@ -131,7 +126,7 @@ class WF:
         if cacheDir:
             os.makedirs(cacheDir, exist_ok=True)
         else:
-            cacheDir = tempfile.mkdtemp(prefix='wes', suffix='backend')
+            cacheDir = tempfile.mkdtemp(prefix='wfexs', suffix='backend')
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, cacheDir)
 
@@ -142,6 +137,8 @@ class WF:
         os.makedirs(self.cacheWorkflowDir, exist_ok=True)
         self.cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
         os.makedirs(self.cacheROCrateDir, exist_ok=True)
+        self.cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
+        os.makedirs(self.cacheWorkflowInputsDir, exist_ok=True)
 
         self.repoURL = None
         self.repoTag = None
@@ -156,9 +153,9 @@ class WF:
         
         If the workflow id is an URL, it is supposed to be a git repository,
         and the version will represent either the branch, tag or specific commit.
-        So, the whole TRS fetching machinery is bypassed
+        So, the whole TRS fetching machinery is bypassed.
         """
-        parsedRepoURL = urllib.parse.urlparse(self.id)
+        parsedRepoURL = parse.urlparse(self.id)
 
         # It is not an absolute URL, so it is being an identifier in the workflow
         if parsedRepoURL.scheme == '':
@@ -178,6 +175,8 @@ class WF:
         self.repoRelPath = repoRelPath
 
         repoDir, repoEngineDesc = self.doMaterializeRepo(repoURL, repoTag)
+        print("materialized workflow repository: {}".format(repoDir))
+
         if engineDesc is None:
             engineDesc = repoEngineDesc
 
@@ -188,7 +187,30 @@ class WF:
         pass
 
     def fetchInputs(self):
-        pass
+        """
+        Fetch the input files for the workflow execution.
+        All the inputs must be URLs or CURIEs from identifiers.org.
+        """
+        # Assure workflow inputs directory exists before the next step
+        workflowInputs_destdir = self.cacheWorkflowInputsDir
+        if not os.path.exists(workflowInputs_destdir):
+            try:
+                os.makedirs(workflowInputs_destdir)
+            except IOError:
+                errstr = "ERROR: Unable to create directory for workflow inputs {}.".format(workflowInputs_destdir)
+                raise WFException(errstr)
+
+        params = self.params.items() if isinstance(self.params, dict) else enumerate(self.params)
+        for key, inputs in params:
+            if isinstance(inputs, dict):
+                if "class" in inputs.keys() and inputs['class'] == "File":  # input files
+                    remote_file = inputs['url']
+                    if isinstance(remote_file, list):  # more than one input file
+                        for file in remote_file:
+                            self.downloadInputFile(file)
+                    else:
+                        self.downloadInputFile(remote_file)
+        print("downloaded workflow input files")
 
     def executeWorkflow(self):
         pass
@@ -201,7 +223,7 @@ class WF:
         :return:
         """
         repo_hashed_id = hashlib.sha1(repoURL.encode('utf-8')).hexdigest()
-        repo_hashed_tag_id = hashlib.sha1(b''  if repoTag is None  else repoTag.encode('utf-8')).hexdigest()
+        repo_hashed_tag_id = hashlib.sha1(b'' if repoTag is None else repoTag.encode('utf-8')).hexdigest()
 
         # Assure directory exists before next step
         repo_destdir = os.path.join(self.cacheWorkflowDir, repo_hashed_id)
@@ -228,9 +250,9 @@ class WF:
             else:
                 # We know nothing about the tag, or checkout
                 gitclone_params = [
-                    self.git_cmd, 'clone','--recurse-submodules', repoURL, repo_tag_destdir
+                    self.git_cmd, 'clone', '--recurse-submodules', repoURL, repo_tag_destdir
                 ]
-                
+
                 gitcheckout_params = None
 
             # Last, initialize submodules
@@ -272,7 +294,7 @@ class WF:
         :return:
         """
         # First, check the tool does exist in the TRS, and the version
-        trs_tool_url = urllib.parse.urljoin(self.trs_endpoint, urllib.parse.quote(self.id, safe=''))
+        trs_tool_url = parse.urljoin(self.trs_endpoint, parse.quote(self.id, safe=''))
 
         # The original bytes
         response = b''
@@ -360,9 +382,9 @@ class WF:
                     self.descriptor_type, self.version_id, self.id, self.trs_endpoint, rawToolDesc))
 
         # And this is the moment where the RO-Crate must be fetched
-        roCrateURL = trs_tool_url + '/versions/' + urllib.parse.quote(toolVersionId,
-                                                                      safe='') + '/' + urllib.parse.quote(
-            chosenDescriptorType, safe='') + '/files?' + urllib.parse.urlencode({'format': 'zip'})
+        roCrateURL = trs_tool_url + '/versions/' + parse.quote(toolVersionId,
+                                                               safe='') + '/' + parse.quote(
+            chosenDescriptorType, safe='') + '/files?' + parse.urlencode({'format': 'zip'})
 
         return self.getWorkflowRepoFromROCrate(roCrateURL,
             expectedProgrammingLanguage=self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]['rocrate_programming_language'])
@@ -375,15 +397,17 @@ class WF:
         :return:
         """
         roCrateFile = self.downloadROcrate(roCrateURL)
+        print("downloaded RO-Crate: {}".format(roCrateFile))
         roCrateObj = rocrate.ROCrate(roCrateFile)
 
         # TODO: get roCrateObj mainEntity programming language
         # print(roCrateObj.root_dataset.as_jsonld())
-        mainEntityProgrammingLanguage = None
-        for e in roCrateObj.get_entities():
-            if e['@type'] == "ComputerLanguage":
-                mainEntityProgrammingLanguage = e['@id']
-                break
+        mainEntityProgrammingLanguage = roCrateObj.get_entities()[5]['@id']  # ComputerLanguage
+        # mainEntityProgrammingLanguage = None
+        # for e in roCrateObj.get_entities():
+        #     if e['@type'] == "ComputerLanguage":
+        #         mainEntityProgrammingLanguage = e['@id']
+        #         break
 
         if mainEntityProgrammingLanguage not in self.RECOGNIZED_ROCRATE_PROG_LANG:
             raise WFException(
@@ -402,7 +426,7 @@ class WF:
         repoURL = None
         repoTag = None
         repoRelPath = None
-        parsed_wf_url = urllib.parse.urlparse(wf_url)
+        parsed_wf_url = parse.urlparse(wf_url)
         if parsed_wf_url.netloc == 'github.com':
             wf_path = parsed_wf_url.path.split('/')
 
@@ -412,7 +436,7 @@ class WF:
                     repoGitPath[-1] += '.git'
 
                 # Rebuilding repo git path
-                repoURL = urllib.parse.urlunparse(
+                repoURL = parse.urlunparse(
                     (parsed_wf_url.scheme, parsed_wf_url.netloc, '/'.join(repoGitPath), '', '', ''))
 
                 # And now, guessing the tag and the relative path
@@ -432,8 +456,7 @@ class WF:
     def downloadROcrate(self, roCrateURL):
         """
         Download RO-crate from WorkflowHub (https://dev.workflowhub.eu/)
-        using GA4GH TRS API and save RO-Crate in path
-        It returns the 
+        using GA4GH TRS API and save RO-Crate in path.
 
         :param roCrateURL: location path to save RO-Crate
         :type roCrateURL: str
@@ -450,63 +473,25 @@ class WF:
 
         return cachedFilename
 
-    # def unzipROcrate(self, path):
-    #     """
-    #     Unzip RO-crate to rocrate_path
-    #
-    #     :param path: location path of RO-Crate zip file
-    #     :type path: str
-    #     """
-    #     try:
-    #         with zipfile.ZipFile(path + self.filename, "r") as zip_file:
-    #             zip_file.extractall(path + self.rocrate_path)
-    #
-    #     except Exception as e:
-    #         raise Exception("Cannot unzip RO-Crate, {}".format(e))
+    def downloadInputFile(self, remote_file):
+        """
+        Download remote file.
 
-    # def downloadWorkflow(self, path):
-    #     """
-    #     Download main workflow and his repository from RO-Crate
-    #
-    #     :param path: location path of RO-Crate folder
-    #     :type path: str
-    #     """
-    #     global wf_url_raw
-    #     try:
-    #         # Create RO-Crate
-    #         ro_crate = rocrate.ROCrate(path + self.rocrate_path, load_preview=False)
-    #
-    #         # Save main URL workflow from RO-Crate
-    #         wf_url = ro_crate.root_dataset['isBasedOn']
-    #         wf_url_str = wf_url.replace(wf_url.split("/")[5] + "/", "")  # removed blob str
-    #
-    #         if "github" in wf_url:  # main workflow from Github
-    #             wf_url_raw = wf_url_str.replace("https://github.com", "https://raw.githubusercontent.com")
-    #
-    #         # download main workflow
-    #         with request.urlopen(wf_url_raw) as url_response, open(os.path.basename(wf_url_raw), "wb") as download_file:
-    #             shutil.copyfileobj(url_response, download_file)
-    #
-    #         # download main workflow repository
-    #         self.downloadRepository(path, wf_url_str)
-    #
-    #     except Exception as e:
-    #         raise Exception("Cannot download main workflow, {}".format(e))
+        :param remote_file: URL or CURIE to download remote file
+        :type remote_file: str
+        """
+        parsedInputURL = parse.urlparse(remote_file)
 
-    # def downloadRepository(self, path, url_repo):
-    #     """
-    #     Download GitHub repository of main workflow specified by url_repo
-    #
-    #     :param path: location path to save the repository
-    #     :param url_repo: URL of main workflow
-    #     :type path: str
-    #     :type url_repo: str
-    #     """
-    #     try:
-    #         repo_name = url_repo.split("/")[4]
-    #         branch_name = url_repo.split("/")[5]
-    #         repo = url_repo.split(branch_name)[0][:-1] + ".git"
-    #         git.Repo.clone_from(repo, path + repo_name, branch=branch_name)
-    #
-    #     except Exception as e:
-    #         raise Exception("Cannot download GitHub repository, {}".format(e))
+        if not all([parsedInputURL.scheme, parsedInputURL.netloc, parsedInputURL.path]):
+            raise RuntimeError("Input is not a valid remote URL or CURIE source")
+
+        else:
+            input_file = os.path.basename(remote_file)
+            cachedFilename = os.path.join(self.cacheWorkflowInputsDir, input_file)
+            print("downloading workflow input file: {}".format(cachedFilename))
+            if not os.path.exists(cachedFilename):
+                try:
+                    with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
+                        shutil.copyfileobj(url_response, download_file)
+                except Exception as e:
+                    raise WFException("Cannot download input file, {}".format(e))

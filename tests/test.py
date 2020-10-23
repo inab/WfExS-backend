@@ -24,18 +24,12 @@ if __name__ == '__main__':
     current_path = os.getcwd() + "/"
 
     # workflow proprieties
-    id = 119
+    id = 126
     version_id = 1
     descriptor_type = "CWL"
 
     # workflow object
-    wf = WF(id, str(version_id), descriptor_type)
+    wf = WF(str(id), str(version_id), descriptor_type)
 
     # download RO-Crate from WorkflowHub
     wf.downloadROcrate("https://dev.workflowhub.eu/ga4gh/trs/v2/tools/")
-
-    # unzip RO-Crate to current path
-    # wf.unzipROcrate(current_path)
-
-    # download main workflow and his repository from RO-Crate
-    # wf.downloadWorkflow(current_path)
