@@ -25,6 +25,7 @@ import platform
 import shutil
 import subprocess
 import tempfile
+import types
 
 from urllib import request, parse
 from rocrate import rocrate
@@ -34,9 +35,42 @@ if platform.system() == "Darwin":
 
     ssl._create_default_https_context = ssl._create_unverified_context
 
+from collections import namedtuple
+
+MaterializedContent = namedtuple('MaterializedContent',['local','uri','prettyFilename'])
+MaterializedInput = namedtuple('MaterializedInput',['name','values'])
+
+
 
 class WFException(Exception):
     pass
+
+
+def fetchClassicURL(remote_file,cachedFilename,secContext=None):
+    """
+    Method to fetch contents from http, https and ftp
+    """
+    try:
+        if isinstance(secContext,dict):
+            username = secContext.get('username')
+            password = secContext.get('password')
+            if username is not None:
+                if password is None:
+                    password = ''
+                
+                # Time to set up user and password in URL
+                parsedInputURL = parse.urlparse(remote_file)
+                
+                netloc = parse.quote(username,safe='') + ':' + parse.quote(password,safe='') + '@' + parsedInputURL.hostname
+                if parsedInputURL.port is not None:
+                    netloc += ':' + parsedInputURL.port
+                
+                # Now the credentials are properly set up
+                remote_file = parse.urlunparse((parsedInputURL.scheme,netloc,parsedInputURL.path,parsedInputURL.params,parsedInputURL.query,parsedInputURL.fragment))
+        with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
+            shutil.copyfileobj(url_response, download_file)
+    except Exception as e:
+        raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
 
 
 class WF:
@@ -62,9 +96,15 @@ class WF:
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t['trs_descriptor'], t), WORKFLOW_ENGINES))
     RECOGNIZED_ROCRATE_PROG_LANG = dict(map(lambda t: (t['rocrate_programming_language'], t), WORKFLOW_ENGINES))
+    
+    DEFAULT_SCHEME_HANDLERS = {
+        'http': fetchClassicURL,
+        'https': fetchClassicURL,
+        'ftp': fetchClassicURL,
+    }
 
     @classmethod
-    def fromDescription(cls, workflow_config, local_config):
+    def fromDescription(cls, workflow_config, local_config, creds_config={}):
         """
         
         :param workflow_config: The configuration describing both the workflow
@@ -80,11 +120,12 @@ class WF:
             descriptor_type=workflow_config.get('workflow_type'),
             trs_endpoint=workflow_config.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_config.get('params', {}),
-            local_config=local_config
+            local_config=local_config,
+            creds_config=creds_config
         )
 
     def __init__(self, workflow_id, version_id, descriptor_type=None, trs_endpoint=DEFAULT_TRS_ENDPOINT, params=None,
-                 local_config=None):
+                 local_config=None, creds_config=None):
         """
         Init function
 
@@ -97,16 +138,23 @@ class WF:
         (e.g. CWL, WDL, NFL, or GALAXY). It is optional, so it is guessed from the calls to the API.
         :param trs_endpoint: The TRS endpoint used to find the workflow.
         :param params: Optional params for the workflow execution.
+        :param local_config: Local setup configuration, telling where caching directories live
+        :param creds_config: Dictionary with the different credential contexts (to be implemented)
         :type workflow_id: str
         :type version_id: str
         :type descriptor_type: str
         :type trs_endpoint: str
         :type params: dict
+        :type local_config: dict
+        :type creds_config: dict
         """
-        if local_config is None:
+        if not isinstance(local_config,dict):
             local_config = {}
+        
+        if not isinstance(creds_config,dict):
+            creds_config = {}
 
-        if params is None:
+        if not isinstance(params,dict):
             params = {}
 
         self.id = str(workflow_id)
@@ -114,6 +162,7 @@ class WF:
         self.descriptor_type = descriptor_type
         self.params = params
         self.local_config = local_config
+        self.creds_config = creds_config
 
         # The endpoint should always end with a slash
         if isinstance(trs_endpoint, str) and trs_endpoint[-1] != '/':
@@ -139,12 +188,16 @@ class WF:
         os.makedirs(self.cacheROCrateDir, exist_ok=True)
         self.cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
         os.makedirs(self.cacheWorkflowInputsDir, exist_ok=True)
+        
+        self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
 
         self.repoURL = None
         self.repoTag = None
         self.repoRelPath = None
         self.repoDir = None
         self.engineDesc = None
+        
+        self.materializedParams = None
 
     def fetchWorkflow(self):
         """
@@ -185,37 +238,63 @@ class WF:
 
     def setupEngine(self):
         pass
-
-    def fetchInputs(self):
+    
+    def addSchemeHandler(self,scheme,handler):
+        if not isinstance(handler,(types.FunctionType,types.LambdaType,types.MethodType,types.BuiltinFunctionType,types.BuiltinMethodType)):
+            raise WFException('Trying to set for scheme {} a invalid handler'.format(scheme))
+        
+        self.schemeHandlers[scheme.lower()] = handler
+    
+    def materializeInputs(self):
+        theParams = self.fetchInputs(self.params,workflowInputs_destdir=self.cacheWorkflowInputsDir)
+        self.materializedParams = theParams
+    
+    def fetchInputs(self, params, workflowInputs_destdir=None,prefix=''):
         """
         Fetch the input files for the workflow execution.
         All the inputs must be URLs or CURIEs from identifiers.org.
         """
-        # Assure workflow inputs directory exists before the next step
-        workflowInputs_destdir = self.cacheWorkflowInputsDir
-        if not os.path.exists(workflowInputs_destdir):
-            try:
-                os.makedirs(workflowInputs_destdir)
-            except IOError:
-                errstr = "ERROR: Unable to create directory for workflow inputs {}.".format(workflowInputs_destdir)
-                raise WFException(errstr)
-
-        params = self.params.items() if isinstance(self.params, dict) else enumerate(self.params)
-        for key, inputs in params:
+        theInputs = []
+        
+        paramsIter = params.items() if isinstance(params, dict) else enumerate(params)
+        for key, inputs in paramsIter:
+            # We are here for the 
+            linearKey = prefix+key
             if isinstance(inputs, dict):
-                if "class" in inputs.keys() and inputs['class'] == "File":  # input files
-                    remote_file = inputs['url']
-                    if isinstance(remote_file, list):  # more than one input file
-                        for file in remote_file:
-                            self.downloadInputFile(file)
+                inputClass = inputs.get('c-l-a-s-s')
+                if inputClass is not None:
+                    if inputClass == "File":  # input files
+                        remote_files = inputs['url']
+                        if not isinstance(remote_files, list):  # more than one input file
+                            remote_files = [ remote_files ]
+                        
+                        remote_pairs = []
+                        for remote_file in remote_files:
+                            # We are sending the context name thinking in the future,
+                            # as it could contain potential hints for authenticated access
+                            contextName = inputs.get('security-context')
+                            matContent = self.downloadInputFile(remote_file,workflowInputs_destdir=workflowInputs_destdir,contextName=contextName)
+                            remote_pairs.append(matContent)
+                        
+                        theInputs.append(MaterializedInput(linearKey ,remote_pairs))
                     else:
-                        self.downloadInputFile(remote_file)
+                        raise WFException('Unrecognized input class "{}"'.format(inputClass))
+                else:
+                    # possible nested files
+                    theInputs.extend(self.fetchInputs(inputs,workflowInputs_destdir=workflowInputs_destdir,prefix=linearKey+'.'))
+            else:
+                if not isinstance(inputs,list):
+                    inputs = [ inputs ]
+                theInputs.append(MaterializedInput(linearKey,inputs))
+        
         print("downloaded workflow input files")
+        
+        return theInputs
 
     def executeWorkflow(self):
         pass
 
-    def doMaterializeRepo(self, repoURL, repoTag):
+    def doMaterializeRepo(self, repoURL, repoTag=None):
         """
 
         :param repoURL:
@@ -473,7 +552,7 @@ class WF:
 
         return cachedFilename
 
-    def downloadInputFile(self, remote_file):
+    def downloadInputFile(self, remote_file, workflowInputs_destdir=None, contextName=None) -> MaterializedContent:
         """
         Download remote file.
 
@@ -486,12 +565,38 @@ class WF:
             raise RuntimeError("Input is not a valid remote URL or CURIE source")
 
         else:
-            input_file = os.path.basename(remote_file)
-            cachedFilename = os.path.join(self.cacheWorkflowInputsDir, input_file)
-            print("downloading workflow input file: {}".format(cachedFilename))
-            if not os.path.exists(cachedFilename):
+            input_file = hashlib.sha1(remote_file.encode('utf-8')).hexdigest()
+            
+            prettyFilename = parsedInputURL.path.split('/')[-1]
+            
+            # Assure workflow inputs directory exists before the next step
+            if workflowInputs_destdir is None:
+                workflowInputs_destdir = self.cacheWorkflowInputsDir
+            
+            if not os.path.exists(workflowInputs_destdir):
                 try:
-                    with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
-                        shutil.copyfileobj(url_response, download_file)
-                except Exception as e:
-                    raise WFException("Cannot download input file, {}".format(e))
+                    os.makedirs(workflowInputs_destdir)
+                except IOError:
+                    errstr = "ERROR: Unable to create directory for workflow inputs {}.".format(workflowInputs_destdir)
+                    raise WFException(errstr)
+            
+            cachedFilename = os.path.join(self.cacheWorkflowInputsDir, input_file)
+            print("downloading workflow input: {} => {}".format(remote_file,cachedFilename))
+            if not os.path.exists(cachedFilename):
+                theScheme = parsedInputURL.scheme.lower()
+                schemeHandler = self.schemeHandlers.get(theScheme)
+                
+                if schemeHandler is None:
+                    raise WFException('No {} scheme handler for {}'.format(theScheme,remote_file))
+                
+                # Security context is obtained here
+                secContext = None
+                if contextName is not None:
+                    secContext = self.creds_config.get(contextName)
+                    if secContext is None:
+                        raise WFException('No security context {} is available, needed by {}'.format(contextName,remote_file))
+                
+                # Content is fetched here
+                schemeHandler(remote_file,cachedFilename,secContext=secContext)
+            
+            return MaterializedContent(cachedFilename,remote_file,prettyFilename)

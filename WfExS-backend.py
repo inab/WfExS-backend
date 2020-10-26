@@ -37,7 +37,9 @@ if __name__ == "__main__":
     ap.add_argument('-L', '--local-config', dest="localConfigFilename", help="Local installation configuration file")
     ap.add_argument('--cache-dir', dest="cacheDir", help="Caching directory")
     ap.add_argument('-W', '--workflow-config', dest="workflowConfigFilename", required=True,
-                    help="Configuration file, describing workflow, inputs and needed credentials")
+                    help="Configuration file, describing workflow and inputs")
+    ap.add_argument('-Z', '--creds-config', dest="securityContextsConfigFilename",
+                    help="Configuration file, describing security contexts, which hold credentials and similar")
     args = ap.parse_args()
 
     # First, try loading the configuration file
@@ -62,10 +64,22 @@ if __name__ == "__main__":
 
     with open(args.workflowConfigFilename, "r", encoding="utf-8") as wcf:
         workflow_config = yaml.load(wcf, Loader=YAMLLoader)
-
-    wfInstance = WF.fromDescription(workflow_config, local_config)
+    
+    # Last, try loading the security contexts credentials file
+    if args.securityContextsConfigFilename:
+        with open(args.securityContextsConfigFilename, "r", encoding="utf-8") as scf:
+            creds_config = yaml.load(scf, Loader=YAMLLoader)
+    else:
+        creds_config = {}
+    
+    wfInstance = WF.fromDescription(workflow_config, local_config, creds_config)
 
     wfInstance.fetchWorkflow()
     wfInstance.setupEngine()
-    wfInstance.fetchInputs()
+    wfInstance.materializeInputs()
+    
+    # These two lines should be commented out once code is near production
+    import pprint
+    pprint.pprint(wfInstance.materializedParams)
+    
     wfInstance.executeWorkflow()
