@@ -27,12 +27,7 @@ from typing import Dict, List, Tuple
 from collections import namedtuple
 
 WorkflowType = namedtuple('WorkflowType',['name','class','uri'])
-
-Container = namedtuple('Container',['name','tag','signature','type'])
-# Symbolic name or identifier of the container
-# Symbolic name or identifier of the tag
-# Signature of the container (sha256 or similar)
-# Container type
+from .container import Container, ContainerFactory
 
 class WorkflowEngineException(Exception):
     """
@@ -68,8 +63,7 @@ class WorkflowEngine(abc.ABC):
         # generic caching directory, with the name of the class
         self.wfCacheDir = os.path.join(cacheDir,self.__class__.__name__)
         
-        # But, for materialized containers, we should use a common directory
-        self.containersCacheDir = os.path.join(cacheDir,'containers')
+        self.usedContainers = None
     
     @abc.abstractclassmethod
     def WorkflowType(cls) -> WorkflowType:
@@ -118,14 +112,18 @@ class WorkflowEngine(abc.ABC):
         pass
     
     @abc.abstractmethod
-    def getEffectiveListOfContainers(self) -> List[str]:
+    def getEffectiveListOfContainers(self) -> List[Container]:
         """
-        Method to get the list of containers used by the workflow.
+        Method to get the list of containers used by the workflow engine
+        after the execution.
         """
         
-        pass
+        return self.usedContainers
     
-    def materializeContainers(self):
+    def materializeContainers(self, containersList = None):
+        if containersList is None:
+            containersList = self.getListOfContainers()
+        
         # TODO
         
         pass
