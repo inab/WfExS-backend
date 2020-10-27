@@ -33,7 +33,7 @@ except ImportError:
 from wfexs_backend.workflow import WF
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="WES backend")
+    ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend")
     ap.add_argument('-L', '--local-config', dest="localConfigFilename", help="Local installation configuration file")
     ap.add_argument('--cache-dir', dest="cacheDir", help="Caching directory")
     ap.add_argument('-W', '--workflow-config', dest="workflowConfigFilename", required=True,
