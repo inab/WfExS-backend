@@ -26,8 +26,9 @@ import enum
 from typing import Dict, List, Tuple
 from collections import namedtuple
 
-WorkflowType = namedtuple('WorkflowType',['name','class','uri'])
+WorkflowType = namedtuple('WorkflowType', ['name', 'class', 'uri'])
 from .container import Container, ContainerFactory
+
 
 class WorkflowEngineException(Exception):
     """
@@ -35,20 +36,25 @@ class WorkflowEngineException(Exception):
     """
     pass
 
+
 class WorkflowEngine(abc.ABC):
-    def __init__(self,entrypoint,cacheDir=None,workflow_config=dict(),local_config=dict()):
+    def __init__(self, entrypoint, cacheDir=None, workflow_config=None, local_config=None):
         """
         Abstract init method
         
         
         """
+        if local_config is None:
+            local_config = dict()
+        if workflow_config is None:
+            workflow_config = dict()
         self.entrypoint = entrypoint
         self.local_config = local_config
-        
+
         # This one may be needed to identify container overrides
         # or specific engine versions
         self.workflow_config = workflow_config
-        
+
         # cacheDir 
         if cacheDir is None:
             cacheDir = local_config.get('cacheDir')
@@ -58,29 +64,30 @@ class WorkflowEngine(abc.ABC):
                 cacheDir = tempfile.mkdtemp(prefix='wes', suffix='backend')
                 # Assuring this temporal directory is removed at the end
                 atexit.register(shutil.rmtree, cacheDir)
-        
+
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
-        self.wfCacheDir = os.path.join(cacheDir,self.__class__.__name__)
-        
+        self.wfCacheDir = os.path.join(cacheDir, self.__class__.__name__)
+
         self.usedContainers = None
-    
-    @abc.abstractclassmethod
+
+    @classmethod
+    @abc.abstractmethod
     def WorkflowType(cls) -> WorkflowType:
         pass
-    
+
     @abc.abstractmethod
     def identifyEngineVersion(self) -> str:
         """
         Method which identifies the version of the workflow engine
         """
         pass
-    
+
     def effectiveEngineVersion(self) -> str:
         """
         Method which reports the concrete version of workflow engine in use
         """
-    
+
     @abc.abstractmethod
     def materializeEngine(self):
         """
@@ -88,18 +95,18 @@ class WorkflowEngine(abc.ABC):
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        
+
         pass
-    
+
     @abc.abstractmethod
     def materializeWorkflow(self):
         """
         Method to ensure the workflow has been materialized.
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
-        
+
         pass
-    
+
     @abc.abstractmethod
     def getListOfContainers(self) -> List[str]:
         """
@@ -108,23 +115,22 @@ class WorkflowEngine(abc.ABC):
         specify it. It lists the ones listed in the workflow, or
         the overriden ones
         """
-        
+
         pass
-    
+
     @abc.abstractmethod
     def getEffectiveListOfContainers(self) -> List[Container]:
         """
         Method to get the list of containers used by the workflow engine
         after the execution.
         """
-        
+
         return self.usedContainers
-    
-    def materializeContainers(self, containersList = None):
+
+    def materializeContainers(self, containersList=None):
         if containersList is None:
             containersList = self.getListOfContainers()
-        
+
         # TODO
-        
+
         pass
-        

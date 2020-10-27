@@ -26,19 +26,22 @@ import enum
 from typing import Dict, List, Tuple
 from collections import namedtuple
 
-Container = namedtuple('Container',['name','tag','signature','type'])
+Container = namedtuple('Container', ['name', 'tag', 'signature', 'type'])
 # Symbolic name or identifier of the container
 # Symbolic name or identifier of the tag
 # Signature of the container (sha256 or similar)
 # Container type
 
+
 class ContainerFactory(abc.ABC):
-    def __init__(self,cacheDir=None,local_config=dict()):
+    def __init__(self, cacheDir=None, local_config=None):
         """
         Abstract init method
         
         
         """
+        if local_config is None:
+            local_config = dict()
         self.local_config = local_config
         
         # cacheDir 
@@ -52,17 +55,16 @@ class ContainerFactory(abc.ABC):
                 atexit.register(shutil.rmtree, cacheDir)
         
         # But, for materialized containers, we should use a common directory
-        self.containersCacheDir = os.path.join(cacheDir,'containers',self.__class__.__name__)
+        self.containersCacheDir = os.path.join(cacheDir, 'containers', self.__class__.__name__)
     
     def getListOfContainers(self):
         # TODO
         return []
     
-    def materializeContainers(self, containersList = None):
+    def materializeContainers(self, containersList=None):
         if containersList is None:
             containersList = self.getListOfContainers()
         
         # TODO
         
         pass
-    
