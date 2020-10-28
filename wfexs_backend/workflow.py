@@ -199,6 +199,7 @@ class WF:
         self.repoTag = None
         self.repoRelPath = None
         self.repoDir = None
+        self.repoEffectiveCheckout = None
         self.engineDesc = None
 
         self.materializedParams = None
@@ -231,8 +232,8 @@ class WF:
             repoRelPath = None
         self.repoRelPath = repoRelPath
 
-        repoDir, repoEngineDesc = self.doMaterializeRepo(repoURL, repoTag)
-        print("materialized workflow repository: {}".format(repoDir))
+        repoDir, repoEffectiveCheckout, repoEngineDesc = self.doMaterializeRepo(repoURL, repoTag)
+        print("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
         
         if repoRelPath is not None:
             if not os.path.exists(os.path.join(repoDir,repoRelPath)):
@@ -242,6 +243,7 @@ class WF:
             engineDesc = repoEngineDesc
 
         self.repoDir = repoDir
+        self.repoEffectiveCheckout = repoEffectiveCheckout
         self.engineDesc = engineDesc
 
     def setupEngine(self):
@@ -375,8 +377,16 @@ class WF:
                             repoURL, repoTag, retval, git_stdout_v, git_stderr_v)
                         raise WFException(errstr)
         
+        # Last, we have to obtain the effective checkout
+        gitrevparse_params = [
+            self.git_cmd, 'rev-parse','--verify','HEAD'
+        ]
+        
+        with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1', cwd=repo_tag_destdir) as revproc:
+            repo_effective_checkout = revproc.stdout.read().rstrip()
+        
         # TODO: guess engine desc, currently hardcoded
-        return repo_tag_destdir, self.WORKFLOW_ENGINES[0]
+        return repo_tag_destdir, repo_effective_checkout, self.WORKFLOW_ENGINES[0]
 
     def getWorkflowRepoFromTRS(self):
         """
