@@ -233,7 +233,11 @@ class WF:
 
         repoDir, repoEngineDesc = self.doMaterializeRepo(repoURL, repoTag)
         print("materialized workflow repository: {}".format(repoDir))
-
+        
+        if repoRelPath is not None:
+            if not os.path.exists(os.path.join(repoDir,repoRelPath)):
+                raise WFException("Relative path {} cannot be found in materialized workflow repository {}".format(repoRelPath,repoDir))
+        
         if engineDesc is None:
             engineDesc = repoEngineDesc
 
@@ -258,7 +262,7 @@ class WF:
     def fetchInputs(self, params, workflowInputs_destdir=None, prefix=''):
         """
         Fetch the input files for the workflow execution.
-        All the inputs must be URLs or CURIEs from identifiers.org.
+        All the inputs must be URLs or CURIEs from identifiers.org / n2t.net .
         """
         theInputs = []
 
@@ -370,7 +374,7 @@ class WF:
                         errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                             repoURL, repoTag, retval, git_stdout_v, git_stderr_v)
                         raise WFException(errstr)
-
+        
         # TODO: guess engine desc, currently hardcoded
         return repo_tag_destdir, self.WORKFLOW_ENGINES[0]
 
