@@ -35,11 +35,7 @@ if platform.system() == "Darwin":
 
     ssl._create_default_https_context = ssl._create_unverified_context
 
-from collections import namedtuple
-
-MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'prettyFilename'])
-MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
-
+from .common import *
 
 class WFException(Exception):
     pass

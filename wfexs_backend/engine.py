@@ -23,10 +23,11 @@ import shutil
 import abc
 import enum
 
+from .common import *
+
 from typing import Dict, List, Tuple
 from collections import namedtuple
 
-WorkflowType = namedtuple('WorkflowType', ['name', 'class', 'uri'])
 from .container import Container, ContainerFactory
 
 
@@ -38,7 +39,7 @@ class WorkflowEngineException(Exception):
 
 
 class WorkflowEngine(abc.ABC):
-    def __init__(self, entrypoint, cacheDir=None, workflow_config=None, local_config=None):
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
         """
         Abstract init method
         
@@ -48,7 +49,6 @@ class WorkflowEngine(abc.ABC):
             local_config = dict()
         if workflow_config is None:
             workflow_config = dict()
-        self.entrypoint = entrypoint
         self.local_config = local_config
 
         # This one may be needed to identify container overrides
@@ -61,76 +61,67 @@ class WorkflowEngine(abc.ABC):
             if cacheDir:
                 os.makedirs(cacheDir, exist_ok=True)
             else:
-                cacheDir = tempfile.mkdtemp(prefix='wes', suffix='backend')
+                cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
                 # Assuring this temporal directory is removed at the end
                 atexit.register(shutil.rmtree, cacheDir)
 
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
         self.wfCacheDir = os.path.join(cacheDir, self.__class__.__name__)
-
-        self.usedContainers = None
-
+    
     @classmethod
     @abc.abstractmethod
     def WorkflowType(cls) -> WorkflowType:
         pass
 
     @abc.abstractmethod
-    def identifyEngineVersion(self) -> str:
+    def identifyWorkflow(self,localWf:LocalWorkflow) -> str:
         """
-        Method which identifies the version of the workflow engine
+        This method should return the effective engine version needed
+        to run it when this workflow engine recognizes the workflow type
         """
         pass
 
-    def effectiveEngineVersion(self) -> str:
-        """
-        Method which reports the concrete version of workflow engine in use
-        """
-
     @abc.abstractmethod
-    def materializeEngine(self):
+    def materializeEngineVersion(self,engineVersion:str) -> str:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-
+        
         pass
+    
+    def materializeEngine(self,localWf:LocalWorkflow) -> MaterializedWorkflowEngine:
+        """
+        Method to ensure the required engine version is materialized
+        It should raise an exception when the exact version is unavailable,
+        and no replacement could be fetched
+        """
+        
+        engineVer = self.identifyWorkflow(localWf)
+        if engineVer is None:
+            return None
+        
+        engineFingerprint = self.materializeEngineVersion(engineVer)
+        
+        return MaterializedWorkflowEngine(self.__class__,engineVer,engineFingerprint)
 
     @abc.abstractmethod
-    def materializeWorkflow(self):
+    def materializeWorkflow(self,localWf:LocalWorkflow) -> Tuple[LocalWorkflow,List[Container]]:
         """
-        Method to ensure the workflow has been materialized.
+        Method to ensure the workflow has been materialized. It returns the 
+        localWorkflow directory, as well as the list of containers
+        
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
-
+        
+        matWorfklowEngine = self.materializeEngine(localWf)
+        if matWorfklowEngine is None:
+            return None
+        
         pass
-
+    
     @abc.abstractmethod
-    def getListOfContainers(self) -> List[str]:
-        """
-        Method to get the list of containers needed by the workflow.
-        As the different workflow languages use different ways to
-        specify it. It lists the ones listed in the workflow, or
-        the overriden ones
-        """
-
-        pass
-
-    @abc.abstractmethod
-    def getEffectiveListOfContainers(self) -> List[Container]:
-        """
-        Method to get the list of containers used by the workflow engine
-        after the execution.
-        """
-
-        return self.usedContainers
-
-    def materializeContainers(self, containersList=None):
-        if containersList is None:
-            containersList = self.getListOfContainers()
-
-        # TODO
-
+    def launchWorkflow(self,localWf:LocalWorkflow,inputs,outputs):
         pass
