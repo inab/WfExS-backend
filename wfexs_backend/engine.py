@@ -42,8 +42,10 @@ class WorkflowEngine(abc.ABC):
     def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
         """
         Abstract init method
-        
-        
+
+        :param cacheDir:
+        :param workflow_config:
+        :param local_config:
         """
         if local_config is None:
             local_config = dict()
@@ -68,14 +70,14 @@ class WorkflowEngine(abc.ABC):
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
         self.wfCacheDir = os.path.join(cacheDir, self.__class__.__name__)
-    
+
     @classmethod
     @abc.abstractmethod
     def WorkflowType(cls) -> WorkflowType:
         pass
 
     @abc.abstractmethod
-    def identifyWorkflow(self,localWf:LocalWorkflow) -> str:
+    def identifyWorkflow(self, localWf: LocalWorkflow) -> str:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -83,45 +85,45 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def materializeEngineVersion(self,engineVersion:str) -> str:
+    def materializeEngineVersion(self, engineVersion: str) -> str:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        
+
         pass
-    
-    def materializeEngine(self,localWf:LocalWorkflow) -> MaterializedWorkflowEngine:
+
+    def materializeEngine(self, localWf: LocalWorkflow) -> MaterializedWorkflowEngine:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        
+
         engineVer = self.identifyWorkflow(localWf)
         if engineVer is None:
             return None
-        
+
         engineFingerprint = self.materializeEngineVersion(engineVer)
-        
-        return MaterializedWorkflowEngine(self.__class__,engineVer,engineFingerprint)
+
+        return MaterializedWorkflowEngine(self.__class__, engineVer, engineFingerprint)
 
     @abc.abstractmethod
-    def materializeWorkflow(self,localWf:LocalWorkflow) -> Tuple[LocalWorkflow,List[Container]]:
+    def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
         
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
-        
+
         matWorfklowEngine = self.materializeEngine(localWf)
         if matWorfklowEngine is None:
             return None
-        
+
         pass
-    
+
     @abc.abstractmethod
-    def launchWorkflow(self,localWf:LocalWorkflow,inputs,outputs):
+    def launchWorkflow(self, localWf: LocalWorkflow, inputs, outputs):
         pass

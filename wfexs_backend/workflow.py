@@ -37,6 +37,7 @@ if platform.system() == "Darwin":
 
 from .common import *
 
+
 class WFException(Exception):
     pass
 
@@ -44,6 +45,10 @@ class WFException(Exception):
 def fetchClassicURL(remote_file, cachedFilename, secContext=None):
     """
     Method to fetch contents from http, https and ftp
+
+    :param remote_file:
+    :param cachedFilename:
+    :param secContext:
     """
     try:
         if isinstance(secContext, dict):
@@ -107,13 +112,15 @@ class WF:
         :param workflow_config: The configuration describing both the workflow
         and the inputs to use when it is being instantiated.
         :param local_config: Relevant local configuration, like the cache directory.
-        :param creds_config:
+        :param creds_config: Dictionary with the different credential contexts (to be implemented)
         :type workflow_config: dict
         :type local_config: dict
-        :return: workflow configuration
+        :type creds_config: dict
+        :return: Workflow configuration
         """
         if creds_config is None:
             creds_config = {}
+
         return cls(
             workflow_config['workflow_id'],
             workflow_config['version'],
@@ -230,11 +237,13 @@ class WF:
 
         repoDir, repoEffectiveCheckout, repoEngineDesc = self.doMaterializeRepo(repoURL, repoTag)
         print("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
-        
+
         if repoRelPath is not None:
-            if not os.path.exists(os.path.join(repoDir,repoRelPath)):
-                raise WFException("Relative path {} cannot be found in materialized workflow repository {}".format(repoRelPath,repoDir))
-        
+            if not os.path.exists(os.path.join(repoDir, repoRelPath)):
+                raise WFException(
+                    "Relative path {} cannot be found in materialized workflow repository {}".format(repoRelPath,
+                                                                                                     repoDir))
+
         if engineDesc is None:
             engineDesc = repoEngineDesc
 
@@ -246,6 +255,11 @@ class WF:
         pass
 
     def addSchemeHandler(self, scheme, handler):
+        """
+
+        :param scheme:
+        :param handler:
+        """
         if not isinstance(handler, (
                 types.FunctionType, types.LambdaType, types.MethodType, types.BuiltinFunctionType,
                 types.BuiltinMethodType)):
@@ -260,7 +274,13 @@ class WF:
     def fetchInputs(self, params, workflowInputs_destdir=None, prefix=''):
         """
         Fetch the input files for the workflow execution.
-        All the inputs must be URLs or CURIEs from identifiers.org / n2t.net .
+        All the inputs must be URLs or CURIEs from identifiers.org / n2t.net.
+
+        :param params: Optional params for the workflow execution.
+        :param workflowInputs_destdir:
+        :param prefix:
+        :type params: dict
+        :type prefix: str
         """
         theInputs = []
 
@@ -372,15 +392,16 @@ class WF:
                         errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                             repoURL, repoTag, retval, git_stdout_v, git_stderr_v)
                         raise WFException(errstr)
-        
+
         # Last, we have to obtain the effective checkout
         gitrevparse_params = [
-            self.git_cmd, 'rev-parse','--verify','HEAD'
+            self.git_cmd, 'rev-parse', '--verify', 'HEAD'
         ]
-        
-        with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1', cwd=repo_tag_destdir) as revproc:
+
+        with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1',
+                              cwd=repo_tag_destdir) as revproc:
             repo_effective_checkout = revproc.stdout.read().rstrip()
-        
+
         # TODO: guess engine desc, currently hardcoded
         return repo_tag_destdir, repo_effective_checkout, self.WORKFLOW_ENGINES[0]
 
@@ -483,7 +504,9 @@ class WF:
             chosenDescriptorType, safe='') + '/files?' + parse.urlencode({'format': 'zip'})
 
         return self.getWorkflowRepoFromROCrate(roCrateURL,
-            expectedProgrammingLanguage=self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]['rocrate_programming_language'])
+                                               expectedProgrammingLanguage=
+                                               self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType][
+                                                   'rocrate_programming_language'])
 
     def getWorkflowRepoFromROCrate(self, roCrateURL, expectedProgrammingLanguage=None):
         """

@@ -22,6 +22,6 @@ from collections import namedtuple
 MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'prettyFilename'])
 MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
 
-LocalWorkflow = namedtuple('LocalWorkflow',['dir','relPath'])
+LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath'])
 WorkflowType = namedtuple('WorkflowType', ['name', 'clazz', 'uri'])
 MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine', ['clazz', 'version', 'fingerprint'])

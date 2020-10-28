@@ -19,6 +19,6 @@ from __future__ import absolute_import
 from .engine import WorkflowEngine, WorkflowEngineException
 
 
-class NextflowWorkflowEngine(WorkflowEngine):
+class CWLWorkflowEngine(WorkflowEngine):
     def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config)
