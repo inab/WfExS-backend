@@ -78,8 +78,10 @@ if __name__ == "__main__":
     wfInstance.setupEngine()
     wfInstance.materializeInputs()
     
-    # These two lines should be commented out once code is near production
-    import pprint
-    pprint.pprint(wfInstance.materializedParams)
+    # These lines should be deleted out once code is near production
+    # import pprint
+    # pprint.pprint(wfInstance.materializedParams)
+    from tests import test
+    test.createYAMLFile(wfInstance.materializedParams)
     
     wfInstance.executeWorkflow()
