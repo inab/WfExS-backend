@@ -17,11 +17,19 @@
 
 from __future__ import absolute_import
 
+import enum
 from collections import namedtuple
 
 DEFAULT_GIT_CMD = 'git'
 DEFAULT_DOCKER_CMD = 'docker'
 DEFAULT_SINGULARITY_CMD = 'singularity'
+DEFAULT_JAVA_CMD = 'java'
+
+class EngineMode(enum.Enum):
+	Local = 'local'
+	Docker = 'docker'
+
+DEFAULT_ENGINE_MODE = EngineMode.Local
 
 MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'prettyFilename'])
 MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
