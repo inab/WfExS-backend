@@ -26,12 +26,7 @@ import enum
 from typing import Dict, List, Tuple
 from collections import namedtuple
 
-Container = namedtuple('Container', ['name', 'tag', 'signature', 'type'])
-# Symbolic name or identifier of the container
-# Symbolic name or identifier of the tag
-# Signature of the container (sha256 or similar)
-# Container type
-
+from .common import *
 
 class ContainerFactory(abc.ABC):
     def __init__(self, cacheDir=None, local_config=None):

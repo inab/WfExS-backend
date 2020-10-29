@@ -45,7 +45,9 @@ class WorkflowEngine(abc.ABC):
 
         :param cacheDir:
         :param workflow_config:
-        :param local_config:
+            This one may be needed to identify container overrides
+            or specific engine versions
+        param local_config:
         """
         if local_config is None:
             local_config = dict()
@@ -77,7 +79,7 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def identifyWorkflow(self, localWf: LocalWorkflow) -> str:
+    def identifyWorkflow(self, localWf: LocalWorkflow) -> EngineVersion:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -85,29 +87,31 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def materializeEngineVersion(self, engineVersion: str) -> str:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> EngineVersion:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-
+        
         pass
 
-    def materializeEngine(self, localWf: LocalWorkflow) -> MaterializedWorkflowEngine:
+    def materializeEngine(self, localWf: LocalWorkflow, engineVersion:EngineVersion = None) -> MaterializedWorkflowEngine:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
+        
+        # This method can be forced to materialize an specific engine version
+        if engineVersion is None:
+            engineVersion = self.identifyWorkflow(localWf)
+            if engineVersion is None:
+                return None
 
-        engineVer = self.identifyWorkflow(localWf)
-        if engineVer is None:
-            return None
+        engineFingerprint = self.materializeEngineVersion(engineVersion)
 
-        engineFingerprint = self.materializeEngineVersion(engineVer)
-
-        return MaterializedWorkflowEngine(self.__class__, engineVer, engineFingerprint)
+        return MaterializedWorkflowEngine(instance=self, version=engineVersion, fingerprint=engineFingerprint, workflow=localWf)
 
     @abc.abstractmethod
     def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
@@ -125,5 +129,5 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def launchWorkflow(self, localWf: LocalWorkflow, inputs, outputs):
+    def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         pass

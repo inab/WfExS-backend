@@ -22,6 +22,24 @@ from collections import namedtuple
 MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'prettyFilename'])
 MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
 
-LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath'])
-WorkflowType = namedtuple('WorkflowType', ['name', 'clazz', 'uri'])
-MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine', ['clazz', 'version', 'fingerprint'])
+LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath','effectiveCheckout'])
+WorkflowType = namedtuple('WorkflowType', ['engine', 'clazz', 'uri','trs_descriptor','rocrate_programming_language'])
+MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine', ['instance', 'version', 'fingerprint','workflow'])
+
+Container = namedtuple('Container', ['name', 'tag', 'signature', 'type'])
+# Symbolic name or identifier of the container
+# Symbolic name or identifier of the tag
+# Signature of the container (sha256 or similar)
+# Container type
+
+# The URL of a git repository containing at least one workflow
+RepoURL = str
+# The tag, branch or hash of a workflow in a git repository
+RepoTag = str
+# This is a relative path
+RelPath = str
+# This is an absolute path
+AbsPath = str
+
+# This is a workflow engine version
+EngineVersion = str
