@@ -39,18 +39,15 @@ class CWLWorkflowEngine(WorkflowEngine):
             rocrate_programming_language='#cwl'
         )
     
-    def identifyWorkflow(self, localWf: LocalWorkflow) -> EngineVersion:
+    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion,LocalWorkflow]:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
         """
         
-        engineVer = None
-        # TODO: Check whether there is a CWL workflow there
-        if True:
-            engineVer = self.DEFAULT_CWLTOOL_VERSION
+        # TODO: Check whether there is a CWL workflow there, and materialize it
         
-        return engineVer
+        return engineVer,localWf
     
     def materializeEngineVersion(self, engineVersion: EngineVersion) -> EngineVersion:
         """

@@ -1,6 +1,8 @@
 cacheDir: /tmp/wfexs-backend-test
 tools:
+  engineMode: local
   gitCommand: git
   dockerCommand: docker
   singularityCommand: singularity
+  javaCommand: java
   

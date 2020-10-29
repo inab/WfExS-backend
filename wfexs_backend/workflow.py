@@ -242,25 +242,25 @@ class WF:
         repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
         localWorkflow = LocalWorkflow(dir=repoDir,relPath=repoRelPath,effectiveCheckout=repoEffectiveCheckout)
         print("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
-        self.localWorkflow = localWorkflow
-
+	
         if repoRelPath is not None:
             if not os.path.exists(os.path.join(repoDir, repoRelPath)):
                 raise WFException(
                     "Relative path {} cannot be found in materialized workflow repository {}".format(repoRelPath,
                                                                                                      repoDir))
         # A valid engine must be identified from the fetched content
+        # TODO: decide whether to force some specific version
         if engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 engine = engineDesc.clazz(cacheDir=self.cacheDir,workflow_config=self.workflow_config,local_config=self.local_config)
-                engineVer = engine.identifyWorkflow(localWorkflow)
+                engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
                 if engineVer is not None:
                     break
             else:
                 raise WFException('No engine recognized a workflow at {}'.format(repoURL))
         else:
             engine = engineDesc.clazz(cacheDir=self.cacheDir,workflow_config=self.workflow_config,local_config=self.local_config)
-            engineVer = engine.identifyWorkflow(localWorkflow)
+            engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException('Engine {} did not recognize a workflow at {}'.format(engine.engine,repoURL))
         
@@ -269,9 +269,9 @@ class WF:
         self.engineDesc = engineDesc
         self.engine = engine
         self.engineVer = engineVer
+        self.localWorkflow = candidateLocalWorkflow
 
     def setupEngine(self):
-        # TODO: decide whether to force some specific version
         self.materializedEngine = self.engine.materializeEngine(self.localWorkflow,self.engineVer)
 
     def addSchemeHandler(self, scheme, handler):

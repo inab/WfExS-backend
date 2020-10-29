@@ -72,6 +72,16 @@ class WorkflowEngine(abc.ABC):
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
         self.wfCacheDir = os.path.join(cacheDir, self.__class__.__name__)
+        
+        # Setting up common properties
+        self.docker_cmd = local_config.get('tools',{}).get('dockerCommand',DEFAULT_DOCKER_CMD)
+        self.singularity_cmd = local_config.get('tools',{}).get('singularityCommand',DEFAULT_SINGULARITY_CMD)
+        engine_mode = local_config.get('tools',{}).get('engineMode')
+        if engine_mode is None:
+            engine_mode = DEFAULT_ENGINE_MODE
+        else:
+            engine_mode = EngineMode(engine_mode)
+        self.engine_mode = engine_mode
 
     @classmethod
     @abc.abstractmethod
@@ -79,7 +89,7 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def identifyWorkflow(self, localWf: LocalWorkflow) -> EngineVersion:
+    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion,LocalWorkflow]:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -105,10 +115,11 @@ class WorkflowEngine(abc.ABC):
         
         # This method can be forced to materialize an specific engine version
         if engineVersion is None:
-            engineVersion = self.identifyWorkflow(localWf)
+            # The identification could return an augmented LocalWorkflow instance
+            engineVersion, localWf = self.identifyWorkflow(localWf,engineVersion)
             if engineVersion is None:
                 return None
-
+        
         engineFingerprint = self.materializeEngineVersion(engineVersion)
 
         return MaterializedWorkflowEngine(instance=self, version=engineVersion, fingerprint=engineFingerprint, workflow=localWf)
