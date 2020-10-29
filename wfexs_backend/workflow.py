@@ -40,13 +40,13 @@ from .common import *
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
 
-
 # The list of classes to be taken into account
-WORKFLOW_ENGINE_CLASSES = [ NextflowWorkflowEngine , CWLWorkflowEngine ]
+WORKFLOW_ENGINE_CLASSES = [NextflowWorkflowEngine, CWLWorkflowEngine]
 
 
 class WFException(Exception):
     pass
+
 
 def fetchClassicURL(remote_file, cachedFilename, secContext=None) -> None:
     """
@@ -185,9 +185,9 @@ class WF:
             cacheDir = tempfile.mkdtemp(prefix='wfexs', suffix='backend')
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, cacheDir)
-        
-        self.git_cmd = local_config.get('tools',{}).get('gitCommand', DEFAULT_GIT_CMD)
-        
+
+        self.git_cmd = local_config.get('tools', {}).get('gitCommand', DEFAULT_GIT_CMD)
+
         # Setting up caching directories
         self.cacheDir = cacheDir
         self.cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
@@ -196,10 +196,10 @@ class WF:
         os.makedirs(self.cacheROCrateDir, exist_ok=True)
         self.cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
         os.makedirs(self.cacheWorkflowInputsDir, exist_ok=True)
-        
+
         # And the copy of scheme handlers
         self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
-        
+
         self.repoURL = None
         self.repoTag = None
         self.repoRelPath = None
@@ -240,9 +240,9 @@ class WF:
         self.repoRelPath = repoRelPath
 
         repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
-        localWorkflow = LocalWorkflow(dir=repoDir,relPath=repoRelPath,effectiveCheckout=repoEffectiveCheckout)
+        localWorkflow = LocalWorkflow(dir=repoDir, relPath=repoRelPath, effectiveCheckout=repoEffectiveCheckout)
         print("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
-	
+
         if repoRelPath is not None:
             if not os.path.exists(os.path.join(repoDir, repoRelPath)):
                 raise WFException(
@@ -252,18 +252,20 @@ class WF:
         # TODO: decide whether to force some specific version
         if engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
-                engine = engineDesc.clazz(cacheDir=self.cacheDir,workflow_config=self.workflow_config,local_config=self.local_config)
+                engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
+                                          local_config=self.local_config)
                 engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
                 if engineVer is not None:
                     break
             else:
                 raise WFException('No engine recognized a workflow at {}'.format(repoURL))
         else:
-            engine = engineDesc.clazz(cacheDir=self.cacheDir,workflow_config=self.workflow_config,local_config=self.local_config)
+            engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
+                                      local_config=self.local_config)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
-                raise WFException('Engine {} did not recognize a workflow at {}'.format(engine.engine,repoURL))
-        
+                raise WFException('Engine {} did not recognize a workflow at {}'.format(engine.engine, repoURL))
+
         self.repoDir = repoDir
         self.repoEffectiveCheckout = repoEffectiveCheckout
         self.engineDesc = engineDesc
@@ -272,7 +274,7 @@ class WF:
         self.localWorkflow = candidateLocalWorkflow
 
     def setupEngine(self):
-        self.materializedEngine = self.engine.materializeEngine(self.localWorkflow,self.engineVer)
+        self.materializedEngine = self.engine.materializeEngine(self.localWorkflow, self.engineVer)
 
     def addSchemeHandler(self, scheme, handler):
         """
@@ -291,7 +293,7 @@ class WF:
         theParams = self.fetchInputs(self.params, workflowInputs_destdir=self.cacheWorkflowInputsDir)
         self.materializedParams = theParams
 
-    def fetchInputs(self, params, workflowInputs_destdir:AbsPath=None, prefix='') -> List[MaterializedInput]:
+    def fetchInputs(self, params, workflowInputs_destdir: AbsPath = None, prefix='') -> List[MaterializedInput]:
         """
         Fetch the input files for the workflow execution.
         All the inputs must be URLs or CURIEs from identifiers.org / n2t.net.
@@ -343,7 +345,7 @@ class WF:
     def executeWorkflow(self):
         pass
 
-    def doMaterializeRepo(self, repoURL, repoTag:RepoTag=None) -> Tuple[AbsPath,RepoTag]:
+    def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None) -> Tuple[AbsPath, RepoTag]:
         """
 
         :param repoURL:
@@ -421,10 +423,10 @@ class WF:
         with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1',
                               cwd=repo_tag_destdir) as revproc:
             repo_effective_checkout = revproc.stdout.read().rstrip()
-        
+
         return repo_tag_destdir, repo_effective_checkout
 
-    def getWorkflowRepoFromTRS(self) -> Tuple[WorkflowType,RepoURL,RepoTag,RelPath]:
+    def getWorkflowRepoFromTRS(self) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
         :return:
@@ -522,11 +524,9 @@ class WF:
                                                                safe='') + '/' + parse.quote(
             chosenDescriptorType, safe='') + '/files?' + parse.urlencode({'format': 'zip'})
 
-        return self.getWorkflowRepoFromROCrate(roCrateURL,
-                                               expectedProgrammingLanguageId=
-                                               self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType].uri)
+        return self.getWorkflowRepoFromROCrate(roCrateURL, expectedProgrammingLanguageId=self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType].uri)
 
-    def getWorkflowRepoFromROCrate(self, roCrateURL, expectedProgrammingLanguageId=None) -> Tuple[WorkflowType,RepoURL,RepoTag,RelPath]:
+    def getWorkflowRepoFromROCrate(self, roCrateURL, expectedProgrammingLanguageId=None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
         :param roCrateURL:
@@ -550,7 +550,8 @@ class WF:
             raise WFException(
                 'Found programming language {} in RO-Crate manifest is not among the acknowledged ones'.format(
                     mainEntityProgrammingLanguageId))
-        elif (expectedProgrammingLanguageId is not None) and mainEntityProgrammingLanguageId != expectedProgrammingLanguageId:
+        elif (
+                expectedProgrammingLanguageId is not None) and mainEntityProgrammingLanguageId != expectedProgrammingLanguageId:
             raise WFException(
                 'Expected programming language {} does not match found one {} in RO-Crate manifest'.format(
                     expectedProgrammingLanguageId, mainEntityProgrammingLanguageId))
@@ -610,7 +611,8 @@ class WF:
 
         return cachedFilename
 
-    def downloadInputFile(self, remote_file, workflowInputs_destdir:AbsPath=None, contextName=None) -> MaterializedContent:
+    def downloadInputFile(self, remote_file, workflowInputs_destdir: AbsPath = None,
+                          contextName=None) -> MaterializedContent:
         """
         Download remote file.
 
