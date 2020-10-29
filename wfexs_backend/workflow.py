@@ -88,7 +88,6 @@ class WF:
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
     DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/tools/"  # root of GA4GH TRS API
-    DEFAULT_GIT_CMD = 'git'
     WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
@@ -187,7 +186,7 @@ class WF:
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, cacheDir)
         
-        self.git_cmd = local_config.get('gitCommand', self.DEFAULT_GIT_CMD)
+        self.git_cmd = local_config.get('tools',{}).get('gitCommand', DEFAULT_GIT_CMD)
         
         # Setting up caching directories
         self.cacheDir = cacheDir

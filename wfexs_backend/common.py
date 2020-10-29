@@ -19,6 +19,10 @@ from __future__ import absolute_import
 
 from collections import namedtuple
 
+DEFAULT_GIT_CMD = 'git'
+DEFAULT_DOCKER_CMD = 'docker'
+DEFAULT_SINGULARITY_CMD = 'singularity'
+
 MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'prettyFilename'])
 MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
 

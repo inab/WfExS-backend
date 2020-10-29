@@ -1,1 +1,6 @@
 cacheDir: /tmp/wfexs-backend-test
+tools:
+  gitCommand: git
+  dockerCommand: docker
+  singularityCommand: singularity
+  
