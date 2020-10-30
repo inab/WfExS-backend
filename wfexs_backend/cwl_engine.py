@@ -16,6 +16,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import os
 from typing import Dict, List, Tuple
 
 from .common import *
@@ -28,6 +29,8 @@ class CWLWorkflowEngine(WorkflowEngine):
     ENGINE_NAME = 'cwl'
 
     def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
+
+        self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config)
 
     @classmethod
@@ -47,6 +50,14 @@ class CWLWorkflowEngine(WorkflowEngine):
         """
 
         # TODO: Check whether there is a CWL workflow there, and materialize it
+
+        cwlPath = localWf.dir
+        if localWf.relPath is not None:
+            engineVer = self.cwl_version
+            cwlPath = os.path.join(cwlPath, localWf.relPath)
+
+        if engineVer is None:
+            engineVer = self.cwl_version
 
         return engineVer, localWf
 
