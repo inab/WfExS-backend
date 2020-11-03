@@ -71,7 +71,7 @@ class WorkflowEngine(abc.ABC):
 
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
-        self.wfCacheDir = os.path.join(cacheDir, self.__class__.__name__)
+        self.weCacheDir = os.path.join(cacheDir, self.__class__.__name__)
         
         # Setting up common properties
         self.docker_cmd = local_config.get('tools',{}).get('dockerCommand',DEFAULT_DOCKER_CMD)
