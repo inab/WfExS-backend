@@ -169,6 +169,7 @@ class WF:
         self.repoRelPath = None
         self.repoDir = None
         self.repoEffectiveCheckout = None
+        self.engine = None
         self.engineDesc = None
 
         self.materializedParams = None
@@ -238,6 +239,10 @@ class WF:
         self.localWorkflow = candidateLocalWorkflow
 
     def setupEngine(self):
+        # The engine is populated by self.fetchWorkflow()
+        if self.engine is None:
+            self.fetchWorkflow()
+        
         self.materializedEngine = self.engine.materializeEngine(self.localWorkflow, self.engineVer)
 
     def addSchemeHandler(self, scheme, handler):
