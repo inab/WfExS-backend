@@ -25,7 +25,7 @@ from wfexs_backend import common
 from wfexs_backend.workflow import WFException
 
 
-def createYAMLFile(materializedParams):
+def createYAMLFile(yamlPath,materializedParams):
     """
     Create YAML file with input values required for workflow execution.
 
@@ -56,7 +56,7 @@ def createYAMLFile(materializedParams):
 
             # print(json.dumps(inputs, indent=2))
             # TODO remove static name
-            with open("tests/wetlab2variations_cwl.yaml", 'w+') as yam_file:
+            with open(yamlPath, mode='w+', encoding='utf-8') as yam_file:
                 yaml.dump(dict(inputs), yam_file, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
         except Exception as error:

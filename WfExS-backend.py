@@ -82,6 +82,7 @@ if __name__ == "__main__":
     # import pprint
     # pprint.pprint(wfInstance.materializedParams)
     from tests import test
-    test.createYAMLFile(wfInstance.materializedParams)
+    import tests
+    test.createYAMLFile(os.path.join(os.path.dirname(tests.__file__),'wetlab2variations_cwl.yaml'),wfInstance.materializedParams)
     
     wfInstance.executeWorkflow()
