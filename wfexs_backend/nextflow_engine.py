@@ -20,8 +20,8 @@ import os
 import re
 import subprocess
 import tempfile
-from typing import Dict, List, Tuple
 
+from typing import Dict, List, Tuple
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
 
@@ -125,15 +125,51 @@ class NextflowWorkflowEngine(WorkflowEngine):
         """
         
         if self.engine_mode == EngineMode.Docker:
-            self.materializeEngineInDocker(engineVersion)
+            engineFingerprint = self.materializeEngineInDocker(engineVersion)
         elif self.engine_mode == EngineMode.Local:
-            self.materializeEngineLocally(engineVersion)
+            engineFingerprint = self.materializeEngineLocally(engineVersion)
         
-        return engineVersion
+        return engineVersion, engineFingerprint
     
     def materializeEngineLocally(self,nextflow_version: EngineVersion):
-        # TODO
-        pass
+        # We have to assure the install directory does exist
+        nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
+        os.makedirs(nextflow_install_dir, exist_ok=True)
+        
+        NXF_HOME = os.path.join(nextflow_install_dir,'.nextflow')
+        nextflow_script_url = 'https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow'.format(nextflow_version)
+        
+        cachedScript = os.path.join(nextflow_install_dir, 'nextflow')
+        if not os.path.exists(cachedScript):
+            print("Downloading Nextflow {}: {} => {}".format(nextflow_version,nextflow_script_url, cachedScript))
+            fetchClassicURL(nextflow_script_url,cachedScript)
+        
+        # Checking the installer has execution permissions
+        if not os.access(cachedScript, os.R_OK | os.X_OK):
+            os.chmod(cachedScript,0o555)
+        
+        # Now, time to run it
+        instEnv = dict(os.environ)
+        instEnv['NXF_HOME'] = NXF_HOME
+        instEnv['JAVA_CMD'] = self.java_cmd
+        
+        with tempfile.NamedTemporaryFile() as nxf_install_stdout:
+            with tempfile.NamedTemporaryFile() as nxf_install_stderr:
+                retval = subprocess.Popen([cachedScript,'-download'],stdout=nxf_install_stdout,stderr=nxf_install_stderr,cwd=nextflow_install_dir,env=instEnv).wait()
+                
+                # Proper error handling
+                if retval != 0:
+                    # Reading the output and error for the report
+                    with open(nxf_install_stdout.name,"r") as c_stF:
+                        nxf_install_stdout_v = c_stF.read()
+                    with open(nxf_install_stderr.name,"r") as c_stF:
+                        nxf_install_stderr_v = c_stF.read()
+                    
+                    errstr = "Could not install Nextflow {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(nextflow_version,retval,nxf_install_stdout_v,nxf_install_stderr_v)
+                    raise WorkflowEngineException(errstr)
+	
+	# TODO: Generate fingerprint
+        return None
     
     def materializeEngineInDocker(self,nextflow_version: EngineVersion):
         # Now, we have to assure the nextflow image is already here
@@ -178,7 +214,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         errstr = "ERROR: Nextflow Engine failed while pulling Nextflow image (retval {}). Tag: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,docker_tag,pullimage_stdout_v,pullimage_stderr_v)
                         raise WorkflowEngineException(errstr)
         
-        return nextflow_version
+	# TODO: Return container fingerprint
+        return None
     
     def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
         """
