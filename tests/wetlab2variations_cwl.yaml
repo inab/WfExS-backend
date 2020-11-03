@@ -1,9 +1,9 @@
-general.rawreads:
+rawreads:
 - class: File
   location: /tmp/wfexs-backend-test/wf-inputs/42be63ef9b0fc7d80d09513bfd3fa42b2288fd9b
 - class: File
   location: /tmp/wfexs-backend-test/wf-inputs/d84baa1e98d5487b2efccf20c68aa1eef0a9c422
-general.referencegenome:
+referencegenome:
 - class: File
   location: /tmp/wfexs-backend-test/wf-inputs/1d387367bda6e81e37fdd3aa3169e3034867dfea
 BSQR:

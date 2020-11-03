@@ -132,6 +132,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             engineFingerprint = self.materializeEngineInDocker(engineVersion)
         elif self.engine_mode == EngineMode.Local:
             engineFingerprint = self.materializeEngineLocally(engineVersion)
+        else:
+            raise WorkflowEngineException('Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
         
         return engineVersion, engineFingerprint
     
