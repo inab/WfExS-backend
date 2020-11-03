@@ -28,6 +28,7 @@ from collections import namedtuple
 
 from .common import *
 
+
 class ContainerFactory(abc.ABC):
     def __init__(self, cacheDir=None, local_config=None):
         """
@@ -38,7 +39,7 @@ class ContainerFactory(abc.ABC):
         if local_config is None:
             local_config = dict()
         self.local_config = local_config
-        
+
         # cacheDir 
         if cacheDir is None:
             cacheDir = local_config.get('cacheDir')
@@ -48,18 +49,18 @@ class ContainerFactory(abc.ABC):
                 cacheDir = tempfile.mkdtemp(prefix='wes', suffix='backend')
                 # Assuring this temporal directory is removed at the end
                 atexit.register(shutil.rmtree, cacheDir)
-        
+
         # But, for materialized containers, we should use a common directory
         self.containersCacheDir = os.path.join(cacheDir, 'containers', self.__class__.__name__)
-    
+
     def getListOfContainers(self):
         # TODO
         return []
-    
+
     def materializeContainers(self, containersList=None):
         if containersList is None:
             containersList = self.getListOfContainers()
-        
+
         # TODO
-        
+
         pass

@@ -74,9 +74,9 @@ class WorkflowEngine(abc.ABC):
         self.weCacheDir = os.path.join(cacheDir, self.__class__.__name__)
         
         # Setting up common properties
-        self.docker_cmd = local_config.get('tools',{}).get('dockerCommand',DEFAULT_DOCKER_CMD)
-        self.singularity_cmd = local_config.get('tools',{}).get('singularityCommand',DEFAULT_SINGULARITY_CMD)
-        engine_mode = local_config.get('tools',{}).get('engineMode')
+        self.docker_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
+        self.singularity_cmd = local_config.get('tools', {}).get('singularityCommand', DEFAULT_SINGULARITY_CMD)
+        engine_mode = local_config.get('tools', {}).get('engineMode')
         if engine_mode is None:
             engine_mode = DEFAULT_ENGINE_MODE
         else:
@@ -89,7 +89,7 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion,LocalWorkflow]:
+    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -103,26 +103,28 @@ class WorkflowEngine(abc.ABC):
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        
+
         pass
 
-    def materializeEngine(self, localWf: LocalWorkflow, engineVersion:EngineVersion = None) -> MaterializedWorkflowEngine:
+    def materializeEngine(self, localWf: LocalWorkflow,
+                          engineVersion: EngineVersion = None) -> MaterializedWorkflowEngine:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        
+
         # This method can be forced to materialize an specific engine version
         if engineVersion is None:
             # The identification could return an augmented LocalWorkflow instance
-            engineVersion, localWf = self.identifyWorkflow(localWf,engineVersion)
+            engineVersion, localWf = self.identifyWorkflow(localWf, engineVersion)
             if engineVersion is None:
                 return None
-        
+
         engineFingerprint = self.materializeEngineVersion(engineVersion)
 
-        return MaterializedWorkflowEngine(instance=self, version=engineVersion, fingerprint=engineFingerprint, workflow=localWf)
+        return MaterializedWorkflowEngine(instance=self, version=engineVersion, fingerprint=engineFingerprint,
+                                          workflow=localWf)
 
     @abc.abstractmethod
     def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:

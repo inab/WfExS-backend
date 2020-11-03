@@ -16,20 +16,50 @@
 import os
 import sys
 
+import yaml
+
 sys.path.insert(1, os.path.abspath(".."))
 
-from wfexs_backend.workflow import WF
+from collections import defaultdict
+from wfexs_backend import common
+from wfexs_backend.workflow import WFException
 
-if __name__ == '__main__':
-    current_path = os.getcwd() + "/"
 
-    # workflow proprieties
-    id = 126
-    version_id = 1
-    descriptor_type = "CWL"
+def createYAMLFile(materializedParams):
+    """
+    Create YAML file with input values required for workflow execution.
 
-    # workflow object
-    wf = WF(str(id), str(version_id), descriptor_type)
+    :param materializedParams: List of materialized input values
+    :type materializedParams: list
+    """
+    if len(materializedParams) != 0:  # list of materializedParams not empty
+        try:
+            inputs = defaultdict(list)
+            for param in materializedParams:
+                if isinstance(param, common.MaterializedInput):  # is MaterializedInput
+                    param_dict = param._asdict()
+                    param_input_name = param_dict['name']
+                    param_input_values = param_dict['values']
+                    # if len(param_input_values) != 0:
+                    for input_value in param_input_values:
+                        if isinstance(input_value, common.MaterializedContent):  # is MaterializedContent
+                            # TODO resolve filename to real filename specified in prettyFilename
+                            input_file = input_value.local
+                            # print(input_value.prettyFilename)
+                            if os.path.isfile(input_file):  # is File
+                                # TODO add type File in common in MaterializedContent
+                                inputs[param_input_name].append({"class": "File", "location": input_file})
+                        else:
+                            inputs[param_input_name] = input_value
+                    # else:
+                    #     raise WFException("")
 
-    # download RO-Crate from WorkflowHub
-    wf.downloadROcrate("https://dev.workflowhub.eu/ga4gh/trs/v2/tools/")
+            # print(json.dumps(inputs, indent=2))
+            # TODO remove static name
+            with open("tests/wetlab2variations_cwl.yaml", 'w+') as yam_file:
+                yaml.dump(dict(inputs), yam_file, allow_unicode=True, default_flow_style=False, sort_keys=False)
+
+        except Exception as error:
+            raise WFException("YAML file not created")
+    else:
+        raise WFException("No exists materialized input values")

@@ -27,18 +27,21 @@ DEFAULT_DOCKER_CMD = 'docker'
 DEFAULT_SINGULARITY_CMD = 'singularity'
 DEFAULT_JAVA_CMD = 'java'
 
+
 class EngineMode(enum.Enum):
-	Local = 'local'
-	Docker = 'docker'
+    Local = 'local'
+    Docker = 'docker'
+
 
 DEFAULT_ENGINE_MODE = EngineMode.Local
 
 MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'prettyFilename'])
 MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
 
-LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath','effectiveCheckout'])
-WorkflowType = namedtuple('WorkflowType', ['engine', 'clazz', 'uri','trs_descriptor','rocrate_programming_language'])
-MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine', ['instance', 'version', 'fingerprint','workflow'])
+LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath', 'effectiveCheckout'])
+WorkflowType = namedtuple('WorkflowType', ['engine', 'clazz', 'uri', 'trs_descriptor', 'rocrate_programming_language'])
+MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine',
+                                        ['instance', 'version', 'fingerprint', 'workflow'])
 
 Container = namedtuple('Container', ['name', 'tag', 'signature', 'type'])
 # Symbolic name or identifier of the container

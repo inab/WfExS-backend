@@ -16,19 +16,23 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import os
 from typing import Dict, List, Tuple
 
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
 
+
 class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = 'https://github.com/common-workflow-language/cwltool'
     DEFAULT_CWLTOOL_VERSION = '3.0.20200807132242'
     ENGINE_NAME = 'cwl'
-    
+
     def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
+
+        self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config)
-    
+
     @classmethod
     def WorkflowType(cls) -> WorkflowType:
         return WorkflowType(
@@ -38,28 +42,36 @@ class CWLWorkflowEngine(WorkflowEngine):
             trs_descriptor='CWL',
             rocrate_programming_language='#cwl'
         )
-    
-    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion,LocalWorkflow]:
+
+    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
         """
-        
+
         # TODO: Check whether there is a CWL workflow there, and materialize it
-        
-        return engineVer,localWf
-    
+
+        cwlPath = localWf.dir
+        if localWf.relPath is not None:
+            engineVer = self.cwl_version
+            cwlPath = os.path.join(cwlPath, localWf.relPath)
+
+        if engineVer is None:
+            engineVer = self.cwl_version
+
+        return engineVer, localWf
+
     def materializeEngineVersion(self, engineVersion: EngineVersion) -> EngineVersion:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        
+
         # TODO
-        
+
         return engineVersion
-    
+
     def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
@@ -67,11 +79,10 @@ class CWLWorkflowEngine(WorkflowEngine):
         
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
-        
+
         # TODO
         return localWf, []
-    
+
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         # TODO
         pass
-        
