@@ -45,41 +45,6 @@ from .cwl_engine import CWLWorkflowEngine
 WORKFLOW_ENGINE_CLASSES = [ NextflowWorkflowEngine , CWLWorkflowEngine ]
 
 
-class WFException(Exception):
-    pass
-
-def fetchClassicURL(remote_file, cachedFilename, secContext=None) -> None:
-    """
-    Method to fetch contents from http, https and ftp
-
-    :param remote_file:
-    :param cachedFilename:
-    :param secContext:
-    """
-    try:
-        if isinstance(secContext, dict):
-            username = secContext.get('username')
-            password = secContext.get('password')
-            if username is not None:
-                if password is None:
-                    password = ''
-
-                # Time to set up user and password in URL
-                parsedInputURL = parse.urlparse(remote_file)
-
-                netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
-                                                                            safe='') + '@' + parsedInputURL.hostname
-                if parsedInputURL.port is not None:
-                    netloc += ':' + str(parsedInputURL.port)
-
-                # Now the credentials are properly set up
-                remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
-                                                parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
-        with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
-            shutil.copyfileobj(url_response, download_file)
-    except Exception as e:
-        raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
-
 
 class WF:
     """
