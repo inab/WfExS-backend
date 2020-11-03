@@ -60,7 +60,8 @@ AbsPath = str
 
 # This is a workflow engine version
 EngineVersion = str
-
+# This represents a fingerprint from an installation, a docker image, etc...
+Fingerprint = str
 
 class WFException(Exception):
     pass

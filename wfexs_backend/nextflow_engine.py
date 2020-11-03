@@ -121,7 +121,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         return engineVer, LocalWorkflow
 
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> EngineVersion:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, Fingerprint]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -135,7 +135,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return engineVersion, engineFingerprint
     
-    def materializeEngineLocally(self,nextflow_version: EngineVersion):
+    def materializeEngineLocally(self,nextflow_version: EngineVersion) -> Fingerprint:
         # We have to assure the install directory does exist
         nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
         os.makedirs(nextflow_install_dir, exist_ok=True)
@@ -175,7 +175,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
 	# TODO: Generate fingerprint
         return None
     
-    def materializeEngineInDocker(self,nextflow_version: EngineVersion):
+    def materializeEngineInDocker(self,nextflow_version: EngineVersion) -> Fingerprint:
         # Now, we have to assure the nextflow image is already here
         docker_tag = self.nxf_image + ':' + nextflow_version
         checkimage_params = [

@@ -97,7 +97,7 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> EngineVersion:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, Fingerprint]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -120,8 +120,10 @@ class WorkflowEngine(abc.ABC):
             engineVersion, localWf = self.identifyWorkflow(localWf, engineVersion)
             if engineVersion is None:
                 return None
-
-        engineFingerprint = self.materializeEngineVersion(engineVersion)
+        
+        # This is needed for those cases where there is no exact match
+        # on the available engine version
+        engineVersion , engineFingerprint = self.materializeEngineVersion(engineVersion)
 
         return MaterializedWorkflowEngine(instance=self, version=engineVersion, fingerprint=engineFingerprint,
                                           workflow=localWf)
