@@ -81,8 +81,5 @@ if __name__ == "__main__":
     # These lines should be deleted out once code is near production
     # import pprint
     # pprint.pprint(wfInstance.materializedParams)
-    from tests import test
-    import tests
-    test.createYAMLFile(os.path.join(os.path.dirname(tests.__file__),'wetlab2variations_cwl.yaml'),wfInstance.materializedParams)
     
     wfInstance.executeWorkflow()
