@@ -29,8 +29,10 @@ from .engine import WorkflowEngine, WorkflowEngineException
 
 class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_PYTHON_PACKAGE = 'cwltool'
+    CWL_UTILS_PYTHON_PACKAGE = 'cwl-utils'
     CWLTOOL_REPO = 'https://github.com/common-workflow-language/' + CWLTOOL_PYTHON_PACKAGE
-    DEFAULT_CWLTOOL_VERSION = '3.0.20200807132242'
+    CWL_UTILS_REPO = 'https://github.com/common-workflow-language/' + CWL_UTILS_PYTHON_PACKAGE
+    DEFAULT_CWLTOOL_VERSION = '3.0.20201026152241'
     ENGINE_NAME = 'cwl'
 
     def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
@@ -72,40 +74,44 @@ class CWLWorkflowEngine(WorkflowEngine):
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        
+
         if self.engine_mode != EngineMode.Local:
-            raise WorkflowEngineException('Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
-        
+            raise WorkflowEngineException(
+                'Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
+
         # A version directory is needed
         cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
-        
+
         # Creating the virtual environment needed to separate CWL code
         # from workflow execution backend
         if not os.path.isdir(cwl_install_dir):
             venv.create(cwl_install_dir, with_pip=True)
-        
+
         # Now, time to run it
         instEnv = dict(os.environ)
-        
+
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
-                retval = subprocess.Popen("source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={}".format(self.CWLTOOL_PYTHON_PACKAGE,engineVersion),
+                retval = subprocess.Popen(
+                    "source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={} ; pip install {}".format(
+                        self.CWLTOOL_PYTHON_PACKAGE, engineVersion, self.CWL_UTILS_PYTHON_PACKAGE),
                     stdout=cwl_install_stdout,
                     stderr=cwl_install_stderr,
                     cwd=cwl_install_dir,
                     shell=True,
                     env=instEnv
                 ).wait()
-                
+
                 # Proper error handling
                 if retval != 0:
                     # Reading the output and error for the report
-                    with open(cwl_install_stdout.name,"r") as c_stF:
+                    with open(cwl_install_stdout.name, "r") as c_stF:
                         cwl_install_stdout_v = c_stF.read()
-                    with open(cwl_install_stderr.name,"r") as c_stF:
+                    with open(cwl_install_stderr.name, "r") as c_stF:
                         cwl_install_stderr_v = c_stF.read()
-                    
-                    errstr = "Could not install CWL {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(engineVersion,retval,cwl_install_stdout_v,cwl_install_stderr_v)
+
+                    errstr = "Could not install CWL {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                        engineVersion, retval, cwl_install_stdout_v, cwl_install_stderr_v)
                     raise WorkflowEngineException(errstr)
         # TODO
 
