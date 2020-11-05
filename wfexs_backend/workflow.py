@@ -44,7 +44,6 @@ from .cwl_engine import CWLWorkflowEngine
 WORKFLOW_ENGINE_CLASSES = [NextflowWorkflowEngine, CWLWorkflowEngine]
 
 
-
 class WF:
     """
     Workflow enaction class
@@ -170,6 +169,7 @@ class WF:
         self.repoDir = None
         self.repoEffectiveCheckout = None
         self.engine = None
+        self.engineVer = None
         self.engineDesc = None
 
         self.materializedParams = None
@@ -242,8 +242,9 @@ class WF:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
             self.fetchWorkflow()
-        
+
         self.materializedEngine = self.engine.materializeEngine(self.localWorkflow, self.engineVer)
+        print("setup engine: {} {}.".format(self.engineDesc.engine, self.engineVer))
 
     def addSchemeHandler(self, scheme, handler):
         """
@@ -493,7 +494,9 @@ class WF:
                                                                safe='') + '/' + parse.quote(
             chosenDescriptorType, safe='') + '/files?' + parse.urlencode({'format': 'zip'})
 
-        return self.getWorkflowRepoFromROCrate(roCrateURL, expectedProgrammingLanguageId=self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType].uri)
+        return self.getWorkflowRepoFromROCrate(roCrateURL,
+                                               expectedProgrammingLanguageId=self.RECOGNIZED_TRS_DESCRIPTORS[
+                                                   chosenDescriptorType].uri)
 
     def getWorkflowRepoFromROCrate(self, roCrateURL, expectedProgrammingLanguageId=None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
