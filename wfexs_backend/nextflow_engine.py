@@ -224,7 +224,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # TODO: Return container fingerprint
         return None
     
-    def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
+    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
@@ -233,7 +233,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         """
 
         # TODO
-        return localWf, []
+        return matWorfklowEngine, []
 
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         # TODO

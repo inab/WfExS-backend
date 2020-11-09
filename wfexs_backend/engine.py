@@ -129,20 +129,25 @@ class WorkflowEngine(abc.ABC):
                                           workflow=localWf)
 
     @abc.abstractmethod
-    def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
+    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
         
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
-
-        matWorfklowEngine = self.materializeEngine(localWf)
-        if matWorfklowEngine is None:
-            return None
-
+        
         pass
 
     @abc.abstractmethod
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         pass
+    
+    @classmethod
+    def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine,inputs: List[MaterializedInput], outputs):
+        return matWfEng.instance.launchWorkflow(matWfEng.workflow, inputs, outputs)
+    
+    @classmethod
+    def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
+        return matWfEng.instance.materializeWorkflow(matWfEng)
+        

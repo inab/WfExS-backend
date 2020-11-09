@@ -37,6 +37,7 @@ if platform.system() == "Darwin":
     ssl._create_default_https_context = ssl._create_unverified_context
 
 from .common import *
+from .engine import WorkflowEngine
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
 
@@ -85,12 +86,13 @@ class WF:
             workflow_config=workflow_config.get('workflow_config'),
             trs_endpoint=workflow_config.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_config.get('params', {}),
+            outputs=workflow_config.get('outputs', {}),
             local_config=local_config,
             creds_config=creds_config
         )
 
     def __init__(self, workflow_id, version_id, descriptor_type=None, trs_endpoint=DEFAULT_TRS_ENDPOINT, params=None,
-                 workflow_config=None, local_config=None, creds_config=None):
+                 outputs=None, workflow_config=None, local_config=None, creds_config=None):
         """
         Init function
 
@@ -125,11 +127,15 @@ class WF:
 
         if not isinstance(params, dict):
             params = {}
+        
+        if not isinstance(outputs, dict):
+            outputs = {}
 
         self.id = str(workflow_id)
         self.version_id = str(version_id)
         self.descriptor_type = descriptor_type
         self.params = params
+        self.outputs = outputs
         self.workflow_config = workflow_config
         self.local_config = local_config
         self.creds_config = creds_config
@@ -175,6 +181,7 @@ class WF:
         self.materializedParams = None
         self.localWorkflow = None
         self.materializedEngine = None
+        self.listOfContainers = None
 
     def fetchWorkflow(self):
         """
@@ -244,8 +251,15 @@ class WF:
             self.fetchWorkflow()
 
         self.materializedEngine = self.engine.materializeEngine(self.localWorkflow, self.engineVer)
-        print("setup engine: {} {}.".format(self.engineDesc.engine, self.engineVer))
-
+        print("setup engine: {} {}.".format(self.materializedEngine.instance, self.materializedEngine.version))
+    
+    def materializeWorkflow(self):
+        if self.materializedEngine is None:
+            self.setupEngine()
+        
+        # This information is badly needed for provenance
+        self.materializedEngine, self.listOfContainers = WorkflowEngine.MaterializeWorkflow(self.materializedEngine)
+    
     def addSchemeHandler(self, scheme, handler):
         """
 
@@ -313,8 +327,8 @@ class WF:
         return theInputs
 
     def executeWorkflow(self):
-        pass
-
+        WorkflowEngine.ExecuteWorkflow(self.materializedEngine, self.materializedParams, self.outputs)
+    
     def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None) -> Tuple[AbsPath, RepoTag]:
         """
 

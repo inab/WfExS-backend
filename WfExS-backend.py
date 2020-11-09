@@ -76,6 +76,7 @@ if __name__ == "__main__":
 
     wfInstance.fetchWorkflow()
     wfInstance.setupEngine()
+    wfInstance.materializeWorkflow()
     wfInstance.materializeInputs()
     
     # These lines should be deleted out once code is near production
