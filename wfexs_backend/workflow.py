@@ -309,10 +309,10 @@ class WF:
         self.schemeHandlers[scheme.lower()] = handler
 
     def materializeInputs(self):
-        theParams = self.fetchInputs(self.params, workflowInputs_destdir=self.cacheWorkflowInputsDir)
+        theParams, numInputs = self.fetchInputs(self.params, workflowInputs_destdir=self.inputsDir, workflowInputs_cacheDir=self.cacheWorkflowInputsDir)
         self.materializedParams = theParams
 
-    def fetchInputs(self, params, workflowInputs_destdir: AbsPath = None, prefix='') -> List[MaterializedInput]:
+    def fetchInputs(self, params, workflowInputs_destdir: AbsPath = None, workflowInputs_cacheDir: AbsPath = None, prefix='', lastInput=0) -> Tuple[List[MaterializedInput],int]:
         """
         Fetch the input files for the workflow execution.
         All the inputs must be URLs or CURIEs from identifiers.org / n2t.net.
@@ -343,23 +343,30 @@ class WF:
                             # as it could contain potential hints for authenticated access
                             contextName = inputs.get('security-context')
                             matContent = self.downloadInputFile(remote_file,
-                                                                workflowInputs_destdir=workflowInputs_destdir,
+                                                                workflowInputs_destdir=workflowInputs_cacheDir,
                                                                 contextName=contextName)
-                            remote_pairs.append(matContent)
+                            
+                            # Now, time to create the symbolic link
+                            lastInput += 1
+                            
+                            prettyLocal = os.path.join(workflowInputs_destdir,str(lastInput)+'_'+matContent.prettyFilename)
+                            os.symlink(matContent.local,prettyLocal)
+                            
+                            remote_pairs.append(MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename))
 
                         theInputs.append(MaterializedInput(linearKey, remote_pairs))
                     else:
                         raise WFException('Unrecognized input class "{}"'.format(inputClass))
                 else:
                     # possible nested files
-                    theInputs.extend(
-                        self.fetchInputs(inputs, workflowInputs_destdir=workflowInputs_destdir, prefix=linearKey + '.'))
+                    newInputsAndParams, lastInput = self.fetchInputs(inputs, workflowInputs_destdir=workflowInputs_destdir, workflowInputs_cacheDir=workflowInputs_cacheDir, prefix=linearKey + '.', lastInput=lastInput)
+                    theInputs.extend(newInputsAndParams)
             else:
                 if not isinstance(inputs, list):
                     inputs = [inputs]
                 theInputs.append(MaterializedInput(linearKey, inputs))
 
-        return theInputs
+        return theInputs, lastInput
 
     def executeWorkflow(self):
         WorkflowEngine.ExecuteWorkflow(self.materializedEngine, self.materializedParams, self.outputs)
