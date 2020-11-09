@@ -349,7 +349,10 @@ class WF:
                             # Now, time to create the symbolic link
                             lastInput += 1
                             
-                            prettyLocal = os.path.join(workflowInputs_destdir,str(lastInput)+'_'+matContent.prettyFilename)
+                            prettyLocal = os.path.join(workflowInputs_destdir,matContent.prettyFilename)
+                            # Trying to avoid collisions on input naming
+                            if os.path.exists(prettyLocal):
+                                prettyLocal = os.path.join(workflowInputs_destdir,str(lastInput)+'_'+matContent.prettyFilename)
                             os.symlink(matContent.local,prettyLocal)
                             
                             remote_pairs.append(MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename))
