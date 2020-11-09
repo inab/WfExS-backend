@@ -30,15 +30,21 @@ from .engine import WorkflowEngine, WorkflowEngineException
 class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_PYTHON_PACKAGE = 'cwltool'
     CWL_UTILS_PYTHON_PACKAGE = 'cwl-utils'
-    CWLTOOL_REPO = 'https://github.com/common-workflow-language/' + CWLTOOL_PYTHON_PACKAGE
-    CWL_UTILS_REPO = 'https://github.com/common-workflow-language/' + CWL_UTILS_PYTHON_PACKAGE
+    SCHEMA_SALAD_PYTHON_PACKAGE = 'schema-salad'
+    CWL_REPO = 'https://github.com/common-workflow-language/'
+    CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
+    CWL_UTILS_REPO = CWLTOOL_REPO + CWL_UTILS_PYTHON_PACKAGE
     DEFAULT_CWLTOOL_VERSION = '3.0.20201026152241'
+    DEFAULT_CWL_UTILS_VERSION = '0.4 '
+    DEFAULT_SCHEMA_SALAD_VERSION = '7.0.20200811075006'
     ENGINE_NAME = 'cwl'
 
     def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None):
-        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config, engineTweaksDir=engineTweaksDir)
-        
+        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
+                         engineTweaksDir=engineTweaksDir)
+
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
+        self.cacheWorkflowPackDir = None
 
     @classmethod
     def WorkflowType(cls) -> WorkflowType:
@@ -58,10 +64,8 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         # TODO: Check whether there is a CWL workflow there, and materialize it
 
-        cwlPath = localWf.dir
         if localWf.relPath is not None:
             engineVer = self.cwl_version
-            cwlPath = os.path.join(cwlPath, localWf.relPath)
 
         if engineVer is None:
             engineVer = self.cwl_version
@@ -93,8 +97,10 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retval = subprocess.Popen(
-                    "source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={} {}".format(
-                        self.CWLTOOL_PYTHON_PACKAGE, engineVersion, self.CWL_UTILS_PYTHON_PACKAGE),
+                    "source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={} ; pip install {}=={}; pip install {}=={}".format(
+                        self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
+                        self.CWL_UTILS_PYTHON_PACKAGE,
+                        self.DEFAULT_CWL_UTILS_VERSION, self.CWLTOOL_PYTHON_PACKAGE, engineVersion),
                     stdout=cwl_install_stdout,
                     stderr=cwl_install_stderr,
                     cwd=cwl_install_dir,
@@ -117,16 +123,64 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         return engineVersion, None
 
-    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
+    def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
         
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
+        localWorkflowDir = localWf.workflow.dir
+        localWorkflowFile = os.path.join(localWorkflowDir, localWf.workflow.relPath)
+        engineVersion = localWf.version
 
-        # TODO
-        return matWorfklowEngine, []
+        if os.path.isfile(localWorkflowFile):   # localWorkflow has been materialized
+
+            # Extract hashes directories from localWorkflow
+            localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail = localWorkflowDir.split("/")[-2:]
+
+            # Extract cached directory from localWorkflow
+            localWorkflowCacheDir = localWorkflowDir.partition(localWorkflowUsedHashes_head)[0]
+
+            # Setting up packed directory
+            self.cacheWorkflowPackDir = os.path.join(localWorkflowCacheDir, 'wf-pack')
+            os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
+
+            # Setting up workflow packed name
+            localWorkflowPackedName = (os.path.join(localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail) + ".cwl").replace("/", "_")
+
+            # Execute cwltool --pack
+
+            # CWLWorkflowEngine directory is needed
+            cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
+
+            with tempfile.NamedTemporaryFile() as cwl_install_stdout:
+                with tempfile.NamedTemporaryFile() as cwl_install_stderr:
+                    retval = subprocess.Popen(
+                        "source bin/activate ; cwltool --pack {} > {}".format(localWorkflowFile,
+                            os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName.replace("/", "_"))),
+                        cwd=cwl_install_dir,
+                        shell=True
+                    ).wait()
+
+                    # Proper error handling
+                    if retval != 0:
+                        # Reading the output and error for the report
+                        with open(cwl_install_stdout.name, "r") as c_stF:
+                            cwl_install_stdout_v = c_stF.read()
+                        with open(cwl_install_stderr.name, "r") as c_stF:
+                            cwl_install_stderr_v = c_stF.read()
+
+                        errstr = "Could not pack CWL running cwltool --pack {}. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                            engineVersion, retval, cwl_install_stdout_v, cwl_install_stderr_v)
+                        raise WorkflowEngineException(errstr)
+
+            #  TODO list of containers
+            return os.path.dirname(localWorkflowFile), []
+
+        else:
+            raise WorkflowEngineException(
+                'CWL workflow {} has not been materialized.'.format(localWorkflowFile))
 
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         # TODO

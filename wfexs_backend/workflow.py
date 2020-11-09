@@ -286,7 +286,6 @@ class WF:
             self.fetchWorkflow()
 
         self.materializedEngine = self.engine.materializeEngine(self.localWorkflow, self.engineVer)
-        print("setup engine: {} {}.".format(self.materializedEngine.instance.workflowType.engineName, self.materializedEngine.version))
     
     def materializeWorkflow(self):
         if self.materializedEngine is None:
