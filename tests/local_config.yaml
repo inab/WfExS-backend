@@ -1,4 +1,5 @@
 cacheDir: /tmp/wfexs-backend-test
+workDir: /tmp/wfexs-backend-test_WorkDir
 tools:
   engineMode: local
   gitCommand: git

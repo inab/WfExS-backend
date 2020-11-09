@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import tempfile
 import types
+import uuid
 from typing import Dict, List, Tuple
 
 from urllib import request, parse
@@ -151,9 +152,23 @@ class WF:
         if cacheDir:
             os.makedirs(cacheDir, exist_ok=True)
         else:
-            cacheDir = tempfile.mkdtemp(prefix='wfexs', suffix='backend')
+            cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, cacheDir)
+        
+        # This directory will be used to store the intermediate
+        # and final results before they are sent away
+        workDir = local_config.get('workDir')
+        if workDir:
+            os.makedirs(workDir, exist_ok=True)
+        else:
+            workDir = tempfile.mkdtemp(prefix='WfExS-workdir', suffix='backend')
+            # Assuring this temporal directory is removed at the end
+            atexit.register(shutil.rmtree, workDir)
+        
+        self.instanceId = str(uuid.uuid4())
+        uniqueWorkDir = os.path.join(workDir,self.instanceId)
+        os.makedirs(uniqueWorkDir, exist_ok=True)
 
         self.git_cmd = local_config.get('tools', {}).get('gitCommand', DEFAULT_GIT_CMD)
 
@@ -165,6 +180,26 @@ class WF:
         os.makedirs(self.cacheROCrateDir, exist_ok=True)
         self.cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
         os.makedirs(self.cacheWorkflowInputsDir, exist_ok=True)
+        
+        # Setting up working directories, one per instance
+        self.workDir = uniqueWorkDir
+        # This directory will hold either symbolic links to the cached
+        # inputs, or the inputs properly post-processed (decompressed,
+        # decrypted, etc....)
+        self.inputsDir = os.path.join(uniqueWorkDir,'inputs')
+        os.makedirs(self.inputsDir, exist_ok=True)
+        # This directory should hold intermediate workflow steps results
+        self.intermediateDir = os.path.join(uniqueWorkDir,'intermediate')
+        os.makedirs(self.intermediateDir, exist_ok=True)
+        # This directory will hold the final workflow results, which could
+        # be either symbolic links to the intermediate results directory
+        # or newly generated content
+        self.outputsDir = os.path.join(uniqueWorkDir,'outputs')
+        os.makedirs(self.outputsDir, exist_ok=True)
+        # This directory is here for those files which are created in order
+        # to tweak or patch workflow executions
+        self.engineTweaksDir = os.path.join(uniqueWorkDir,'engineTweaks')
+        os.makedirs(self.outputsDir, exist_ok=True)
 
         # And the copy of scheme handlers
         self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
@@ -225,7 +260,7 @@ class WF:
         if engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
-                                          local_config=self.local_config)
+                                          local_config=self.local_config, engineTweaksDir=self.engineTweaksDir)
                 engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
                 if engineVer is not None:
                     break
@@ -233,10 +268,10 @@ class WF:
                 raise WFException('No engine recognized a workflow at {}'.format(repoURL))
         else:
             engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
-                                      local_config=self.local_config)
+                                      local_config=self.local_config, engineTweaksDir=self.engineTweaksDir)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
-                raise WFException('Engine {} did not recognize a workflow at {}'.format(engine.engine, repoURL))
+                raise WFException('Engine {} did not recognize a workflow at {}'.format(engine.workflowType.engineName, repoURL))
 
         self.repoDir = repoDir
         self.repoEffectiveCheckout = repoEffectiveCheckout
@@ -251,7 +286,7 @@ class WF:
             self.fetchWorkflow()
 
         self.materializedEngine = self.engine.materializeEngine(self.localWorkflow, self.engineVer)
-        print("setup engine: {} {}.".format(self.materializedEngine.instance, self.materializedEngine.version))
+        print("setup engine: {} {}.".format(self.materializedEngine.instance.workflowType.engineName, self.materializedEngine.version))
     
     def materializeWorkflow(self):
         if self.materializedEngine is None:

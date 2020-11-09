@@ -18,6 +18,7 @@
 import argparse
 import atexit
 import os
+import sys
 import shutil
 import tempfile
 
@@ -73,6 +74,9 @@ if __name__ == "__main__":
         creds_config = {}
     
     wfInstance = WF.fromDescription(workflow_config, local_config, creds_config)
+    
+    print("* Working directory will be {}".format(wfInstance.workDir),file=sys.stderr)
+    sys.stderr.flush()
 
     wfInstance.fetchWorkflow()
     wfInstance.setupEngine()
