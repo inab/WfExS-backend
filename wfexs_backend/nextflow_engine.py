@@ -174,7 +174,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     errstr = "Could not install Nextflow {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(nextflow_version,retval,nxf_install_stdout_v,nxf_install_stderr_v)
                     raise WorkflowEngineException(errstr)
 	
-	# TODO: Generate fingerprint
+        # TODO: Generate fingerprint
         return None
     
     def materializeEngineInDocker(self,nextflow_version: EngineVersion) -> Fingerprint:
@@ -221,7 +221,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             retval, docker_tag, pullimage_stdout_v, pullimage_stderr_v)
                         raise WorkflowEngineException(errstr)
         
-	# TODO: Return container fingerprint
+        # TODO: Return container fingerprint
         return None
     
     def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
