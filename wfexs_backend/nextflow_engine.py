@@ -36,8 +36,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     ENGINE_NAME = 'nextflow'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
-        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config)
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None):
+        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config, engineTweaksDir=engineTweaksDir)
 
         self.java_cmd = local_config.get('tools', {}).get('javaCommand', DEFAULT_JAVA_CMD)
 
@@ -49,7 +49,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     @classmethod
     def WorkflowType(cls) -> WorkflowType:
         return WorkflowType(
-            engine=cls.ENGINE_NAME,
+            engineName=cls.ENGINE_NAME,
             clazz=cls,
             uri='https://www.nextflow.io/',
             trs_descriptor='NFL',
@@ -234,6 +234,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         """
 
         # Try creating a custom nextflow script, in order to capture the interesting data
+        
         
         return matWorfklowEngine, []
 

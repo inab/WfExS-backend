@@ -39,7 +39,7 @@ class WorkflowEngineException(Exception):
 
 
 class WorkflowEngine(abc.ABC):
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None):
         """
         Abstract init method
 
@@ -47,7 +47,8 @@ class WorkflowEngine(abc.ABC):
         :param workflow_config:
             This one may be needed to identify container overrides
             or specific engine versions
-        param local_config:
+        :param local_config:
+        :param engineTweaksDir:
         """
         if local_config is None:
             local_config = dict()
@@ -68,10 +69,18 @@ class WorkflowEngine(abc.ABC):
                 cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
                 # Assuring this temporal directory is removed at the end
                 atexit.register(shutil.rmtree, cacheDir)
-
+        
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
         self.weCacheDir = os.path.join(cacheDir, self.__class__.__name__)
+        
+        # engine tweaks directory
+        if engineTweaksDir is None:
+            engineTweaksDir = tempfile.mkdtemp(prefix='WfExS-tweaks', suffix='backend')
+            # Assuring this temporal directory is removed at the end
+            atexit.register(shutil.rmtree, engineTweaksDir)
+        
+        self.engineTweaksDir = engineTweaksDir
         
         # Setting up common properties
         self.docker_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
@@ -87,7 +96,11 @@ class WorkflowEngine(abc.ABC):
     @abc.abstractmethod
     def WorkflowType(cls) -> WorkflowType:
         pass
-
+    
+    @property
+    def workflowType(self) -> WorkflowType:
+        return self.WorkflowType()
+    
     @abc.abstractmethod
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """

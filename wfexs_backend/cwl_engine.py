@@ -35,15 +35,15 @@ class CWLWorkflowEngine(WorkflowEngine):
     DEFAULT_CWLTOOL_VERSION = '3.0.20201026152241'
     ENGINE_NAME = 'cwl'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None):
-
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None):
+        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config, engineTweaksDir=engineTweaksDir)
+        
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
-        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config)
 
     @classmethod
     def WorkflowType(cls) -> WorkflowType:
         return WorkflowType(
-            engine=cls.ENGINE_NAME,
+            engineName=cls.ENGINE_NAME,
             clazz=cls,
             uri='https://w3id.org/cwl/v1.0/',
             trs_descriptor='CWL',

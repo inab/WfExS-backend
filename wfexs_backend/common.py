@@ -39,7 +39,7 @@ MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'pretty
 MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
 
 LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath', 'effectiveCheckout'])
-WorkflowType = namedtuple('WorkflowType', ['engine', 'clazz', 'uri', 'trs_descriptor', 'rocrate_programming_language'])
+WorkflowType = namedtuple('WorkflowType', ['engineName', 'clazz', 'uri', 'trs_descriptor', 'rocrate_programming_language'])
 MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine',
                                         ['instance', 'version', 'fingerprint', 'workflow'])
 
