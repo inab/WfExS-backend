@@ -82,6 +82,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         else:
             # We are deactivating the engine version capture from the config
             verPat = None
+        
         if os.path.isfile(nfConfig):
             # Now, let's guess the nextflow version and mainScript
             with open(nfConfig, "r") as nc_config:
@@ -115,11 +116,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if not os.path.isfile(entrypoint):
             raise WorkflowEngineException(
                 'Could not find mainScript {} in Nextflow workflow directory {} '.format(candidateNf, nfDir))
-
+        
         if engineVer is None:
             engineVer = self.nxf_version
-
-        return engineVer, LocalWorkflow
+        
+        return engineVer, LocalWorkflow(dir=nfDir, relPath=candidateNf, effectiveCheckout=localWf.effectiveCheckout)
 
     def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, Fingerprint]:
         """
@@ -232,7 +233,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
 
-        # TODO
+        # Try creating a custom nextflow script, in order to capture the interesting data
+        
         return matWorfklowEngine, []
 
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
