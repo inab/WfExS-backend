@@ -260,7 +260,8 @@ class WF:
         if engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
-                                          local_config=self.local_config, engineTweaksDir=self.engineTweaksDir)
+                                          local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
+                                          cacheWorkflowDir=self.cacheWorkflowDir)
                 engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
                 if engineVer is not None:
                     break

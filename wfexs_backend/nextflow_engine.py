@@ -36,8 +36,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     ENGINE_NAME = 'nextflow'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None):
-        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config, engineTweaksDir=engineTweaksDir)
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None, cacheWorkflowDir=None):
+        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config, engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir)
 
         self.java_cmd = local_config.get('tools', {}).get('javaCommand', DEFAULT_JAVA_CMD)
 
@@ -225,7 +225,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # TODO: Return container fingerprint
         return None
     
-    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
+    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers

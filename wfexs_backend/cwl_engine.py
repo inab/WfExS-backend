@@ -35,16 +35,18 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWLTOOL_REPO + CWL_UTILS_PYTHON_PACKAGE
     DEFAULT_CWLTOOL_VERSION = '3.0.20201026152241'
-    DEFAULT_CWL_UTILS_VERSION = '0.4 '
+    DEFAULT_CWL_UTILS_VERSION = '0.7'
     DEFAULT_SCHEMA_SALAD_VERSION = '7.0.20200811075006'
     ENGINE_NAME = 'cwl'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None):
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None, cacheWorkflowDir=None):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
-                         engineTweaksDir=engineTweaksDir)
+                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir)
 
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
-        self.cacheWorkflowPackDir = None
+        # Setting up packed directory
+        self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, 'wf-pack')
+        os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
 
     @classmethod
     def WorkflowType(cls) -> WorkflowType:
@@ -123,42 +125,44 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         return engineVersion, None
 
-    def materializeWorkflow(self, localWf: LocalWorkflow) -> Tuple[LocalWorkflow, List[Container]]:
+    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
         
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
-        localWorkflowDir = localWf.workflow.dir
-        localWorkflowFile = os.path.join(localWorkflowDir, localWf.workflow.relPath)
-        engineVersion = localWf.version
+        localWf = matWorkflowEngine.workflow
+        localWorkflowDir = localWf.dir
+        if os.path.isabs(localWf.relPath):
+            localWorkflowFile = localWf.relPath
+        else:
+            localWorkflowFile = os.path.join(localWorkflowDir, localWf.relPath)
+        engineVersion = matWorkflowEngine.version
+        
+        if not os.path.isfile(localWorkflowFile):
+            raise WorkflowEngineException(
+                'CWL workflow {} has not been materialized.'.format(localWorkflowFile))
+        
+        # Extract hashes directories from localWorkflow
+        localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail = localWorkflowDir.split("/")[-2:]
 
-        if os.path.isfile(localWorkflowFile):   # localWorkflow has been materialized
-
-            # Extract hashes directories from localWorkflow
-            localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail = localWorkflowDir.split("/")[-2:]
-
-            # Extract cached directory from localWorkflow
-            localWorkflowCacheDir = localWorkflowDir.partition(localWorkflowUsedHashes_head)[0]
-
-            # Setting up packed directory
-            self.cacheWorkflowPackDir = os.path.join(localWorkflowCacheDir, 'wf-pack')
-            os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
-
-            # Setting up workflow packed name
-            localWorkflowPackedName = (os.path.join(localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail) + ".cwl").replace("/", "_")
-
+        # Setting up workflow packed name
+        localWorkflowPackedName = (os.path.join(localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail) + ".cwl").replace("/", "_")
+        packedLocalWorkflowFile = os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName)
+        
+        if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(packedLocalWorkflowFile) == 0:   # localWorkflow has not been packed
             # Execute cwltool --pack
-
             # CWLWorkflowEngine directory is needed
             cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
 
-            with tempfile.NamedTemporaryFile() as cwl_install_stdout:
-                with tempfile.NamedTemporaryFile() as cwl_install_stderr:
+            with open(packedLocalWorkflowFile,mode='wb') as packedH:
+                with tempfile.NamedTemporaryFile() as cwl_pack_stderr:
+                    # Writing straight to the file
                     retval = subprocess.Popen(
-                        "source bin/activate ; cwltool --pack {} > {}".format(localWorkflowFile,
-                            os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName.replace("/", "_"))),
+                        "source bin/activate ; cwltool --no-doc-cache --pack {}".format(localWorkflowFile),
+                        stdout=packedH,
+                        stderr=cwl_pack_stderr,
                         cwd=cwl_install_dir,
                         shell=True
                     ).wait()
@@ -166,21 +170,19 @@ class CWLWorkflowEngine(WorkflowEngine):
                     # Proper error handling
                     if retval != 0:
                         # Reading the output and error for the report
-                        with open(cwl_install_stdout.name, "r") as c_stF:
-                            cwl_install_stdout_v = c_stF.read()
-                        with open(cwl_install_stderr.name, "r") as c_stF:
-                            cwl_install_stderr_v = c_stF.read()
+                        with open(cwl_pack_stderr.name, "r") as c_stF:
+                            cwl_pack_stderr_v = c_stF.read()
 
-                        errstr = "Could not pack CWL running cwltool --pack {}. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                            engineVersion, retval, cwl_install_stdout_v, cwl_install_stderr_v)
+                        errstr = "Could not pack CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
+                            engineVersion, retval, cwl_pack_stderr_v)
                         raise WorkflowEngineException(errstr)
-
-            #  TODO list of containers
-            return os.path.dirname(localWorkflowFile), []
-
-        else:
-            raise WorkflowEngineException(
-                'CWL workflow {} has not been materialized.'.format(localWorkflowFile))
+        
+        #  TODO list of containers
+        containersList = []
+        
+        newLocalWf = LocalWorkflow(dir=localWf.dir,relPath=packedLocalWorkflowFile,effectiveCheckout=localWf.effectiveCheckout)
+        newWfEngine = MaterializedWorkflowEngine(instance=matWorkflowEngine.instance, version=engineVersion, fingerprint=matWorkflowEngine.fingerprint, workflow=newLocalWf)
+        return newWfEngine, containersList
 
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         # TODO

@@ -39,7 +39,7 @@ class WorkflowEngineException(Exception):
 
 
 class WorkflowEngine(abc.ABC):
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None):
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None, cacheWorkflowDir=None):
         """
         Abstract init method
 
@@ -73,6 +73,13 @@ class WorkflowEngine(abc.ABC):
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
         self.weCacheDir = os.path.join(cacheDir, self.__class__.__name__)
+        
+        # Needed for those cases where alternate version of the workflow is generated
+        if cacheWorkflowDir is None:
+            cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
+            os.makedirs(cacheWorkflowDir, exist_ok=True)
+        self.cacheWorkflowDir = cacheWorkflowDir
+        
         
         # engine tweaks directory
         if engineTweaksDir is None:
