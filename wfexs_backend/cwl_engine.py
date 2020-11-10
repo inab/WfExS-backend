@@ -97,7 +97,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retval = subprocess.Popen(
-                    "source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={} ; pip install {}=={}; pip install {}=={}".format(
+                    "source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={}  {}=={}  {}=={}".format(
                         self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                         self.CWL_UTILS_PYTHON_PACKAGE,
                         self.DEFAULT_CWL_UTILS_VERSION, self.CWLTOOL_PYTHON_PACKAGE, engineVersion),
