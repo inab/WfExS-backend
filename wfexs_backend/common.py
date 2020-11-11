@@ -42,11 +42,19 @@ LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath', 'effectiveCheckou
 WorkflowType = namedtuple('WorkflowType', ['engineName', 'clazz', 'uri', 'trs_descriptor', 'rocrate_programming_language'])
 MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine',
                                         ['instance', 'version', 'fingerprint', 'workflow'])
+# Instance of the workflow engine
+# Version of the engine to be used
+# Fingerprint of the engine to be used (it could be the version)
+# Instance of LocalWorkflow
+
+class ContainerType(enum.Enum):
+    Singularity = 'singularity'
+    Docker = 'docker'
 
 Container = namedtuple('Container', ['name', 'tag', 'signature', 'type'])
 # Symbolic name or identifier of the container
 # Symbolic name or identifier of the tag
-# Signature of the container (sha256 or similar)
+# Signature (aka fingerprint) of the container (sha256 or similar)
 # Container type
 
 # The URL of a git repository containing at least one workflow
