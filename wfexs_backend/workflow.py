@@ -233,10 +233,20 @@ class WF:
         if parsedRepoURL.scheme == '':
             engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromTRS()
         else:
-            repoURL = self.id
-            repoTag = self.version_id
-            repoRelPath = None
             engineDesc = None
+            
+            # Trying to be smarter
+            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(self.id)
+            
+            if repoURL is None:
+                # raise WFException('Unable to guess repository from RO-Crate manifest')
+                repoURL = self.id
+                repoTag = self.version_id
+                repoRelPath = None
+            else:
+                repoURL = guessedRepoURL
+                repoTag = guessedRepoTag  if guessedRepoTag is not None  else self.version_id
+                repoRelPath = guessedRepoRelPath
 
         self.repoURL = repoURL
         self.repoTag = repoTag
@@ -591,16 +601,27 @@ class WF:
         # the branch/tag/checkout , and the relative directory in the
         # fetched content (needed by Nextflow)
         wf_url = roCrateObj.root_dataset['isBasedOn']
+        
+        repoURL, repoTag, repoRelPath = self.guessRepoParams(wf_url)
+        
+        if repoURL is None:
+            raise WFException('Unable to guess repository from RO-Crate manifest')
+        
+        # It must return four elements:
+        return self.RECOGNIZED_ROCRATE_PROG_LANG[mainEntityProgrammingLanguageId], repoURL, repoTag, repoRelPath
 
+    def guessRepoParams(self,wf_url:str) -> Tuple[RepoURL, RepoTag, RelPath]:
         repoURL = None
         repoTag = None
         repoRelPath = None
+        
+        # TODO handling other additional cases
         parsed_wf_url = parse.urlparse(wf_url)
         if parsed_wf_url.netloc == 'github.com':
             wf_path = parsed_wf_url.path.split('/')
 
             if len(wf_path) >= 3:
-                repoGitPath = parsed_wf_url.path.split('/')[:3]
+                repoGitPath = wf_path[:3]
                 if not repoGitPath[-1].endswith('.git'):
                     repoGitPath[-1] += '.git'
 
@@ -614,13 +635,26 @@ class WF:
 
                     if len(wf_path) >= 6:
                         repoRelPath = '/'.join(wf_path[5:])
-        else:
-            raise WFException('Unable to guess repository from RO-Crate manifest')
+        elif parsed_wf_url.netloc == 'raw.githubusercontent.com':
+            wf_path = parsed_wf_url.path.split('/')
+            if len(wf_path) >= 3:
+                # Rebuilding it
+                repoGitPath = wf_path[:3]
+                repoGitPath[-1] += '.git'
+                
+                # Rebuilding repo git path
+                repoURL = parse.urlunparse(
+                    ('https', 'github.com', '/'.join(repoGitPath), '', '', ''))
+                
+                # And now, guessing the tag/checkout and the relative path
+                if len(wf_path) >= 4:
+                    repoTag = wf_path[3]
 
-        # TODO handling other additional cases
-
-        # It must return four elements:
-        return self.RECOGNIZED_ROCRATE_PROG_LANG[mainEntityProgrammingLanguageId], repoURL, repoTag, repoRelPath
+                    if len(wf_path) >= 5:
+                        repoRelPath = '/'.join(wf_path[4:])
+        
+        return repoURL, repoTag, repoRelPath
+        
 
     def downloadROcrate(self, roCrateURL) -> AbsPath:
         """
