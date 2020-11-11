@@ -22,6 +22,7 @@ params:
     url:
       - ftp://ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.vcf.gz
   readgroup_str: "@RG\\tID:H947YADXX\\tSM:NA12878\\tPL:ILLUMINA"
+  chromosome: "1"
 outputs:
   metrics:
     c-l-a-s-s: File
