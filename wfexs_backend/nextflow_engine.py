@@ -236,7 +236,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # Try creating a custom nextflow script, in order to capture the interesting data
         
         
-        return matWorfklowEngine, []
+        return matWorkflowEngine, []
 
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         # TODO
