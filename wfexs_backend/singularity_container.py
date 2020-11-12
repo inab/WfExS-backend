@@ -69,6 +69,7 @@ class SingularityContainerFactory(ContainerFactory):
             containerFilename = simpleFileName(tag)
             localContainerPath = os.path.join(self.containersCacheDir,containerFilename)
                 
+            print("downloading container: {} => {}".format(tag, localContainerPath))
             # First, let's materialize the container image
             if not os.path.isfile(localContainerPath):
                 with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
