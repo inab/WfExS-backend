@@ -238,7 +238,7 @@ class WF:
             # Trying to be smarter
             guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(self.id)
             
-            if repoURL is None:
+            if self.repoURL is None:
                 # raise WFException('Unable to guess repository from RO-Crate manifest')
                 repoURL = self.id
                 repoTag = self.version_id
