@@ -21,13 +21,18 @@ import tempfile
 import atexit
 import shutil
 import abc
-import enum
 
 from typing import Dict, List, Tuple
 from collections import namedtuple
 
 from .common import *
 
+
+class ContainerFactoryException(Exception):
+    """
+    Exceptions fired by instances of ContainerFactory
+    """
+    pass
 
 class ContainerFactory(abc.ABC):
     def __init__(self, cacheDir=None, local_config=None):
@@ -52,15 +57,20 @@ class ContainerFactory(abc.ABC):
 
         # But, for materialized containers, we should use a common directory
         self.containersCacheDir = os.path.join(cacheDir, 'containers', self.__class__.__name__)
-
-    def getListOfContainers(self):
-        # TODO
-        return []
-
-    def materializeContainers(self, containersList=None):
-        if containersList is None:
-            containersList = self.getListOfContainers()
-
-        # TODO
-
+        os.makedirs(self.containersCacheDir, exist_ok=True)
+    
+    @classmethod
+    @abc.abstractmethod
+    def ContainerType(cls) -> ContainerType:
+        pass
+    
+    @property
+    def containerType(self) -> ContainerType:
+        return self.ContainerType()
+    
+    @abc.abstractmethod
+    def materializeContainers(self, tagList: List[ContainerTaggedName]) -> List[Container]:
+        """
+        It is assured the containers are materialized
+        """
         pass
