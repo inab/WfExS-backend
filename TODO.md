@@ -11,13 +11,13 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [x] **Step 3**: Setup Nextflow and CWL engines.
 
-- [ ] **Step 4**: Validate workflows and materialize their containers. 
+- [x] **Step 4**: Validate workflows and materialize their containers. 
 
 - [ ] **Step 5**: Launch the workflows in an execution environment.
 
 ## Next Steps
 
-- Integrate GA4GH API [dockstore.org](https://dockstore.org/search?searchMode=files).
+- Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
 - Example:
   - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902
   - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902/versions/master/CWL/files
