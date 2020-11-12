@@ -199,7 +199,7 @@ class WF:
         # This directory is here for those files which are created in order
         # to tweak or patch workflow executions
         self.engineTweaksDir = os.path.join(uniqueWorkDir,'engineTweaks')
-        os.makedirs(self.outputsDir, exist_ok=True)
+        os.makedirs(self.engineTweaksDir, exist_ok=True)
 
         # And the copy of scheme handlers
         self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
