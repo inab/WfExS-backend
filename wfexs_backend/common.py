@@ -22,6 +22,10 @@ import enum
 from collections import namedtuple
 from urllib import request, parse
 
+import base64
+import hashlib
+import functools
+
 DEFAULT_GIT_CMD = 'git'
 DEFAULT_DOCKER_CMD = 'docker'
 DEFAULT_SINGULARITY_CMD = 'singularity'
@@ -49,13 +53,20 @@ MaterializedWorkflowEngine = namedtuple('MaterializedWorkflowEngine',
 
 class ContainerType(enum.Enum):
     Singularity = 'singularity'
-    Docker = 'docker'
+#    Docker = 'docker'
+#    UDocker = 'udocker'
+#    Buildah = 'buildah'
 
-Container = namedtuple('Container', ['name', 'tag', 'signature', 'type'])
-# Symbolic name or identifier of the container
-# Symbolic name or identifier of the tag
+DEFAULT_CONTAINER_TYPE = ContainerType.Singularity
+
+Container = namedtuple('Container', ['taggedName', 'signature', 'type','localPath'])
+# Symbolic name or identifier of the container (including tag)
 # Signature (aka fingerprint) of the container (sha256 or similar)
 # Container type
+# The full local path to the container file (it can be null)
+
+# The tagged name of a container
+ContainerTaggedName = str
 
 # The URL of a git repository containing at least one workflow
 RepoURL = str
@@ -105,3 +116,28 @@ def fetchClassicURL(remote_file, cachedFilename, secContext=None) -> None:
             shutil.copyfileobj(url_response, download_file)
     except Exception as e:
         raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
+
+# Next methods have been borrowed from FlowMaps
+DEFAULT_DIGEST_ALGORITHM = 'sha256'
+DEFAULT_DIGET_BUFFER_SIZE = 65536
+def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize=DEFAULT_DIGET_BUFFER_SIZE) -> Fingerprint:
+    """
+    Accessory method used to compute the digest of an input file-like object
+    """
+
+    h = hashlib.new(digestAlgorithm)
+    buf = filelike.read(bufferSize)
+    while len(buf) > 0:
+            h.update(buf)
+            buf = filelike.read(bufferSize)
+
+    return '{0}={1}'.format(digestAlgorithm,str(base64.standard_b64encode(h.digest()),'iso-8859-1'))
+
+@functools.lru_cache(maxsize=32)
+def ComputeDigestFromFile(filename, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize=DEFAULT_DIGET_BUFFER_SIZE) -> Fingerprint:
+    """
+    Accessory method used to compute the digest of an input file
+    """
+    
+    with open(filename, mode='rb') as f:
+        return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize)
