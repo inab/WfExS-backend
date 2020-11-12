@@ -22,6 +22,7 @@ from typing import Dict, List, Tuple
 import subprocess
 import tempfile
 import venv
+import re
 
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
@@ -124,8 +125,11 @@ class CWLWorkflowEngine(WorkflowEngine):
         # TODO
 
         return engineVersion, None
-
-    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
+    
+    # Pattern for searching for dockerPull lines
+    ContCWLPat = re.compile(r"\"dockerPull\": \"([^\"]+)\"")
+    
+    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
@@ -151,6 +155,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         localWorkflowPackedName = (os.path.join(localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail) + ".cwl").replace("/", "_")
         packedLocalWorkflowFile = os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName)
         
+        # TODO: check whether the repo is newer than the packed file
         if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(packedLocalWorkflowFile) == 0:   # localWorkflow has not been packed
             # Execute cwltool --pack
             # CWLWorkflowEngine directory is needed
@@ -177,12 +182,16 @@ class CWLWorkflowEngine(WorkflowEngine):
                             engineVersion, retval, cwl_pack_stderr_v)
                         raise WorkflowEngineException(errstr)
         
-        #  TODO list of containers
-        containersList = []
+        containerTags = set()
+        with open(packedLocalWorkflowFile, encoding='utf-8') as pLWH:
+            for line in pLWH:
+                contMatch = self.ContCWLPat.search(line)
+                if contMatch:
+                    containerTags.add(contMatch.group(1))
         
         newLocalWf = LocalWorkflow(dir=localWf.dir,relPath=packedLocalWorkflowFile,effectiveCheckout=localWf.effectiveCheckout)
         newWfEngine = MaterializedWorkflowEngine(instance=matWorkflowEngine.instance, version=engineVersion, fingerprint=matWorkflowEngine.fingerprint, workflow=newLocalWf)
-        return newWfEngine, containersList
+        return newWfEngine, list(containerTags)
 
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         # TODO
