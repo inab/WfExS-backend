@@ -59,3 +59,8 @@ There program takes three configuration files, being only one required:
 * Workflow configuration file (required): _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_execution_nxf.yaml), [CWL example](tests/wetlab2variations_execution_cwl.yaml)).
 
 * Security contexts file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_credentials_nxf.yaml), [CWL example](tests/wetlab2variations_credentials_cwl.yaml)).
+
+
+# Flowchart
+
+![WfExS-backend flowchart](docs/wfexs-flowchart.svg)
