@@ -19,6 +19,8 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] **Step 7**: Generate RO-Crate from execution provenance.
 
+- [ ] **Step 8**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
+
 ## Next Steps
 
 - Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
