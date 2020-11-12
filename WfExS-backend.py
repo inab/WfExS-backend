@@ -21,6 +21,7 @@ import os
 import sys
 import shutil
 import tempfile
+import enum
 
 import yaml
 
@@ -33,6 +34,25 @@ except ImportError:
 
 from wfexs_backend.workflow import WF
 
+# Adapted from https://gist.github.com/ptmcg/23ba6e42d51711da44ba1216c53af4ea
+# in order to show the value instead of the class name
+class ArgTypeMixin(enum.Enum):
+    @classmethod
+    def argtype(cls, s: str) -> enum.Enum:
+        try:
+            return cls(s)
+        except:
+            raise argparse.ArgumentTypeError(
+                f"{s!r} is not a valid {cls.__name__}")
+
+    def __str__(self):
+        return self.value
+
+class WfExS_Commands(ArgTypeMixin,enum.Enum):
+    Stage = 'stage'
+    OfflineExecute = 'offline-execute'
+    Execute = 'execute'
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend")
     ap.add_argument('-L', '--local-config', dest="localConfigFilename", help="Local installation configuration file")
@@ -41,6 +61,7 @@ if __name__ == "__main__":
                     help="Configuration file, describing workflow and inputs")
     ap.add_argument('-Z', '--creds-config', dest="securityContextsConfigFilename",
                     help="Configuration file, describing security contexts, which hold credentials and similar")
+    ap.add_argument('command',help='Command to run',nargs='?',type=WfExS_Commands.argtype,choices=WfExS_Commands,default=WfExS_Commands.Execute)
     args = ap.parse_args()
 
     # First, try loading the configuration file
@@ -75,16 +96,19 @@ if __name__ == "__main__":
     
     wfInstance = WF.fromDescription(workflow_config, local_config, creds_config)
     
-    print("* Working directory will be {}".format(wfInstance.workDir),file=sys.stderr)
+    print("* Command \"{}\". Working directory will be {}".format(args.command,wfInstance.workDir),file=sys.stderr)
     sys.stderr.flush()
-
-    wfInstance.fetchWorkflow()
-    wfInstance.setupEngine()
-    wfInstance.materializeWorkflow()
-    wfInstance.materializeInputs()
+    
+    if args.command in (WfExS_Commands.Stage,WfExS_Commands.Execute):
+        wfInstance.fetchWorkflow()
+        wfInstance.setupEngine()
+        wfInstance.materializeWorkflow()
+        wfInstance.materializeInputs()
     
     # These lines should be deleted out once code is near production
     # import pprint
     # pprint.pprint(wfInstance.materializedParams)
     
-    wfInstance.executeWorkflow()
+    if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.Execute):
+        wfInstance.executeWorkflow()
+    
