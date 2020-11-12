@@ -5,7 +5,7 @@ fetch the inputs and workflow execution engine (currently working on [Nextflow](
 and [cwltool](https://github.com/common-workflow-language/cwltool)), and execute the workflow in a
 secure way.
 
-This development is relevant for projects like [EOSC-Life](https://www.eosc-life.eu/) or [EJP-RD](https://www.ejprarediseases.org/).
+This development is relevant for projects like [EOSC-Life](https://www.eosc-life.eu/) or [EJP-RD](https://www.ejprarediseases.org/). The list of high level scheduled and pending developments can be seen at [TODO.md](TODO.md).
 
 In order to use it you have to install first the dependencies described at [INSTALL.md](INSTALL.md). The usage is:
 

@@ -15,6 +15,10 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] **Step 5**: Launch the workflows in an execution environment.
 
+- [ ] **Step 6**: Create execution provenance.
+
+- [ ] **Step 7**: Generate RO-Crate from execution provenance.
+
 ## Next Steps
 
 - Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
