@@ -29,7 +29,7 @@ from typing import Dict, List, Tuple
 from collections import namedtuple
 
 from .container import Container, ContainerFactory
-
+from .singularity_container import SingularityContainerFactory
 
 class WorkflowEngineException(Exception):
     """
@@ -37,6 +37,10 @@ class WorkflowEngineException(Exception):
     """
     pass
 
+
+CONTAINER_FACTORY_CLASSES = [
+    SingularityContainerFactory,
+]
 
 class WorkflowEngine(abc.ABC):
     def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None, cacheWorkflowDir=None):
@@ -91,14 +95,26 @@ class WorkflowEngine(abc.ABC):
         
         # Setting up common properties
         self.docker_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
-        self.singularity_cmd = local_config.get('tools', {}).get('singularityCommand', DEFAULT_SINGULARITY_CMD)
         engine_mode = local_config.get('tools', {}).get('engineMode')
         if engine_mode is None:
             engine_mode = DEFAULT_ENGINE_MODE
         else:
             engine_mode = EngineMode(engine_mode)
         self.engine_mode = engine_mode
-
+        
+        container_type = local_config.get('tools', {}).get('containerType')
+        if container_type is None:
+            container_type = DEFAULT_CONTAINER_TYPE
+        else:
+            container_type = ContainerType(container_type)
+        
+        for containerFactory in CONTAINER_FACTORY_CLASSES:
+            if containerFactory.ContainerType() == container_type:
+                self.container_factory = containerFactory(cacheDir=cacheDir,local_config=local_config)
+                break
+        else:
+            raise WorkflowEngineException("FATAL: No container factory implementation for {}".format(container_type))
+    
     @classmethod
     @abc.abstractmethod
     def WorkflowType(cls) -> WorkflowType:
@@ -149,7 +165,7 @@ class WorkflowEngine(abc.ABC):
                                           workflow=localWf)
 
     @abc.abstractmethod
-    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
+    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
@@ -158,7 +174,10 @@ class WorkflowEngine(abc.ABC):
         """
         
         pass
-
+    
+    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName]) -> List[Container]:
+        return self.container_factory.materializeContainers(listOfContainerTags)
+    
     @abc.abstractmethod
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
         pass
@@ -169,5 +188,9 @@ class WorkflowEngine(abc.ABC):
     
     @classmethod
     def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
-        return matWfEng.instance.materializeWorkflow(matWfEng)
+        matWfEng, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng)
+        
+        listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags)
+        
+        return matWfEng, listOfContainers
         
