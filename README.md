@@ -36,7 +36,7 @@ optional arguments:
 
 There program takes three configuration files, being only one required:
 
-* Local configuration file: It describes the local setup of the backend. There is an example at [tests/local_config.yaml](tests/local_config.yaml).
+* Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)).
   
   - `cacheDir`: The path in this key sets up the place where all the contents which can be cached are hold. It contains downloaded RO-Crate,
      downloaded workflow git repositories, downloaded workflow engines.
@@ -56,6 +56,6 @@ There program takes three configuration files, being only one required:
 
   - `tools.javaCommand`: Path to java command (only used when needed)
   
-* Workflow configuration file (required): _TO BE DOCUMENTED_
+* Workflow configuration file (required): _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_execution_nxf.yaml), [CWL example](tests/wetlab2variations_execution_cwl.yaml)).
 
-* Security contexts file: _TO BE DOCUMENTED_
+* Security contexts file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_credentials_nxf.yaml), [CWL example](tests/wetlab2variations_credentials_cwl.yaml)).

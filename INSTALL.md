@@ -17,3 +17,8 @@ pip install -r requirements.txt
 ```
 
 * If you upgrade your Python installation (from version 3.6 to 3.7, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.
+
+* [encfs](https://vgough.github.io/encfs/) is needed for the ongoing feature of secure intermediate results.
+
+* External tools [java](https://openjdk.java.net/) (supported from version 8 to any version below 15), [git](https://git-scm.com/) and [singularity](https://sylabs.io/singularity/) are needed in several stages of the code. Please, install them,
+  using either native packages (for instance, from your Linux distribution) or by hand and later set their path in the local configuration file you are using.
