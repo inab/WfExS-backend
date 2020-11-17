@@ -24,6 +24,8 @@ import tempfile
 import venv
 import re
 
+import yaml
+
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
 
@@ -40,7 +42,8 @@ class CWLWorkflowEngine(WorkflowEngine):
     DEFAULT_SCHEMA_SALAD_VERSION = '7.0.20200811075006'
     ENGINE_NAME = 'cwl'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None, cacheWorkflowDir=None):
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None,
+                 cacheWorkflowDir=None):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir)
 
@@ -125,10 +128,10 @@ class CWLWorkflowEngine(WorkflowEngine):
         # TODO
 
         return engineVersion, None
-    
+
     # Pattern for searching for dockerPull lines
     ContCWLPat = re.compile(r"\"dockerPull\": \"([^\"]+)\"")
-    
+
     def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
@@ -143,25 +146,27 @@ class CWLWorkflowEngine(WorkflowEngine):
         else:
             localWorkflowFile = os.path.join(localWorkflowDir, localWf.relPath)
         engineVersion = matWorkflowEngine.version
-        
+
         if not os.path.isfile(localWorkflowFile):
             raise WorkflowEngineException(
                 'CWL workflow {} has not been materialized.'.format(localWorkflowFile))
-        
+
         # Extract hashes directories from localWorkflow
         localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail = localWorkflowDir.split("/")[-2:]
 
         # Setting up workflow packed name
-        localWorkflowPackedName = (os.path.join(localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail) + ".cwl").replace("/", "_")
+        localWorkflowPackedName = (
+                os.path.join(localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail) + ".cwl").replace("/", "_")
         packedLocalWorkflowFile = os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName)
-        
+
         # TODO: check whether the repo is newer than the packed file
-        if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(packedLocalWorkflowFile) == 0:   # localWorkflow has not been packed
+        if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(
+                packedLocalWorkflowFile) == 0:  # localWorkflow has not been packed
             # Execute cwltool --pack
             # CWLWorkflowEngine directory is needed
             cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
 
-            with open(packedLocalWorkflowFile,mode='wb') as packedH:
+            with open(packedLocalWorkflowFile, mode='wb') as packedH:
                 with tempfile.NamedTemporaryFile() as cwl_pack_stderr:
                     # Writing straight to the file
                     retval = subprocess.Popen(
@@ -181,18 +186,101 @@ class CWLWorkflowEngine(WorkflowEngine):
                         errstr = "Could not pack CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
                             engineVersion, retval, cwl_pack_stderr_v)
                         raise WorkflowEngineException(errstr)
-        
+
         containerTags = set()
         with open(packedLocalWorkflowFile, encoding='utf-8') as pLWH:
             for line in pLWH:
                 contMatch = self.ContCWLPat.search(line)
                 if contMatch:
                     containerTags.add(contMatch.group(1))
-        
-        newLocalWf = LocalWorkflow(dir=localWf.dir,relPath=packedLocalWorkflowFile,effectiveCheckout=localWf.effectiveCheckout)
-        newWfEngine = MaterializedWorkflowEngine(instance=matWorkflowEngine.instance, version=engineVersion, fingerprint=matWorkflowEngine.fingerprint, workflow=newLocalWf)
+
+        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=packedLocalWorkflowFile,
+                                   effectiveCheckout=localWf.effectiveCheckout)
+        newWfEngine = MaterializedWorkflowEngine(instance=matWorkflowEngine.instance, version=engineVersion,
+                                                 fingerprint=matWorkflowEngine.fingerprint, workflow=newLocalWf)
         return newWfEngine, list(containerTags)
 
     def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
-        # TODO
-        pass
+        """
+        Method to execute the workflow
+        """
+        localWorkflowFile = localWf.relPath
+        if os.path.exists(localWorkflowFile):
+            # TODO change the hardcoded test filename and path to real execution path
+            yamlFileName = "wetlab2variations_input_provenance_cwl.yaml"
+            yamlFilePath = "tests"
+            yamlFile = os.path.join(yamlFilePath, yamlFileName)
+
+            try:
+                # Create YAML file
+                self.createYAMLFile(inputs, yamlFile)
+                if os.path.isfile(yamlFile):
+                    # TODO
+                    # Execute workflow
+                    # CWLWorkflowEngine directory is needed
+                    pass
+
+            except Exception as error:
+                raise WorkflowEngineException(
+                    "ERROR: cannot execute the workflow {}, {}".format(localWorkflowFile, error)
+                )
+        else:
+            raise WorkflowEngineException(
+                'CWL workflow {} has not been successfully materialized and packed for their execution'.format(
+                    localWorkflowFile)
+            )
+
+    def createYAMLFile(self, inputs, filename):
+        """
+        Method to create a YAML file that describes the execution inputs of the workflow
+        needed for their execution
+        """
+        try:
+            execInputs = self.executionInputs(inputs)   # TODO convert to class method
+            if len(execInputs) != 0:
+                with open(filename, mode="w+", encoding="utf-8") as yaml_file:
+                    yaml.dump(execInputs, yaml_file, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            else:
+                raise WorkflowEngineException(
+                    "Dict of execution inputs is empty"
+                )
+
+        except IOError as error:
+            raise WorkflowEngineException(
+                "ERROR: cannot create YAML file {}, {}".format(filename, error)
+            )
+
+    @staticmethod
+    def executionInputs(inputs):
+        """
+        Setting execution inputs needed to execute the workflow
+        """
+        if len(inputs) != 0:  # list of materialized inputs is not empty
+            execInputs = dict()     # TODO convert class variable
+            for input in inputs:
+                if isinstance(input, MaterializedInput):  # input is a MaterializedInput
+                    numberOfInputs = len(input.values)  # number of inputs inside a MaterializedInput
+                    for input_value in input.values:
+                        name = input.name
+                        value = input_value
+                        if isinstance(value, MaterializedContent):  # value of an input contains MaterializedContent
+                            if os.path.isfile(value.local):  # MaterializedContent is a File
+                                exec_input = {"class": "File", "location": value.local}
+                                if name not in execInputs.keys():
+                                    if numberOfInputs != 1:  # different inputs in MaterializedContent
+                                        execInputs[name] = [exec_input]
+                                    else:
+                                        execInputs[name] = exec_input
+                                else:
+                                    execInputs[name].append(exec_input)
+                            else:
+                                raise WorkflowEngineException(
+                                    "Input {} is not materialized".format(value)
+                                )
+                        else:
+                            execInputs[name] = value
+                # TODO else?
+            return execInputs
+
+        else:
+            raise WorkflowEngineException("List of materialized inputs is empty")
