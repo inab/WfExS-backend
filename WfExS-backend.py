@@ -46,7 +46,7 @@ class ArgTypeMixin(enum.Enum):
                 f"{s!r} is not a valid {cls.__name__}")
 
     def __str__(self):
-        return self.value
+        return str(self.value)
 
 class WfExS_Commands(ArgTypeMixin,enum.Enum):
     Stage = 'stage'
