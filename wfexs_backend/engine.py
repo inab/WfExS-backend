@@ -179,12 +179,12 @@ class WorkflowEngine(abc.ABC):
         return self.container_factory.materializeContainers(listOfContainerTags)
     
     @abc.abstractmethod
-    def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs):
         pass
     
     @classmethod
     def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine,inputs: List[MaterializedInput], outputs):
-        return matWfEng.instance.launchWorkflow(matWfEng.workflow, inputs, outputs)
+        return matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
     
     @classmethod
     def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
