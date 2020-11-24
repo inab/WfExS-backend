@@ -193,6 +193,6 @@ class CWLWorkflowEngine(WorkflowEngine):
         newWfEngine = MaterializedWorkflowEngine(instance=matWorkflowEngine.instance, version=engineVersion, fingerprint=matWorkflowEngine.fingerprint, workflow=newLocalWf)
         return newWfEngine, list(containerTags)
 
-    def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs):
         # TODO
         pass
