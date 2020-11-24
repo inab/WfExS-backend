@@ -20,3 +20,8 @@ params:
       - ftp://ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.vcf.gz
   bwamem:
     rgheader: "@RG\\tID:H947YADXX\\tSM:NA12878\\tPL:ILLUMINA"
+outputs:
+  gvcf:
+    c-l-a-s-s: File
+    preferredName: NA12878.g.vcf.gz
+    glob: "*.sorted.noDuplicates.recalibrated.g.vcf.gz"

@@ -26,5 +26,7 @@ params:
 outputs:
   metrics:
     c-l-a-s-s: File
+    preferredName: 'NA12878.metrics.txt'
   gvcf:
     c-l-a-s-s: File
+    preferredName: 'NA12878.genome.vcf.gz'
