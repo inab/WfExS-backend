@@ -384,7 +384,7 @@ class WF:
     def executeWorkflow(self):
         WorkflowEngine.ExecuteWorkflow(self.materializedEngine, self.materializedParams, self.outputs)
     
-    def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None) -> Tuple[AbsPath, RepoTag]:
+    def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
         """
 
         :param repoURL:
@@ -405,6 +405,7 @@ class WF:
 
         repo_tag_destdir = os.path.join(repo_destdir, repo_hashed_tag_id)
         # We are assuming that, if the directory does exist, it contains the repo
+        doRepoUpdate = True
         if not os.path.exists(repo_tag_destdir):
             # Try cloning the repository without initial checkout
             if repoTag is not None:
@@ -423,37 +424,47 @@ class WF:
                 ]
 
                 gitcheckout_params = None
-
-            # Last, initialize submodules
-            gitsubmodule_params = [
-                self.git_cmd, 'submodule', 'update', '--init'
+        elif doUpdate:
+            gitclone_params = None
+            gitcheckout_params = [
+                self.git_cmd, 'pull', '--recurse-submodules'
             ]
-
-            with tempfile.NamedTemporaryFile() as git_stdout:
-                with tempfile.NamedTemporaryFile() as git_stderr:
-                    # First, (bare) clone
+        else:
+            doRepoUpdate = False
+        
+        if doRepoUpdate:
+            with tempfile.NamedTemporaryFile() as git_stdout, tempfile.NamedTemporaryFile() as git_stderr:
+                
+                # First, (bare) clone
+                retval = 0
+                if gitclone_params is not None:
                     retval = subprocess.call(gitclone_params, stdout=git_stdout, stderr=git_stderr)
-                    # Then, checkout (which can be optional)
-                    if retval == 0 and (gitcheckout_params is not None):
-                        retval = subprocess.Popen(gitcheckout_params, stdout=git_stdout, stderr=git_stderr,
-                                                  cwd=repo_tag_destdir).wait()
-                    # Last, submodule preparation
-                    if retval == 0:
-                        retval = subprocess.Popen(gitsubmodule_params, stdout=git_stdout, stderr=git_stderr,
-                                                  cwd=repo_tag_destdir).wait()
+                # Then, checkout (which can be optional)
+                if retval == 0 and (gitcheckout_params is not None):
+                    retval = subprocess.Popen(gitcheckout_params, stdout=git_stdout, stderr=git_stderr,
+                                              cwd=repo_tag_destdir).wait()
+                # Last, submodule preparation
+                if retval == 0:
+                    # Last, initialize submodules
+                    gitsubmodule_params = [
+                        self.git_cmd, 'submodule', 'update', '--init', '--recursive'
+                    ]
+                    
+                    retval = subprocess.Popen(gitsubmodule_params, stdout=git_stdout, stderr=git_stderr,
+                                              cwd=repo_tag_destdir).wait()
 
-                    # Proper error handling
-                    if retval != 0:
-                        # Reading the output and error for the report
-                        with open(git_stdout.name, "r") as c_stF:
-                            git_stdout_v = c_stF.read()
-                        with open(git_stderr.name, "r") as c_stF:
-                            git_stderr_v = c_stF.read()
+                # Proper error handling
+                if retval != 0:
+                    # Reading the output and error for the report
+                    with open(git_stdout.name, "r") as c_stF:
+                        git_stdout_v = c_stF.read()
+                    with open(git_stderr.name, "r") as c_stF:
+                        git_stderr_v = c_stF.read()
 
-                        errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                            repoURL, repoTag, retval, git_stdout_v, git_stderr_v)
-                        raise WFException(errstr)
-
+                    errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                        repoURL, repoTag, retval, git_stdout_v, git_stderr_v)
+                    raise WFException(errstr)
+        
         # Last, we have to obtain the effective checkout
         gitrevparse_params = [
             self.git_cmd, 'rev-parse', '--verify', 'HEAD'
