@@ -7,7 +7,7 @@ This workflow execution service backend is written for Python 3.6 and later.
 	- `venv` is also available in many Linux distributions (Ubuntu package `python3-venv`). In some of them is integrated into the Python 3.5 (or later) installation.
 
 
-* The creation of a virtual environment where to install WES backend dependencies is done running:
+* The creation of a virtual environment where to install WfExS backend dependencies is done running:
   
 ```bash
 python3 -m venv .pyWEenv
