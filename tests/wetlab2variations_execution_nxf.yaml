@@ -23,5 +23,6 @@ params:
 outputs:
   gvcf:
     c-l-a-s-s: File
+    implicit: true
     preferredName: NA12878.g.vcf.gz
     glob: "*.sorted.noDuplicates.recalibrated.g.vcf.gz"
