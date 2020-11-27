@@ -111,4 +111,5 @@ if __name__ == "__main__":
     
     if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.Execute):
         wfInstance.executeWorkflow()
+        wfInstance.createResearchObject()
     

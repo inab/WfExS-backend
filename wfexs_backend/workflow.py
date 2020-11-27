@@ -46,6 +46,13 @@ from .cwl_engine import CWLWorkflowEngine
 WORKFLOW_ENGINE_CLASSES = [NextflowWorkflowEngine, CWLWorkflowEngine]
 
 
+def parseExpectedOutputs(outputs) -> List[ExpectedOutput]:
+    expectedOutputs = []
+    
+    # TODO: implement parsing of outputs
+    
+    return expectedOutputs
+
 class WF:
     """
     Workflow enaction class
@@ -136,10 +143,12 @@ class WF:
         self.version_id = str(version_id)
         self.descriptor_type = descriptor_type
         self.params = params
-        self.outputs = outputs
         self.workflow_config = workflow_config
         self.local_config = local_config
         self.creds_config = creds_config
+        
+        # TODO: implement parseExpectedOutputs
+        self.outputs = parseExpectedOutputs(outputs)
 
         # The endpoint should always end with a slash
         if isinstance(trs_endpoint, str) and trs_endpoint[-1] != '/':
@@ -217,6 +226,11 @@ class WF:
         self.localWorkflow = None
         self.materializedEngine = None
         self.listOfContainers = None
+
+        self.exitVal = None
+        self.augmentedInputs = None
+        self.matCheckOutputs = None
+
 
     def fetchWorkflow(self):
         """
@@ -382,7 +396,15 @@ class WF:
         return theInputs, lastInput
 
     def executeWorkflow(self):
-        WorkflowEngine.ExecuteWorkflow(self.materializedEngine, self.materializedParams, self.outputs)
+        exitVal, augmentedInputs, matCheckOutputs = WorkflowEngine.ExecuteWorkflow(self.materializedEngine, self.materializedParams, self.outputs)
+        
+        self.exitVal = exitVal
+        self.augmentedInputs = augmentedInputs
+        self.matCheckOutputs = matCheckOutputs
+    
+    def createResearchObject(self):
+        # TODO: digest the results from executeWorkflow plus all the provenance
+        pass
     
     def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
         """
