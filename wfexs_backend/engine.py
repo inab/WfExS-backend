@@ -184,12 +184,12 @@ class WorkflowEngine(abc.ABC):
     
     @classmethod
     def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine,inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
-        matOutputs = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
+        exitVal, augmentedInputs, matOutputs = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
         
         # TODO: compute checksums
         matCheckOutputs = matOutputs
         
-        return matCheckOutputs
+        return exitVal, augmentedInputs, matCheckOutputs
     
     @classmethod
     def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
