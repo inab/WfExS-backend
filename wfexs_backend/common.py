@@ -40,7 +40,33 @@ class EngineMode(enum.Enum):
 DEFAULT_ENGINE_MODE = EngineMode.Local
 
 MaterializedContent = namedtuple('MaterializedContent', ['local', 'uri', 'prettyFilename'])
+# local: Local absolute path of the content which was materialized. It
+#   can be either a path in the cached inputs directory, or an absolute
+#   path in the inputs directory of the execution
+# uri: Either an URL or a CURIE of the content which was materialized,
+#   needed for the provenance
+# prettyFilename: The preferred filename to use in the inputs directory
+#   of the execution environment
+
 MaterializedInput = namedtuple('MaterializedInput', ['name', 'values'])
+# name: Name of the input
+# values: list of associated values, which can be literal ones or
+#   instances from MaterializedContent
+
+ExpectedOutput = namedtuple('ExpectedOutput',['name','isImplicit','prettyFilename','glob'])
+# name: Name of the output
+# isImplicit: if it is true, this output is implicit, so no parameter
+#   must be set
+# prettyFilename: Relative "pretty" name to be used in input directory
+#   when the workflow is being launched
+# glob: When the output is implicit, the filename pattern to capture the
+#   local path, based on the output / working directory
+
+MaterializedOutput = namedtuple('MaterializedOutput',['name','local','prettyFilename','signature'])
+# name: Name of the output
+# local: Local absolute path of the output
+# prettyFilename: Relative "pretty" name to be used in provenance
+# signature: Computed sha256 from the file
 
 LocalWorkflow = namedtuple('LocalWorkflow', ['dir', 'relPath', 'effectiveCheckout'])
 WorkflowType = namedtuple('WorkflowType', ['engineName', 'clazz', 'uri', 'trs_descriptor', 'rocrate_programming_language'])

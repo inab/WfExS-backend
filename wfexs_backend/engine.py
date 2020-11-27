@@ -179,12 +179,17 @@ class WorkflowEngine(abc.ABC):
         return self.container_factory.materializeContainers(listOfContainerTags)
     
     @abc.abstractmethod
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs):
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
         pass
     
     @classmethod
-    def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine,inputs: List[MaterializedInput], outputs):
-        return matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
+    def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine,inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+        matOutputs = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
+        
+        # TODO: compute checksums
+        matCheckOutputs = matOutputs
+        
+        return matCheckOutputs
     
     @classmethod
     def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
