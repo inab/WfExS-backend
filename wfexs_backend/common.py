@@ -108,6 +108,9 @@ EngineVersion = str
 # This represents a fingerprint from an installation, a docker image, etc...
 Fingerprint = str
 
+# Exit value from any kind of execution
+ExitVal = int
+
 class WFException(Exception):
     pass
 

@@ -36,9 +36,20 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     ENGINE_NAME = 'nextflow'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None, cacheWorkflowDir=None):
-        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config, engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir)
-
+    def __init__(self,
+            cacheDir=None,
+            workflow_config=None,
+            local_config=None,
+            engineTweaksDir=None,
+            cacheWorkflowDir=None,
+            workDir=None,
+            outputsDir=None,
+            intermediateDir=None
+        ):
+        super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
+                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
+                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir)
+        
         self.java_cmd = local_config.get('tools', {}).get('javaCommand', DEFAULT_JAVA_CMD)
 
         self.nxf_image = local_config.get(self.ENGINE_NAME, {}).get('dockerImage', self.DEFAULT_NEXTFLOW_DOCKER_IMAGE)
@@ -142,7 +153,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return engineVersion, engineFingerprint
     
-    def runNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None) -> Tuple[int,str,str]:
+    def runNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None) -> Tuple[ExitVal,str,str]:
         if self.engine_mode == EngineMode.Docker:
             retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir)
         elif self.engine_mode == EngineMode.Local:
@@ -213,7 +224,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         
         return retval, nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None) -> Tuple[int,str,str]:
+    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None) -> Tuple[ExitVal,str,str]:
         # Now, we have to assure the nextflow image is already here
         docker_tag = self.nxf_image + ':' + nextflow_version
         checkimage_params = [
@@ -492,7 +503,14 @@ STDERR
         
         return matWorkflowEngine, list(containerTags)
 
-    def launchWorkflow(self, localWf: LocalWorkflow, inputs: List[MaterializedInput], outputs):
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+        localWf = matWfEng.workflow
+        launch_retval , launch_stdout, launch_stderr = self.runNextflowCommand(
+            matWfEng.version,
+            ['config','-flat',localWf.dir],
+            workdir=localWf.dir
+        )
+        
         """
         docker.enabled = false
         singularity.enabled = true

@@ -42,11 +42,20 @@ class CWLWorkflowEngine(WorkflowEngine):
     DEFAULT_SCHEMA_SALAD_VERSION = '7.0.20200811075006'
     ENGINE_NAME = 'cwl'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None,
-                 cacheWorkflowDir=None):
+    def __init__(self,
+            cacheDir=None,
+            workflow_config=None,
+            local_config=None,
+            engineTweaksDir=None,
+            cacheWorkflowDir=None,
+            workDir=None,
+            outputsDir=None,
+            intermediateDir=None
+        ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
-                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir)
-
+                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
+                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir)
+        
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
         # Setting up packed directory
         self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, 'wf-pack')
@@ -200,7 +209,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                                                  fingerprint=matWorkflowEngine.fingerprint, workflow=newLocalWf)
         return newWfEngine, list(containerTags)
 
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs):
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
         """
         Method to execute the workflow
         """

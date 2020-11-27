@@ -43,7 +43,16 @@ CONTAINER_FACTORY_CLASSES = [
 ]
 
 class WorkflowEngine(abc.ABC):
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None, cacheWorkflowDir=None):
+    def __init__(self,
+            cacheDir=None,
+            workflow_config=None,
+            local_config=None,
+            engineTweaksDir=None,
+            cacheWorkflowDir=None,
+            workDir=None,
+            outputsDir=None,
+            intermediateDir=None
+        ):
         """
         Abstract init method
 
@@ -53,6 +62,11 @@ class WorkflowEngine(abc.ABC):
             or specific engine versions
         :param local_config:
         :param engineTweaksDir:
+        :param cacheWorkflowDir:
+        :param workDir:
+        :param inputsDir:
+        :param outputsDir:
+        :param intermediateDir:
         """
         if local_config is None:
             local_config = dict()
@@ -84,13 +98,34 @@ class WorkflowEngine(abc.ABC):
             os.makedirs(cacheWorkflowDir, exist_ok=True)
         self.cacheWorkflowDir = cacheWorkflowDir
         
+
+        # Setting up working directories, one per instance
+        if workDir is None:
+            workDir = tempfile.mkdtemp(prefix='WfExS-exec', suffix='workdir')
+            # Assuring this temporal directory is removed at the end
+            atexit.register(shutil.rmtree, workDir)
+        self.workDir = workDir
         
+        # This directory should hold intermediate workflow steps results
+        if intermediateDir is None:
+            intermediateDir = os.path.join(workDir,'intermediate')
+        os.makedirs(intermediateDir, exist_ok=True)
+        self.intermediateDir = intermediateDir
+                
+        # This directory will hold the final workflow results, which could
+        # be either symbolic links to the intermediate results directory
+        # or newly generated content
+        if outputsDir is None:
+            outputsDir = os.path.join(workDir,'outputs')
+        os.makedirs(outputsDir, exist_ok=True)
+        self.outputsDir = outputsDir
+        
+        # This directory is here for those files which are created in order
+        # to tweak or patch workflow executions
         # engine tweaks directory
         if engineTweaksDir is None:
-            engineTweaksDir = tempfile.mkdtemp(prefix='WfExS-tweaks', suffix='backend')
-            # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, engineTweaksDir)
-        
+            engineTweaksDir = os.path.join(workDir,'engineTweaks')
+        os.makedirs(engineTweaksDir, exist_ok=True)
         self.engineTweaksDir = engineTweaksDir
         
         # Setting up common properties

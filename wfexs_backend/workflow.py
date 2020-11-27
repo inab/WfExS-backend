@@ -285,7 +285,8 @@ class WF:
             for engineDesc in self.WORKFLOW_ENGINES:
                 engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
                                           local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
-                                          cacheWorkflowDir=self.cacheWorkflowDir)
+                                          cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
+                                          outputsDir=self.outputsDir, intermediateDir=self.intermediateDir)
                 engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
                 if engineVer is not None:
                     break
@@ -293,7 +294,9 @@ class WF:
                 raise WFException('No engine recognized a workflow at {}'.format(repoURL))
         else:
             engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
-                                      local_config=self.local_config, engineTweaksDir=self.engineTweaksDir)
+                                          local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
+                                          cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
+                                          outputsDir=self.outputsDir, intermediateDir=self.intermediateDir)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException('Engine {} did not recognize a workflow at {}'.format(engine.workflowType.engineName, repoURL))
