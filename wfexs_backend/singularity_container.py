@@ -76,7 +76,7 @@ class SingularityContainerFactory(ContainerFactory):
                     # Singularity command line borrowed from
                     # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
                     s_retval = subprocess.Popen(
-                    [self.singularity_cmd, 'pull', '--name', localContainerPath, singTag],
+                    [self.singularity_cmd, 'pull', '--disable-cache', '--name', localContainerPath, singTag],
                     stdout=s_out,
                     stderr=s_err
                     ).wait()
