@@ -34,29 +34,33 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_PYTHON_PACKAGE = 'cwltool'
     CWL_UTILS_PYTHON_PACKAGE = 'cwl-utils'
     SCHEMA_SALAD_PYTHON_PACKAGE = 'schema-salad'
+
     CWL_REPO = 'https://github.com/common-workflow-language/'
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWLTOOL_REPO + CWL_UTILS_PYTHON_PACKAGE
+
     DEFAULT_CWLTOOL_VERSION = '3.0.20201026152241'
     DEFAULT_CWL_UTILS_VERSION = '0.7'
     DEFAULT_SCHEMA_SALAD_VERSION = '7.0.20200811075006'
+
     ENGINE_NAME = 'cwl'
 
     def __init__(self,
-            cacheDir=None,
-            workflow_config=None,
-            local_config=None,
-            engineTweaksDir=None,
-            cacheWorkflowDir=None,
-            workDir=None,
-            outputsDir=None,
-            intermediateDir=None
-        ):
+                 cacheDir=None,
+                 workflow_config=None,
+                 local_config=None,
+                 engineTweaksDir=None,
+                 cacheWorkflowDir=None,
+                 workDir=None,
+                 outputsDir=None,
+                 intermediateDir=None
+                 ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir)
-        
+
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
+
         # Setting up packed directory
         self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, 'wf-pack')
         os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
@@ -111,7 +115,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
-                retval = subprocess.Popen(
+                retVal = subprocess.Popen(
                     "source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={}  {}=={}  {}=={}".format(
                         self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                         self.CWL_UTILS_PYTHON_PACKAGE,
@@ -124,7 +128,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 ).wait()
 
                 # Proper error handling
-                if retval != 0:
+                if retVal != 0:
                     # Reading the output and error for the report
                     with open(cwl_install_stdout.name, "r") as c_stF:
                         cwl_install_stdout_v = c_stF.read()
@@ -132,11 +136,12 @@ class CWLWorkflowEngine(WorkflowEngine):
                         cwl_install_stderr_v = c_stF.read()
 
                     errstr = "Could not install CWL {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                        engineVersion, retval, cwl_install_stdout_v, cwl_install_stderr_v)
+                        engineVersion, retVal, cwl_install_stdout_v, cwl_install_stderr_v)
                     raise WorkflowEngineException(errstr)
+
         # TODO
 
-        return engineVersion, None
+        return engineVersion, ""
 
     # Pattern for searching for dockerPull lines
     ContCWLPat = re.compile(r"\"dockerPull\": \"([^\"]+)\"")
@@ -150,6 +155,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         """
         localWf = matWorkflowEngine.workflow
         localWorkflowDir = localWf.dir
+
         if os.path.isabs(localWf.relPath):
             localWorkflowFile = localWf.relPath
         else:
@@ -169,16 +175,17 @@ class CWLWorkflowEngine(WorkflowEngine):
         packedLocalWorkflowFile = os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName)
 
         # TODO: check whether the repo is newer than the packed file
-        if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(
-                packedLocalWorkflowFile) == 0:  # localWorkflow has not been packed
-            # Execute cwltool --pack
+
+        if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(packedLocalWorkflowFile) == 0:
+
             # CWLWorkflowEngine directory is needed
             cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
 
+            # Execute cwltool --pack
             with open(packedLocalWorkflowFile, mode='wb') as packedH:
                 with tempfile.NamedTemporaryFile() as cwl_pack_stderr:
                     # Writing straight to the file
-                    retval = subprocess.Popen(
+                    retVal = subprocess.Popen(
                         "source bin/activate ; cwltool --no-doc-cache --pack {}".format(localWorkflowFile),
                         stdout=packedH,
                         stderr=cwl_pack_stderr,
@@ -187,13 +194,13 @@ class CWLWorkflowEngine(WorkflowEngine):
                     ).wait()
 
                     # Proper error handling
-                    if retval != 0:
+                    if retVal != 0:
                         # Reading the output and error for the report
                         with open(cwl_pack_stderr.name, "r") as c_stF:
                             cwl_pack_stderr_v = c_stF.read()
 
                         errstr = "Could not pack CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
-                            engineVersion, retval, cwl_pack_stderr_v)
+                            engineVersion, retVal, cwl_pack_stderr_v)
                         raise WorkflowEngineException(errstr)
 
         containerTags = set()
@@ -209,26 +216,64 @@ class CWLWorkflowEngine(WorkflowEngine):
                                                  fingerprint=matWorkflowEngine.fingerprint, workflow=newLocalWf)
         return newWfEngine, list(containerTags)
 
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: List[MaterializedInput],
+                       outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
         """
         Method to execute the workflow
         """
         localWf = matWfEng.workflow
         localWorkflowFile = localWf.relPath
+        engineVersion = matWfEng.version
+
         if os.path.exists(localWorkflowFile):
-            # TODO change the hardcoded test filename and path to real execution path
+            with open(localWorkflowFile, "r") as cwl_file:
+                cwl_yaml = yaml.safe_load(cwl_file)  # convert packed CWL to YAML
+                cwl_yaml_inputs = next(item for item in cwl_yaml['$graph'] if item["class"] == "Workflow")['inputs']
+
+                # Setting packed CWL inputs (id, type)
+                cwl_dict_inputs = dict()
+                for cwl_yaml_input in cwl_yaml_inputs:  # clean string of packed CWL inputs
+                    cwl_yaml_input_id = str(cwl_yaml_input['id'])
+                    if "main" in cwl_yaml_input_id:
+                        cwl_yaml_input['id'] = cwl_yaml_input_id.replace("#main/", "")
+                        if cwl_yaml_input_id not in cwl_dict_inputs.keys():
+                            cwl_dict_inputs[cwl_yaml_input['id']] = cwl_yaml_input['type']
+
+            # TODO change the hardcoded filename
             yamlFileName = "wetlab2variations_input_provenance_cwl.yaml"
-            yamlFilePath = "tests"
-            yamlFile = os.path.join(yamlFilePath, yamlFileName)
+            yamlFile = os.path.join(self.engineTweaksDir, yamlFileName)
 
             try:
                 # Create YAML file
-                self.createYAMLFile(inputs, yamlFile)
+                augmentedInputs = self.createYAMLFile(matInputs, cwl_dict_inputs, yamlFile)
                 if os.path.isfile(yamlFile):
-                    # TODO
-                    # Execute workflow
                     # CWLWorkflowEngine directory is needed
-                    pass
+                    cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
+
+                    # Execute workflow
+                    with tempfile.NamedTemporaryFile() as cwl_yaml_stderr:
+                        intermediateDir = self.intermediateDir + "/"
+                        outputDir = self.outputsDir + "/"
+                        cmd = "cwltool --outdir {0} --no-doc-cache --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}".format(
+                            outputDir, intermediateDir, localWorkflowFile, yamlFile)
+
+                        retVal = subprocess.Popen("source bin/activate  ; {}".format(cmd),
+                                                  stderr=cwl_yaml_stderr,
+                                                  cwd=cwl_install_dir,
+                                                  shell=True
+                                                  ).wait()
+
+                        # Proper error handling
+                        if retVal != 0:
+                            # Reading the output and error for the report
+                            with open(cwl_yaml_stderr.name, "r") as c_stF:
+                                cwl_pack_stderr_v = c_stF.read()
+
+                            errstr = "Could not execute CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
+                                engineVersion, retVal, cwl_pack_stderr_v)
+                            raise WorkflowEngineException(errstr)
+
+                    return 0, list(augmentedInputs.items()), list(outputs)
 
             except Exception as error:
                 raise WorkflowEngineException(
@@ -240,57 +285,60 @@ class CWLWorkflowEngine(WorkflowEngine):
                     localWorkflowFile)
             )
 
-    def createYAMLFile(self, inputs, filename):
+    def createYAMLFile(self, matInputs, cwlInputs, filename):
         """
         Method to create a YAML file that describes the execution inputs of the workflow
-        needed for their execution
+        needed for their execution. Return parsed inputs.
         """
         try:
-            execInputs = self.executionInputs(inputs)   # TODO convert to class method
+            execInputs = self.executionInputs(matInputs, cwlInputs)
             if len(execInputs) != 0:
                 with open(filename, mode="w+", encoding="utf-8") as yaml_file:
                     yaml.dump(execInputs, yaml_file, allow_unicode=True, default_flow_style=False, sort_keys=False)
+                return execInputs
+
             else:
                 raise WorkflowEngineException(
-                    "Dict of execution inputs is empty"
-                )
+                    "Dict of execution inputs is empty")
 
         except IOError as error:
             raise WorkflowEngineException(
-                "ERROR: cannot create YAML file {}, {}".format(filename, error)
-            )
+                "ERROR: cannot create YAML file {}, {}".format(filename, error))
 
     @staticmethod
-    def executionInputs(inputs):
+    def executionInputs(matInputs, cwlInputs):
         """
         Setting execution inputs needed to execute the workflow
         """
-        if len(inputs) != 0:  # list of materialized inputs is not empty
-            execInputs = dict()     # TODO convert class variable
-            for input in inputs:
-                if isinstance(input, MaterializedInput):  # input is a MaterializedInput
-                    numberOfInputs = len(input.values)  # number of inputs inside a MaterializedInput
-                    for input_value in input.values:
-                        name = input.name
+        execInputs = dict()
+        if len(matInputs) != 0 and len(cwlInputs):  # list of materialized and cwl inputs are not empty
+            for matInput in matInputs:
+                if isinstance(matInput, MaterializedInput):  # input is a MaterializedInput
+                    # numberOfInputs = len(matInput.values)  # number of inputs inside a MaterializedInput
+                    for input_value in matInput.values:
+                        name = matInput.name
                         value = input_value
                         if isinstance(value, MaterializedContent):  # value of an input contains MaterializedContent
-                            if os.path.isfile(value.local):  # MaterializedContent is a File
-                                exec_input = {"class": "File", "location": value.local}
-                                if name not in execInputs.keys():
-                                    if numberOfInputs != 1:  # different inputs in MaterializedContent
-                                        execInputs[name] = [exec_input]
+                            if os.path.isfile(value.local):
+                                value_type = cwlInputs[name]
+                                value_local = value.local
+                                if isinstance(value_type, dict):    # MaterializedContent is a List of File
+                                    classType = value_type['items']
+                                    if name not in execInputs.keys():
+                                        execInputs[name] = [{"class": classType, "location": value_local}]
                                     else:
-                                        execInputs[name] = exec_input
-                                else:
-                                    execInputs[name].append(exec_input)
+                                        execInputs[name].append({"class": classType, "location": value_local})
+
+                                else:   # MaterializedContent is a File
+                                    classType = value_type
+                                    execInputs[name] = {"class": classType, "location": value_local}
                             else:
                                 raise WorkflowEngineException(
-                                    "Input {} is not materialized".format(value)
-                                )
+                                    "Input {} is not materialized".format(value))
                         else:
                             execInputs[name] = value
-                # TODO else?
+
             return execInputs
 
         else:
-            raise WorkflowEngineException("List of materialized inputs is empty")
+            raise WorkflowEngineException("List of execution inputs is empty, {}".format(execInputs))

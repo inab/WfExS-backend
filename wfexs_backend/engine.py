@@ -31,6 +31,7 @@ from collections import namedtuple
 from .container import Container, ContainerFactory
 from .singularity_container import SingularityContainerFactory
 
+
 class WorkflowEngineException(Exception):
     """
     Exceptions fired by instances of WorkflowEngine
@@ -42,17 +43,18 @@ CONTAINER_FACTORY_CLASSES = [
     SingularityContainerFactory,
 ]
 
+
 class WorkflowEngine(abc.ABC):
     def __init__(self,
-            cacheDir=None,
-            workflow_config=None,
-            local_config=None,
-            engineTweaksDir=None,
-            cacheWorkflowDir=None,
-            workDir=None,
-            outputsDir=None,
-            intermediateDir=None
-        ):
+                 cacheDir=None,
+                 workflow_config=None,
+                 local_config=None,
+                 engineTweaksDir=None,
+                 cacheWorkflowDir=None,
+                 workDir=None,
+                 outputsDir=None,
+                 intermediateDir=None
+                 ):
         """
         Abstract init method
 
@@ -64,7 +66,6 @@ class WorkflowEngine(abc.ABC):
         :param engineTweaksDir:
         :param cacheWorkflowDir:
         :param workDir:
-        :param inputsDir:
         :param outputsDir:
         :param intermediateDir:
         """
@@ -87,17 +88,16 @@ class WorkflowEngine(abc.ABC):
                 cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
                 # Assuring this temporal directory is removed at the end
                 atexit.register(shutil.rmtree, cacheDir)
-        
+
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
         self.weCacheDir = os.path.join(cacheDir, self.__class__.__name__)
-        
+
         # Needed for those cases where alternate version of the workflow is generated
         if cacheWorkflowDir is None:
             cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
             os.makedirs(cacheWorkflowDir, exist_ok=True)
         self.cacheWorkflowDir = cacheWorkflowDir
-        
 
         # Setting up working directories, one per instance
         if workDir is None:
@@ -105,29 +105,29 @@ class WorkflowEngine(abc.ABC):
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, workDir)
         self.workDir = workDir
-        
+
         # This directory should hold intermediate workflow steps results
         if intermediateDir is None:
-            intermediateDir = os.path.join(workDir,'intermediate')
+            intermediateDir = os.path.join(workDir, 'intermediate')
         os.makedirs(intermediateDir, exist_ok=True)
         self.intermediateDir = intermediateDir
-                
+
         # This directory will hold the final workflow results, which could
         # be either symbolic links to the intermediate results directory
         # or newly generated content
         if outputsDir is None:
-            outputsDir = os.path.join(workDir,'outputs')
+            outputsDir = os.path.join(workDir, 'outputs')
         os.makedirs(outputsDir, exist_ok=True)
         self.outputsDir = outputsDir
-        
+
         # This directory is here for those files which are created in order
         # to tweak or patch workflow executions
         # engine tweaks directory
         if engineTweaksDir is None:
-            engineTweaksDir = os.path.join(workDir,'engineTweaks')
+            engineTweaksDir = os.path.join(workDir, 'engineTweaks')
         os.makedirs(engineTweaksDir, exist_ok=True)
         self.engineTweaksDir = engineTweaksDir
-        
+
         # Setting up common properties
         self.docker_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
         engine_mode = local_config.get('tools', {}).get('engineMode')
@@ -136,29 +136,29 @@ class WorkflowEngine(abc.ABC):
         else:
             engine_mode = EngineMode(engine_mode)
         self.engine_mode = engine_mode
-        
+
         container_type = local_config.get('tools', {}).get('containerType')
         if container_type is None:
             container_type = DEFAULT_CONTAINER_TYPE
         else:
             container_type = ContainerType(container_type)
-        
+
         for containerFactory in CONTAINER_FACTORY_CLASSES:
             if containerFactory.ContainerType() == container_type:
-                self.container_factory = containerFactory(cacheDir=cacheDir,local_config=local_config)
+                self.container_factory = containerFactory(cacheDir=cacheDir, local_config=local_config)
                 break
         else:
             raise WorkflowEngineException("FATAL: No container factory implementation for {}".format(container_type))
-    
+
     @classmethod
     @abc.abstractmethod
     def WorkflowType(cls) -> WorkflowType:
         pass
-    
+
     @property
     def workflowType(self) -> WorkflowType:
         return self.WorkflowType()
-    
+
     @abc.abstractmethod
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
@@ -191,10 +191,10 @@ class WorkflowEngine(abc.ABC):
             engineVersion, localWf = self.identifyWorkflow(localWf, engineVersion)
             if engineVersion is None:
                 return None
-        
+
         # This is needed for those cases where there is no exact match
         # on the available engine version
-        engineVersion , engineFingerprint = self.materializeEngineVersion(engineVersion)
+        engineVersion, engineFingerprint = self.materializeEngineVersion(engineVersion)
 
         return MaterializedWorkflowEngine(instance=self, version=engineVersion, fingerprint=engineFingerprint,
                                           workflow=localWf)
@@ -207,30 +207,32 @@ class WorkflowEngine(abc.ABC):
         
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
-        
+
         pass
-    
+
     def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName]) -> List[Container]:
         return self.container_factory.materializeContainers(listOfContainerTags)
-    
+
     @abc.abstractmethod
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput],
+                       outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
         pass
-    
+
     @classmethod
-    def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine,inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+    def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput],
+                        outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
+
         exitVal, augmentedInputs, matOutputs = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
-        
+
         # TODO: compute checksums
         matCheckOutputs = matOutputs
-        
+
         return exitVal, augmentedInputs, matCheckOutputs
-    
+
     @classmethod
     def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
         matWfEng, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng)
-        
+
         listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags)
-        
+
         return matWfEng, listOfContainers
-        
