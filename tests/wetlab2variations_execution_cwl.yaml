@@ -1,6 +1,6 @@
 trs_endpoint: https://dev.workflowhub.eu/ga4gh/trs/v2/tools/
 workflow_id: 34
-version: 3
+version: 4
 # All the inputs must be URLs or CURIEs from identifiers.org
 params:
   fastq_files:
@@ -23,6 +23,7 @@ params:
       - ftp://ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.vcf.gz
   readgroup_str: "@RG\\tID:H947YADXX\\tSM:NA12878\\tPL:ILLUMINA"
   chromosome: "1"
+  sample_name: "abc2"
 outputs:
   metrics:
     c-l-a-s-s: File
