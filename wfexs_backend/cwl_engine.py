@@ -23,6 +23,7 @@ import subprocess
 import tempfile
 import venv
 import re
+import json
 
 import yaml
 
@@ -251,29 +252,37 @@ class CWLWorkflowEngine(WorkflowEngine):
                     cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
 
                     # Execute workflow
-                    with tempfile.NamedTemporaryFile() as cwl_yaml_stderr:
-                        intermediateDir = self.intermediateDir + "/"
-                        outputDir = self.outputsDir + "/"
-                        cmd = "cwltool --outdir {0} --no-doc-cache --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}".format(
-                            outputDir, intermediateDir, localWorkflowFile, yamlFile)
+                    with tempfile.NamedTemporaryFile() as cwl_yaml_stdout:
+                        with tempfile.NamedTemporaryFile() as cwl_yaml_stderr:
+                            intermediateDir = self.intermediateDir + "/"
+                            outputDir = self.outputsDir + "/"
+                            cmd = "cwltool --outdir {0} --no-doc-cache --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}".format(
+                                outputDir, intermediateDir, localWorkflowFile, yamlFile)
 
-                        retVal = subprocess.Popen("source bin/activate  ; {}".format(cmd),
-                                                  stderr=cwl_yaml_stderr,
-                                                  cwd=cwl_install_dir,
-                                                  shell=True
-                                                  ).wait()
+                            retVal = subprocess.Popen("source bin/activate  ; {}".format(cmd),
+                                                      stdout=cwl_yaml_stdout,
+                                                      stderr=cwl_yaml_stderr,
+                                                      cwd=cwl_install_dir,
+                                                      shell=True
+                                                      ).wait()
 
-                        # Proper error handling
-                        if retVal != 0:
-                            # Reading the output and error for the report
-                            with open(cwl_yaml_stderr.name, "r") as c_stF:
-                                cwl_pack_stderr_v = c_stF.read()
+                            # Proper error handling
+                            if retVal != 0:
+                                # Reading the error for the report
+                                with open(cwl_yaml_stderr.name, "r") as c_stF:
+                                    cwl_pack_stderr_v = c_stF.read()
 
-                            errstr = "Could not execute CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
-                                engineVersion, retVal, cwl_pack_stderr_v)
-                            raise WorkflowEngineException(errstr)
+                                errstr = "Could not execute CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
+                                    engineVersion, retVal, cwl_pack_stderr_v)
+                                raise WorkflowEngineException(errstr)
 
-                    return 0, list(augmentedInputs.items()), list(outputs)
+                            else:
+                                # Reading the output for the report
+                                with open(cwl_yaml_stdout.name, "r") as c_stT:
+                                    cwl_yaml_stdout_v = c_stT.read()
+                                    outputs = self.executionOutputs(json.loads(cwl_yaml_stdout_v))
+
+                    return 0, list(augmentedInputs.items()), list(outputs.items())
 
             except Exception as error:
                 raise WorkflowEngineException(
@@ -311,7 +320,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         Setting execution inputs needed to execute the workflow
         """
         execInputs = dict()
-        if len(matInputs) != 0 and len(cwlInputs):  # list of materialized and cwl inputs are not empty
+        if len(matInputs) != 0 and len(cwlInputs) != 0:  # list of materialized and cwl inputs are not empty
             for matInput in matInputs:
                 if isinstance(matInput, MaterializedInput):  # input is a MaterializedInput
                     # numberOfInputs = len(matInput.values)  # number of inputs inside a MaterializedInput
@@ -342,3 +351,25 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         else:
             raise WorkflowEngineException("List of execution inputs is empty, {}".format(execInputs))
+
+    @staticmethod
+    def executionOutputs(cwlOutputs):
+        """
+        Setting execution outputs provenance
+        """
+        execOutputs = dict()
+
+        if len(cwlOutputs.keys()) != 0:  # dict of execution outputs is not empty
+            for out_rec in cwlOutputs.keys():
+                execOutputs[out_rec] = [{"class": cwlOutputs[out_rec]['class'], "location": cwlOutputs[out_rec]['path']}]
+                if "secondaryFiles" in cwlOutputs[out_rec]:
+                    secondaryFiles = cwlOutputs[out_rec]['secondaryFiles']
+                    for secondaryFile in secondaryFiles:
+                        execOutputs[out_rec].append({"class": secondaryFile['class'], "location": secondaryFile['path']})
+
+                # TODO is not a File
+
+            return execOutputs
+
+        else:
+            raise WorkflowEngineException("List of execution outputs is empty, {}".format(execOutputs))
