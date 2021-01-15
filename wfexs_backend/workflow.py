@@ -53,6 +53,7 @@ def parseExpectedOutputs(outputs) -> List[ExpectedOutput]:
     
     return expectedOutputs
 
+
 class WF:
     """
     Workflow enaction class
@@ -195,19 +196,19 @@ class WF:
         # This directory will hold either symbolic links to the cached
         # inputs, or the inputs properly post-processed (decompressed,
         # decrypted, etc....)
-        self.inputsDir = os.path.join(uniqueWorkDir,'inputs')
+        self.inputsDir = os.path.join(uniqueWorkDir, 'inputs')
         os.makedirs(self.inputsDir, exist_ok=True)
         # This directory should hold intermediate workflow steps results
-        self.intermediateDir = os.path.join(uniqueWorkDir,'intermediate')
+        self.intermediateDir = os.path.join(uniqueWorkDir, 'intermediate')
         os.makedirs(self.intermediateDir, exist_ok=True)
         # This directory will hold the final workflow results, which could
         # be either symbolic links to the intermediate results directory
         # or newly generated content
-        self.outputsDir = os.path.join(uniqueWorkDir,'outputs')
+        self.outputsDir = os.path.join(uniqueWorkDir, 'outputs')
         os.makedirs(self.outputsDir, exist_ok=True)
         # This directory is here for those files which are created in order
         # to tweak or patch workflow executions
-        self.engineTweaksDir = os.path.join(uniqueWorkDir,'engineTweaks')
+        self.engineTweaksDir = os.path.join(uniqueWorkDir, 'engineTweaks')
         os.makedirs(self.engineTweaksDir, exist_ok=True)
 
         # And the copy of scheme handlers
@@ -230,7 +231,7 @@ class WF:
         self.exitVal = None
         self.augmentedInputs = None
         self.matCheckOutputs = None
-
+        self.cacheROCrateFilename = None
 
     def fetchWorkflow(self):
         """
@@ -407,7 +408,19 @@ class WF:
     
     def createResearchObject(self):
         # TODO: digest the results from executeWorkflow plus all the provenance
-        pass
+
+        wf_crate = rocrate.ROCrate(self.cacheROCrateFilename)
+        provenance = self.augmentedInputs + self.matCheckOutputs
+
+        for key, value in provenance:
+            if isinstance(value, list):  # only files
+                for i in range(0, len(value)):
+                    wf_crate.add_file(value[i]['location'])
+
+        wf_crate.write_zip(self.outputsDir + "/crate")
+        print("Research Object created: {}".format(self.outputsDir))
+
+        # TODO error handling
     
     def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
         """
@@ -646,7 +659,7 @@ class WF:
         # It must return four elements:
         return self.RECOGNIZED_ROCRATE_PROG_LANG[mainEntityProgrammingLanguageId], repoURL, repoTag, repoRelPath
 
-    def guessRepoParams(self,wf_url:str) -> Tuple[RepoURL, RepoTag, RelPath]:
+    def guessRepoParams(self, wf_url:str) -> Tuple[RepoURL, RepoTag, RelPath]:
         repoURL = None
         repoTag = None
         repoRelPath = None
@@ -690,7 +703,6 @@ class WF:
                         repoRelPath = '/'.join(wf_path[4:])
         
         return repoURL, repoTag, repoRelPath
-        
 
     def downloadROcrate(self, roCrateURL) -> AbsPath:
         """
@@ -709,6 +721,8 @@ class WF:
                     shutil.copyfileobj(url_response, download_file)
             except Exception as e:
                 raise WFException("Cannot download RO-Crate, {}".format(e))
+
+        self.cacheROCrateFilename = cachedFilename  # TODO pass to downloadInputFile method
 
         return cachedFilename
 
