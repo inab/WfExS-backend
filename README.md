@@ -1,6 +1,6 @@
 # ![WfExS-backend:](docs/logo/WfExS-logo-final_paths.svg) Workflow Execution Service backend
 
-![WfExS-backend:](docs/logo/WfExS-logo-final_paths.svg) This project aims to fetch a workflow from a TRS-enabled [WorkflowHub](https://workflowhub.eu) instance,
+This project aims to fetch a workflow from a TRS-enabled [WorkflowHub](https://workflowhub.eu) instance,
 fetch the inputs and workflow execution engine (currently working on [Nextflow](https://www.nextflow.io/)
 and [cwltool](https://github.com/common-workflow-language/cwltool)), and execute the workflow in a
 secure way.
