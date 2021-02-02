@@ -15,11 +15,21 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] **Step 5**: Launch the workflows in an execution environment.
 
-- [ ] **Step 6**: Create execution provenance.
+- [ ] **Step 6**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
 
-- [ ] **Step 7**: Generate RO-Crate from execution provenance.
+- [ ] **Step 7**: Add upload capabilities of results: Nextcloud / B2DROP.
+  
+  - [ ] **Step 7.future**: Add upload capabilities of results and metadata (RO-Crate): B2SHARE.
 
-- [ ] **Step 8**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
+- [ ] **Step 8**: Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
+
+- [ ] **Step 9**: Generate RO-Crate from execution provenance.
+
+- [ ] **Step 10**: Add upload capabilities of metadata (RO-Crate): Nextcloud / B2DROP.
+
+  - [ ] **Step 10.future**: Add upload capabilities of metadata (RO-Crate): B2SHARE.
+
+- [ ] **Step n**: Add full circle capabilities. Re-execute workflow from previously generated RO-Crate.
 
 ## Next Steps
 
