@@ -100,6 +100,26 @@ class WF:
             creds_config=creds_config
         )
 
+    @classmethod
+    def fromForm(cls, workflow_config, local_config):  # NEW
+        """
+
+        :param workflow_config: The configuration describing both the workflow
+        and the inputs to use when it is being instantiated.
+        :param local_config: Relevant local configuration, like the cache directory.
+        :type workflow_config: dict
+        :type local_config: dict
+        :return: Workflow configuration
+        """
+
+        return cls(
+            workflow_config['workflow_id'],
+            workflow_config['version'],
+            trs_endpoint=workflow_config.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
+            local_config=local_config
+            # TODO inputs, outputs, params
+        )
+
     def __init__(self, workflow_id, version_id, descriptor_type=None, trs_endpoint=DEFAULT_TRS_ENDPOINT, params=None,
                  outputs=None, workflow_config=None, local_config=None, creds_config=None):
         """
