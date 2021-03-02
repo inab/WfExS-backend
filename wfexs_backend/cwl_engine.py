@@ -117,7 +117,8 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retVal = subprocess.Popen(
-                    "source bin/activate ; pip install --upgrade pip wheel ; pip install {}=={}  {}=={}  {}=={}".format(
+                    "source '{0}'/bin/activate ; pip install --upgrade pip wheel ; pip install {}=={}  {}=={}  {}=={}".format(
+                        cwl_install_dir,
                         self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                         self.CWL_UTILS_PYTHON_PACKAGE,
                         self.DEFAULT_CWL_UTILS_VERSION, self.CWLTOOL_PYTHON_PACKAGE, engineVersion),
@@ -187,7 +188,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 with tempfile.NamedTemporaryFile() as cwl_pack_stderr:
                     # Writing straight to the file
                     retVal = subprocess.Popen(
-                        "source bin/activate ; cwltool --no-doc-cache --pack {}".format(localWorkflowFile),
+                        "source '{0}'/bin/activate ; cwltool --no-doc-cache --pack {}".format(cwl_install_dir,localWorkflowFile),
                         stdout=packedH,
                         stderr=cwl_pack_stderr,
                         cwd=cwl_install_dir,
@@ -259,7 +260,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             cmd = "cwltool --outdir {0} --no-doc-cache --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}".format(
                                 outputDir, intermediateDir, localWorkflowFile, yamlFile)
 
-                            retVal = subprocess.Popen("source bin/activate  ; {}".format(cmd),
+                            retVal = subprocess.Popen("source '{0}'/bin/activate  ; {}".format(cwl_install_dir,cmd),
                                                       stdout=cwl_yaml_stdout,
                                                       stderr=cwl_yaml_stderr,
                                                       cwd=cwl_install_dir,
