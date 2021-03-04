@@ -17,45 +17,27 @@
 from __future__ import absolute_import
 
 import os
+import os.path
 import re
 import subprocess
 import tempfile
 from urllib import parse
+import uuid
 
 from typing import Dict, List, Tuple
 from .common import *
 from .container import ContainerFactory, ContainerFactoryException
 
-
-# This method was borrowed from
-# https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L80
-# and translated to Python
-def simpleFileName(imageUrl: str) -> str:
-    p = imageUrl.find('://')
-    name = imageUrl[p+3:]  if p != -1   else imageUrl
-    extension = '.img'
-    if '.sif:' in name:
-        extension = '.sif'
-        name = name.replace('.sif:','-')
-    elif name.endswith('.sif'):
-        extension = '.sif'
-        name = name[:-4]
-    
-    name = name.replace(':','-').replace('/','-')
-    
-    return name + extension
-
-
 class SingularityContainerFactory(ContainerFactory):
-    def __init__(self, cacheDir=None, local_config=None):
-        super().__init__(cacheDir=cacheDir, local_config=local_config)
+    def __init__(self, cacheDir=None, local_config=None, engine_name='unset'):
+        super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name)
         self.singularity_cmd = local_config.get('tools', {}).get('singularityCommand', DEFAULT_SINGULARITY_CMD)
     
     @classmethod
     def ContainerType(cls) -> ContainerType:
         return ContainerType.Singularity
     
-    def materializeContainers(self, tagList: List[ContainerTaggedName]) -> List[Container]:
+    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod) -> List[Container]:
         """
         It is assured the containers are materialized
         """
@@ -66,23 +48,45 @@ class SingularityContainerFactory(ContainerFactory):
             parsedTag = parse.urlparse(tag)
             singTag = 'docker://' + tag  if parsedTag.scheme == ''  else tag
             
-            containerFilename = simpleFileName(tag)
-            localContainerPath = os.path.join(self.containersCacheDir,containerFilename)
+            containerFilename = simpleFileNameMethod(tag)
+            localContainerPath = os.path.join(self.engineContainersSymlinkDir,containerFilename)
                 
             print("downloading container: {} => {}".format(tag, localContainerPath))
             # First, let's materialize the container image
+            imageSignature = None
             if not os.path.isfile(localContainerPath):
                 with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
+                    tmpContainerPath = os.path.join(self.containersCacheDir,str(uuid.uuid4()))
                     # Singularity command line borrowed from
                     # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
                     s_retval = subprocess.Popen(
-                    [self.singularity_cmd, 'pull', '--disable-cache', '--name', localContainerPath, singTag],
+                    [self.singularity_cmd, 'pull', '--disable-cache', '--name', tmpContainerPath, singTag],
                     stdout=s_out,
                     stderr=s_err
                     ).wait()
                     
                     # Reading the output and error for the report
-                    if s_retval != 0:
+                    if s_retval == 0:
+                        imageSignature = ComputeDigestFromFile(tmpContainerPath)
+                        # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
+                        canonicalContainerPath = os.path.join(self.containersCacheDir, imageSignature.replace('=','~').replace('/','-').replace('+','_'))
+                        if os.path.exists(canonicalContainerPath):
+                            tmpSize = os.path.getsize(tmpContainerPath)
+                            canonicalSize = os.path.getsize(canonicalContainerPath)
+                            
+                            # Remove the temporary one
+                            os.unlink(tmpContainerPath)
+                            if tmpSize != canonicalSize:
+                                # If files were not the same complain
+                                # This should not happen!!!!!
+                                raise ContainerFactoryException("FATAL ERROR: Singularity cache collision for {}, with differing sizes ({} local, {} remote {})".format(imageSignature,canonicalSize,tmpSize,tag))
+                        else:
+                            shutil.move(tmpContainerPath,canonicalContainerPath)
+                        
+                        # Now, create the relative symbolic link
+                        os.symlink(os.path.relpath(canonicalContainerPath,self.engineContainersSymlinkDir),localContainerPath)
+                            
+                    else:
                         with open(s_out.name,"r") as c_stF:
                             s_out_v = c_stF.read()
                         with open(s_err.name,"r") as c_stF:
@@ -98,11 +102,17 @@ STDOUT
 STDERR
 ======
 {}""".format(singTag, s_retval, s_out_v, s_err_v)
+                        if os.path.exists(tmpContainerPath):
+                            try:
+                                os.unlink(tmpContainerPath)
+                            except:
+                                pass
                         raise ContainerFactoryException(errstr)
                 
             
             # Then, compute the signature
-            imageSignature = ComputeDigestFromFile(localContainerPath)
+            if imageSignature is None:
+                imageSignature = ComputeDigestFromFile(localContainerPath)
             
             containersList.append(
                 Container(
