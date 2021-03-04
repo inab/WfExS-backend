@@ -401,7 +401,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 # numberOfInputs = len(matInput.values)  # number of inputs inside a MaterializedInput
                 for input_value in matInput.values:
                     name = matInput.name
-                    value_type = cwlInputs.get(name)['type']
+                    value_type = cwlInputs.get(name,{})['type']
                     if value_type is None:
                         raise WorkflowEngineException("ERROR: input {} not available in workflow".format(name))
                     
