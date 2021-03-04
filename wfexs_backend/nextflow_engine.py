@@ -133,14 +133,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return engineVer, LocalWorkflow(dir=nfDir, relPath=candidateNf, effectiveCheckout=localWf.effectiveCheckout)
 
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, Fingerprint]:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
         
-        retval , nxf_install_stdout_v, nxf_install_stderr_v = self.runNextflowCommand(engineVersion,['info'])
+        nextflow_install_dir = os.path.join(self.weCacheDir,engineVersion)
+        retval , nxf_install_stdout_v, nxf_install_stderr_v = self.runNextflowCommand(engineVersion,['info'],nextflow_path=nextflow_install_dir)
         if retval != 0:
             errstr = "Could not install Nextflow {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(engineVersion,retval,nxf_install_stdout_v,nxf_install_stderr_v)
             raise WorkflowEngineException(errstr)
@@ -151,20 +152,21 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         engineFingerprint = verMatch.group(1)  if verMatch  else None
         
-        return engineVersion, engineFingerprint
+        return engineVersion, nextflow_install_dir, engineFingerprint
     
-    def runNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None) -> Tuple[ExitVal,str,str]:
         if self.engine_mode == EngineMode.Docker:
             retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir)
         elif self.engine_mode == EngineMode.Local:
-            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir)
+            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir, nextflow_install_dir=nextflow_path)
         else:
             raise WorkflowEngineException('Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
         
         return retval , nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runLocalNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None) -> Tuple[int,str,str]:
-        nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
+    def runLocalNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None) -> Tuple[int,str,str]:
+        if nextflow_install_dir is None:
+            nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
         cachedScript = os.path.join(nextflow_install_dir, 'nextflow')
         if not os.path.exists(cachedScript):
             os.makedirs(nextflow_install_dir, exist_ok=True)
@@ -470,7 +472,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         flat_retval , flat_stdout, flat_stderr = self.runNextflowCommand(
             matWorkflowEngine.version,
             ['config','-flat',localWf.dir],
-            workdir=localWf.dir
+            workdir=localWf.dir,
+            nextflow_path=matWorkflowEngine.engine_path
         )
         
         if flat_retval != 0:
@@ -502,13 +505,34 @@ STDERR
         
         
         return matWorkflowEngine, list(containerTags)
-
+    
+    def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
+        """
+        This method was borrowed from
+        https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L80
+        and translated to Python
+        """
+        p = imageUrl.find('://')
+        name = imageUrl[p+3:]  if p != -1   else imageUrl
+        extension = '.img'
+        if '.sif:' in name:
+            extension = '.sif'
+            name = name.replace('.sif:','-')
+        elif name.endswith('.sif'):
+            extension = '.sif'
+            name = name[:-4]
+        
+        name = name.replace(':','-').replace('/','-')
+        
+        return name + extension
+    
     def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
         localWf = matWfEng.workflow
         launch_retval , launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
             ['config','-flat',localWf.dir],
-            workdir=localWf.dir
+            workdir=localWf.dir,
+            nextflow_path=matWfEng.engine_path
         )
         
         """
