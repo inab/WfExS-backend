@@ -290,7 +290,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                     cwl_yaml_input_id = str(cwl_yaml_input['id'])
                     # Validating
                     if cwl_yaml_input_id.startswith(wfIdPrefix):
-                        inputId = cwl_yaml_input_id[0:len(wfIdPrefix)]
+                        inputId = cwl_yaml_input_id[len(wfIdPrefix):]
                     else:
                         inputId = cwl_yaml_input_id
                     
