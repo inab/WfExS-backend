@@ -28,7 +28,7 @@ from .common import *
 from typing import Dict, List, Tuple
 from collections import namedtuple
 
-from .container import Container, ContainerFactory
+from .container import Container, ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 
 
@@ -41,10 +41,11 @@ class WorkflowEngineException(Exception):
 
 CONTAINER_FACTORY_CLASSES = [
     SingularityContainerFactory,
+    NoContainerFactory,
 ]
 
 
-class WorkflowEngine(abc.ABC):
+class WorkflowEngine(AbstractWorkflowEngineType):
     def __init__(self,
                  cacheDir=None,
                  workflow_config=None,
@@ -91,6 +92,7 @@ class WorkflowEngine(abc.ABC):
 
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
+        # This directory will hold software installations, for instance
         self.weCacheDir = os.path.join(cacheDir, self.__class__.__name__)
 
         # Needed for those cases where alternate version of the workflow is generated
@@ -127,7 +129,7 @@ class WorkflowEngine(abc.ABC):
             engineTweaksDir = os.path.join(workDir, 'engineTweaks')
         os.makedirs(engineTweaksDir, exist_ok=True)
         self.engineTweaksDir = engineTweaksDir
-
+        
         # Setting up common properties
         self.docker_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
         engine_mode = local_config.get('tools', {}).get('engineMode')
@@ -145,7 +147,7 @@ class WorkflowEngine(abc.ABC):
 
         for containerFactory in CONTAINER_FACTORY_CLASSES:
             if containerFactory.ContainerType() == container_type:
-                self.container_factory = containerFactory(cacheDir=cacheDir, local_config=local_config)
+                self.container_factory = containerFactory(cacheDir=cacheDir, local_config=local_config, engine_name=self.__class__.__name__)
                 break
         else:
             raise WorkflowEngineException("FATAL: No container factory implementation for {}".format(container_type))
@@ -168,7 +170,7 @@ class WorkflowEngine(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, Fingerprint]:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -194,10 +196,14 @@ class WorkflowEngine(abc.ABC):
 
         # This is needed for those cases where there is no exact match
         # on the available engine version
-        engineVersion, engineFingerprint = self.materializeEngineVersion(engineVersion)
+        engineVersion, enginePath, engineFingerprint = self.materializeEngineVersion(engineVersion)
 
-        return MaterializedWorkflowEngine(instance=self, version=engineVersion, fingerprint=engineFingerprint,
-                                          workflow=localWf)
+        return MaterializedWorkflowEngine(instance=self,
+                                            version=engineVersion,
+                                            fingerprint=engineFingerprint,
+                                            engine_path=enginePath,
+                                            workflow=localWf
+                                        )
 
     @abc.abstractmethod
     def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
@@ -209,9 +215,18 @@ class WorkflowEngine(abc.ABC):
         """
 
         pass
-
+    
+    @abc.abstractmethod
+    def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
+        """
+        This method must be implemented to tell which names expect the workflow engine
+        on its container cache directories when an image is locally materialized
+        (currently only useful for Singularity)
+        """
+        pass
+    
     def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName]) -> List[Container]:
-        return self.container_factory.materializeContainers(listOfContainerTags)
+        return self.container_factory.materializeContainers(listOfContainerTags, self.simpleContainerFileName)
 
     @abc.abstractmethod
     def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput],
