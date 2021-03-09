@@ -382,16 +382,19 @@ class WF:
                 if inputClass is not None:
                     if inputClass == "File":  # input files
                         remote_files = inputs['url']
+                        cacheable = True  if inputs.get('cache',True)  else  False
                         if not isinstance(remote_files, list):  # more than one input file
                             remote_files = [remote_files]
 
                         remote_pairs = []
+                        # The storage dir depends on whether it can be cached or not
+                        storeDir = workflowInputs_cacheDir  if cacheable  else  workflowInputs_destdir
                         for remote_file in remote_files:
                             # We are sending the context name thinking in the future,
                             # as it could contain potential hints for authenticated access
                             contextName = inputs.get('security-context')
                             matContent = self.downloadInputFile(remote_file,
-                                                                workflowInputs_destdir=workflowInputs_cacheDir,
+                                                                workflowInputs_destdir=storeDir,
                                                                 contextName=contextName)
                             
                             # Now, time to create the symbolic link
