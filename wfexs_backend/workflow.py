@@ -70,6 +70,7 @@ class WF:
         'http': fetchClassicURL,
         'https': fetchClassicURL,
         'ftp': fetchClassicURL,
+        'ssh': fetchSSHURL,
     }
 
     @classmethod

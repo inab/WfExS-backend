@@ -28,6 +28,9 @@ from typing import Callable, List, Mapping, NamedTuple, NewType, Pattern, Type, 
 import base64
 import hashlib
 import functools
+import paramiko
+import paramiko.pkey
+from paramiko.config import SSH_PORT as DEFAULT_SSH_PORT
 
 DEFAULT_GIT_CMD = 'git'
 DEFAULT_DOCKER_CMD = 'docker'
@@ -232,6 +235,55 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Secu
             shutil.copyfileobj(url_response, download_file)
     except Exception as e:
         raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
+
+# TODO: test this codepath
+def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> None:
+    """
+    Method to fetch contents from ssh / sftp servers
+
+    :param remote_file:
+    :param cachedFilename: Destination filename for the fetched content
+    :param secContext: The security context containing the credentials
+    """
+    
+    # Sanitizing possible ill-formed inputs
+    if not isinstance(secContext, dict):
+        secContext = {}
+    
+    username = secContext.get('username')
+    password = secContext.get('password')
+    sshKey = secContext.get('key')
+    if (username is None) or ((password is None) and (sshKey is None)):
+        raise WFException("Cannot download content from {} without credentials".format(remote_file))
+    
+    connBlock = {
+        'username': username,
+    }
+    
+    if sshKey is not None:
+        pKey = paramiko.pkey.PKey(data=sshKey)
+        connBlock['pkey'] = pKey
+    else:
+        connBlock['password'] = password
+    
+    parsedInputURL = parse.urlparse(remote_file)
+    sshHost = parsedInputURL.hostname
+    sshPort = parsedInputURL.port  if parsedInputURL.port is not None  else  DEFAULT_SSH_PORT
+    sshPath = parsedInputURL.path
+    
+    t = None
+    try:
+        t = paramiko.Transport((sshHost, sshPort))
+        t.connect(**connBlock)
+        sftp = paramiko.SFTPClient.from_transport(t)
+        
+        sftp.get(sshPath,cachedFilename)
+    except Exception as e:
+        raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
+    finally:
+        # Closing the SFTP connection
+        if t is not None:
+            t.close()
 
 # Next methods have been borrowed from FlowMaps
 DEFAULT_DIGEST_ALGORITHM = 'sha256'

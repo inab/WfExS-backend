@@ -1,4 +1,5 @@
 pyyaml
 jsonpath-ng
+paramiko[ed25519]
 GitPython
 git+https://github.com/inab/ro-crate-py.git#egg=rocrate
