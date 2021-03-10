@@ -37,6 +37,7 @@ DEFAULT_DOCKER_CMD = 'docker'
 DEFAULT_SINGULARITY_CMD = 'singularity'
 DEFAULT_PODMAN_CMD = 'podman'
 DEFAULT_JAVA_CMD = 'java'
+DEFAULT_ENCFS_CMD = 'encfs'
 
 
 class EngineMode(enum.Enum):

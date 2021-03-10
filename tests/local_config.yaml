@@ -6,4 +6,5 @@ tools:
   dockerCommand: docker
   singularityCommand: singularity
   javaCommand: java
+  encfsCommand: encfs
   
