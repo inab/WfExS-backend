@@ -49,28 +49,38 @@ class ArgTypeMixin(enum.Enum):
         return str(self.value)
 
 class WfExS_Commands(ArgTypeMixin,enum.Enum):
+    Init = 'init'
     Stage = 'stage'
+    MountWorkDir = 'mount-workdir'
     OfflineExecute = 'offline-execute'
     Execute = 'execute'
 
+DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
+
 if __name__ == "__main__":
+    defaultLocalConfigFilename = os.path.join(os.getcwd(),DEFAULT_LOCAL_CONFIG_RELNAME)
     ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend")
-    ap.add_argument('-L', '--local-config', dest="localConfigFilename", help="Local installation configuration file")
+    ap.add_argument('-L', '--local-config', dest="localConfigFilename", default=defaultLocalConfigFilename, help="Local installation configuration file")
     ap.add_argument('--cache-dir', dest="cacheDir", help="Caching directory")
-    ap.add_argument('-W', '--workflow-config', dest="workflowConfigFilename", required=True,
+    ap.add_argument('-W', '--workflow-config', dest="workflowConfigFilename",
                     help="Configuration file, describing workflow and inputs")
     ap.add_argument('-Z', '--creds-config', dest="securityContextsConfigFilename",
                     help="Configuration file, describing security contexts, which hold credentials and similar")
+    ap.add_argument('-J','--staged-job-dir', dest='workflowWorkingDirectory',
+                    help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
     ap.add_argument('command',help='Command to run',nargs='?',type=WfExS_Commands.argtype,choices=WfExS_Commands,default=WfExS_Commands.Execute)
     args = ap.parse_args()
 
     # First, try loading the configuration file
-    if args.localConfigFilename:
-        with open(args.localConfigFilename, "r", encoding="utf-8") as cf:
+    localConfigFilename = args.localConfigFilename
+    if localConfigFilename and os.path.exists(localConfigFilename):
+        with open(localConfigFilename, mode="r", encoding="utf-8") as cf:
             local_config = yaml.load(cf, Loader=YAMLLoader)
     else:
         local_config = {}
-
+        if localConfigFilename and not os.path.exists(localConfigFilename):
+            print("[WARNING] Configuration file {} does not exist".format(localConfigFilename), file=sys.stderr)
+    
     if args.cacheDir:
         local_config['cache-directory'] = args.cacheDir
 
@@ -83,18 +93,40 @@ if __name__ == "__main__":
         local_config['cacheDir'] = cacheDir
         # Assuring this temporal directory is removed at the end
         atexit.register(shutil.rmtree, cacheDir)
-
-    with open(args.workflowConfigFilename, "r", encoding="utf-8") as wcf:
-        workflow_config = yaml.load(wcf, Loader=YAMLLoader)
     
-    # Last, try loading the security contexts credentials file
-    if args.securityContextsConfigFilename:
-        with open(args.securityContextsConfigFilename, "r", encoding="utf-8") as scf:
-            creds_config = yaml.load(scf, Loader=YAMLLoader)
+    # A filename is needed later, in order to initialize installation keys
+    if not localConfigFilename:
+        localConfigFilename = defaultLocalConfigFilename
+    
+    # Hints for the the default path for the Crypt4GH keys
+    config_directory = os.path.dirname(localConfigFilename)
+    config_relname = os.path.basename(localConfigFilename)
+    
+    # Initialize (and create config file)
+    if args.command in (WfExS_Commands.Init,WfExS_Commands.Stage,WfExS_Commands.Execute):
+        updated_config, local_config = WF.bootstrap(local_config,config_directory,key_prefix=config_relname)
+        
+        # Last, should config be saved back?
+        if updated_config or not os.path.exists(localConfigFilename):
+            print("* Storing updated configuration at {}".format(localConfigFilename))
+            with open(localConfigFilename, mode="w", encoding="utf-8") as cf:
+                yaml.dump(local_config,cf,Dumper=YAMLDumper)
+    
+    
+    # Is the work already staged?
+    wfInstance = WF(local_config,config_directory)
+    
+    # This is needed to be sure the encfs instance is unmounted
+    if args.command != WfExS_Commands.MountWorkDir:
+        atexit.register(wfInstance.cleanup)
+    
+    if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.MountWorkDir):
+        wfInstance.fromWorkDir(args.workflowWorkingDirectory)
+    elif not args.workflowConfigFilename:
+        print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
+        sys.exit(1)
     else:
-        creds_config = {}
-    
-    wfInstance = WF.fromDescription(workflow_config, local_config, creds_config)
+        wfInstance.fromFiles(args.workflowConfigFilename,args.securityContextsConfigFilename)
     
     print("* Command \"{}\". Working directory will be {}".format(args.command,wfInstance.workDir),file=sys.stderr)
     sys.stderr.flush()
@@ -104,12 +136,13 @@ if __name__ == "__main__":
         wfInstance.setupEngine()
         wfInstance.materializeWorkflow()
         wfInstance.materializeInputs()
+        
+        print("* Instance {} (to be used with -J)".format(wfInstance.instanceId))
     
     # These lines should be deleted out once code is near production
     # import pprint
     # pprint.pprint(wfInstance.materializedParams)
     
     if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.Execute):
-        wfInstance.executeWorkflow()
+        wfInstance.executeWorkflow(offline= args.command==WfExS_Commands.OfflineExecute)
         wfInstance.createResearchObject()
-    
