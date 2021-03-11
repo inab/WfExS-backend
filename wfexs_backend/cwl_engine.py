@@ -317,10 +317,10 @@ class CWLWorkflowEngine(WorkflowEngine):
                             # This is needed to teach cwltool where to find the cached images
                             instEnv = dict(os.environ)
                             if isinstance(self.container_factory,SingularityContainerFactory):
-                                cmdTemplate = "cwltool --outdir {0} --strict --on-error continue --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
                             elif isinstance(self.container_factory,NoContainerFactory):
-                                cmdTemplate = "cwltool --outdir {0} --strict --on-error continue --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:
                                 raise WorkflowEngineException("FATAL ERROR: Unsupported container factory {}".format(self.container_factory.ContainerType()))
                             
@@ -337,11 +337,13 @@ class CWLWorkflowEngine(WorkflowEngine):
                             # Proper error handling
                             if retVal != 0:
                                 # Reading the error for the report
+                                with open(cwl_yaml_stdout.name, "r") as c_stF:
+                                    cwl_yaml_stdout_v = c_stF.read()
                                 with open(cwl_yaml_stderr.name, "r") as c_stF:
-                                    cwl_pack_stderr_v = c_stF.read()
+                                    cwl_yaml_stderr_v = c_stF.read()
 
-                                errstr = "Could not execute CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
-                                    engineVersion, retVal, cwl_pack_stderr_v)
+                                errstr = "[CWL] Failed running cwltool {}. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                                    engineVersion, retVal, cwl_yaml_stdout_v, cwl_yaml_stderr_v)
                                 raise WorkflowEngineException(errstr)
                             
                             else:
