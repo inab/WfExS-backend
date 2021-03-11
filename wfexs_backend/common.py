@@ -38,6 +38,7 @@ DEFAULT_SINGULARITY_CMD = 'singularity'
 DEFAULT_PODMAN_CMD = 'podman'
 DEFAULT_JAVA_CMD = 'java'
 DEFAULT_ENCFS_CMD = 'encfs'
+DEFAULT_FUSERMOUNT_CMD = 'fusermount'
 
 
 class EngineMode(enum.Enum):
@@ -205,14 +206,20 @@ class Container(NamedTuple):
 class WFException(Exception):
     pass
 
-def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> None:
+def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None, offline:bool=False) -> None:
     """
     Method to fetch contents from http, https and ftp
 
     :param remote_file:
     :param cachedFilename:
     :param secContext:
+    :param offline:
     """
+    
+    # As this is a handler for online resources, complain in offline mode
+    if offline:
+        raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, cachedFilename))
+    
     try:
         if isinstance(secContext, dict):
             username = secContext.get('username')
@@ -238,7 +245,7 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Secu
         raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
 
 # TODO: test this codepath
-def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> None:
+def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None, offline:bool=False) -> None:
     """
     Method to fetch contents from ssh / sftp servers
 
@@ -246,6 +253,10 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Security
     :param cachedFilename: Destination filename for the fetched content
     :param secContext: The security context containing the credentials
     """
+    
+    # As this is a handler for online resources, complain in offline mode
+    if offline:
+        raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, cachedFilename))
     
     # Sanitizing possible ill-formed inputs
     if not isinstance(secContext, dict):
