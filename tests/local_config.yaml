@@ -1,10 +1,13 @@
 cacheDir: /tmp/wfexs-backend-test
-workDir: /tmp/wfexs-backend-test_WorkDir
+crypt4gh:
+  key: local_config.yaml.key
+  passphrase: strive backyard dividing gumball
+  pub: local_config.yaml.pub
 tools:
+  dockerCommand: docker
+  encfsCommand: encfs
   engineMode: local
   gitCommand: git
-  dockerCommand: docker
-  singularityCommand: singularity
   javaCommand: java
-  encfsCommand: encfs
-  
+  singularityCommand: singularity
+workDir: /tmp/wfexs-backend-test_WorkDir
