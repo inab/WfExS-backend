@@ -50,11 +50,17 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     CWL_REPO = 'https://github.com/common-workflow-language/'
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
-    CWL_UTILS_REPO = CWLTOOL_REPO + CWL_UTILS_PYTHON_PACKAGE
+    CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
 
+    # FIXME: use next tagged version,
+    # which should include this fix for singularity
     DEFAULT_CWLTOOL_VERSION = '3.0.20210124104916'
+    
+    DEVEL_CWLTOOL_PACKAGE = 'git+{}.git'.format(CWLTOOL_REPO)
+    DEVEL_CWLTOOL_VERSION = '8bdc1529fd49ccdfa4734daa6646bcf5f1a65cba'
+    
     DEFAULT_CWL_UTILS_VERSION = '0.9'
-    DEFAULT_SCHEMA_SALAD_VERSION = '7.0.20210124093443'
+    DEFAULT_SCHEMA_SALAD_VERSION = '7.1.20210309094900'
 
     ENGINE_NAME = 'cwl'
 
@@ -125,15 +131,22 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         # Now, time to run it
         instEnv = dict(os.environ)
-
+        
+        if self.DEVEL_CWLTOOL_VERSION is not None:
+            cwltoolPackage = self.DEVEL_CWLTOOL_PACKAGE
+            cwltoolMatchOp = '@'
+            engineVersion = self.DEVEL_CWLTOOL_VERSION
+        else:
+            cwltoolPackage = self.CWLTOOL_PYTHON_PACKAGE
+            cwltoolMatchOp = '=='
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retVal = subprocess.Popen(
-                    "source '{0}'/bin/activate ; pip install --upgrade pip wheel ; pip install {1}=={2}  {3}=={4}  {5}=={6}".format(
+                    "source '{0}'/bin/activate ; pip install --upgrade pip wheel ; pip install {1}=={2}  {3}=={4}  {5}{6}{7}".format(
                         cwl_install_dir,
                         self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                         self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
-                        self.CWLTOOL_PYTHON_PACKAGE, engineVersion),
+                        cwltoolPackage, cwltoolMatchOp, engineVersion),
                     stdout=cwl_install_stdout,
                     stderr=cwl_install_stderr,
                     cwd=cwl_install_dir,
