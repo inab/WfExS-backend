@@ -279,72 +279,73 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # TODO: run it!!!!
             nxf_run_stdout_v = ''
             
-            #try:
-            #    if workdir is None:
-            #        workdir = tempfile.mkdtemp(prefix="WfExS-nxf-",suffix="-job")
-            #    else:
-            #        os.makedirs(workdir, exist_ok=True)
-            #except Exception as error:
-            #    raise WorkflowEngineException("ERROR: Unable to create nextflow working directory. Error: "+str(error))
-            #
-            ## Value needed to compose the Nextflow docker call
-            #uid = str(os.getuid())
-            #gid = str(os.getgid())
-            #
-            ## Timezone is needed to get logs properly timed
-            #try:
-            #    with open("/etc/timezone","r") as tzreader:
-            #        tzstring = tzreader.readline().rstrip()
-            #except:
-            #    # The default for the worst case
-            #    tzstring = 'Europe/Madrid'
-            #
-            #homedir = os.path.expanduser("~")
-            #
-            #nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
-            #nxf_home = os.path.join(nextflow_install_dir,'.nextflow')
-            #nxf_assets_dir = os.path.join(nxf_home,"assets")
-            #try:
-            #    # Directories required by Nextflow in a Docker
-            #    os.makedirs(nxf_assets_dir, exist_ok=True)
-            #except Exception as error:
-            #    raise WorkflowEngineException("ERROR: Unable to create nextflow assets directory. Error: "+str(error))
-            #
-            ## The fixed parameters
-            #nextflow_cmd_pre_vol = [
-            #    self.docker_cmd, "run", "--rm", "--net", "host",
-            #    "-e", "USER",
-            #    "-e", "NXF_DEBUG",
-            #    "-e", "TZ="+tzstring,
-            #    "-e", "HOME="+homedir,
-            #    "-e", "NXF_ASSETS="+nxf_assets_dir,
-            #    "-e", "NXF_USRMAP="+uid,
-            #    #"-e", "NXF_DOCKER_OPTS=-u "+uid+":"+gid+" -e HOME="+homedir+" -e TZ="+tzstring+" -v "+workdir+":"+workdir+":rw,rprivate,z -v "+project_path+":"+project_path+":rw,rprivate,z",
-            #    "-e", "NXF_DOCKER_OPTS=-u "+uid+":"+gid+" -e HOME="+homedir+" -e TZ="+tzstring+" -v "+workdir+":"+workdir+":rw,rprivate,z",
-            #    "-v", "/var/run/docker.sock:/var/run/docker.sock:rw,rprivate,z"
-            #]
-            #
-            #validation_cmd_post_vol = [
-            #    "-w", workdir,
-            #    docker_tag,
-            #    "nextflow"
-            #]
-            #validation_cmd_post_vol.extend(commandLine)
-            #
-            #validation_cmd_post_vol_resume = [ *validation_cmd_post_vol , '-resume' ]
-            #
-            ## This one will be filled in by the volume parameters passed to docker
-            ##docker_vol_params = []
-            #
-            ## This one will be filled in by the volume meta declarations, used
-            ## to generate the volume parameters
-            #volumes = [
-            #    (homedir+'/',"ro,rprivate,z"),
-            ##    (nxf_assets_dir,"rprivate,z"),
-            #    (workdir+'/',"rw,rprivate,z"),
+            try:
+                if workdir is None:
+                    workdir = self.workDir
+                else:
+                    os.makedirs(workdir, exist_ok=True)
+            except Exception as error:
+                raise WorkflowEngineException("ERROR: Unable to create nextflow working directory. Error: "+str(error))
+            
+            # Value needed to compose the Nextflow docker call
+            uid = str(os.getuid())
+            gid = str(os.getgid())
+            
+            # Timezone is needed to get logs properly timed
+            try:
+                with open("/etc/timezone","r") as tzreader:
+                    tzstring = tzreader.readline().rstrip()
+            except:
+                # The default for the worst case
+                tzstring = 'Europe/Madrid'
+            
+            # FIXME: should it be something more restrictive?
+            homedir = os.path.expanduser("~")
+            
+            nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
+            nxf_home = os.path.join(nextflow_install_dir,'.nextflow')
+            nxf_assets_dir = os.path.join(nxf_home,"assets")
+            try:
+                # Directories required by Nextflow in a Docker
+                os.makedirs(nxf_assets_dir, exist_ok=True)
+            except Exception as error:
+                raise WorkflowEngineException("ERROR: Unable to create nextflow assets directory. Error: "+str(error))
+            
+            # The fixed parameters
+            nextflow_cmd_pre_vol = [
+                self.docker_cmd, "run", "--rm", "--net", "host",
+                "-e", "USER",
+                "-e", "NXF_DEBUG",
+                "-e", "TZ="+tzstring,
+                "-e", "HOME="+homedir,
+                "-e", "NXF_ASSETS="+nxf_assets_dir,
+                "-e", "NXF_USRMAP="+uid,
+                #"-e", "NXF_DOCKER_OPTS=-u "+uid+":"+gid+" -e HOME="+homedir+" -e TZ="+tzstring+" -v "+workdir+":"+workdir+":rw,rprivate,z -v "+project_path+":"+project_path+":rw,rprivate,z",
+                "-e", "NXF_DOCKER_OPTS=-u "+uid+":"+gid+" -e HOME="+homedir+" -e TZ="+tzstring+" -v "+workdir+":"+workdir+":rw,rprivate,z",
+                "-v", "/var/run/docker.sock:/var/run/docker.sock:rw,rprivate,z"
+            ]
+            
+            validation_cmd_post_vol = [
+                "-w", workdir,
+                docker_tag,
+                "nextflow"
+            ]
+            validation_cmd_post_vol.extend(commandLine)
+            
+            validation_cmd_post_vol_resume = [ *validation_cmd_post_vol , '-resume' ]
+            
+            # This one will be filled in by the volume parameters passed to docker
+            #docker_vol_params = []
+            
+            # This one will be filled in by the volume meta declarations, used
+            # to generate the volume parameters
+            volumes = [
+                (homedir+'/',"ro,rprivate,z"),
+            #    (nxf_assets_dir,"rprivate,z"),
+                (workdir+'/',"rw,rprivate,z"),
             #    (project_path+'/',"rw,rprivate,z"),
             #    (repo_dir+'/',"ro,rprivate,z")
-            #]
+            ]
             #
             ## These are the parameters, including input and output files and directories
             #
@@ -410,18 +411,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
             #
             #    variable_params.append((rw_loc_id,rw_loc_val))
             #
-            ## Assembling the command line    
-            #validation_params = []
-            #validation_params.extend(validation_cmd_pre_vol)
-            #
-            #for volume_dir,volume_mode in volumes:
-            #    validation_params.append("-v")
-            #    validation_params.append(volume_dir+':'+volume_dir+':'+volume_mode)
-            #
-            #validation_params_resume = [ *validation_params ]
-            #
-            #validation_params.extend(validation_cmd_post_vol)
-            #validation_params_resume.extend(validation_cmd_post_vol_resume)
+            # Assembling the command line    
+            validation_params = []
+            validation_params.extend(nextflow_cmd_pre_vol)
+            
+            for volume_dir,volume_mode in volumes:
+                validation_params.append("-v")
+                validation_params.append(volume_dir+':'+volume_dir+':'+volume_mode)
+            
+            validation_params_resume = [ *validation_params ]
+            
+            validation_params.extend(validation_cmd_post_vol)
+            validation_params_resume.extend(validation_cmd_post_vol_resume)
             #
             ## Last, but not the least important
             #validation_params_flags = []
@@ -432,22 +433,37 @@ class NextflowWorkflowEngine(WorkflowEngine):
             #validation_params.extend(validation_params_flags)
             #validation_params_resume.extend(validation_params_flags)
             #
-            ## Retries system was introduced because an insidious
-            ## bug happens sometimes
-            ## https://forums.docker.com/t/any-known-problems-with-symlinks-on-bind-mounts/32138
-            #retries = self.max_retries
-            #retval = -1
-            #validation_params_cmd = validation_params
-            #while retries > 0 and retval != 0:
-            #    logger.debug('"'+'" "'.join(validation_params_cmd)+'"')
-            #    sys.stdout.flush()
-            #    sys.stderr.flush()
-            #    
-            #    retval = subprocess.call(validation_params_cmd,stdout=sys.stdout,stderr=sys.stderr)
-            #    if retval != 0:
-            #        retries -= 1
-            #        logger.debug("\nFailed with {} , left {} tries\n".format(retval,retries))
-            #        validation_params_cmd = validation_params_resume
+            # Retries system was introduced because an insidious
+            # bug happens sometimes
+            # https://forums.docker.com/t/any-known-problems-with-symlinks-on-bind-mounts/32138
+            retries = self.max_retries
+            retval = -1
+            validation_params_cmd = validation_params
+            with tempfile.NamedTemporaryFile() as run_stdout, tempfile.NamedTemporaryFile() as run_stderr:
+                while retries > 0 and retval != 0:
+                    self.logger.debug('"'+'" "'.join(validation_params_cmd)+'"')
+                    run_stdout.flush()
+                    run_stderr.flush()
+                    
+                    retval = subprocess.call(validation_params_cmd,stdout=run_stdout,stderr=run_stderr)
+                    if retval != 0:
+                        retries -= 1
+                        self.logger.debug("\nFailed with {} , left {} tries\n".format(retval,retries))
+                        validation_params_cmd = validation_params_resume
+                
+                # Reading the output and error for the report
+                with open(run_stdout.name, "r") as c_stF:
+                    nxf_run_stdout_v = c_stF.read()
+                with open(run_stderr.name, "r") as c_stF:
+                    nxf_run_stderr_v = c_stF.read()
+
+                # Last evaluation
+                if retval != 0:
+                    # It failed!
+                    errstr = "ERROR: Nextflow Engine failed while executing Nextflow workflow (retval {})\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                        retval, nxf_run_stdout_v, nxf_run_stderr_v)
+                    
+                    nxf_run_stderr_v = errstr
             
         return retval, nxf_run_stdout_v, nxf_run_stderr_v
     
