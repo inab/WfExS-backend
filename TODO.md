@@ -15,6 +15,12 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] **Step 5**: Launch the workflows in an execution environment.
 
+  - [x] **Step 5.a**: Launch workflows in a FUSE encrypted filesystem.
+  
+  - [x] **Step 5.b**: Launch CWL workflows in an execution environment.
+  
+  - [ ] **Step 5.c**: Launch Nextlfow workflows in an execution environment.
+
 - [ ] **Step 6**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
 
 - [ ] **Step 7**: Add upload capabilities of results: Nextcloud / B2DROP.
