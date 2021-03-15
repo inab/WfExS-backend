@@ -7,19 +7,22 @@ secure way.
 
 This development is relevant for projects like [EOSC-Life](https://www.eosc-life.eu/) or [EJP-RD](https://www.ejprarediseases.org/). The list of high level scheduled and pending developments can be seen at [TODO.md](TODO.md).
 
-In order to use it you have to install first the dependencies described at [INSTALL.md](INSTALL.md). The usage is:
+In order to use it you have to install first the dependencies described at [INSTALL.md](INSTALL.md).
+
+## Usage
 
 ```
 python WfExS-backend.py -h
 usage: WfExS-backend.py [-h] [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR]
-                        -W WORKFLOWCONFIGFILENAME
+                        [-W WORKFLOWCONFIGFILENAME]
                         [-Z SECURITYCONTEXTSCONFIGFILENAME]
-                        [{stage,offline-execute,execute}]
+                        [-J WORKFLOWWORKINGDIRECTORY]
+                        [{init,stage,mount-workdir,offline-execute,execute}]
 
 WfExS (workflow execution service) backend
 
 positional arguments:
-  {stage,offline-execute,execute}
+  {init,stage,mount-workdir,offline-execute,execute}
                         Command to run
 
 optional arguments:
@@ -32,9 +35,28 @@ optional arguments:
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
                         Configuration file, describing security contexts,
                         which hold credentials and similar
+  -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
+                        Already staged job directory (to be used with offline-
+                        execute)
 ```
 
-There program takes three configuration files, being only one required:
+WfExS commands are:
+
+![WfExS-backend commands](docs/wfexs-commands.svg)
+
+* `init`: This command is used to initialize a WfExS installation. It takes a local configuration file through `-L` parameter, and it can both generate crypt4gh paired keys for installation work and identification purposes and update the path to them in case they are not properly defined. Those keys are needed to decrypt encrypted working directories, and in the future to decrypt secure requests and encrypt secure results.
+
+* `stage`: This command is used to fetch all the workflow preconditions and files, staging them for an execution. It honours `-L`, `-W` and `-Z` parameters, and once the staging is finished it prints the path to the parent execution environment.
+
+* `offline-execute`: This command is complementary to `stage`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`.
+
+* `mount-workdir`: This command is a helper to inspect encrypted execution environments, as it mounts its working directory for a limited time. As `offline-execute`, it recognizes `-L` parameter and depends on `-J` parameter.
+
+* `execute`: This command's behaviour is equivalent to `stage` followed by `offline-execute`.
+
+## Configuration files
+
+The program uses three different types of configuration files:
 
 * Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)).
   
@@ -43,6 +65,12 @@ There program takes three configuration files, being only one required:
   
   - `workDir`: The path in this key sets up the place where all the executions are going to store both intermediate and final results,
     having a separate directory for each execution.
+  
+  - `crypt4gh.key`: The path to the secret key used in this installation. It is paired to `crypt4gh.pub`.
+  
+  - `crypt4gh.pub`: The path to the public key used in this installation. It is paired to `crypt4gh.key`.
+  
+  - `crypt4gh.passphrase`: The passphrase needed to decrypt the contents of `crypt4gh.key`.
   
   - `tools.engineMode`: Currently, local mode only.
   
@@ -56,11 +84,19 @@ There program takes three configuration files, being only one required:
 
   - `tools.javaCommand`: Path to java command (only used when needed)
   
-* Workflow configuration file (required): _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_execution_nxf.yaml), [CWL example](tests/wetlab2variations_execution_cwl.yaml)).
+  - `tools.encrypted_fs.type`: Kind of FUSE encryption filesystem to use for secure working directories. Currently only `encfs` is supported.
+  
+  - `tools.encrypted_fs.command`: Command path to be used to mount the secure working directory. The default depends on value of `tools.encrypted_fs.type`.
+  
+  - `tools.encrypted_fs.fusermount_command`: Command to be used to unmount the secure working directory. Defaults to `fusermount`.
+  
+  - `tools.encrypted_fs.idle: Number of minutes of inactivity before the encrypted FUSE filesystem is automatically unmounted. The default is 5 minutes.
+  
+* Workflow configuration file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_execution_nxf.yaml), [CWL example](tests/wetlab2variations_execution_cwl.yaml)).
 
 * Security contexts file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_credentials_nxf.yaml), [CWL example](tests/wetlab2variations_credentials_cwl.yaml)).
 
 
-# Flowchart
+## Flowchart
 
 ![WfExS-backend flowchart](docs/wfexs-flowchart.svg)
