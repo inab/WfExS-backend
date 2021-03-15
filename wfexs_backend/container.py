@@ -21,6 +21,7 @@ import tempfile
 import atexit
 import shutil
 import abc
+import logging
 
 from typing import Dict, List, Tuple
 from collections import namedtuple
@@ -44,7 +45,10 @@ class ContainerFactory(abc.ABC):
         if local_config is None:
             local_config = dict()
         self.local_config = local_config
-
+        
+        # Getting a logger focused on specific classes
+        self.logger = logging.getLogger(self.__class__.__name__)
+        
         # cacheDir 
         if cacheDir is None:
             cacheDir = local_config.get('cacheDir')

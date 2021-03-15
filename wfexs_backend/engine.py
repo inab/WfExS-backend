@@ -22,6 +22,7 @@ import atexit
 import shutil
 import abc
 import enum
+import logging
 
 from .common import *
 
@@ -75,7 +76,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if workflow_config is None:
             workflow_config = dict()
         self.local_config = local_config
-
+        
+        # Getting a logger focused on specific classes
+        self.logger = logging.getLogger(self.__class__.__name__)
+        
         # This one may be needed to identify container overrides
         # or specific engine versions
         self.workflow_config = workflow_config

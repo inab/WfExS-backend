@@ -21,6 +21,7 @@ import hashlib
 import http
 import io
 import json
+import logging
 import os
 import platform
 import shutil
@@ -252,6 +253,9 @@ class WF:
             local_config = {}
 
         self.local_config = local_config
+        
+        # Getting a logger focused on specific classes
+        self.logger = logging.getLogger(self.__class__.__name__)
         
         toolSect = local_config.get('tools', {})
         self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
