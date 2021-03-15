@@ -329,6 +329,7 @@ class WF:
         self.baseWorkDir = workDir
         self.rawWorkDir = None
         self.workDir = None
+        self.encWorkDir = None
         
         # And the copy of scheme handlers
         self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
@@ -508,7 +509,7 @@ class WF:
             else:
                 securePassphrase = self.generate_passphrase()
                 encfs_type = self.encfs_type
-                clearF = io.BytesIO((encfs_type + '=' + securePassphrase).encode('utf-8'))
+                clearF = io.BytesIO((str(encfs_type) + '=' + securePassphrase).encode('utf-8'))
                 with open(passphraseFile,mode="wb") as encF:
                     crypt4gh.lib.encrypt(
                         [(0, self.privKey, self.pubKey)],
