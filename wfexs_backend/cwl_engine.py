@@ -121,6 +121,14 @@ class CWLWorkflowEngine(WorkflowEngine):
             raise WorkflowEngineException(
                 'Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
 
+        if self.DEVEL_CWLTOOL_VERSION is not None:
+            cwltoolPackage = self.DEVEL_CWLTOOL_PACKAGE
+            cwltoolMatchOp = '@'
+            engineVersion = self.DEVEL_CWLTOOL_VERSION
+        else:
+            cwltoolPackage = self.CWLTOOL_PYTHON_PACKAGE
+            cwltoolMatchOp = '=='
+        
         # A version directory is needed
         cwl_install_dir = os.path.join(self.weCacheDir, engineVersion)
 
@@ -132,13 +140,6 @@ class CWLWorkflowEngine(WorkflowEngine):
         # Now, time to run it
         instEnv = dict(os.environ)
         
-        if self.DEVEL_CWLTOOL_VERSION is not None:
-            cwltoolPackage = self.DEVEL_CWLTOOL_PACKAGE
-            cwltoolMatchOp = '@'
-            engineVersion = self.DEVEL_CWLTOOL_VERSION
-        else:
-            cwltoolPackage = self.CWLTOOL_PYTHON_PACKAGE
-            cwltoolMatchOp = '=='
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retVal = subprocess.Popen(
@@ -342,7 +343,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             retVal = subprocess.Popen("source '{0}'/bin/activate  ; {1}".format(cwl_install_dir,cmd),
                                                       stdout=cwl_yaml_stdout,
                                                       stderr=cwl_yaml_stderr,
-                                                      cwd=cwl_install_dir,
+                                                      cwd=self.workDir,
                                                       shell=True,
                                                       env=instEnv
                                                       ).wait()
