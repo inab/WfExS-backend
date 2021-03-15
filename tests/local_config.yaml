@@ -5,7 +5,9 @@ crypt4gh:
   pub: local_config.yaml.pub
 tools:
   dockerCommand: docker
-  encfsCommand: encfs
+  encrypted_fs:
+    type: encfs
+    command: encfs
   engineMode: local
   gitCommand: git
   javaCommand: java

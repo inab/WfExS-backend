@@ -256,7 +256,8 @@ class WF:
         toolSect = local_config.get('tools', {})
         self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
         
-        encfs_type = toolSect.get('encfsType', DEFAULT_ENCRYPTED_FS_TYPE)
+        encfsSect= toolSect.get('encrypted_fs',{})
+        encfs_type = encfsSect.get('type', DEFAULT_ENCRYPTED_FS_TYPE)
         try:
             encfs_type = EncryptedFSType(encfs_type)
         except:
@@ -265,9 +266,9 @@ class WF:
             raise WFException('FIXME: Default encryption filesystem {} mount procedure is not implemented')
         self.encfs_type = encfs_type
         
-        self.encfs_cmd = toolSect.get('encfsCommand', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type])
-        self.fusermount_cmd = toolSect.get('fusermountCommand', DEFAULT_FUSERMOUNT_CMD)
-        self.encfs_idleMinutes = toolSect.get('encfsIdle', DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT)
+        self.encfs_cmd = encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type])
+        self.fusermount_cmd = encfsSect.get('fusermount_command', DEFAULT_FUSERMOUNT_CMD)
+        self.encfs_idleMinutes = encfsSect.get('idle', DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT)
         
         # Getting the config directory, needed for relative filenames
         if config_directory is None:
