@@ -52,6 +52,7 @@ if platform.system() == "Darwin":
     ssl._create_default_https_context = ssl._create_unverified_context
 
 from .common import *
+from .encrypted_fs import *
 from .engine import WorkflowEngine
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
@@ -73,8 +74,6 @@ class WF:
     Workflow enaction class
     """
     
-    # Idle timeout, in minutes
-    DEFAULT_ENCFS_IDLE_TIMEOUT = 5
     DEFAULT_PASSPHRASE_LENGTH = 4
     
     CRYPT4GH_SECTION = 'crypt4gh'
@@ -254,11 +253,21 @@ class WF:
 
         self.local_config = local_config
         
-        self.git_cmd = local_config.get('tools', {}).get('gitCommand', DEFAULT_GIT_CMD)
+        toolSect = local_config.get('tools', {})
+        self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
         
-        self.encfs_cmd = local_config.get('tools', {}).get('encfsCommand', DEFAULT_ENCFS_CMD)
-        self.fusermount_cmd = local_config.get('tools', {}).get('fusermountCommand', DEFAULT_FUSERMOUNT_CMD)
-        self.encfs_idleMinutes = local_config.get('encfsIdle',self.DEFAULT_ENCFS_IDLE_TIMEOUT)
+        encfs_type = toolSect.get('encfsType', DEFAULT_ENCRYPTED_FS_TYPE)
+        try:
+            encfs_type = EncryptedFSType(encfs_type)
+        except:
+            raise WFException('Invalid default encryption filesystem {}'.format(encfs_type))
+        if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
+            raise WFException('FIXME: Default encryption filesystem {} mount procedure is not implemented')
+        self.encfs_type = encfs_type
+        
+        self.encfs_cmd = toolSect.get('encfsCommand', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type])
+        self.fusermount_cmd = toolSect.get('fusermountCommand', DEFAULT_FUSERMOUNT_CMD)
+        self.encfs_idleMinutes = toolSect.get('encfsIdle', DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT)
         
         # Getting the config directory, needed for relative filenames
         if config_directory is None:
@@ -456,38 +465,6 @@ class WF:
         
         return self
     
-    def _mountEncFS(self, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPassBytes):
-            with tempfile.NamedTemporaryFile() as encfs_init_stdout, tempfile.NamedTemporaryFile() as encfs_init_stderr:
-                
-                encfsCommand = [
-                    self.encfs_cmd,
-                    '-i',str(self.encfs_idleMinutes),
-                    '--stdinpass',
-                    '--standard',
-                    uniqueEncWorkDir,
-                    uniqueWorkDir
-                ]
-                
-                efs = subprocess.Popen(
-                    encfsCommand,
-                    stdin=subprocess.PIPE,
-                    stdout=encfs_init_stdout,
-                    stderr=encfs_init_stderr,
-                    cwd=uniqueRawWorkDir,
-                )
-                efs.communicate(input=clearPassBytes)
-                retval = efs.wait()
-                    
-                # Reading the output and error for the report
-                if retval != 0:
-                    with open(encfs_init_stdout.name,"r") as c_stF:
-                        encfs_init_stdout_v = c_stF.read()
-                    with open(encfs_init_stderr.name,"r") as c_stF:
-                        encfs_init_stderr_v = c_stF.read()
-                    
-                    errstr = "Could not mount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(encfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
-                    raise WFException(errstr)
-    
     def setupWorkdir(self,doSecureWorkDir):
         uniqueRawWorkDir = self.rawWorkDir
         
@@ -513,10 +490,20 @@ class WF:
                         sender_pubkey=None
                     )
                 
-                securePassphrase = clearF.getvalue().decode('utf-8')
+                encfs_type , _ , securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
+                try:
+                    encfs_type = EncryptedFSType(encfs_type)
+                except:
+                    raise WFException('Invalid encryption filesystem {} in working directory'.format(encfs_type))
+                if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
+                    raise WFException('FIXME: Encryption filesystem {} mount procedure is not implemented')
+                self.encfs_type = encfs_type
+                if securePassphrase == '':
+                    raise WFException('Encryption filesystem key does not follow the right format')
             else:
                 securePassphrase = self.generate_passphrase()
-                clearF = io.BytesIO(securePassphrase.encode('utf-8'))
+                encfs_type = self.encfs_type
+                clearF = io.BytesIO((encfs_type + '=' + securePassphrase).encode('utf-8'))
                 with open(passphraseFile,mode="wb") as encF:
                     crypt4gh.lib.encrypt(
                         [(0, self.privKey, self.pubKey)],
@@ -525,13 +512,12 @@ class WF:
                         offset=0,
                         span=None
                     )
-            
-            self.encfsPassphrase = securePassphrase
-            del securePassphrase
+            del clearF
             
             # Now, time to mount the encfs
-            self._mountEncFS(uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearF.getvalue())
-            del clearF
+            ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[self.encfs_type](self.encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, securePassphrase)
+            #self.encfsPassphrase = securePassphrase
+            del securePassphrase
         else:
             uniqueEncWorkDir = None
             uniqueWorkDir = uniqueRawWorkDir
@@ -563,7 +549,7 @@ class WF:
                     with open(encfs_umount_stderr.name,"r") as c_stF:
                         encfs_umount_stderr_v = c_stF.read()
                     
-                    errstr = "Could not umount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(fusermountCommand),encfs_umount_stdout_v,encfs_umount_stderr_v)
+                    errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(self.encfs_type,retval,' '.join(fusermountCommand),encfs_umount_stdout_v,encfs_umount_stderr_v)
                     raise WFException(errstr)
                 
                 self.encWorkDir = None
