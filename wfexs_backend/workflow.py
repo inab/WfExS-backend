@@ -456,6 +456,38 @@ class WF:
         
         return self
     
+    def _mountEncFS(self, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPassBytes):
+            with tempfile.NamedTemporaryFile() as encfs_init_stdout, tempfile.NamedTemporaryFile() as encfs_init_stderr:
+                
+                encfsCommand = [
+                    self.encfs_cmd,
+                    '-i',str(self.encfs_idleMinutes),
+                    '--stdinpass',
+                    '--standard',
+                    uniqueEncWorkDir,
+                    uniqueWorkDir
+                ]
+                
+                efs = subprocess.Popen(
+                    encfsCommand,
+                    stdin=subprocess.PIPE,
+                    stdout=encfs_init_stdout,
+                    stderr=encfs_init_stderr,
+                    cwd=uniqueRawWorkDir,
+                )
+                efs.communicate(input=clearPassBytes)
+                retval = efs.wait()
+                    
+                # Reading the output and error for the report
+                if retval != 0:
+                    with open(encfs_init_stdout.name,"r") as c_stF:
+                        encfs_init_stdout_v = c_stF.read()
+                    with open(encfs_init_stderr.name,"r") as c_stF:
+                        encfs_init_stderr_v = c_stF.read()
+                    
+                    errstr = "Could not mount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(encfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
+                    raise WFException(errstr)
+    
     def setupWorkdir(self,doSecureWorkDir):
         uniqueRawWorkDir = self.rawWorkDir
         
@@ -498,37 +530,7 @@ class WF:
             del securePassphrase
             
             # Now, time to mount the encfs
-            with tempfile.NamedTemporaryFile() as encfs_init_stdout, tempfile.NamedTemporaryFile() as encfs_init_stderr:
-                
-                encfsCommand = [
-                    self.encfs_cmd,
-                    '-i',str(self.encfs_idleMinutes),
-                    '--stdinpass',
-                    '--standard',
-                    uniqueEncWorkDir,
-                    uniqueWorkDir
-                ]
-                
-                efs = subprocess.Popen(
-                    encfsCommand,
-                    stdin=subprocess.PIPE,
-                    stdout=encfs_init_stdout,
-                    stderr=encfs_init_stderr,
-                    cwd=uniqueRawWorkDir,
-                )
-                efs.communicate(input=clearF.getvalue())
-                retval = efs.wait()
-                    
-                # Reading the output and error for the report
-                if retval != 0:
-                    with open(encfs_init_stdout.name,"r") as c_stF:
-                        encfs_init_stdout_v = c_stF.read()
-                    with open(encfs_init_stderr.name,"r") as c_stF:
-                        encfs_init_stderr_v = c_stF.read()
-                    
-                    errstr = "Could not mount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(encfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
-                    raise WFException(errstr)
-            
+            self._mountEncFS(uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearF.getvalue())
             del clearF
         else:
             uniqueEncWorkDir = None
