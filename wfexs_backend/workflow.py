@@ -161,11 +161,11 @@ class WF:
             
             if os.path.exists(fname):
                 if os.path.getsize(fname) == 0:
-                    print("[WARNING] Installation {} file {} is empty".format(elem,fname), file=sys.stderr)
+                    self.logger.warning("[WARNING] Installation {} file {} is empty".format(elem,fname))
                 else:
                     numExist += 1
             else:
-                print("[WARNING] Installation {} file {} does not exist".format(elem,fname), file=sys.stderr)
+                self.logger.warning("[WARNING] Installation {} file {} does not exist".format(elem,fname))
         
         if numExist == 1:
             raise WFException("Inconsistent {} section, as one of the keys is missing".format(cls.CRYPT4GH_SECTION))
@@ -677,7 +677,7 @@ class WF:
 
         repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
         localWorkflow = LocalWorkflow(dir=repoDir, relPath=repoRelPath, effectiveCheckout=repoEffectiveCheckout)
-        print("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
+        self.logger.info("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
 
         if repoRelPath is not None:
             if not os.path.exists(os.path.join(repoDir, repoRelPath)):
@@ -842,7 +842,7 @@ class WF:
                     wf_crate.add_file(value[i]['location'])
 
         wf_crate.write_zip(self.outputsDir + "/crate")
-        print("Research Object created: {}".format(self.outputsDir))
+        self.logger.info("Research Object created: {}".format(self.outputsDir))
 
         # TODO error handling
     
@@ -1056,11 +1056,11 @@ class WF:
         :return:
         """
         roCrateFile = self.downloadROcrate(roCrateURL)
-        print("downloaded RO-Crate: {}".format(roCrateFile))
+        self.logger.info("downloaded RO-Crate: {}".format(roCrateFile))
         roCrateObj = rocrate.ROCrate(roCrateFile)
 
         # TODO: get roCrateObj mainEntity programming language
-        # print(roCrateObj.root_dataset.as_jsonld())
+        # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
         mainEntityProgrammingLanguageId = None
         for e in roCrateObj.get_entities():
             if e['@type'] == "ComputerLanguage":
@@ -1190,7 +1190,7 @@ class WF:
                     raise WFException(errstr)
 
             cachedFilename = os.path.join(self.cacheWorkflowInputsDir, input_file)
-            print("downloading workflow input: {} => {}".format(remote_file, cachedFilename))
+            self.logger.info("downloading workflow input: {} => {}".format(remote_file, cachedFilename))
             if not os.path.exists(cachedFilename):
                 theScheme = parsedInputURL.scheme.lower()
                 schemeHandler = self.schemeHandlers.get(theScheme)

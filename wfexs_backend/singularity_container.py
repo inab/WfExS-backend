@@ -51,7 +51,7 @@ class SingularityContainerFactory(ContainerFactory):
             containerFilename = simpleFileNameMethod(tag)
             localContainerPath = os.path.join(self.engineContainersSymlinkDir,containerFilename)
                 
-            print("downloading container: {} => {}".format(tag, localContainerPath))
+            self.logger.info("downloading container: {} => {}".format(tag, localContainerPath))
             # First, let's materialize the container image
             imageSignature = None
             if not os.path.isfile(localContainerPath):
