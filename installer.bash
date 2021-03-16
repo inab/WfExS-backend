@@ -51,15 +51,17 @@ pip install -r "${wfexsDir}"/requirements.txt
 # Now, it is time to install the binaries
 if [ ! -x "${envDir}/bin/java" ] ; then
 	echo "Installing openjdk ${JDK_VER}+${JDK_REV} in the environment (to be used with Nextflow)"
-	( cd "${downloadDir}" && curl -O "https://download.java.net/openjdk/jdk${JDK_VER}/ri/openjdk-${JDK_VER}+${JDK_REV}_linux-x64_bin.tar.gz" )
+	( cd "${downloadDir}" && curl -L -O "https://download.java.net/openjdk/jdk${JDK_VER}/ri/openjdk-${JDK_VER}+${JDK_REV}_linux-x64_bin.tar.gz" )
 	tar -x -C "${envDir}" -f "${downloadDir}"/openjdk*.tar.gz
 	for path in bin lib ; do
 		mv "${envDir}"/jdk-${JDK_VER}/${path}/* "${envDir}/${path}"
+	done
 	mv "${envDir}"/jdk-${JDK_VER}/* "${envDir}"
 fi
 
 if [ ! -x "${envDir}/bin/gocryptfs" ] ; then
-	echo "Installing static gocryptfs ${GOCRYPTFS_VER}"
-	( cd "${downloadDir}" && curl -O "https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_linux-static_amd64.tar.gz" )
+	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_linux-static_amd64.tar.gz"
+	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
+	( cd "${downloadDir}" && curl -L -O "${gocryptfs_url}" )
 	tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz
 fi
