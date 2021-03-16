@@ -17,6 +17,7 @@
 
 import argparse
 import atexit
+import logging
 import os
 import sys
 import shutil
@@ -56,10 +57,15 @@ class WfExS_Commands(ArgTypeMixin,enum.Enum):
     Execute = 'execute'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
+LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
 
 if __name__ == "__main__":
     defaultLocalConfigFilename = os.path.join(os.getcwd(),DEFAULT_LOCAL_CONFIG_RELNAME)
     ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend")
+    ap.add_argument('--log-file', dest="logFilename", help='Store messages in a file instead of using standard error and standard output')
+    ap.add_argument('-q','--quiet', dest='logLevel', action='store_const', const=logging.WARNING, help='Only show engine warnings and errors')
+    ap.add_argument('-v','--verbose', dest='logLevel', action='store_const', const=logging.INFO, help='Show verbose (informational) messages')
+    ap.add_argument('-d','--debug', dest='logLevel', action='store_const', const=logging.DEBUG, help='Show debug messages (use with care, as it can disclose passphrases and passwords)')
     ap.add_argument('-L', '--local-config', dest="localConfigFilename", default=defaultLocalConfigFilename, help="Local installation configuration file")
     ap.add_argument('--cache-dir', dest="cacheDir", help="Caching directory")
     ap.add_argument('-W', '--workflow-config', dest="workflowConfigFilename",
@@ -70,7 +76,21 @@ if __name__ == "__main__":
                     help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
     ap.add_argument('command',help='Command to run',nargs='?',type=WfExS_Commands.argtype,choices=WfExS_Commands,default=WfExS_Commands.Execute)
     args = ap.parse_args()
-
+    
+    # Setting up the log
+    loggingConf = {
+        'format': LOGGING_FORMAT,
+    }
+    
+    if args.logLevel:
+        loggingConf['level'] = args.logLevel
+    
+    if args.logFilename is not None:
+        loggingConf['filename'] = args.logFilename
+        loggingConf['encoding'] = 'utf-8'
+    
+    logging.basicConfig(**loggingConf)
+    
     # First, try loading the configuration file
     localConfigFilename = args.localConfigFilename
     if localConfigFilename and os.path.exists(localConfigFilename):

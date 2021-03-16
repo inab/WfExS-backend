@@ -13,7 +13,8 @@ In order to use it you have to install first the dependencies described at [INST
 
 ```
 python WfExS-backend.py -h
-usage: WfExS-backend.py [-h] [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR]
+usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
+                        [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR]
                         [-W WORKFLOWCONFIGFILENAME]
                         [-Z SECURITYCONTEXTSCONFIGFILENAME]
                         [-J WORKFLOWWORKINGDIRECTORY]
@@ -27,6 +28,13 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  --log-file LOGFILENAME
+                        Store messages in a file instead of using standard
+                        error and standard output
+  -q, --quiet           Only show engine warnings and errors
+  -v, --verbose         Show verbose (informational) messages
+  -d, --debug           Show debug messages (use with care, as it can disclose
+                        passphrases and passwords)
   -L LOCALCONFIGFILENAME, --local-config LOCALCONFIGFILENAME
                         Local installation configuration file
   --cache-dir CACHEDIR  Caching directory
