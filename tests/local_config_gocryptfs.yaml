@@ -1,0 +1,14 @@
+cacheDir: /tmp/wfexs-backend-test
+crypt4gh:
+  key: local_config.yaml.key
+  passphrase: strive backyard dividing gumball
+  pub: local_config.yaml.pub
+tools:
+  dockerCommand: docker
+  encrypted_fs:
+    type: gocryptfs
+  engineMode: local
+  gitCommand: git
+  javaCommand: java
+  singularityCommand: singularity
+workDir: /tmp/wfexs-backend-test_WorkDir
