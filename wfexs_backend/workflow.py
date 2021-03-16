@@ -834,15 +834,19 @@ class WF:
         # TODO: digest the results from executeWorkflow plus all the provenance
 
         wf_crate = rocrate.ROCrate(self.cacheROCrateFilename)
-        provenance = self.augmentedInputs + self.matCheckOutputs
+        execution_provenance = self.augmentedInputs + self.matCheckOutputs
 
-        for key, value in provenance:
-            if isinstance(value, list):  # only files
-                for i in range(0, len(value)):
-                    wf_crate.add_file(value[i]['location'])
+        for key, value in execution_provenance:
+            if isinstance(value, dict):  # file
+                if value['class'] == "File":
+                    wf_crate.add_file(value['location'])
+            elif isinstance(value, list):  # list of files
+                for i in range(len(value)):
+                    if value[i]['class'] == "File":
+                        wf_crate.add_file(value[i]['location'])
 
-        wf_crate.write_zip(self.outputsDir + "/crate")
-        self.logger.info("Research Object created: {}".format(self.outputsDir))
+        wf_crate.writeZip(self.outputsDir + "/crate")
+        self.logger.info("*RO-Crate created: {}".format(self.outputsDir))
 
         # TODO error handling
     
