@@ -520,6 +520,10 @@ class WF:
                     )
             del clearF
             
+            # Fail earlier
+            if os.path.ismount(self.workDir):
+                raise WFException("Destination mount point {} is already in use")
+            
             # Now, time to mount the encfs
             ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[self.encfs_type](self.encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, securePassphrase)
             #self.encfsPassphrase = securePassphrase
@@ -534,32 +538,34 @@ class WF:
     
     def unmountWorkdir(self):
         if self.encWorkDir is not None:
-            with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
-                
-                fusermountCommand = [
-                    self.fusermount_cmd,
-                    '-u',   # Umount the directory
-                    '-z',   # Even if it is not possible to umount it now, hide the mount point
-                    self.workDir,
-                ]
-                
-                retval = subprocess.Popen(
-                    fusermountCommand,
-                    stdout=encfs_umount_stdout,
-                    stderr=encfs_umount_stderr,
-                ).wait()
-                
-                if retval != 0:
-                    with open(encfs_umount_stdout.name,"r") as c_stF:
-                        encfs_umount_stdout_v = c_stF.read()
-                    with open(encfs_umount_stderr.name,"r") as c_stF:
-                        encfs_umount_stderr_v = c_stF.read()
+            # Only unmount if it is needed
+            if os.path.ismount(self.workDir):
+                with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
+                    fusermountCommand = [
+                        self.fusermount_cmd,
+                        '-u',   # Umount the directory
+                        '-z',   # Even if it is not possible to umount it now, hide the mount point
+                        self.workDir,
+                    ]
                     
-                    errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(self.encfs_type,retval,' '.join(fusermountCommand),encfs_umount_stdout_v,encfs_umount_stderr_v)
-                    raise WFException(errstr)
-                
-                self.encWorkDir = None
-                self.workDir = None
+                    retval = subprocess.Popen(
+                        fusermountCommand,
+                        stdout=encfs_umount_stdout,
+                        stderr=encfs_umount_stderr,
+                    ).wait()
+                    
+                    if retval != 0:
+                        with open(encfs_umount_stdout.name,"r") as c_stF:
+                            encfs_umount_stdout_v = c_stF.read()
+                        with open(encfs_umount_stderr.name,"r") as c_stF:
+                            encfs_umount_stderr_v = c_stF.read()
+                        
+                        errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(self.encfs_type,retval,' '.join(fusermountCommand),encfs_umount_stdout_v,encfs_umount_stderr_v)
+                        raise WFException(errstr)
+            
+            # This is needed to avoid double work
+            self.encWorkDir = None
+            self.workDir = None
     
     def cleanup(self):
         self.unmountWorkdir()
