@@ -18,7 +18,9 @@ from __future__ import absolute_import
 
 import os
 import re
+import shutil
 import subprocess
+import sys
 import tempfile
 
 from typing import Dict, List, Tuple
@@ -50,12 +52,22 @@ class NextflowWorkflowEngine(WorkflowEngine):
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir)
         
-        self.java_cmd = local_config.get('tools', {}).get('javaCommand', DEFAULT_JAVA_CMD)
-
-        self.nxf_image = local_config.get(self.ENGINE_NAME, {}).get('dockerImage', self.DEFAULT_NEXTFLOW_DOCKER_IMAGE)
-        self.nxf_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_NEXTFLOW_VERSION)
-        self.max_retries = local_config.get(self.ENGINE_NAME, {}).get('maxRetries', self.DEFAULT_MAX_RETRIES)
-        self.max_cpus = local_config.get(self.ENGINE_NAME, {}).get('maxCpus', self.DEFAULT_MAX_CPUS)
+        # Obtaining the full path to Java
+        self.java_cmd = shutil.which(local_config.get('tools', {}).get('javaCommand', DEFAULT_JAVA_CMD))
+        
+        # Deciding whether to unset JAVA_HOME
+        wfexs_dirname = os.path.dirname(os.path.abspath(sys.argv[0]))
+        self.unset_java_home = os.path.commonpath([self.java_cmd,wfexs_dirname]) == wfexs_dirname
+        
+        engineConf =  local_config.get(self.ENGINE_NAME, {})
+        
+        self.nxf_image = engineConf.get('dockerImage', self.DEFAULT_NEXTFLOW_DOCKER_IMAGE)
+        self.nxf_version = engineConf.get('version', self.DEFAULT_NEXTFLOW_VERSION)
+        self.max_retries = engineConf.get('maxRetries', self.DEFAULT_MAX_RETRIES)
+        self.max_cpus = engineConf.get('maxCpus', self.DEFAULT_MAX_CPUS)
+        
+        # The profile to force, in case it cannot be guessed
+        self.nxf_profile = workflow_config.get('profile')
 
     @classmethod
     def WorkflowType(cls) -> WorkflowType:
@@ -171,7 +183,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if not os.path.exists(cachedScript):
             os.makedirs(nextflow_install_dir, exist_ok=True)
             nextflow_script_url = 'https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow'.format(nextflow_version)
-            print("Downloading Nextflow {}: {} => {}".format(nextflow_version,nextflow_script_url, cachedScript))
+            self.logger.info("Downloading Nextflow {}: {} => {}".format(nextflow_version,nextflow_script_url, cachedScript))
             fetchClassicURL(nextflow_script_url,cachedScript)
         
         # Checking the installer has execution permissions
@@ -183,6 +195,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
         instEnv = dict(os.environ)
         instEnv['NXF_HOME'] = NXF_HOME
         instEnv['JAVA_CMD'] = self.java_cmd
+        if self.unset_java_home:
+            instEnv.pop('NXF_JAVA_HOME',None)
+            instEnv.pop('JAVA_HOME',None)
         
         # This is done only once
         retval = 0
@@ -201,10 +216,17 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     
                 # Reading the output and error for the report
                 if retval != 0:
-                    with open(nxf_install_stdout.name,"r") as c_stF:
-                        nxf_run_stdout_v = c_stF.read()
-                    with open(nxf_install_stderr.name,"r") as c_stF:
-                        nxf_run_stderr_v = c_stF.read()
+                    if os.path.exists(nxf_install_stdout.name):
+                        with open(nxf_install_stdout.name,"r") as c_stF:
+                            nxf_run_stdout_v = c_stF.read()
+                    else:
+                        nxf_run_stdout_v = ''
+                    
+                    if os.path.exists(nxf_install_stderr.name):
+                        with open(nxf_install_stderr.name,"r") as c_stF:
+                            nxf_run_stderr_v = c_stF.read()
+                    else:
+                        nxf_run_stderr_v = ''
         
         # And now the command is run
         if retval == 0  and isinstance(commandLine,list) and len(commandLine)>0:
