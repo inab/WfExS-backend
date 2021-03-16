@@ -127,6 +127,8 @@ class WF:
         import datetime
         import socket
         
+        logger = logging.getLogger(cls.__name__)
+        
         updated = False
         
         # Getting the config directory
@@ -161,11 +163,11 @@ class WF:
             
             if os.path.exists(fname):
                 if os.path.getsize(fname) == 0:
-                    self.logger.warning("[WARNING] Installation {} file {} is empty".format(elem,fname))
+                    logger.warning("[WARNING] Installation {} file {} is empty".format(elem,fname))
                 else:
                     numExist += 1
             else:
-                self.logger.warning("[WARNING] Installation {} file {} does not exist".format(elem,fname))
+                logger.warning("[WARNING] Installation {} file {} does not exist".format(elem,fname))
         
         if numExist == 1:
             raise WFException("Inconsistent {} section, as one of the keys is missing".format(cls.CRYPT4GH_SECTION))
@@ -270,7 +272,7 @@ class WF:
             raise WFException('FIXME: Default encryption filesystem {} mount procedure is not implemented')
         self.encfs_type = encfs_type
         
-        self.encfs_cmd = encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type])
+        self.encfs_cmd = shutil.which(encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type]))
         self.fusermount_cmd = encfsSect.get('fusermount_command', DEFAULT_FUSERMOUNT_CMD)
         self.encfs_idleMinutes = encfsSect.get('idle', DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT)
         
@@ -330,6 +332,7 @@ class WF:
         self.rawWorkDir = None
         self.workDir = None
         self.encWorkDir = None
+        self.doUnmount = False
         
         # And the copy of scheme handlers
         self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
@@ -478,12 +481,13 @@ class WF:
             uniqueEncWorkDir = os.path.join(uniqueRawWorkDir,'.crypt')
             uniqueWorkDir = os.path.join(uniqueRawWorkDir,'work')
             
-            # The directories should exist before calling encfs
+            # The directories should exist before calling encryption FS mount
             os.makedirs(uniqueEncWorkDir, exist_ok=True)
             os.makedirs(uniqueWorkDir, exist_ok=True)
             
             # This is the passphrase needed to decrypt the filesystem
             passphraseFile = os.path.join(uniqueRawWorkDir,self.WORKDIR_PASSPHRASE_FILE)
+            encfs_cmd = self.encfs_cmd
             if os.path.exists(passphraseFile):
                 clearF = io.BytesIO()
                 with open(passphraseFile,mode="rb") as encF:
@@ -497,19 +501,25 @@ class WF:
                     )
                 
                 encfs_type , _ , securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
+                self.logger.debug(encfs_type + ' ' + securePassphrase)
                 try:
                     encfs_type = EncryptedFSType(encfs_type)
                 except:
                     raise WFException('Invalid encryption filesystem {} in working directory'.format(encfs_type))
                 if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
                     raise WFException('FIXME: Encryption filesystem {} mount procedure is not implemented')
-                self.encfs_type = encfs_type
+                
+                # If the working directory encrypted filesystem does not
+                # match the configured one, use its default executable
+                if encfs_type != self.encfs_type:
+                    encfs_cmd = DEFAULT_ENCRYPTED_FS_CMD[encfs_type]
+                
                 if securePassphrase == '':
                     raise WFException('Encryption filesystem key does not follow the right format')
             else:
                 securePassphrase = self.generate_passphrase()
                 encfs_type = self.encfs_type
-                clearF = io.BytesIO((str(encfs_type) + '=' + securePassphrase).encode('utf-8'))
+                clearF = io.BytesIO((encfs_type.value + '=' + securePassphrase).encode('utf-8'))
                 with open(passphraseFile,mode="wb") as encF:
                     crypt4gh.lib.encrypt(
                         [(0, self.privKey, self.pubKey)],
@@ -520,12 +530,16 @@ class WF:
                     )
             del clearF
             
-            # Fail earlier
-            if os.path.ismount(self.workDir):
-                raise WFException("Destination mount point {} is already in use")
+            # Warn/fail earlier
+            if os.path.ismount(uniqueWorkDir):
+                # raise WFException("Destination mount point {} is already in use")
+                self.logger.warning("Destination mount point {} is already in use")
+            else:
+                # Now, time to mount the encrypted FS
+                ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, securePassphrase)
+                # We are going to unmount what we have mounted
+                self.doUnmount = True
             
-            # Now, time to mount the encfs
-            ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[self.encfs_type](self.encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, securePassphrase)
             #self.encfsPassphrase = securePassphrase
             del securePassphrase
         else:
@@ -537,7 +551,7 @@ class WF:
         self.workDir = uniqueWorkDir
     
     def unmountWorkdir(self):
-        if self.encWorkDir is not None:
+        if self.doUnmount and (self.encWorkDir is not None):
             # Only unmount if it is needed
             if os.path.ismount(self.workDir):
                 with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
@@ -564,6 +578,7 @@ class WF:
                         raise WFException(errstr)
             
             # This is needed to avoid double work
+            self.doUnmount = False
             self.encWorkDir = None
             self.workDir = None
     
