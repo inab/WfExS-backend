@@ -22,10 +22,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import yaml
 
 from typing import Dict, List, Tuple
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
+from .singularity_container import SingularityContainerFactory
 
 
 class NextflowWorkflowEngine(WorkflowEngine):
@@ -68,6 +70,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         # The profile to force, in case it cannot be guessed
         self.nxf_profile = workflow_config.get('profile')
+        
+        # Setting the assets directory
+        self.nxf_assets = os.path.join(self.engineTweaksDir,'assets')
+        os.makedirs(self.nxf_assets, exist_ok=True)
 
     @classmethod
     def WorkflowType(cls) -> WorkflowType:
@@ -166,7 +172,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return engineVersion, nextflow_install_dir, engineFingerprint
     
-    def runNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None) -> Tuple[ExitVal,str,str]:
         if self.engine_mode == EngineMode.Docker:
             retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir)
         elif self.engine_mode == EngineMode.Local:
@@ -176,7 +182,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return retval , nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runLocalNextflowCommand(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None) -> Tuple[int,str,str]:
+    def runLocalNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None) -> Tuple[int,str,str]:
         if nextflow_install_dir is None:
             nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
         cachedScript = os.path.join(nextflow_install_dir, 'nextflow')
@@ -194,10 +200,21 @@ class NextflowWorkflowEngine(WorkflowEngine):
         NXF_HOME = os.path.join(nextflow_install_dir,'.nextflow')
         instEnv = dict(os.environ)
         instEnv['NXF_HOME'] = NXF_HOME
+        # Needed to tie Nextflow short
+        instEnv['NXF_OFFLINE'] = 'true'
         instEnv['JAVA_CMD'] = self.java_cmd
         if self.unset_java_home:
             instEnv.pop('NXF_JAVA_HOME',None)
             instEnv.pop('JAVA_HOME',None)
+        
+        instEnv['NXF_WORKDIR'] = workdir  if workdir is not None  else  self.intermediateDir
+        instEnv['NXF_ASSETS'] = self.nxf_assets
+        
+        # FIXME: Should we set NXF_TEMP???
+        
+        # This is needed to have Nextflow using the cached contents
+        if isinstance(self.container_factory,SingularityContainerFactory):
+            instEnv['NXF_SINGULARITY_CACHEDIR'] = self.container_factory.cacheDir
         
         # This is done only once
         retval = 0
@@ -326,7 +343,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             
             nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
             nxf_home = os.path.join(nextflow_install_dir,'.nextflow')
-            nxf_assets_dir = os.path.join(nxf_home,"assets")
+            nxf_assets_dir = self.nxf_assets
             try:
                 # Directories required by Nextflow in a Docker
                 os.makedirs(nxf_assets_dir, exist_ok=True)
@@ -507,9 +524,17 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # parse
         # nextflow config -flat
         localWf = matWorkflowEngine.workflow
+        nxf_params = [
+            'config',
+            '-flat'
+        ]
+        if self.nxf_profile is not None:
+            nxf_params.extend(['-profile',self.nxf_profile])
+        nxf_params.append(localWf.dir)
+        
         flat_retval , flat_stdout, flat_stderr = self.runNextflowCommand(
             matWorkflowEngine.version,
-            ['config','-flat',localWf.dir],
+            nxf_params,
             workdir=localWf.dir,
             nextflow_path=matWorkflowEngine.engine_path
         )
@@ -564,19 +589,89 @@ STDERR
         
         return name + extension
     
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+    def structureAsNXFParams(self, matInputs: List[MaterializedInput]):
+        nxpParams = {}
+        
+        for matInput in matInputs:
+            node = nxpParams
+            splittedPath = matInput.name.split('.')
+            for step in splittedPath[:-1]:
+                node = node.setdefault(step,{})
+            
+            nxfValues = []
+            
+            for value in matInput.values:
+                if isinstance(value, MaterializedContent):
+                    if os.path.isfile(value.local):
+                        nxfValues.append(value.local)
+                    else:
+                        raise WorkflowEngineException(
+                            "ERROR: Input {} has values which are not materialized".format(matInput.name))
+                else:
+                    nxfValues.append(value)
+            
+            node[splittedPath[-1]] = nxfValues  if len(nxfValues)!=1  else  nxfValues[0]
+        
+        return nxpParams
+    
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+        if len(matInputs) == 0:  # Is list of materialized inputs empty?
+            raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
+        
         localWf = matWfEng.workflow
+        
+        forceParamsConfFile = os.path.join(self.engineTweaksDir,'force-params.config')
+        with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:
+            if isinstance(self.container_factory,SingularityContainerFactory):
+                print(
+"""
+docker.enabled = false
+singularity.enabled = true
+singularity.runOptions = '--userns'
+singularity.autoMounts = true
+""",file=fPC)
+        
+        relInputsFileName = "inputdeclarations.yaml"
+        inputsFileName = os.path.join(self.workDir, relInputsFileName)
+        
+        nxpParams = self.structureAsNXFParams(matInputs)
+        if len(nxpParams) != 0:
+            try:
+                with open(inputsFileName, mode="w+", encoding="utf-8") as yF:
+                    yaml.dump(nxpParams, yF)
+            except IOError as error:
+                raise WorkflowEngineException(
+                    "ERROR: cannot create input declarations file {}, {}".format(inputsFileName, error))
+        else:
+            raise WorkflowEngineException("No parameter was specified! Bailing out")
+        
+        
+        outputStatsDir = os.path.join(self.outputsDir,'stats')
+        os.makedirs(outputStatsDir, exist_ok=True)
+        nxf_params = [
+            '-log',os.path.join(outputStatsDir,'log.txt'),
+            '-c',forceParamsConfFile,
+            'run',
+            '-name','WfExS-run',
+            '-offline','true',
+            '-w',self.intermediateDir,
+            '-with-dag',os.path.join(outputStatsDir,'dag.dot'),
+            '-with-report',os.path.join(outputStatsDir,'report.html'),
+            '-with-timeline',os.path.join(outputStatsDir,'timeline.html'),
+            '-with-trace',os.path.join(outputStatsDir,'trace.txt'),
+            '-params-file',inputsFileName,
+        ]
+        
+        if self.nxf_profile is not None:
+            nxf_params.extend(['-profile',self.nxf_profile])
+        
+        nxf_params.append(localWf.dir)
         launch_retval , launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
-            ['config','-flat',localWf.dir],
-            workdir=localWf.dir,
+            nxf_params,
+            workdir=self.intermediateDir,
             nextflow_path=matWfEng.engine_path
         )
         
-        """
-        docker.enabled = false
-        singularity.enabled = true
-        singularity.autoMounts = true
-        """
         # TODO
         pass    
