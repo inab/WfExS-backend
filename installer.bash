@@ -55,7 +55,9 @@ if [ ! -x "${envDir}/bin/java" ] ; then
 	tar -x -C "${envDir}" -f "${downloadDir}"/openjdk*.tar.gz
 	for path in bin lib ; do
 		mv "${envDir}"/jdk-${JDK_VER}/${path}/* "${envDir}/${path}"
+		rmdir "${envDir}"/jdk-${JDK_VER}/${path}
 	done
+
 	mv "${envDir}"/jdk-${JDK_VER}/* "${envDir}"
 fi
 
