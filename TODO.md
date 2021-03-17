@@ -23,6 +23,12 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] **Step 6**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
 
+  - [x] **Step 6.a**: Use Crypt4GH to encrypt the passphrase of FUSE encrypted execution working directories.
+
+  - [ ] **Step 6.b**: Use Crypt4GH to decrypt a secure request to the installation.
+
+  - [ ] **Step 6.c**: Use Crypt4GH to decrypt EGA input files.
+
 - [ ] **Step 7**: Add upload capabilities of results: Nextcloud / B2DROP.
   
   - [ ] **Step 7.future**: Add upload capabilities of results and metadata (RO-Crate): B2SHARE.
@@ -31,15 +37,23 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] **Step 9**: Generate RO-Crate from execution provenance.
 
+  - [ ] **Step 9.a**: Use Crypt4GH to encrypt with crypt4gh the generated RO-Crate.
+
 - [ ] **Step 10**: Add upload capabilities of metadata (RO-Crate): Nextcloud / B2DROP.
 
   - [ ] **Step 10.future**: Add upload capabilities of metadata (RO-Crate): B2SHARE.
 
 - [ ] **Step n**: Add full circle capabilities. Re-execute workflow from previously generated RO-Crate.
 
-## Next Steps
+## Other features
 
-- Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
-- Example:
-  - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902
-  - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902/versions/master/CWL/files
+- [ ] Supporting `file` protocol and lean and mean paths, so WfExS can be used with local routes and paths. The main drawback is that RO-Crate provenance can suffer in these scenarios, as it is not provided a public URL/URI.
+
+- [ ] Supporting post-process steps on inputs, which allow implementing decrypt crypt4gh encrypted files from EGA.
+
+- [ ] Supporting post-process steps on outputs, which allow implementing encrypt as crypt4gh files the designated results.
+
+- [ ] Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
+  - Example:
+    - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902
+    - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902/versions/master/CWL/files
