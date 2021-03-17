@@ -1,4 +1,4 @@
-# TODO
+# WfExS-backend official roadmap and informal TODO
 
 - [x] **Step 0**: Materialize Nextflow and CWL workflows from WorkflowHub. Downloading an RO-Crate using the TRS API of 
 WorkflowHub to materialize workflows.
