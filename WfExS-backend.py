@@ -131,6 +131,10 @@ if __name__ == "__main__":
             print("* Storing updated configuration at {}".format(localConfigFilename))
             with open(localConfigFilename, mode="w", encoding="utf-8") as cf:
                 yaml.dump(local_config,cf,Dumper=YAMLDumper)
+        
+        # We are finishing here!
+        if args.command == WfExS_Commands.Init:
+            sys.exit(0)
     
     
     # Is the work already staged?
