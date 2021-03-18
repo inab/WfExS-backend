@@ -28,6 +28,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import types
 import uuid
 
@@ -332,6 +334,7 @@ class WF:
         self.rawWorkDir = None
         self.workDir = None
         self.encWorkDir = None
+        self.encfsThread = None
         self.doUnmount = False
         
         # And the copy of scheme handlers
@@ -537,6 +540,11 @@ class WF:
             else:
                 # Now, time to mount the encrypted FS
                 ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, securePassphrase)
+                
+                # and start the thread which keeps the mount working 
+                self.encfsThread = threading.Thread(target=self._wakeupEncDir,daemon=True)
+                self.encfsThread.start()
+                
                 # We are going to unmount what we have mounted
                 self.doUnmount = True
             
@@ -549,6 +557,14 @@ class WF:
         # Setting up working directories, one per instance
         self.encWorkDir = uniqueEncWorkDir
         self.workDir = uniqueWorkDir
+    
+    def _wakeupEncDir(self):
+        """
+        This method periodically checks whether the directory is still available
+        """
+        while True:
+            time.sleep(60)
+            os.path.isdir(self.workDir)
     
     def unmountWorkdir(self):
         if self.doUnmount and (self.encWorkDir is not None):
