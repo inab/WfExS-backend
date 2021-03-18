@@ -5,6 +5,7 @@
 JDK_VER=11
 JDK_REV=28
 GOCRYPTFS_VER=v2.0-beta2
+STATIC_BASH_VER=5.1.004-1.2.2
 
 # Getting the installation directory
 wfexsDir="$(dirname "$0")"
@@ -66,4 +67,12 @@ if [ ! -x "${envDir}/bin/gocryptfs" ] ; then
 	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
 	( cd "${downloadDir}" && curl -L -O "${gocryptfs_url}" )
 	tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz
+fi
+
+if [ ! -x "${envDir}/bin/bash-linux-x86_64" ] ; then
+	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/bash-linux-x86_64"
+	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
+	( cd "${downloadDir}" && curl -L -O "${static_bash_url}" )
+	mv "${downloadDir}/bash-linux-x86_64" "${envDir}/bin/bash-linux-x86_64"
+	chmod +x "${envDir}/bin/bash-linux-x86_64"
 fi

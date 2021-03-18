@@ -30,6 +30,9 @@ from .engine import WorkflowEngine, WorkflowEngineException
 from .singularity_container import SingularityContainerFactory
 
 
+# A default name for the static bash
+DEFAULT_STATIC_BASH_CMD = 'bash.static'
+
 class NextflowWorkflowEngine(WorkflowEngine):
     NEXTFLOW_REPO = 'https://github.com/nextflow-io/nextflow'
     DEFAULT_NEXTFLOW_VERSION = '19.04.1'
@@ -54,8 +57,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir)
         
+        toolsSect = local_config.get('tools', {})
         # Obtaining the full path to Java
-        self.java_cmd = shutil.which(local_config.get('tools', {}).get('javaCommand', DEFAULT_JAVA_CMD))
+        self.java_cmd = shutil.which(toolsSect.get('javaCommand', DEFAULT_JAVA_CMD))
+        
+        # Obtaining the full path to static bash
+        self.static_bash_cmd = shutil.which(toolsSect.get('staticBashCommand', DEFAULT_STATIC_BASH_CMD))
+        
+        if self.static_bash_cmd is None:
+            self.logger.warning("Static bash command is not available. It could be needed for some images")
         
         # Deciding whether to unset JAVA_HOME
         wfexs_dirname = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -624,13 +634,17 @@ STDERR
         forceParamsConfFile = os.path.join(self.engineTweaksDir,'force-params.config')
         with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:
             if isinstance(self.container_factory,SingularityContainerFactory):
+                if self.static_bash_cmd is not None:
+                    optBash = "-B {}:/bin/bash".format(self.static_bash_cmd)
+                else:
+                    optBash = ""
                 print(
 """docker.enabled = false
 singularity.enabled = true
-singularity.runOptions = '--userns'
+singularity.runOptions = '--userns {}'
 singularity.autoMounts = true
 // executor.cpus=1
-""",file=fPC)
+""".format(optBash),file=fPC)
         
         relInputsFileName = "inputdeclarations.yaml"
         inputsFileName = os.path.join(self.workDir, relInputsFileName)

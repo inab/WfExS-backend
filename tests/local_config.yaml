@@ -12,4 +12,5 @@ tools:
   gitCommand: git
   javaCommand: java
   singularityCommand: singularity
+  staticBashCommand: bash-linux-x86_64
 workDir: /tmp/wfexs-backend-test_WorkDir
