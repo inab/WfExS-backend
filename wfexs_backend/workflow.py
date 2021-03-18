@@ -1097,11 +1097,22 @@ class WF:
         # TODO: get roCrateObj mainEntity programming language
         # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
         mainEntityProgrammingLanguageId = None
+        mainEntityIdHolder = None
+        mainEntityId = None
+        workflowUploadURL = None
+        workflowTypeId = None
         for e in roCrateObj.get_entities():
-            if e['@type'] == "ComputerLanguage":
+            if (mainEntityIdHolder is None) and e['@type'] == 'CreativeWork':
+                mainEntityIdHolder = e.as_jsonld()['about']['@id']
+            elif e['@id'] == mainEntityIdHolder:
+                mainEntityId = e.as_jsonld()['mainEntity']['@id']
+            elif e['@id'] == mainEntityId:
+                eAsLD = e.as_jsonld()
+                workflowUploadURL = eAsLD.get('url')
+                workflowTypeId = eAsLD['programmingLanguage']['@id']
+            elif e['@id'] == workflowTypeId:
                 # A bit dirty, but it works
                 mainEntityProgrammingLanguageId = e.as_jsonld()['identifier']['@id']
-                break
 
         if mainEntityProgrammingLanguageId not in self.RECOGNIZED_ROCRATE_PROG_LANG:
             raise WFException(
@@ -1116,7 +1127,7 @@ class WF:
         # This workflow URL, in the case of github, can provide the repo,
         # the branch/tag/checkout , and the relative directory in the
         # fetched content (needed by Nextflow)
-        wf_url = roCrateObj.root_dataset['isBasedOn']
+        wf_url = workflowUploadURL  if workflowUploadURL is not None  else  roCrateObj.root_dataset['isBasedOn']
         
         repoURL, repoTag, repoRelPath = self.guessRepoParams(wf_url)
         
@@ -1168,6 +1179,8 @@ class WF:
 
                     if len(wf_path) >= 5:
                         repoRelPath = '/'.join(wf_path[4:])
+       
+        self.logger.debug("From {} was derived {} {} {}".format(wf_url,repoURL,repoTag,repoRelPath))
         
         return repoURL, repoTag, repoRelPath
 
