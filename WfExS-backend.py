@@ -87,7 +87,7 @@ if __name__ == "__main__":
     
     if args.logFilename is not None:
         loggingConf['filename'] = args.logFilename
-        loggingConf['encoding'] = 'utf-8'
+    #    loggingConf['encoding'] = 'utf-8'
     
     logging.basicConfig(**loggingConf)
     
