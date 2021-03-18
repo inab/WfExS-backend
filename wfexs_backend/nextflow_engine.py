@@ -629,6 +629,7 @@ STDERR
 singularity.enabled = true
 singularity.runOptions = '--userns'
 singularity.autoMounts = true
+// executor.cpus=1
 """,file=fPC)
         
         relInputsFileName = "inputdeclarations.yaml"
