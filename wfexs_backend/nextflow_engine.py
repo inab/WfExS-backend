@@ -173,6 +173,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         return engineVersion, nextflow_install_dir, engineFingerprint
     
     def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None) -> Tuple[ExitVal,str,str]:
+        self.logger.debug('Command => nextflow '+' '.join(commandLine))
         if self.engine_mode == EngineMode.Docker:
             retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir)
         elif self.engine_mode == EngineMode.Local:
@@ -201,7 +202,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         instEnv = dict(os.environ)
         instEnv['NXF_HOME'] = NXF_HOME
         # Needed to tie Nextflow short
-        instEnv['NXF_OFFLINE'] = 'true'
+        instEnv['NXF_OFFLINE'] = 'TRUE'
         instEnv['JAVA_CMD'] = self.java_cmd
         if self.unset_java_home:
             instEnv.pop('NXF_JAVA_HOME',None)
@@ -624,8 +625,7 @@ STDERR
         with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:
             if isinstance(self.container_factory,SingularityContainerFactory):
                 print(
-"""
-docker.enabled = false
+"""docker.enabled = false
 singularity.enabled = true
 singularity.runOptions = '--userns'
 singularity.autoMounts = true
@@ -653,7 +653,7 @@ singularity.autoMounts = true
             '-c',forceParamsConfFile,
             'run',
             '-name','WfExS-run',
-            '-offline','true',
+            '-offline',
             '-w',self.intermediateDir,
             '-with-dag',os.path.join(outputStatsDir,'dag.dot'),
             '-with-report',os.path.join(outputStatsDir,'report.html'),
@@ -672,6 +672,9 @@ singularity.autoMounts = true
             workdir=self.intermediateDir,
             nextflow_path=matWfEng.engine_path
         )
+        self.logger.debug(launch_retval)
+        self.logger.debug(launch_stdout)
+        self.logger.debug(launch_stderr)
         
         # TODO
-        pass    
+        return  launch_retval, [], []
