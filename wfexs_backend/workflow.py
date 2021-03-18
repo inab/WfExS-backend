@@ -926,8 +926,8 @@ class WF:
             gitcheckout_params = [
                 self.git_cmd, 'pull', '--recurse-submodules'
             ]
-            if repoTag is not None
-            gitcheckout_params.extend(['origin',repoTag])
+            if repoTag is not None:
+                gitcheckout_params.extend(['origin',repoTag])
         else:
             doRepoUpdate = False
         
