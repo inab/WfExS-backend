@@ -635,7 +635,7 @@ STDERR
         with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:
             if isinstance(self.container_factory,SingularityContainerFactory):
                 if self.static_bash_cmd is not None:
-                    optBash = "-B {0}:/bin/bash -B {0}:/bin/sh".format(self.static_bash_cmd)
+                    optBash = "-B {0}:/bin/bash".format(self.static_bash_cmd)
                 else:
                     optBash = ""
                 print(
