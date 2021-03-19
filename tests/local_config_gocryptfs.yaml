@@ -1,4 +1,4 @@
-cacheDir: /tmp/wfexs-backend-test
+cacheDir: ../wfexs-backend-test
 crypt4gh:
   key: local_config.yaml.key
   passphrase: strive backyard dividing gumball
@@ -12,4 +12,4 @@ tools:
   javaCommand: java
   singularityCommand: singularity
   staticBashCommand: bash-linux-x86_64
-workDir: /tmp/wfexs-backend-test_WorkDir
+workDir: ../wfexs-backend-test_WorkDir

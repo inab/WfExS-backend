@@ -66,13 +66,15 @@ WfExS commands are:
 
 The program uses three different types of configuration files:
 
-* Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)).
+* Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
   
   - `cacheDir`: The path in this key sets up the place where all the contents which can be cached are hold. It contains downloaded RO-Crate,
-     downloaded workflow git repositories, downloaded workflow engines.
+     downloaded workflow git repositories, downloaded workflow engines. It is recommended to have it outside `/tmp` directory,
+     due undesirable side interactions with the way workflow engines use Singularity.
   
   - `workDir`: The path in this key sets up the place where all the executions are going to store both intermediate and final results,
-    having a separate directory for each execution.
+    having a separate directory for each execution. It is recommended to have it outside `/tmp` directory, due undesirable side
+    interactions with the way workflow engines use Singularity.
   
   - `crypt4gh.key`: The path to the secret key used in this installation. It is paired to `crypt4gh.pub`.
   
