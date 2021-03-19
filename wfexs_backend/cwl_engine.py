@@ -54,10 +54,11 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     # FIXME: use next tagged version,
     # which should include this fix for singularity
-    DEFAULT_CWLTOOL_VERSION = '3.0.20210124104916'
+    DEFAULT_CWLTOOL_VERSION = '3.0.20210319143721'
     
     DEVEL_CWLTOOL_PACKAGE = 'git+{}.git'.format(CWLTOOL_REPO)
-    DEVEL_CWLTOOL_VERSION = '8bdc1529fd49ccdfa4734daa6646bcf5f1a65cba'
+    # DEVEL_CWLTOOL_VERSION = '8bdc1529fd49ccdfa4734daa6646bcf5f1a65cba'
+    DEVEL_CWLTOOL_VERSION = None
     
     DEFAULT_CWL_UTILS_VERSION = '0.9'
     DEFAULT_SCHEMA_SALAD_VERSION = '7.1.20210309094900'
