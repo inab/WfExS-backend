@@ -31,6 +31,7 @@ import jsonpath_ng.ext
 
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
+from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE
 from .container import NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 
@@ -73,13 +74,14 @@ class CWLWorkflowEngine(WorkflowEngine):
                  cacheWorkflowDir=None,
                  workDir=None,
                  outputsDir=None,
+                 outputMetaDir=None,
                  intermediateDir=None,
                  config_directory=None
                  ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
-                         config_directory=config_directory)
+                         outputMetaDir=outputMetaDir, config_directory=config_directory)
 
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
 
@@ -343,8 +345,10 @@ class CWLWorkflowEngine(WorkflowEngine):
                     cwl_install_dir = matWfEng.engine_path
 
                     # Execute workflow
-                    with tempfile.NamedTemporaryFile() as cwl_yaml_stdout:
-                        with tempfile.NamedTemporaryFile() as cwl_yaml_stderr:
+                    stdoutFilename = os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
+                    stderrFilename = os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)
+                    with open(stdoutFilename, mode="ab+") as cwl_yaml_stdout:
+                        with open(stderrFilename, mode="ab+") as cwl_yaml_stderr:
                             intermediateDir = self.intermediateDir + "/"
                             outputDir = self.outputsDir + "/"
                             
@@ -370,24 +374,23 @@ class CWLWorkflowEngine(WorkflowEngine):
                                                       ).wait()
                             
                             # Proper error handling
-                            if retVal != 0:
+                            if retVal > 125:
                                 # Reading the error for the report
-                                with open(cwl_yaml_stdout.name, "r") as c_stF:
-                                    cwl_yaml_stdout_v = c_stF.read()
-                                with open(cwl_yaml_stderr.name, "r") as c_stF:
-                                    cwl_yaml_stderr_v = c_stF.read()
-
+                                cwl_yaml_stdout.seek(0)
+                                cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
+                                cwl_yaml_stderr.seek(0)
+                                cwl_yaml_stderr_v = cwl_yaml_stderr.read().decode('utf-8', 'ignore')
+                                
                                 errstr = "[CWL] Failed running cwltool {}. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                                     engineVersion, retVal, cwl_yaml_stdout_v, cwl_yaml_stderr_v)
                                 raise WorkflowEngineException(errstr)
                             
-                            else:
-                                # Reading the output for the report
-                                with open(cwl_yaml_stdout.name, "r") as c_stT:
-                                    cwl_yaml_stdout_v = c_stT.read()
-                                    outputs = self.executionOutputs(json.loads(cwl_yaml_stdout_v))
+                            # Reading the output for the report
+                            cwl_yaml_stdout.seek(0)
+                            cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
+                            outputs = self.executionOutputs(json.loads(cwl_yaml_stdout_v))
                             
-                    return 0, list(augmentedInputs.items()), list(outputs.items())
+                    return retVal, list(augmentedInputs.items()), list(outputs.items())
 
             except WorkflowEngineException as wfex:
                 raise wfex
