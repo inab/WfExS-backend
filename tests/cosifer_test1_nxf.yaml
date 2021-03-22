@@ -9,7 +9,7 @@ params:
     c-l-a-s-s: File
     url: https://raw.githubusercontent.com/PhosphorylatedRabbits/cosifer/f2e2a259d218b9a56a01d84bc9d6a7cd7c8d9bf1/examples/interactive/data_matrix.csv
   sep: ","
-  outputsDir: "."
+  outputsDir: "output"
 outputs:
   resdir:
     c-l-a-s-s: Directory
