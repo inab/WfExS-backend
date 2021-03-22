@@ -113,7 +113,6 @@ class CWLWorkflowEngine(WorkflowEngine):
             with open(cwlPath, mode="r", encoding="utf-8") as pCWL:
                 wf_yaml = yaml.safe_load(pCWL)  # parse possible CWL
                 cwlVersion = wf_yaml.get('cwlVersion')
-                self.logger.debug('cwlVersion {} from {}'.format(cwlVersion,cwlPath))
         except Exception as e:
             self.logger.warning('Unable to process CWL entrypoint {} {}'.format(cwlPath,e))
         
