@@ -73,11 +73,13 @@ class CWLWorkflowEngine(WorkflowEngine):
                  cacheWorkflowDir=None,
                  workDir=None,
                  outputsDir=None,
-                 intermediateDir=None
+                 intermediateDir=None,
+                 config_directory=None
                  ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
-                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir)
+                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
+                         config_directory=config_directory)
 
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
 
@@ -100,9 +102,25 @@ class CWLWorkflowEngine(WorkflowEngine):
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
         """
-
-        # TODO: Check whether there is a CWL workflow there, and materialize it
-
+        
+        cwlPath = localWf.dir
+        if localWf.relPath is not None:
+            cwlPath = os.path.join(cwlPath, localWf.relPath)
+        
+        # Is this a yaml?
+        cwlVersion = None
+        try:
+            with open(cwlPath, mode="r", encoding="utf-8") as pCWL:
+                wf_yaml = yaml.safe_load(pCWL)  # parse possible CWL
+                cwlVersion = wf_yaml.get('cwlVersion')
+                self.logger.debug('cwlVersion {} from {}'.format(cwlVersion,cwlPath))
+        except Exception as e:
+            self.logger.warning('Unable to process CWL entrypoint {} {}'.format(cwlPath,e))
+        
+        if cwlVersion is None:
+            return None, None
+        
+        # TODO: Check best version of the engine
         if localWf.relPath is not None:
             engineVer = self.cwl_version
 
