@@ -27,6 +27,7 @@ import yaml
 from typing import Dict, List, Tuple
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
+from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE
 from .singularity_container import SingularityContainerFactory
 
 
@@ -51,13 +52,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
             cacheWorkflowDir=None,
             workDir=None,
             outputsDir=None,
+            outputMetaDir=None,
             intermediateDir=None,
             config_directory=None
         ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
-                         config_directory=config_directory)
+                         outputMetaDir=outputMetaDir, config_directory=config_directory)
         
         toolsSect = local_config.get('tools', {})
         # Obtaining the full path to Java
@@ -198,18 +200,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return engineVersion, nextflow_install_dir, engineFingerprint
     
-    def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None) -> Tuple[ExitVal,str,str]:
         self.logger.debug('Command => nextflow '+' '.join(commandLine))
         if self.engine_mode == EngineMode.Docker:
-            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir)
+            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename)
         elif self.engine_mode == EngineMode.Local:
-            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir, nextflow_install_dir=nextflow_path)
+            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir, nextflow_install_dir=nextflow_path, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename)
         else:
             raise WorkflowEngineException('Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
         
         return retval , nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runLocalNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None) -> Tuple[int,str,str]:
+    def runLocalNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None) -> Tuple[int,str,str]:
         if nextflow_install_dir is None:
             nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
         cachedScript = os.path.join(nextflow_install_dir, 'nextflow')
@@ -274,25 +276,44 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         # And now the command is run
         if retval == 0  and isinstance(commandLine,list) and len(commandLine)>0:
-            with tempfile.NamedTemporaryFile() as nxf_run_stdout:
-                with tempfile.NamedTemporaryFile() as nxf_run_stderr:
-                    retval = subprocess.Popen(
-                        [cachedScript,*commandLine],
-                        stdout=nxf_run_stdout,
-                        stderr=nxf_run_stderr,
-                        cwd=nextflow_install_dir  if workdir is None  else workdir,
-                        env=instEnv
-                    ).wait()
-                    
-                    # Reading the output and error for the report
-                    with open(nxf_run_stdout.name,"r") as c_stF:
-                        nxf_run_stdout_v = c_stF.read()
-                    with open(nxf_run_stderr.name,"r") as c_stF:
-                        nxf_run_stderr_v = c_stF.read()
-                        
+            nxf_run_stdout = None
+            nxf_run_stderr = None
+            try:
+                if stdoutFilename is None:
+                    nxf_run_stdout = tempfile.NamedTemporaryFile()
+                    stdoutFilename = nxf_run_stdout.name
+                else:
+                    nxf_run_stdout = open(stdoutFilename, mode='ab+')
+                
+                if stderrFilename is None:
+                    nxf_run_stderr = tempfile.NamedTemporaryFile()
+                    stderrFilename = nxf_run_stderr.name
+                else:
+                    nxf_run_stderr = open(stderrFilename, mode='ab+')
+                
+                retval = subprocess.Popen(
+                    [cachedScript,*commandLine],
+                    stdout=nxf_run_stdout,
+                    stderr=nxf_run_stderr,
+                    cwd=nextflow_install_dir  if workdir is None  else workdir,
+                    env=instEnv
+                ).wait()
+            finally:
+                # Reading the output and error for the report
+                if nxf_run_stdout is not None:
+                    nxf_run_stdout.seek(0)
+                    nxf_run_stdout_v = nxf_run_stdout.read()
+                    nxf_run_stdout_v = nxf_run_stdout_v.decode('utf-8', 'ignore')
+                    nxf_run_stdout.close()
+                if nxf_run_stderr is not None:
+                    nxf_run_stderr.seek(0)
+                    nxf_run_stderr_v = nxf_run_stderr.read()
+                    nxf_run_stderr_v = nxf_run_stderr_v.decode('utf-8', 'ignore')
+                    nxf_run_stderr.close()
+        
         return retval, nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None) -> Tuple[ExitVal,str,str]:
         # Now, we have to assure the nextflow image is already here
         docker_tag = self.nxf_image + ':' + nextflow_version
         checkimage_params = [
@@ -505,7 +526,22 @@ class NextflowWorkflowEngine(WorkflowEngine):
             retries = self.max_retries
             retval = -1
             validation_params_cmd = validation_params
-            with tempfile.NamedTemporaryFile() as run_stdout, tempfile.NamedTemporaryFile() as run_stderr:
+            
+            run_stdout = None
+            run_stderr = None
+            try:
+                if stdoutFilename is None:
+                    run_stdout = tempfile.NamedTemporaryFile()
+                    stdoutFilename = run_stdout.name
+                else:
+                    run_stdout = open(stdoutFilename, mode='ab+')
+                
+                if stderrFilename is None:
+                    run_stderr = tempfile.NamedTemporaryFile()
+                    stderrFilename = run_stderr.name
+                else:
+                    run_stderr = open(stderrFilename, mode='ab+')
+                
                 while retries > 0 and retval != 0:
                     self.logger.debug('"'+'" "'.join(validation_params_cmd)+'"')
                     run_stdout.flush()
@@ -516,21 +552,27 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         retries -= 1
                         self.logger.debug("\nFailed with {} , left {} tries\n".format(retval,retries))
                         validation_params_cmd = validation_params_resume
-                
+            finally:
                 # Reading the output and error for the report
-                with open(run_stdout.name, "r") as c_stF:
-                    nxf_run_stdout_v = c_stF.read()
-                with open(run_stderr.name, "r") as c_stF:
-                    nxf_run_stderr_v = c_stF.read()
-
-                # Last evaluation
-                if retval != 0:
-                    # It failed!
-                    errstr = "ERROR: Nextflow Engine failed while executing Nextflow workflow (retval {})\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                        retval, nxf_run_stdout_v, nxf_run_stderr_v)
-                    
-                    nxf_run_stderr_v = errstr
+                if run_stdout is not None:
+                    run_stdout.seek(0)
+                    nxf_run_stdout_v = run_stdout.read()
+                    nxf_run_stdout_v = nxf_run_stdout_v.decode('utf-8', 'ignore')
+                    run_stdout.close()
+                if run_stderr is not None:
+                    run_stderr.seek(0)
+                    nxf_run_stderr_v = run_stderr.read()
+                    nxf_run_stderr_v = nxf_run_stderr_v.decode('utf-8', 'ignore')
+                    run_stderr.close()
             
+            # Last evaluation
+            if retval != 0:
+                # It failed!
+                errstr = "ERROR: Nextflow Engine failed while executing Nextflow workflow (retval {})\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                    retval, nxf_run_stdout_v, nxf_run_stderr_v)
+                
+                nxf_run_stderr_v = errstr
+        
         return retval, nxf_run_stdout_v, nxf_run_stderr_v
     
     
@@ -647,7 +689,7 @@ STDERR
         
         localWf = matWfEng.workflow
         
-        outputStatsDir = os.path.join(self.outputsDir,'stats')
+        outputStatsDir = os.path.join(self.outputMetaDir,'stats')
         os.makedirs(outputStatsDir, exist_ok=True)
         
         timelineFile = os.path.join(outputStatsDir,'timeline.html')
@@ -724,11 +766,16 @@ dag {{
             nxf_params.extend(['-profile',self.nxf_profile])
         
         nxf_params.append(localWf.dir)
+        
+        stdoutFilename = os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
+        stderrFilename = os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)
         launch_retval , launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
             nxf_params,
             workdir=self.outputsDir,
-            nextflow_path=matWfEng.engine_path
+            nextflow_path=matWfEng.engine_path,
+            stdoutFilename=stdoutFilename,
+            stderrFilename=stderrFilename
         )
         self.logger.debug(launch_retval)
         self.logger.debug(launch_stdout)
