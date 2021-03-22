@@ -55,7 +55,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                  cacheWorkflowDir=None,
                  workDir=None,
                  outputsDir=None,
-                 intermediateDir=None
+                 intermediateDir=None,
+                 config_directory=None
                  ):
         """
         Abstract init method
@@ -77,6 +78,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             workflow_config = dict()
         self.local_config = local_config
         
+        if config_directory is None:
+            config_directory = os.getcwd()
+        self.config_directory = config_directory
+        
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(self.__class__.__name__)
         
@@ -87,12 +92,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # cacheDir 
         if cacheDir is None:
             cacheDir = local_config.get('cacheDir')
-            if cacheDir:
-                os.makedirs(cacheDir, exist_ok=True)
-            else:
-                cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
-                # Assuring this temporal directory is removed at the end
-                atexit.register(shutil.rmtree, cacheDir)
+        
+        if cacheDir is None:
+            cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
+            # Assuring this temporal directory is removed at the end
+            atexit.register(shutil.rmtree, cacheDir)
+        else:
+            if not os.path.isabs(cacheDir):
+                cacheDir = os.path.normpath(os.path.join(config_directory,cacheDir))
+            # Be sure the directory exists
+            os.makedirs(cacheDir, exist_ok=True)
 
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
