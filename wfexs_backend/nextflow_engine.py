@@ -631,6 +631,14 @@ STDERR
         
         localWf = matWfEng.workflow
         
+        outputStatsDir = os.path.join(self.outputsDir,'stats')
+        os.makedirs(outputStatsDir, exist_ok=True)
+        
+        timelineFile = os.path.join(outputStatsDir,'timeline.html')
+        reportFile = os.path.join(outputStatsDir,'report.html')
+        traceFile = os.path.join(outputStatsDir,'trace.tsv')
+        dagFile = os.path.join(outputStatsDir,'dag.dot')
+        
         forceParamsConfFile = os.path.join(self.engineTweaksDir,'force-params.config')
         with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:
             if isinstance(self.container_factory,SingularityContainerFactory):
@@ -643,8 +651,30 @@ STDERR
 singularity.enabled = true
 singularity.runOptions = '--userns {}'
 singularity.autoMounts = true
+""".format(optBash), file=fPC)
+
+            print(
+"""timeline {
+	enabled = true
+	file = "{}"
+}
+		
+report {
+	enabled = true
+	file = "{}"
+}
+
+trace {
+	enabled = true
+	file = "{3}"
+}
+
+dag {
+	enabled = true
+	file = "{4}"
+}
 // executor.cpus=1
-""".format(optBash),file=fPC)
+""".format(timelineFile, reportFile, traceFile, dagFile), file=fPC)
         
         relInputsFileName = "inputdeclarations.yaml"
         inputsFileName = os.path.join(self.workDir, relInputsFileName)
@@ -660,9 +690,6 @@ singularity.autoMounts = true
         else:
             raise WorkflowEngineException("No parameter was specified! Bailing out")
         
-        
-        outputStatsDir = os.path.join(self.outputsDir,'stats')
-        os.makedirs(outputStatsDir, exist_ok=True)
         nxf_params = [
             '-log',os.path.join(outputStatsDir,'log.txt'),
             '-c',forceParamsConfFile,
@@ -670,10 +697,10 @@ singularity.autoMounts = true
             '-name','WfExS-run',
             '-offline',
             '-w',self.intermediateDir,
-            '-with-dag',os.path.join(outputStatsDir,'dag.dot'),
-            '-with-report',os.path.join(outputStatsDir,'report.html'),
-            '-with-timeline',os.path.join(outputStatsDir,'timeline.html'),
-            '-with-trace',os.path.join(outputStatsDir,'trace.txt'),
+            '-with-dag', dagFile,
+            '-with-report', reportFile,
+            '-with-timeline', timelineFile,
+            '-with-trace', traceFile,
             '-params-file',inputsFileName,
         ]
         
@@ -684,7 +711,7 @@ singularity.autoMounts = true
         launch_retval , launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
             nxf_params,
-            workdir=self.intermediateDir,
+            workdir=self.outputsDir,
             nextflow_path=matWfEng.engine_path
         )
         self.logger.debug(launch_retval)
