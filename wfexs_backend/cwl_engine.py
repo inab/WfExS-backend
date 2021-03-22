@@ -323,6 +323,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                     # Validating
                     if cwl_yaml_input_id.startswith(wfIdPrefix):
                         inputId = cwl_yaml_input_id[len(wfIdPrefix):]
+                    elif cwl_yaml_input_id[0] == '#':
+                        inputId = cwl_yaml_input_id[1:]
                     else:
                         inputId = cwl_yaml_input_id
                     
@@ -347,7 +349,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             outputDir = self.outputsDir + "/"
                             
                             # This is needed to teach cwltool where to find the cached images
-                            instEnv = dict(os.environ)
+                            instEnv = dict()
                             if isinstance(self.container_factory,SingularityContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
