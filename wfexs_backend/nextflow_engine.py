@@ -118,11 +118,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         nfConfig = os.path.join(nfDir, 'nextflow.config')
         verPat = re.compile(r"nextflowVersion *= *['\"][>=]*([^ ]+)['\"]")
         mainPat = re.compile(r"mainScript *= *['\"]([^\"]+)['\"]")
+	# Setting up the default value, in case nothing is found
         if engineVer is None:
             engineVer = self.nxf_version
-        else:
-            # We are deactivating the engine version capture from the config
-            verPat = None
+        #else:
+        #    # We are deactivating the engine version capture from the config
+        #    verPat = None
         
         if os.path.isfile(nfConfig):
             # Now, let's guess the nextflow version and mainScript
@@ -669,25 +670,25 @@ singularity.autoMounts = true
 """.format(optBash), file=fPC)
 
             print(
-"""timeline {
+"""timeline {{
 	enabled = true
 	file = "{}"
-}
+}}
 		
-report {
+report {{
 	enabled = true
 	file = "{}"
-}
+}}
 
-trace {
+trace {{
 	enabled = true
-	file = "{3}"
-}
+	file = "{}"
+}}
 
-dag {
+dag {{
 	enabled = true
-	file = "{4}"
-}
+	file = "{}"
+}}
 // executor.cpus=1
 """.format(timelineFile, reportFile, traceFile, dagFile), file=fPC)
         
