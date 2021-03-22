@@ -56,7 +56,9 @@ if platform.system() == "Darwin":
 
 from .common import *
 from .encrypted_fs import *
-from .engine import WorkflowEngine
+from .engine import WorkflowEngine, WorkflowEngineException
+from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
+from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, WORKDIR_ENGINE_TWEAKS_RELDIR
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
 
@@ -84,10 +86,6 @@ class WF:
     CRYPT4GH_PUBKEY_KEY = 'pub'
     CRYPT4GH_PASSPHRASE_KEY = 'passphrase'
     
-    WORKDIR_META_RELDIR = 'meta'
-    WORKDIR_WORKFLOW_META_FILE = 'workflow_meta.yaml'
-    WORKDIR_SECURITY_CONTEXT_FILE = 'credentials.yaml'
-    WORKDIR_PASSPHRASE_FILE = '.passphrase'
     TRS_QUERY_CACHE_FILE = 'trs_result.json'
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
@@ -420,12 +418,12 @@ class WF:
             
             self.setupWorkdir(doSecureWorkDir)
         
-        metaDir = os.path.join(self.workDir, self.WORKDIR_META_RELDIR)
+        metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
         if not os.path.exists(metaDir):
             # Now it is time to save a snapshot of workflow and security docs
             os.makedirs(metaDir, exist_ok=True)
             
-            with open(os.path.join(metaDir,self.WORKDIR_WORKFLOW_META_FILE),mode='w',encoding='utf-8') as wmF:
+            with open(os.path.join(metaDir,WORKDIR_WORKFLOW_META_FILE),mode='w',encoding='utf-8') as wmF:
                 workflow_meta = {
                     'trs_endpoint': trs_endpoint,
                     'workflow_id': workflow_id,
@@ -437,25 +435,25 @@ class WF:
                 }
                 yaml.dump(workflow_meta,wmF,Dumper=YAMLDumper)
             
-            with open(os.path.join(metaDir,self.WORKDIR_SECURITY_CONTEXT_FILE),mode='w',encoding='utf-8') as crF:
+            with open(os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE), mode='w', encoding='utf-8') as crF:
                 yaml.dump(creds_config,crF,Dumper=YAMLDumper)
         
         # This directory will hold either symbolic links to the cached
         # inputs, or the inputs properly post-processed (decompressed,
         # decrypted, etc....)
-        self.inputsDir = os.path.join(self.workDir, 'inputs')
+        self.inputsDir = os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
         os.makedirs(self.inputsDir, exist_ok=True)
         # This directory should hold intermediate workflow steps results
-        self.intermediateDir = os.path.join(self.workDir, 'intermediate')
+        self.intermediateDir = os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
         os.makedirs(self.intermediateDir, exist_ok=True)
         # This directory will hold the final workflow results, which could
         # be either symbolic links to the intermediate results directory
         # or newly generated content
-        self.outputsDir = os.path.join(self.workDir, 'outputs')
+        self.outputsDir = os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR)
         os.makedirs(self.outputsDir, exist_ok=True)
         # This directory is here for those files which are created in order
         # to tweak or patch workflow executions
-        self.engineTweaksDir = os.path.join(self.workDir, 'engineTweaks')
+        self.engineTweaksDir = os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
         os.makedirs(self.engineTweaksDir, exist_ok=True)
         
         self.repoURL = None
@@ -491,7 +489,7 @@ class WF:
             os.makedirs(uniqueWorkDir, exist_ok=True)
             
             # This is the passphrase needed to decrypt the filesystem
-            passphraseFile = os.path.join(uniqueRawWorkDir,self.WORKDIR_PASSPHRASE_FILE)
+            passphraseFile = os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
             encfs_cmd = self.encfs_cmd
             if os.path.exists(passphraseFile):
                 clearF = io.BytesIO()
@@ -618,18 +616,18 @@ class WF:
         self.instanceId = os.path.basename(workflowWorkingDirectory)
         
         # This is needed to parse
-        passphraseFile = os.path.join(self.rawWorkDir, self.WORKDIR_PASSPHRASE_FILE)
+        passphraseFile = os.path.join(self.rawWorkDir, WORKDIR_PASSPHRASE_FILE)
         
         # Setting up the directory
         self.setupWorkdir(os.path.exists(passphraseFile))
         
-        metaDir = os.path.join(self.workDir, self.WORKDIR_META_RELDIR)
+        metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
         if not os.path.isdir(metaDir):
             raise WFException("Staged working directory {} is incomplete".format(self.workDir))
         
         # In order to be able to build next paths to call
-        workflowMetaFilename = os.path.join(metaDir,self.WORKDIR_WORKFLOW_META_FILE)
-        securityContextFilename = os.path.join(metaDir,self.WORKDIR_SECURITY_CONTEXT_FILE)
+        workflowMetaFilename = os.path.join(metaDir, WORKDIR_WORKFLOW_META_FILE)
+        securityContextFilename = os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
         
         return self.fromFiles(workflowMetaFilename,securityContextFilename)
     
