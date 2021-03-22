@@ -216,7 +216,7 @@ class WF:
             local_config
         ).newSetup(
             workflow_meta['workflow_id'],
-            workflow_meta['version'],
+            workflow_meta.get('version'),
             descriptor_type=workflow_meta.get('workflow_type'),
             trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
@@ -241,7 +241,7 @@ class WF:
             local_config=local_config
         ).newSetup(
             workflow_meta['workflow_id'],
-            workflow_meta['version'],
+            workflow_meta.get('version'),
             trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             # TODO inputs, outputs, params
         )
@@ -303,6 +303,8 @@ class WF:
         # This directory will be used to cache repositories and distributable inputs
         cacheDir = local_config.get('cacheDir')
         if cacheDir:
+            if not os.path.isabs(cacheDir):
+                cacheDir = os.path.normpath(os.path.join(config_directory, cacheDir))
             os.makedirs(cacheDir, exist_ok=True)
         else:
             cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
@@ -659,7 +661,7 @@ class WF:
         
         return self.newSetup(
             workflow_meta['workflow_id'],
-            workflow_meta['version'],
+            workflow_meta.get('version'),
             descriptor_type=workflow_meta.get('workflow_type'),
             trs_endpoint=workflow_meta.get('trs_endpoint', self.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
@@ -718,20 +720,29 @@ class WF:
         # TODO: decide whether to force some specific version
         if engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
+                self.logger.debug("Testing engine "+engineDesc.trs_descriptor)
                 engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
                                           local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
                                           cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
-                                          outputsDir=self.outputsDir, intermediateDir=self.intermediateDir)
-                engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
-                if engineVer is not None:
-                    break
+                                          outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
+                                          config_directory=self.config_directory)
+                try:
+                    engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
+                    self.logger.debug("Tested engine {} {}".format(engineDesc.trs_descriptor,engineVer))
+                    if engineVer is not None:
+                        break
+                except WorkflowEngineException:
+                    # TODO: store the exceptions, to be shown if no workflow is recognized
+                    pass
             else:
                 raise WFException('No engine recognized a workflow at {}'.format(repoURL))
         else:
+            self.logger.debug("Fixed engine "+engineDesc.trs_descriptor)
             engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
                                           local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
                                           cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
-                                          outputsDir=self.outputsDir, intermediateDir=self.intermediateDir)
+                                          outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
+                                          config_directory=self.config_directory)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException('Engine {} did not recognize a workflow at {}'.format(engine.workflowType.engineName, repoURL))
