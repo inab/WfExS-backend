@@ -51,11 +51,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
             cacheWorkflowDir=None,
             workDir=None,
             outputsDir=None,
-            intermediateDir=None
+            intermediateDir=None,
+            config_directory=None
         ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
-                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir)
+                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
+                         config_directory=config_directory)
         
         toolsSect = local_config.get('tools', {})
         # Obtaining the full path to Java
@@ -155,6 +157,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if not os.path.isfile(entrypoint):
             raise WorkflowEngineException(
                 'Could not find mainScript {} in Nextflow workflow directory {} '.format(candidateNf, nfDir))
+        
+        # Now, the moment to identify whether it is a nextflow workflow
+        with open(entrypoint,mode='r',encoding='iso-8859-1') as hypNf:
+            wholeNf = hypNf.read()
+            
+            # Better recognition is needed, maybe using nextflow
+            for pat in ('nextflow','process '):
+                if pat in wholeNf:
+                    break
+            else:
+                # No nextflow keyword was detected
+                return None, None
+                
         
         if engineVer is None:
             engineVer = self.nxf_version
