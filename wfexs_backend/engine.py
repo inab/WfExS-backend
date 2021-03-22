@@ -32,6 +32,19 @@ from collections import namedtuple
 from .container import Container, ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 
+# Constants
+WORKDIR_INPUTS_RELDIR = 'inputs'
+WORKDIR_INTERMEDIATE_RELDIR = 'intermediate'
+WORKDIR_META_RELDIR = 'meta'
+WORKDIR_OUTPUTS_RELDIR = 'outputs'
+WORKDIR_ENGINE_TWEAKS_RELDIR = 'engineTweaks'
+
+WORKDIR_STDOUT_FILE = 'stdout.txt'
+WORKDIR_STDERR_FILE = 'stderr.txt'
+
+WORKDIR_WORKFLOW_META_FILE = 'workflow_meta.yaml'
+WORKDIR_SECURITY_CONTEXT_FILE = 'credentials.yaml'
+WORKDIR_PASSPHRASE_FILE = '.passphrase'
 
 class WorkflowEngineException(Exception):
     """
@@ -55,6 +68,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                  cacheWorkflowDir=None,
                  workDir=None,
                  outputsDir=None,
+                 outputMetaDir=None,
                  intermediateDir=None,
                  config_directory=None
                  ):
@@ -123,7 +137,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         # This directory should hold intermediate workflow steps results
         if intermediateDir is None:
-            intermediateDir = os.path.join(workDir, 'intermediate')
+            intermediateDir = os.path.join(workDir, WORKDIR_INTERMEDIATE_RELDIR)
         os.makedirs(intermediateDir, exist_ok=True)
         self.intermediateDir = intermediateDir
 
@@ -131,15 +145,22 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # be either symbolic links to the intermediate results directory
         # or newly generated content
         if outputsDir is None:
-            outputsDir = os.path.join(workDir, 'outputs')
+            outputsDir = os.path.join(workDir, WORKDIR_OUTPUTS_RELDIR)
         os.makedirs(outputsDir, exist_ok=True)
         self.outputsDir = outputsDir
+
+        # This directory will hold diverse metadata, like execution metadata
+        # or newly generated content
+        if outputMetaDir is None:
+            outputMetaDir = os.path.join(workDir, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR)
+        os.makedirs(outputMetaDir, exist_ok=True)
+        self.outputMetaDir = outputMetaDir
 
         # This directory is here for those files which are created in order
         # to tweak or patch workflow executions
         # engine tweaks directory
         if engineTweaksDir is None:
-            engineTweaksDir = os.path.join(workDir, 'engineTweaks')
+            engineTweaksDir = os.path.join(workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
         os.makedirs(engineTweaksDir, exist_ok=True)
         self.engineTweaksDir = engineTweaksDir
         
