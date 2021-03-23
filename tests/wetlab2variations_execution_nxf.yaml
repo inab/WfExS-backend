@@ -1,6 +1,6 @@
 trs_endpoint: https://dev.workflowhub.eu/ga4gh/trs/v2/tools/
 workflow_id: 126
-version: 3
+version: 4
 workflow_config:
   secure: false
 # All the inputs must be URLs or CURIEs from identifiers.org
@@ -29,9 +29,18 @@ params:
         - ftp://ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.vcf.idx.gz
   bwamem:
     rgheader: "@RG\\tID:H947YADXX\\tSM:NA12878\\tPL:ILLUMINA"
+  outputDir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false
 outputs:
   gvcf:
     c-l-a-s-s: File
     implicit: true
     preferredName: NA12878.g.vcf.gz
     glob: "*.sorted.noDuplicates.recalibrated.g.vcf.gz"
+  metrics:
+    c-l-a-s-s: File
+    preferredName: 'NA12878.metrics.txt'
+    glob: "*.sorted.duplicates.metrics.txt"

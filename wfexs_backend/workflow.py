@@ -804,7 +804,24 @@ class WF:
             if isinstance(inputs, dict):
                 inputClass = inputs.get('c-l-a-s-s')
                 if inputClass is not None:
-                    if inputClass == "File":  # input files
+                    if inputClass in ("File","Directory"):  # input files
+                        inputDestDir = workflowInputs_destdir
+                        if inputClass == 'Directory':
+                            # We have to autofill this with the outputs directory,
+                            # so results are properly stored (without escaping the jail)
+                            if inputs.get('autoFill',False):
+                                if inputs.get('autoPrefix',True):
+                                    autoFilledDir = os.path.join(self.outputsDir, *linearKey.split('.'))
+                                else:
+                                    autoFilledDir = self.outputsDir
+                                
+                                theInputs.append(MaterializedInput(linearKey, [autoFilledDir]))
+                                continue
+                            
+                            # This is to nest the directory where to place the different files
+                            inputDestDir = os.path.join(inputDestDir, *linearKey.split('.'))
+                            os.makedirs(inputDestDir, exist_ok=True)
+                        
                         remote_files = inputs['url']
                         cacheable = True  if inputs.get('cache',True)  else  False
                         if not isinstance(remote_files, list):  # more than one input file
@@ -812,7 +829,7 @@ class WF:
 
                         remote_pairs = []
                         # The storage dir depends on whether it can be cached or not
-                        storeDir = workflowInputs_cacheDir  if cacheable  else  workflowInputs_destdir
+                        storeDir = workflowInputs_cacheDir  if cacheable  else  inputDestDir
                         for remote_file in remote_files:
                             # We are sending the context name thinking in the future,
                             # as it could contain potential hints for authenticated access
@@ -826,7 +843,7 @@ class WF:
                             # Now, time to create the symbolic link
                             lastInput += 1
                             
-                            prettyLocal = os.path.join(workflowInputs_destdir,matContent.prettyFilename)
+                            prettyLocal = os.path.join(inputDestDir, matContent.prettyFilename)
                             hardenPrettyLocal = False
                             if os.path.islink(prettyLocal):
                                 oldLocal = os.readlink(prettyLocal)
@@ -837,7 +854,7 @@ class WF:
                             
                             if hardenPrettyLocal:
                                 # Trying to avoid collisions on input naming
-                                prettyLocal = os.path.join(workflowInputs_destdir,str(lastInput)+'_'+matContent.prettyFilename)
+                                prettyLocal = os.path.join(inputDestDir, str(lastInput)+'_'+matContent.prettyFilename)
                             
                             if not os.path.exists(prettyLocal):
                                 os.symlink(matContent.local,prettyLocal)
@@ -846,7 +863,7 @@ class WF:
 
                         theInputs.append(MaterializedInput(linearKey, remote_pairs))
                     else:
-                        raise WFException('Unrecognized input class "{}"'.format(inputClass))
+                        raise WFException('Unrecognized input class "{}", attached to "{}"'.format(inputClass, linearKey))
                 else:
                     # possible nested files
                     newInputsAndParams, lastInput = self.fetchInputs(inputs, workflowInputs_destdir=workflowInputs_destdir, workflowInputs_cacheDir=workflowInputs_cacheDir, prefix=linearKey + '.', lastInput=lastInput, offline=offline)
