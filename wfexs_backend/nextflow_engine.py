@@ -734,6 +734,24 @@ dag {{
 // executor.cpus=1
 """.format(timelineFile, reportFile, traceFile, dagFile), file=fPC)
         
+        # Building the NXF trojan horse in order to obtain a full list of 
+        # input parameters, for provenance purposes
+        trojanDir = os.path.join(self.engineTweaksDir,'nxf_trojan')
+        shutil.copytree(localWf.dir, trojanDir)
+        
+        allParamsFile = os.path.join(self.outputMetaDir,'all-params.json')
+        with open(os.path.join(trojanDir, localWf.relPath), mode='a+', encoding='utf-8') as tH:
+            print("""
+
+import groovy.json.JsonOutput
+def wfexs_allParams()
+{{
+    new File('{0}').write(JsonOutput.toJson(params))
+}}
+
+wfexs_allParams()
+""".format(allParamsFile), file=tH)
+        
         relInputsFileName = "inputdeclarations.yaml"
         inputsFileName = os.path.join(self.workDir, relInputsFileName)
         
@@ -765,7 +783,10 @@ dag {{
         if self.nxf_profile is not None:
             nxf_params.extend(['-profile',self.nxf_profile])
         
-        nxf_params.append(localWf.dir)
+        # Using the patched workflow instead of
+        # the original one
+        nxf_params.append(trojanDir)
+        # nxf_params.append(localWf.dir)
         
         stdoutFilename = os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
         stderrFilename = os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)
