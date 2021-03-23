@@ -16,6 +16,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import datetime
 import os
 import re
 import shutil
@@ -711,6 +712,8 @@ singularity.runOptions = '--userns {}'
 singularity.autoMounts = true
 """.format(optBash), file=fPC)
 
+            # Trace fields are detailed at
+            # https://www.nextflow.io/docs/latest/tracing.html#trace-fields
             print(
 """timeline {{
 	enabled = true
@@ -725,6 +728,9 @@ report {{
 trace {{
 	enabled = true
 	file = "{}"
+    fields = 'task_id,process,tag,name,status,exit,module,container,cpus,time,disk,memory,attempt,submit,start,complete,duration,realtime,%cpu,%mem,rss,vmem,peak_rss,peak_vmem,rchar,wchar,syscr,syscw,read_bytes,write_bytes,env,script,error_action'
+    raw = true
+    sep = '\0\t\0'
 }}
 
 dag {{
@@ -766,11 +772,13 @@ wfexs_allParams()
         else:
             raise WorkflowEngineException("No parameter was specified! Bailing out")
         
+        runName = 'WfExS-run_'+datetime.datetime.now().isoformat()
+        
         nxf_params = [
             '-log',os.path.join(outputStatsDir,'log.txt'),
             '-c',forceParamsConfFile,
             'run',
-            '-name','WfExS-run',
+            '-name',runName,
             '-offline',
             '-w',self.intermediateDir,
             '-with-dag', dagFile,
