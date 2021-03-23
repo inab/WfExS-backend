@@ -388,9 +388,9 @@ class CWLWorkflowEngine(WorkflowEngine):
                             # Reading the output for the report
                             cwl_yaml_stdout.seek(0)
                             cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
-                            outputs = self.executionOutputs(json.loads(cwl_yaml_stdout_v))
+                            matOutputs = self.executionOutputs(outputs, json.loads(cwl_yaml_stdout_v))
                             
-                    return retVal, list(augmentedInputs.items()), list(outputs.items())
+                    return retVal, list(augmentedInputs.items()), list(matOutputs.items())
 
             except WorkflowEngineException as wfex:
                 raise wfex
@@ -464,7 +464,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         return execInputs
 
     @staticmethod
-    def executionOutputs(cwlOutputs):
+    def executionOutputs(expectedOutputs,cwlOutputs):
         """
         Setting execution outputs provenance
         """
