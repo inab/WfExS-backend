@@ -13,13 +13,13 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [x] **Step 4**: Validate workflows and materialize their containers. 
 
-- [ ] **Step 5**: Launch the workflows in an execution environment.
+- [x] **Step 5**: Launch the workflows in an execution environment.
 
   - [x] **Step 5.a**: Launch workflows in a FUSE encrypted filesystem.
   
   - [x] **Step 5.b**: Launch CWL workflows in an execution environment.
   
-  - [ ] **Step 5.c**: Launch Nextlfow workflows in an execution environment.
+  - [x] **Step 5.c**: Launch Nextlfow workflows in an execution environment.
 
 - [ ] **Step 6**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
 
@@ -38,7 +38,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 - [ ] **Step 9**: Generate RO-Crate from execution provenance.
 
   - [ ] **Step 9.a**: Use Crypt4GH to encrypt with crypt4gh the generated RO-Crate.
-
+  
 - [ ] **Step 10**: Add upload capabilities of metadata (RO-Crate): Nextcloud / B2DROP.
 
   - [ ] **Step 10.future**: Add upload capabilities of metadata (RO-Crate): B2SHARE.
@@ -46,6 +46,8 @@ references to the inputs, that we are going to use to instantiate the workflows.
 - [ ] **Step n**: Add full circle capabilities. Re-execute workflow from previously generated RO-Crate.
 
 ## Other features
+
+- [ ] Create a JSON Schema formally describing the different configuration files.
 
 - [ ] Supporting `file` protocol and lean and mean paths, so WfExS can be used with local routes and paths. The main drawback is that RO-Crate provenance can suffer in these scenarios, as it is not provided a public URL/URI.
 
