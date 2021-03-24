@@ -38,12 +38,17 @@ references to the inputs, that we are going to use to instantiate the workflows.
 - [ ] **Step 9**: Generate RO-Crate from execution provenance.
 
   - [ ] **Step 9.a**: Use Crypt4GH to encrypt with crypt4gh the generated RO-Crate.
+
+  - [ ] **Step 9.b**: Generated RO-Crate should be consumable by WorkflowHub.
+
+  - [ ] **Step 9.c**: Generated RO-Crate should be consumable by WfExS-backend.
   
+  - [ ] **Step 9.d**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate.
+
 - [ ] **Step 10**: Add upload capabilities of metadata (RO-Crate): Nextcloud / B2DROP.
 
   - [ ] **Step 10.future**: Add upload capabilities of metadata (RO-Crate): B2SHARE.
 
-- [ ] **Step n**: Add full circle capabilities. Re-execute workflow from previously generated RO-Crate.
 
 ## Other features
 
