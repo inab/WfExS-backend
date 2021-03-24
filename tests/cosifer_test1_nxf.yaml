@@ -13,9 +13,8 @@ params:
     c-l-a-s-s: Directory
     # This hint tells that this parameter is the output directory
     autoFill: true
-    autoPrefix: false
+    autoPrefix: true
 outputs:
   resdir:
     c-l-a-s-s: Directory
-    implicit: true
     glob: "*"
