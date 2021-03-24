@@ -22,11 +22,12 @@ import atexit
 import shutil
 import abc
 import enum
+import glob
 import logging
 
 from .common import *
 
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 from collections import namedtuple
 
 from .container import Container, ContainerFactory, NoContainerFactory
@@ -273,10 +274,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         exitVal, augmentedInputs, matOutputs = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
 
-        # TODO: compute checksums
-        matCheckOutputs = matOutputs
-
-        return exitVal, augmentedInputs, matCheckOutputs
+        return exitVal, augmentedInputs, matOutputs
 
     @classmethod
     def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
@@ -285,3 +283,71 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags)
 
         return matWfEng, listOfContainers
+    
+    def identifyMaterializedOutputs(self, expectedOutputs:List[ExpectedOutput], outputsDir:AbsPath, outputsMapping:Mapping[SymbolicOutputName,Any]=None) -> List[MaterializedOutput]:
+        """
+        This method is used to identify outputs by either file glob descriptions
+        or matching with a mapping
+        """
+        if not isinstance(outputsMapping, dict):
+            outputsMapping = {}
+        
+        matOutputs = []
+        for expectedOutput in expectedOutputs:
+            cannotBeEmpty = expectedOutput.cardinality[0] != 0
+            matValues = []
+            if expectedOutput.glob is not None:
+                filterMethod = None
+                if expectedOutput.kind == OutputKind.Directory:
+                    filterMethod = os.path.isdir
+                else:
+                    filterMethod = os.path.isfile
+                matchedPaths = []
+                
+                for matchingPath in glob.iglob(os.path.join(outputsDir,expectedOutput.glob),recursive=True):
+                    # Getting what it is only interesting for this
+                    if filterMethod(matchingPath):
+                        matchedPaths.append(matchingPath)
+                
+                if len(matchedPaths) == 0 and cannotBeEmpty:
+                    self.logger.warning("Output {} got no path for pattern {}".format(expectedOutput.name, expectedOutput.glob))
+                
+                for matchedPath in matchedPaths:
+                    theContent = None
+                    if expectedOutput.kind == OutputKind.Directory:
+                        theContent = GetGeneratedDirectoryContent(
+                            matchedPath,
+                            uri=None,   # TODO: generate URIs when it is advised
+                            preferredFilename=expectedOutput.preferredFilename
+                        )
+                    elif expectedOutput.kind == OutputKind.File:
+                        theContent = GeneratedContent(
+                            local=matchedPath,
+                            uri=None,   # TODO: generate URIs when it is advised
+                            signature=ComputeDigestFromFile(matchedPath),
+                            preferredFilename=expectedOutput.preferredFilename
+                        )
+                    else:
+                        # Reading the value from a file, as the glob is telling that
+                        with open(matchedPath, mode='r', encoding='utf-8', errors='ignore') as mP:
+                            theContent = mP.read()
+                    
+                    matValues.append(theContent)
+            else:
+                outputVal = outputsMapping.get(expectedOutput.name)
+                
+                if (outputVal is None) and cannotBeEmpty:
+                    self.logger.warning("Output {} got no match from the outputs mapping".format(expectedOutput.name))
+                
+                matValues = CWLDesc2Content(outputVal, self.logger, expectedOutput)
+            
+            matOutput = MaterializedOutput(
+                name=expectedOutput.name,
+                kind=expectedOutput.kind,
+                expectedCardinality=expectedOutput.cardinality,
+                values=matValues
+            )
+            
+            matOutputs.append(matOutput)
+        
+        return matOutputs
