@@ -29,7 +29,7 @@ import yaml
 from typing import Any, Dict, List, Tuple
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE
+from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .singularity_container import SingularityContainerFactory
 
 
@@ -712,13 +712,12 @@ STDERR
         
         localWf = matWfEng.workflow
         
-        outputStatsDir = os.path.join(self.outputMetaDir,'stats')
-        os.makedirs(outputStatsDir, exist_ok=True)
+        outputStatsDir = self.outputStatsDir
         
         timelineFile = os.path.join(outputStatsDir,'timeline.html')
         reportFile = os.path.join(outputStatsDir,'report.html')
         traceFile = os.path.join(outputStatsDir,'trace.tsv')
-        dagFile = os.path.join(outputStatsDir,'dag.dot')
+        dagFile = os.path.join(outputStatsDir,STATS_DAG_DOT_FILE)
         
         forceParamsConfFile = os.path.join(self.engineTweaksDir,'force-params.config')
         with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:

@@ -31,7 +31,7 @@ import jsonpath_ng.ext
 
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE
+from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .container import NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 
@@ -291,16 +291,57 @@ class CWLWorkflowEngine(WorkflowEngine):
         
         return img_name
     
+    def generateDotWorkflow(self, matWfEng: MaterializedWorkflowEngine, dagFile:AbsPath) -> None:
+        localWf = matWfEng.workflow
+        if os.path.isabs(localWf.relPath):
+            localWorkflowFile = localWf.relPath
+        else:
+            localWorkflowFile = os.path.join(localWf.dir, localWf.relPath)
+        engineVersion = matWfEng.version
+        cwl_install_dir = matWfEng.engine_path
+        # Execute cwltool --print-dot
+        with open(dagFile, mode='wb') as packedH:
+            with tempfile.NamedTemporaryFile() as cwl_dot_stderr:
+                # Writing straight to the file
+                retVal = subprocess.Popen(
+                    "source '{0}'/bin/activate ; cwltool --print-dot {1}".format(cwl_install_dir,localWorkflowFile),
+                    stdout=packedH,
+                    stderr=cwl_dot_stderr,
+                    cwd=cwl_install_dir,
+                    shell=True
+                ).wait()
+
+                # Proper error handling
+                if retVal != 0:
+                    # Reading the output and error for the report
+                    cwl_dot_stderr.seek(0)
+                    cwl_dot_stderr_v = cwl_dot_stderr.read().decode('utf-8',errors='ignore')
+
+                    errstr = "Could not generate CWL representation in dot format using cwltool --print-dot {}. Retval {}\n======\nSTDERR\n======\n{}".format(
+                        engineVersion, retVal, cwl_dot_stderr_v)
+                    raise WorkflowEngineException(errstr)
+    
     def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: List[MaterializedInput],
                        outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
         """
         Method to execute the workflow
         """
         localWf = matWfEng.workflow
-        localWorkflowFile = localWf.relPath
+        if os.path.isabs(localWf.relPath):
+            localWorkflowFile = localWf.relPath
+        else:
+            localWorkflowFile = os.path.join(localWf.dir, localWf.relPath)
         engineVersion = matWfEng.version
-
+        dagFile = os.path.join(self.outputStatsDir,STATS_DAG_DOT_FILE)
+        
         if os.path.exists(localWorkflowFile):
+            # CWLWorkflowEngine directory is needed
+            cwl_install_dir = matWfEng.engine_path
+            
+            # First, generate the graphical representation of the workflow
+            self.generateDotWorkflow(matWfEng, dagFile)
+            
+            # Then, all the preparations
             cwl_dict_inputs = dict()
             with open(localWorkflowFile, "r") as cwl_file:
                 cwl_yaml = yaml.safe_load(cwl_file)  # convert packed CWL to YAML
@@ -341,9 +382,6 @@ class CWLWorkflowEngine(WorkflowEngine):
                 # Create YAML file
                 augmentedInputs = self.createYAMLFile(matInputs, cwl_dict_inputs, yamlFile)
                 if os.path.isfile(yamlFile):
-                    # CWLWorkflowEngine directory is needed
-                    cwl_install_dir = matWfEng.engine_path
-
                     # Execute workflow
                     stdoutFilename = os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
                     stderrFilename = os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)

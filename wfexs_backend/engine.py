@@ -37,6 +37,7 @@ from .singularity_container import SingularityContainerFactory
 WORKDIR_INPUTS_RELDIR = 'inputs'
 WORKDIR_INTERMEDIATE_RELDIR = 'intermediate'
 WORKDIR_META_RELDIR = 'meta'
+WORKDIR_STATS_RELDIR = 'stats'
 WORKDIR_OUTPUTS_RELDIR = 'outputs'
 WORKDIR_ENGINE_TWEAKS_RELDIR = 'engineTweaks'
 
@@ -46,6 +47,8 @@ WORKDIR_STDERR_FILE = 'stderr.txt'
 WORKDIR_WORKFLOW_META_FILE = 'workflow_meta.yaml'
 WORKDIR_SECURITY_CONTEXT_FILE = 'credentials.yaml'
 WORKDIR_PASSPHRASE_FILE = '.passphrase'
+
+STATS_DAG_DOT_FILE = 'dag.dot'
 
 class WorkflowEngineException(Exception):
     """
@@ -156,6 +159,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             outputMetaDir = os.path.join(workDir, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR)
         os.makedirs(outputMetaDir, exist_ok=True)
         self.outputMetaDir = outputMetaDir
+        
+        # This directory will hold stats metadata, as well as the dot representation
+        # of the workflow execution
+        outputStatsDir = os.path.join(outputMetaDir,WORKDIR_STATS_RELDIR)
+        os.makedirs(outputStatsDir, exist_ok=True)
+        self.outputStatsDir = outputStatsDir
 
         # This directory is here for those files which are created in order
         # to tweak or patch workflow executions
