@@ -60,6 +60,8 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] Supporting post-process steps on outputs, which allow implementing encrypt as crypt4gh files the designated results.
 
+- [ ] Generate an abstract CWL description of a workflow execution. In the case of CWL will be a no-op, in the case of Nextflow it will use execution provenance.
+
 - [ ] Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
   - Example:
     - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902
