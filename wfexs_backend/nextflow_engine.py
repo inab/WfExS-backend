@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 import datetime
+import json
 import os
 import re
 import shutil
@@ -25,7 +26,7 @@ import sys
 import tempfile
 import yaml
 
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE
@@ -684,6 +685,27 @@ STDERR
         
         return nxpParams
     
+    def augmentNextflowInputs(self, matHash:Mapping[SymbolicParamName,MaterializedInput], allExecutionParams:Mapping[str,Any], prefix='') -> List[MaterializedInput]:
+        """
+        Generate additional MaterializedInput for the implicit params.
+        """
+        augmentedInputs = []
+        for key,val in allExecutionParams.items():
+            linearKey = prefix + key
+            if isinstance(val, dict):
+                newAugmentedInputs = self.augmentNextflowInputs(matHash, val, prefix=linearKey+'.')
+                augmentedInputs.extend(newAugmentedInputs)
+            else:
+                augmentedInput = matHash.get(linearKey)
+                if augmentedInput is None:
+                    # Time to create a new materialized input
+                    theValues = val  if isinstance(val,list)  else   [ val ]
+                    augmentedInput = MaterializedInput(name=key,values=theValues)
+                
+                augmentedInputs.append(augmentedInput)
+        
+        return augmentedInputs
+    
     def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
@@ -810,5 +832,21 @@ wfexs_allParams()
         self.logger.debug(launch_stdout)
         self.logger.debug(launch_stderr)
         
-        # TODO
-        return  launch_retval, [], []
+        # Creating the augmented inputs
+        if os.path.isfile(allParamsFile):
+            matHash = {}
+            for matInput in matInputs:
+                matHash[matInput.name] = matInput
+            
+            with open(allParamsFile, mode="r", encoding="utf-8") as aPF:
+                allExecutionParams = json.load(aPF)
+            
+            augmentedInputs = self.augmentNextflowInputs(matHash, allExecutionParams)
+        else:
+            augmentedInputs = matInputs
+        
+        # Creating the materialized outputs
+        matOuputs = []
+        matOutputs = self.identifyMaterializedOutputs(outputs, self.outputsDir)
+
+        return  launch_retval, augmentedInputs, matOutputs
