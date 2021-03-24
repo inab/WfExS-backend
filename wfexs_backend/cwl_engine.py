@@ -388,9 +388,10 @@ class CWLWorkflowEngine(WorkflowEngine):
                             # Reading the output for the report
                             cwl_yaml_stdout.seek(0)
                             cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
-                            matOutputs = self.executionOutputs(outputs, json.loads(cwl_yaml_stdout_v))
-                            
-                    return retVal, list(augmentedInputs.items()), list(matOutputs.items())
+                            matOutputs = self.identifyMaterializedOutputs(outputs, self.outputsDir, json.loads(cwl_yaml_stdout_v))
+                        
+                    # FIXME: create augmentedInputs properly
+                    return retVal, matInputs, matOutputs
 
             except WorkflowEngineException as wfex:
                 raise wfex
