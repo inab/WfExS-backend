@@ -23,11 +23,12 @@ import enum
 from collections import namedtuple
 from urllib import request, parse
 
-from typing import Callable, List, Mapping, NamedTuple, NewType, Pattern, Type, Union
+from typing import Any, Callable, List, Mapping, NamedTuple, NewType, Tuple, Type, Union
 
 import base64
 import hashlib
 import functools
+import os
 import paramiko
 import paramiko.pkey
 from paramiko.config import SSH_PORT as DEFAULT_SSH_PORT
@@ -110,32 +111,75 @@ class MaterializedInput(NamedTuple):
     name: SymbolicParamName
     values: List[Union[bool,str,int,float,MaterializedContent]]
 
+class OutputKind(enum.Enum):
+    File = 'file'
+    Directory = 'dir'
+    Value = 'val'
+
+GlobPattern = NewType('GlobPattern',str)
+
 class ExpectedOutput(NamedTuple):
     """
-    name: Name of the output
-    isImplicit: if it is true, this output is implicit, so no parameter
-      must be set
-    prettyFilename: Relative "pretty" name to be used in input directory
-      when the workflow is being launched
-    glob: When the output is implicit, the filename pattern to capture the
-      local path, based on the output / working directory
+    name: Name of the output. If the workflow engine allows using
+      symbolic names attached to the outputs, this name must match that.
+      Otherwise, a matching pattern must be defined.
+    kind: The kind of output. Either an atomic value.
+    preferredFilename: Relative "pretty" name which is going to be used
+      to export the file to external storage.
+    cardinality: Whether it is expected to be optional, a single value or
+      multiple ones.
+    glob: When the workflow engine does not use symbolic
+      names to label the outputs, this is the filename pattern to capture the
+      local path, based on the output / working directory.
     """
     name: SymbolicOutputName
-    isImplicit: bool
-    prettyFilename: RelPath
-    glob: Pattern
+    kind: OutputKind
+    preferredFilename: RelPath
+    cardinality: Tuple[int, int]
+    glob: GlobPattern
+
+class GeneratedContent(NamedTuple):
+    """
+    local: Local absolute path of the content which was generated. It
+      is an absolute path in the outputs directory of the execution.
+    uri: A putative URL or a CURIE of the content which was generated,
+      needed for the provenance and upload matters.
+    signature: Computed checksum from the file
+    preferredFilename: The preferred relative filename to use when it is
+      uploaded from the computational environment
+    """
+    local: AbsPath
+    signature: Fingerprint
+    uri: URIType = None
+    preferredFilename: RelPath = None
+
+class GeneratedDirectoryContent(NamedTuple):
+    """
+    local: Local absolute path of the content which was generated. It
+      is an absolute path in the outputs directory of the execution.
+    uri: A putative URL or a CURIE of the content which was generated,
+      needed for the provenance and upload matters.
+    signature: Computed checksum from the file
+    preferredFilename: The preferred relative filename to use when it is
+      uploaded from the computational environment
+    """
+    local: AbsPath
+    values: List[Any]   # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
+    uri: URIType = None
+    preferredFilename: RelPath = None
 
 class MaterializedOutput(NamedTuple):
     """
-    name: Name of the output
+    name: Name of the output. It should be a public identifier whenever it is possible
+    expectedCardinality: Whether it was expected to be optional, a single value or
+      multiple ones.
     local: Local absolute path of the output
     prettyFilename: Relative "pretty" name to be used in provenance
-    signature: Computed sha256 from the file
     """
     name: SymbolicOutputName
-    local: AbsPath
-    prettyFilename: RelPath
-    signature: Fingerprint
+    kind: OutputKind
+    expectedCardinality: Tuple[int, int]
+    values: List[Union[bool,str,int,float,GeneratedContent,GeneratedDirectoryContent]]
 
 class LocalWorkflow(NamedTuple):
     """
@@ -320,3 +364,69 @@ def ComputeDigestFromFile(filename:Union[AbsPath,RelPath], digestAlgorithm=DEFAU
     
     with open(filename, mode='rb') as f:
         return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize)
+
+def GetGeneratedDirectoryContent(thePath:AbsPath,uri:URIType=None,preferredFilename:RelPath=None) -> GeneratedDirectoryContent:
+    theValues = []
+    with os.scandir(thePath) as itEntries:
+        for entry in itEntries:
+            # Hidden files are skipped by default
+            if not entry.name.startswith('.'):
+                theValue = None
+                if entry.is_file():
+                    theValue = GeneratedContent(
+                        local=entry.path,
+                        # uri=None, 
+                        signature=ComputeDigestFromFile(entry.path)
+                    )
+                elif entry.is_dir():
+                    theValue = GetGeneratedDirectoryContent(entry.path)
+                
+                if theValue is not None:
+                    theValues.append(theValue)
+        
+    return GeneratedDirectoryContent(
+        local=thePath,
+        uri=uri,
+        preferredFilename=preferredFilename,
+        values=theValues
+    )
+
+CWLClass2WfExS = {
+    'Directory': OutputKind.Directory,
+    'File': OutputKind.File,
+    # '???': OutputKind.Value,
+}
+
+def CWLDesc2Content(cwlDescs:Mapping[str,Any], logger, expectedOutput:ExpectedOutput=None) -> List[Union[bool,str,int,float,GeneratedContent,GeneratedDirectoryContent]]:
+    matValues = []
+    
+    if not isinstance(cwlDescs,list):
+        cwlDescs = [ cwlDescs ]
+    for cwlDesc in cwlDescs:
+        foundKind = CWLClass2WfExS.get(cwlDesc['class'])
+        if (expectedOutput is not None) and foundKind != expectedOutput.kind:
+            logger.warning("For output {} obtained kind does not match ({} vs {})".format(expectedOutput.name, expectedOutput.kind, foundKind))
+        
+        matValue = None
+        if foundKind==OutputKind.Directory:
+            theValues = CWLDesc2Content(cwlDesc['listing'],logger=logger)
+            matValue = GeneratedDirectoryContent(
+                local=cwlDesc['path'],
+                # TODO: Generate URIs when it is advised
+                # uri=None,
+                preferredFilename=None  if expectedOutput is None  else expectedOutput.preferredFilename,
+                values=theValues
+            )
+        elif foundKind==OutputKind.File:
+            matValue = GeneratedContent(
+                local=cwlDesc['path'],
+                signature=ComputeDigestFromFile(cwlDesc['path'])
+            )
+            # TODO: What to do with auxiliary/secondary files?
+        
+        if matValue is not None:
+            matValues.append(matValue)
+    
+    return matValues
+    
+    return matValues

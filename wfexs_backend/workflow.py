@@ -33,7 +33,7 @@ import time
 import types
 import uuid
 
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from urllib import request, parse
 from rocrate import rocrate
@@ -64,14 +64,6 @@ from .cwl_engine import CWLWorkflowEngine
 
 # The list of classes to be taken into account
 WORKFLOW_ENGINE_CLASSES = [NextflowWorkflowEngine, CWLWorkflowEngine]
-
-
-def parseExpectedOutputs(outputs) -> List[ExpectedOutput]:
-    expectedOutputs = []
-    
-    # TODO: implement parsing of outputs
-    
-    return expectedOutputs
 
 
 class WF:
@@ -394,8 +386,7 @@ class WF:
         self.version_id = str(version_id)
         self.descriptor_type = descriptor_type
         self.params = params
-        # TODO: implement parseExpectedOutputs
-        self.outputs = parseExpectedOutputs(outputs)
+        self.outputs = self.parseExpectedOutputs(outputs)
         
         
         # The endpoint should always end with a slash
@@ -874,7 +865,62 @@ class WF:
                 theInputs.append(MaterializedInput(linearKey, inputs))
 
         return theInputs, lastInput
+    
+    DefaultCardinality = '1'
+    CardinalityMapping = {
+        '1': (1, 1),
+        '?': (0, 1),
+        '*': (0, sys.maxsize),
+        '+': (1, sys.maxsize),
+    }
+    
+    OutputClassMapping = {
+        'File': OutputKind.File,
+        'Directory': OutputKind.Directory,
+        'Value': OutputKind.Value,
+    }
+    
+    def parseExpectedOutputs(self, outputs: List[Any]) -> List[ExpectedOutput]:
+        expectedOutputs = []
+        
+        # TODO: implement parsing of outputs
+        outputsIter = outputs.items() if isinstance(outputs, dict) else enumerate(outputs)
 
+        for outputKey, outputDesc in outputsIter:
+            # The glob pattern
+            patS = outputDesc.get('glob')
+            if patS is not None:
+                if len(patS)==0:
+                    patS = None
+            
+            # Parsing the cardinality
+            cardS = outputDesc.get('cardinality')
+            cardinality = None
+            if cardS is not None:
+                if isinstance(cardS,int):
+                    if cardS < 1:
+                        cardinality = (0, 1)
+                    else:
+                        cardinality = (cardS, cardS)
+                elif isinstance(cardS,list):
+                    cardinality = (int(cardS[0]), int(cardS[1]))
+                else:
+                    cardinality = self.CardinalityMapping.get(cardS)
+            
+            if cardinality is None:
+                cardinality = self.CardinalityMapping[self.DefaultCardinality]
+            
+            eOutput = ExpectedOutput(
+                name=outputKey,
+                kind=self.OutputClassMapping.get(outputDesc.get('c-l-a-s-s'),'File'),
+                preferredFilename=outputDesc.get('preferredName'),
+                cardinality=cardinality,
+                glob=patS,
+            )
+            expectedOutputs.append(eOutput)
+        
+        return expectedOutputs
+    
     def executeWorkflow(self, offline=False):
         # This is needed to be sure all the elements are in place
         self.materializeWorkflow(offline=offline)
@@ -885,6 +931,9 @@ class WF:
         self.exitVal = exitVal
         self.augmentedInputs = augmentedInputs
         self.matCheckOutputs = matCheckOutputs
+        self.logger.debug(exitVal)
+        self.logger.debug(augmentedInputs)
+        self.logger.debug(matCheckOutputs)
     
     def createResearchObject(self):
         # TODO: digest the results from executeWorkflow plus all the provenance
@@ -893,10 +942,11 @@ class WF:
         execution_provenance = self.augmentedInputs + self.matCheckOutputs
 
         for key, value in execution_provenance:
-            if isinstance(value, dict):  # file
+            # FIXME
+            if isinstance(value, MaterializedInput):  # file
                 if value['class'] == "File":
                     wf_crate.add_file(value['location'])
-            elif isinstance(value, list):  # list of files
+            elif isinstance(value, MaterializedOutput):  # list of files
                 for i in range(len(value)):
                     if value[i]['class'] == "File":
                         wf_crate.add_file(value[i]['location'])
