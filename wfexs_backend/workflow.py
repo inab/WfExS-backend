@@ -942,21 +942,59 @@ class WF:
     def createResearchObject(self):
         # TODO: digest the results from executeWorkflow plus all the provenance
 
-        wf_crate = rocrate.ROCrate(self.cacheROCrateFilename)
-        execution_provenance = self.augmentedInputs + self.matCheckOutputs
+        wfCrate = rocrate.ROCrate(self.cacheROCrateFilename)
 
-        for key, value in execution_provenance:
-            # FIXME
-            if isinstance(value, MaterializedInput):  # file
-                if value['class'] == "File":
-                    wf_crate.add_file(value['location'])
-            elif isinstance(value, MaterializedOutput):  # list of files
-                for i in range(len(value)):
-                    if value[i]['class'] == "File":
-                        wf_crate.add_file(value[i]['location'])
+        for in_item in self.augmentedInputs:
+            if isinstance(in_item, MaterializedInput):
+                itemInValues = in_item.values[0]
+                if isinstance(itemInValues, MaterializedContent):
+                    itemInSource = itemInValues.local
+                    if os.path.isfile(itemInSource):
+                        properties = {
+                            'name': in_item.name,
+                            'uri': itemInValues.uri
+                        }
+                        wfCrate.add_file(source=itemInSource, properties=properties)
 
-        wf_crate.writeZip(self.outputsDir + "/crate")
-        self.logger.info("*RO-Crate created: {}".format(self.outputsDir))
+                    else:
+                        pass    # TODO raise Exception
+
+                # TODO digest other types of inputs
+
+        # for out_item in self.matCheckOutputs:
+        #     if isinstance(out_item, MaterializedOutput):
+        #         itemOutKind = out_item.kind.value
+        #         itemOutValues = out_item.values[0]
+        #         itemOutSource = itemOutValues.local
+        #         properties = {'name': out_item.name}
+        #         if itemOutKind == "dir":
+        #             if isinstance(itemOutValues, GeneratedDirectoryContent):
+        #                 if os.path.isdir(itemOutSource):
+        #                     dirProperties = dict.fromkeys(['values'])
+        #                     dirProperties['values'] = itemOutValues.values
+        #                     properties.update(dirProperties)
+        #                     wfCrate.add_directory(source=itemOutSource, properties=properties)
+        #
+        #                 else:
+        #                     pass  # TODO raise Exception
+        #
+        #         elif itemOutKind == "file":
+        #             if isinstance(itemOutValues, GeneratedContent):
+        #                 if os.path.isfile(itemOutSource):
+        #                     fileProperties = {
+        #                         'uri': itemOutValues.uri
+        #                     }
+        #                     properties.update(fileProperties)
+        #                     wfCrate.add_file(source=itemOutSource, properties=properties)
+        #
+        #                 else:
+        #                     pass  # TODO raise Exception
+        #         # elif itemOutKind == "val":
+        #         else:
+        #             pass # TODO raise Exception
+
+        wfCrate.writeZip(self.outputsDir + "/crate")
+        self.logger.info("RO-Crate created: {}".format(self.outputsDir))
 
         # TODO error handling
     
