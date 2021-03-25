@@ -401,8 +401,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 raise WorkflowEngineException("FATAL ERROR: Unsupported container factory {}".format(self.container_factory.ContainerType()))
                             
                             cmd = cmdTemplate.format(outputDir, intermediateDir, localWorkflowFile, yamlFile)
-
-                            print("executing workflow: {}".format(cmd))
+                            self.logger.debug("Command => {}".format(cmd))
+                            
                             retVal = subprocess.Popen("source '{0}'/bin/activate  ; {1}".format(cwl_install_dir, cmd),
                                                       stdout=cwl_yaml_stdout,
                                                       stderr=cwl_yaml_stderr,
