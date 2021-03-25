@@ -59,6 +59,8 @@ from .encrypted_fs import *
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
 from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, WORKDIR_ENGINE_TWEAKS_RELDIR
+from . import fetchers
+
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
 
@@ -88,10 +90,12 @@ class WF:
     RECOGNIZED_ROCRATE_PROG_LANG = dict(map(lambda t: (t.uri, t), WORKFLOW_ENGINES))
 
     DEFAULT_SCHEME_HANDLERS = {
-        'http': fetchClassicURL,
-        'https': fetchClassicURL,
-        'ftp': fetchClassicURL,
-        'ssh': fetchSSHURL,
+        'http': fetchers.fetchClassicURL,
+        'https': fetchers.fetchClassicURL,
+        'ftp': fetchers.fetchClassicURL,
+        'sftp': fetchers.fetchSSHURL,
+        'ssh': fetchers.fetchSSHURL,
+        'file': fetchers.fetchFile,
     }
     
     @classmethod

@@ -30,6 +30,7 @@ from typing import Any, Dict, List, Tuple
 from .common import *
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
+from .fetchers import fetchClassicURL
 from .singularity_container import SingularityContainerFactory
 
 
