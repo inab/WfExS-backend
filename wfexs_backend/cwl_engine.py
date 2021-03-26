@@ -163,7 +163,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retVal = subprocess.Popen(
-                    "source '{0}'/bin/activate ; pip install --upgrade pip wheel ; pip install {1}=={2}  {3}=={4}  {5}{6}{7}".format(
+                    ". '{0}'/bin/activate ; pip install --upgrade pip wheel ; pip install {1}=={2}  {3}=={4}  {5}{6}{7}".format(
                         cwl_install_dir,
                         self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                         self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
@@ -229,7 +229,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 with tempfile.NamedTemporaryFile() as cwl_pack_stderr:
                     # Writing straight to the file
                     retVal = subprocess.Popen(
-                        "source '{0}'/bin/activate ; cwltool --no-doc-cache --pack {1}".format(cwl_install_dir,localWorkflowFile),
+                        ". '{0}'/bin/activate ; cwltool --no-doc-cache --pack {1}".format(cwl_install_dir,localWorkflowFile),
                         stdout=packedH,
                         stderr=cwl_pack_stderr,
                         cwd=cwl_install_dir,
@@ -304,7 +304,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             with tempfile.NamedTemporaryFile() as cwl_dot_stderr:
                 # Writing straight to the file
                 retVal = subprocess.Popen(
-                    "source '{0}'/bin/activate ; cwltool --print-dot {1}".format(cwl_install_dir,localWorkflowFile),
+                    ". '{0}'/bin/activate ; cwltool --print-dot {1}".format(cwl_install_dir,localWorkflowFile),
                     stdout=packedH,
                     stderr=cwl_dot_stderr,
                     cwd=cwl_install_dir,
@@ -403,7 +403,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             cmd = cmdTemplate.format(outputDir, intermediateDir, localWorkflowFile, yamlFile)
                             self.logger.debug("Command => {}".format(cmd))
                             
-                            retVal = subprocess.Popen("source '{0}'/bin/activate  ; {1}".format(cwl_install_dir, cmd),
+                            retVal = subprocess.Popen(". '{0}'/bin/activate  ; {1}".format(cwl_install_dir, cmd),
                                                       stdout=cwl_yaml_stdout,
                                                       stderr=cwl_yaml_stderr,
                                                       cwd=self.workDir,
