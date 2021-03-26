@@ -412,7 +412,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                                                       ).wait()
                             
                             # Proper error handling
-                            if retVal > 125:
+                            if retVal != 0:
                                 # Reading the error for the report
                                 cwl_yaml_stdout.seek(0)
                                 cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
