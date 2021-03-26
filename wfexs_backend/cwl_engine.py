@@ -16,29 +16,27 @@
 # limitations under the License.
 from __future__ import absolute_import
 
-import os
-from typing import Dict, List, Tuple
-
+import json
 import subprocess
 import tempfile
 import venv
-import re
-import json
 
-import yaml
 import jsonpath_ng
 import jsonpath_ng.ext
+import yaml
 
 from .common import *
-from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .container import NoContainerFactory
+from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
+from .engine import WorkflowEngine, WorkflowEngineException
 from .singularity_container import SingularityContainerFactory
+
 
 # Next methods are borrowed from
 # https://github.com/common-workflow-language/cwltool/blob/5bdb3d3dd47d8d1b3a1685220b4b6ce0f94c055e/cwltool/singularity.py#L83
 def _normalize_image_id(string: str) -> str:
     return string.replace("/", "_") + ".img"
+
 
 def _normalize_sif_id(string: str) -> str:
     return string.replace("/", "_") + ".sif"
@@ -66,22 +64,14 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     ENGINE_NAME = 'cwl'
 
-    def __init__(self,
-                 cacheDir=None,
-                 workflow_config=None,
-                 local_config=None,
-                 engineTweaksDir=None,
-                 cacheWorkflowDir=None,
-                 workDir=None,
-                 outputsDir=None,
-                 outputMetaDir=None,
-                 intermediateDir=None,
-                 config_directory=None
-                 ):
+    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None,
+                 cacheWorkflowDir=None, workDir=None, outputsDir=None, outputMetaDir=None, intermediateDir=None,
+                 config_directory=None):
+
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
-                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
-                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
-                         outputMetaDir=outputMetaDir, config_directory=config_directory)
+                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir, workDir=workDir,
+                         outputsDir=outputsDir, intermediateDir=intermediateDir, outputMetaDir=outputMetaDir,
+                         config_directory=config_directory)
 
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
 
@@ -104,7 +94,6 @@ class CWLWorkflowEngine(WorkflowEngine):
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
         """
-        
         cwlPath = localWf.dir
         if localWf.relPath is not None:
             cwlPath = os.path.join(cwlPath, localWf.relPath)
@@ -116,7 +105,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 wf_yaml = yaml.safe_load(pCWL)  # parse possible CWL
                 cwlVersion = wf_yaml.get('cwlVersion')
         except Exception as e:
-            self.logger.warning('Unable to process CWL entrypoint {} {}'.format(cwlPath,e))
+            self.logger.warning('Unable to process CWL entrypoint {} {}'.format(cwlPath, e))
         
         if cwlVersion is None:
             return None, None
@@ -136,7 +125,6 @@ class CWLWorkflowEngine(WorkflowEngine):
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-
         if self.engine_mode != EngineMode.Local:
             raise WorkflowEngineException(
                 'Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
@@ -194,9 +182,9 @@ class CWLWorkflowEngine(WorkflowEngine):
     def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
-        localWorkflow directory, as well as the list of containers
+        localWorkflow directory, as well as the list of containers.
         
-        For Nextflow it is usually a no-op, but for CWL it requires resolution
+        For Nextflow it is usually a no-op, but for CWL it requires resolution.
         """
         localWf = matWorkflowEngine.workflow
         localWorkflowDir = localWf.dir
@@ -229,7 +217,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 with tempfile.NamedTemporaryFile() as cwl_pack_stderr:
                     # Writing straight to the file
                     retVal = subprocess.Popen(
-                        ". '{0}'/bin/activate ; cwltool --no-doc-cache --pack {1}".format(cwl_install_dir,localWorkflowFile),
+                        ". '{0}'/bin/activate ; cwltool --no-doc-cache --pack {1}".format(cwl_install_dir, localWorkflowFile),
                         stdout=packedH,
                         stderr=cwl_pack_stderr,
                         cwd=cwl_install_dir,
@@ -264,8 +252,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 
                 containerTags.add(dockerPullId)
         
-        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=packedLocalWorkflowFile,
-                                   effectiveCheckout=localWf.effectiveCheckout)
+        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=packedLocalWorkflowFile, effectiveCheckout=localWf.effectiveCheckout)
         newWfEngine = MaterializedWorkflowEngine(
                             instance=matWorkflowEngine.instance,
                             version=engineVersion,
@@ -280,18 +267,18 @@ class CWLWorkflowEngine(WorkflowEngine):
         This method was borrowed from
         https://github.com/common-workflow-language/cwltool/blob/5bdb3d3dd47d8d1b3a1685220b4b6ce0f94c055e/cwltool/singularity.py#L107
         """
-        
-        #match = re.search(
+        # match = re.search(
         #    pattern=r"([a-z]*://)", string=imageUrl
-        #)
+        # )
         img_name = _normalize_image_id(imageUrl)
-        #candidates.append(img_name)
-        #sif_name = _normalize_sif_id(dockerRequirement["dockerPull"])
-        #candidates.append(sif_name)
+        # candidates.append(img_name)
+        # sif_name = _normalize_sif_id(dockerRequirement["dockerPull"])
+        # candidates.append(sif_name)
         
         return img_name
-    
-    def generateDotWorkflow(self, matWfEng: MaterializedWorkflowEngine, dagFile:AbsPath) -> None:
+
+    @staticmethod
+    def generateDotWorkflow(matWfEng: MaterializedWorkflowEngine, dagFile: AbsPath) -> None:
         localWf = matWfEng.workflow
         if os.path.isabs(localWf.relPath):
             localWorkflowFile = localWf.relPath
@@ -304,7 +291,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             with tempfile.NamedTemporaryFile() as cwl_dot_stderr:
                 # Writing straight to the file
                 retVal = subprocess.Popen(
-                    ". '{0}'/bin/activate ; cwltool --print-dot {1}".format(cwl_install_dir,localWorkflowFile),
+                    ". '{0}'/bin/activate ; cwltool --print-dot {1}".format(cwl_install_dir, localWorkflowFile),
                     stdout=packedH,
                     stderr=cwl_dot_stderr,
                     cwd=cwl_install_dir,
@@ -315,7 +302,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 if retVal != 0:
                     # Reading the output and error for the report
                     cwl_dot_stderr.seek(0)
-                    cwl_dot_stderr_v = cwl_dot_stderr.read().decode('utf-8',errors='ignore')
+                    cwl_dot_stderr_v = cwl_dot_stderr.read().decode('utf-8', errors='ignore')
 
                     errstr = "Could not generate CWL representation in dot format using cwltool --print-dot {}. Retval {}\n======\nSTDERR\n======\n{}".format(
                         engineVersion, retVal, cwl_dot_stderr_v)
@@ -332,7 +319,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         else:
             localWorkflowFile = os.path.join(localWf.dir, localWf.relPath)
         engineVersion = matWfEng.version
-        dagFile = os.path.join(self.outputStatsDir,STATS_DAG_DOT_FILE)
+        dagFile = os.path.join(self.outputStatsDir, STATS_DAG_DOT_FILE)
         
         if os.path.exists(localWorkflowFile):
             # CWLWorkflowEngine directory is needed
@@ -357,8 +344,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                     wfId = wf.get('id')
                     wfIdPrefix = ''  if wfId is None  else  wfId + '/'
                     
-                    cwl_yaml_inputs = wf.get('inputs',[])
-                    cwl_yaml_outputs = wf.get('outputs',[])
+                    cwl_yaml_inputs = wf.get('inputs', [])
+                    cwl_yaml_outputs = wf.get('outputs', [])
                 
                 # Setting packed CWL inputs (id, type)
                 for cwl_yaml_input in cwl_yaml_inputs:  # clean string of packed CWL inputs
@@ -392,10 +379,10 @@ class CWLWorkflowEngine(WorkflowEngine):
                             
                             # This is needed to teach cwltool where to find the cached images
                             instEnv = dict()
-                            if isinstance(self.container_factory,SingularityContainerFactory):
+                            if isinstance(self.container_factory, SingularityContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
-                            elif isinstance(self.container_factory,NoContainerFactory):
+                            elif isinstance(self.container_factory, NoContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:
                                 raise WorkflowEngineException("FATAL ERROR: Unsupported container factory {}".format(self.container_factory.ContainerType()))
@@ -464,7 +451,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 "ERROR: cannot create YAML file {}, {}".format(filename, error))
 
     @staticmethod
-    def executionInputs(matInputs:List[MaterializedInput], cwlInputs):
+    def executionInputs(matInputs: List[MaterializedInput], cwlInputs):
         """
         Setting execution inputs needed to execute the workflow
         """
@@ -480,7 +467,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 # numberOfInputs = len(matInput.values)  # number of inputs inside a MaterializedInput
                 for input_value in matInput.values:
                     name = matInput.name
-                    value_type = cwlInputs.get(name,{}).get('type')
+                    value_type = cwlInputs.get(name, {}).get('type')
                     if value_type is None:
                         raise WorkflowEngineException("ERROR: input {} not available in workflow".format(name))
                     
@@ -490,7 +477,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             value_local = value.local
                             if isinstance(value_type, dict):    # MaterializedContent is a List of File
                                 classType = value_type['items']
-                                execInputs.setdefault(name,[]).append({"class": classType, "location": value_local})
+                                execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
                             else:   # MaterializedContent is a File
                                 classType = value_type
                                 execInputs[name] = {"class": classType, "location": value_local}
@@ -503,7 +490,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         return execInputs
 
     @staticmethod
-    def executionOutputs(expectedOutputs,cwlOutputs):
+    def executionOutputs(expectedOutputs, cwlOutputs):
         """
         Setting execution outputs provenance
         """
