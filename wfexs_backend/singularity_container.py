@@ -19,6 +19,7 @@ from __future__ import absolute_import
 import os
 import os.path
 import re
+import shutil
 import subprocess
 import tempfile
 from urllib import parse
