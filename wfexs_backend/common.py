@@ -18,16 +18,12 @@
 from __future__ import absolute_import
 
 import abc
-import shutil
-import enum
-from collections import namedtuple
-
-from typing import Any, Callable, List, Mapping, NamedTuple, NewType, Tuple, Type, Union
-
 import base64
-import hashlib
+import enum
 import functools
+import hashlib
 import os
+from typing import Any, Callable, List, Mapping, NamedTuple, NewType, Tuple, Type, Union
 
 DEFAULT_GIT_CMD = 'git'
 DEFAULT_DOCKER_CMD = 'docker'
@@ -45,43 +41,44 @@ class EngineMode(enum.Enum):
 DEFAULT_ENGINE_MODE = EngineMode.Local
 
 # Abstraction of input params and output names
-SymbolicName = NewType('SymbolicName',str)
-SymbolicParamName = NewType('SymbolicParamName',SymbolicName)
-SymbolicOutputName = NewType('SymbolicOutputName',SymbolicName)
+SymbolicName = NewType('SymbolicName', str)
+SymbolicParamName = NewType('SymbolicParamName', SymbolicName)
+SymbolicOutputName = NewType('SymbolicOutputName', SymbolicName)
 
 # The tagged name of a container
-ContainerTaggedName = NewType('ContainerTaggedName',str)
+ContainerTaggedName = NewType('ContainerTaggedName', str)
 
-URIType = NewType('URIType',str)
+URIType = NewType('URIType', str)
 # The URL of a git repository containing at least one workflow
-RepoURL = NewType('RepoURL',URIType)
+RepoURL = NewType('RepoURL', URIType)
 # The tag, branch or hash of a workflow in a git repository
-RepoTag = NewType('RepoTag',str)
+RepoTag = NewType('RepoTag', str)
 # This is a relative path
-RelPath = NewType('RelPath',str)
+RelPath = NewType('RelPath', str)
 # This is an absolute path
-AbsPath = NewType('AbsPath',str)
+AbsPath = NewType('AbsPath', str)
 # This is also an absolute path
-EnginePath = NewType('EnginePath',AbsPath)
+EnginePath = NewType('EnginePath', AbsPath)
 
 # This is a workflow engine version
-EngineVersion = NewType('EngineVersion',str)
+EngineVersion = NewType('EngineVersion', str)
 
 # This represents a fingerprint from an installation, a docker image, etc...
 # It should follow next format
 # {0}={1}
 # where {0} is the name of the digest (sha256, for instance)
 # and {1} is the base64 encoding of the binary digest
-Fingerprint = NewType('Fingerprint',str)
+Fingerprint = NewType('Fingerprint', str)
 
 # Exit value from any kind of execution
-ExitVal = NewType('ExitVal',int)
+ExitVal = NewType('ExitVal', int)
 
-SecurityContextConfig = Mapping[str,object]
+SecurityContextConfig = Mapping[str, object]
 
 # As each workflow engine can have its own naming convention, leave them to
 # provide it
-ContainerFileNamingMethod = Callable[[URIType],RelPath]
+ContainerFileNamingMethod = Callable[[URIType], RelPath]
+
 
 class MaterializedContent(NamedTuple):
     """
@@ -105,14 +102,17 @@ class MaterializedInput(NamedTuple):
       instances from MaterializedContent
     """
     name: SymbolicParamName
-    values: List[Union[bool,str,int,float,MaterializedContent]]
+    values: List[Union[bool, str, int, float, MaterializedContent]]
+
 
 class OutputKind(enum.Enum):
     File = 'file'
     Directory = 'dir'
     Value = 'val'
 
-GlobPattern = NewType('GlobPattern',str)
+
+GlobPattern = NewType('GlobPattern', str)
+
 
 class ExpectedOutput(NamedTuple):
     """
@@ -134,6 +134,7 @@ class ExpectedOutput(NamedTuple):
     cardinality: Tuple[int, int]
     glob: GlobPattern
 
+
 class GeneratedContent(NamedTuple):
     """
     local: Local absolute path of the content which was generated. It
@@ -149,6 +150,7 @@ class GeneratedContent(NamedTuple):
     uri: URIType = None
     preferredFilename: RelPath = None
 
+
 class GeneratedDirectoryContent(NamedTuple):
     """
     local: Local absolute path of the content which was generated. It
@@ -160,9 +162,10 @@ class GeneratedDirectoryContent(NamedTuple):
       uploaded from the computational environment
     """
     local: AbsPath
-    values: List[Any]   # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
+    values: List[Any]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
     uri: URIType = None
     preferredFilename: RelPath = None
+
 
 class MaterializedOutput(NamedTuple):
     """
@@ -175,7 +178,8 @@ class MaterializedOutput(NamedTuple):
     name: SymbolicOutputName
     kind: OutputKind
     expectedCardinality: Tuple[int, int]
-    values: List[Union[bool,str,int,float,GeneratedContent,GeneratedDirectoryContent]]
+    values: List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]
+
 
 class LocalWorkflow(NamedTuple):
     """
@@ -187,11 +191,14 @@ class LocalWorkflow(NamedTuple):
     relPath: RelPath
     effectiveCheckout: RepoTag
 
+
 # This skeleton is here only for type mapping reasons
 class AbstractWorkflowEngineType(abc.ABC):
     pass
 
+
 TRS_Workflow_Descriptor = str
+
 
 class WorkflowType(NamedTuple):
     """
@@ -207,6 +214,7 @@ class WorkflowType(NamedTuple):
     trs_descriptor: TRS_Workflow_Descriptor
     rocrate_programming_language: str
 
+
 class MaterializedWorkflowEngine(NamedTuple):
     """
     instance: Instance of the workflow engine
@@ -217,9 +225,10 @@ class MaterializedWorkflowEngine(NamedTuple):
     """
     instance: AbstractWorkflowEngineType
     version: str
-    fingerprint: Union[Fingerprint,str]
+    fingerprint: Union[Fingerprint, str]
     engine_path: EnginePath
     workflow: LocalWorkflow
+
 
 class ContainerType(enum.Enum):
     Singularity = 'singularity'
@@ -228,7 +237,9 @@ class ContainerType(enum.Enum):
     Podman = 'podman'
     NoContainer = 'none'
 
+
 DEFAULT_CONTAINER_TYPE = ContainerType.Singularity
+
 
 class Container(NamedTuple):
     """
@@ -242,35 +253,41 @@ class Container(NamedTuple):
     type: ContainerType
     localPath: AbsPath
 
+
 class WFException(Exception):
     pass
 
+
 # Next methods have been borrowed from FlowMaps
 DEFAULT_DIGEST_ALGORITHM = 'sha256'
-DEFAULT_DIGET_BUFFER_SIZE = 65536
-def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize:int=DEFAULT_DIGET_BUFFER_SIZE) -> Fingerprint:
+DEFAULT_DIGEST_BUFFER_SIZE = 65536
+
+
+def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE) -> Fingerprint:
     """
     Accessory method used to compute the digest of an input file-like object
     """
-
     h = hashlib.new(digestAlgorithm)
     buf = filelike.read(bufferSize)
     while len(buf) > 0:
-            h.update(buf)
-            buf = filelike.read(bufferSize)
+        h.update(buf)
+        buf = filelike.read(bufferSize)
 
-    return '{0}={1}'.format(digestAlgorithm,str(base64.standard_b64encode(h.digest()),'iso-8859-1'))
+    return '{0}={1}'.format(digestAlgorithm, str(base64.standard_b64encode(h.digest()), 'iso-8859-1'))
+
 
 @functools.lru_cache(maxsize=32)
-def ComputeDigestFromFile(filename:Union[AbsPath,RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize:int=DEFAULT_DIGET_BUFFER_SIZE) -> Fingerprint:
+def ComputeDigestFromFile(filename: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE) -> Fingerprint:
     """
     Accessory method used to compute the digest of an input file
     """
-    
     with open(filename, mode='rb') as f:
         return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize)
 
-def GetGeneratedDirectoryContent(thePath:AbsPath,uri:URIType=None,preferredFilename:RelPath=None) -> GeneratedDirectoryContent:
+
+def GetGeneratedDirectoryContent(thePath: AbsPath, uri: URIType = None, preferredFilename: RelPath = None) -> GeneratedDirectoryContent:
+    """
+    """
     theValues = []
     with os.scandir(thePath) as itEntries:
         for entry in itEntries:
@@ -285,10 +302,10 @@ def GetGeneratedDirectoryContent(thePath:AbsPath,uri:URIType=None,preferredFilen
                     )
                 elif entry.is_dir():
                     theValue = GetGeneratedDirectoryContent(entry.path)
-                
+
                 if theValue is not None:
                     theValues.append(theValue)
-        
+
     return GeneratedDirectoryContent(
         local=thePath,
         uri=uri,
@@ -296,42 +313,44 @@ def GetGeneratedDirectoryContent(thePath:AbsPath,uri:URIType=None,preferredFilen
         values=theValues
     )
 
+
 CWLClass2WfExS = {
     'Directory': OutputKind.Directory,
-    'File': OutputKind.File,
-    # '???': OutputKind.Value,
+    'File': OutputKind.File
+    # '???': OutputKind.Value
 }
 
-def CWLDesc2Content(cwlDescs:Mapping[str,Any], logger, expectedOutput:ExpectedOutput=None) -> List[Union[bool,str,int,float,GeneratedContent,GeneratedDirectoryContent]]:
+
+def CWLDesc2Content(cwlDescs: Mapping[str, Any], logger, expectedOutput: ExpectedOutput = None) -> List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]:
+    """
+    """
     matValues = []
-    
-    if not isinstance(cwlDescs,list):
-        cwlDescs = [ cwlDescs ]
+
+    if not isinstance(cwlDescs, list):
+        cwlDescs = [cwlDescs]
     for cwlDesc in cwlDescs:
         foundKind = CWLClass2WfExS.get(cwlDesc['class'])
         if (expectedOutput is not None) and foundKind != expectedOutput.kind:
             logger.warning("For output {} obtained kind does not match ({} vs {})".format(expectedOutput.name, expectedOutput.kind, foundKind))
-        
+
         matValue = None
-        if foundKind==OutputKind.Directory:
-            theValues = CWLDesc2Content(cwlDesc['listing'],logger=logger)
+        if foundKind == OutputKind.Directory:
+            theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger)
             matValue = GeneratedDirectoryContent(
                 local=cwlDesc['path'],
                 # TODO: Generate URIs when it is advised
-                # uri=None,
-                preferredFilename=None  if expectedOutput is None  else expectedOutput.preferredFilename,
+                # uri=None
+                preferredFilename=None if expectedOutput is None else expectedOutput.preferredFilename,
                 values=theValues
             )
-        elif foundKind==OutputKind.File:
+        elif foundKind == OutputKind.File:
             matValue = GeneratedContent(
                 local=cwlDesc['path'],
                 signature=ComputeDigestFromFile(cwlDesc['path'])
             )
             # TODO: What to do with auxiliary/secondary files?
-        
+
         if matValue is not None:
             matValues.append(matValue)
-    
-    return matValues
-    
+
     return matValues
