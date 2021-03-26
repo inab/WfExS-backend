@@ -151,7 +151,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retVal = subprocess.Popen(
-                    ". '{0}'/bin/activate ; pip install --upgrade pip wheel ; pip install {1}=={2}  {3}=={4}  {5}{6}{7}".format(
+                    ". '{0}'/bin/activate && pip install --upgrade pip wheel ; pip install {1}=={2}  {3}=={4}  {5}{6}{7}".format(
                         cwl_install_dir,
                         self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                         self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
@@ -217,7 +217,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 with tempfile.NamedTemporaryFile() as cwl_pack_stderr:
                     # Writing straight to the file
                     retVal = subprocess.Popen(
-                        ". '{0}'/bin/activate ; cwltool --no-doc-cache --pack {1}".format(cwl_install_dir, localWorkflowFile),
+                        ". '{0}'/bin/activate && cwltool --no-doc-cache --pack {1}".format(cwl_install_dir, localWorkflowFile),
                         stdout=packedH,
                         stderr=cwl_pack_stderr,
                         cwd=cwl_install_dir,
@@ -291,7 +291,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             with tempfile.NamedTemporaryFile() as cwl_dot_stderr:
                 # Writing straight to the file
                 retVal = subprocess.Popen(
-                    ". '{0}'/bin/activate ; cwltool --print-dot {1}".format(cwl_install_dir, localWorkflowFile),
+                    ". '{0}'/bin/activate && cwltool --print-dot {1}".format(cwl_install_dir, localWorkflowFile),
                     stdout=packedH,
                     stderr=cwl_dot_stderr,
                     cwd=cwl_install_dir,
@@ -390,7 +390,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             cmd = cmdTemplate.format(outputDir, intermediateDir, localWorkflowFile, yamlFile)
                             self.logger.debug("Command => {}".format(cmd))
                             
-                            retVal = subprocess.Popen(". '{0}'/bin/activate  ; {1}".format(cwl_install_dir, cmd),
+                            retVal = subprocess.Popen(". '{0}'/bin/activate && {1}".format(cwl_install_dir, cmd),
                                                       stdout=cwl_yaml_stdout,
                                                       stderr=cwl_yaml_stderr,
                                                       cwd=self.workDir,
@@ -398,22 +398,27 @@ class CWLWorkflowEngine(WorkflowEngine):
                                                       env=instEnv
                                                       ).wait()
                             
+                            cwl_yaml_stdout.seek(0)
+                            cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
                             # Proper error handling
-                            if retVal != 0:
+                            try:
+                                outputsMapping = json.loads(cwl_yaml_stdout_v)
+                                cwl_yaml_stderr_v = ''
+                            except json.JSONDecodeError as e:
+                                outputsMapping = None
+                                cwl_yaml_stderr_v = "Output cwltool JSON decode error: {}".format(e.msg)
+                            
+                            if (outputsMapping is None) or retVal > 125:
                                 # Reading the error for the report
-                                cwl_yaml_stdout.seek(0)
-                                cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
                                 cwl_yaml_stderr.seek(0)
-                                cwl_yaml_stderr_v = cwl_yaml_stderr.read().decode('utf-8', 'ignore')
+                                cwl_yaml_stderr_v += cwl_yaml_stderr.read().decode('utf-8', 'ignore')
                                 
                                 errstr = "[CWL] Failed running cwltool {}. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                                     engineVersion, retVal, cwl_yaml_stdout_v, cwl_yaml_stderr_v)
                                 raise WorkflowEngineException(errstr)
                             
                             # Reading the output for the report
-                            cwl_yaml_stdout.seek(0)
-                            cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode('utf-8', 'ignore')
-                            matOutputs = self.identifyMaterializedOutputs(outputs, self.outputsDir, json.loads(cwl_yaml_stdout_v))
+                            matOutputs = self.identifyMaterializedOutputs(outputs, self.outputsDir, outputsMapping)
                         
                     # FIXME: create augmentedInputs properly
                     return retVal, matInputs, matOutputs
