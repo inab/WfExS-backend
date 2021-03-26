@@ -31,26 +31,35 @@ trap cleanup EXIT ERR
 
 set -e
 
-envDir="${wfexsDir}/.pyWEenv"
-envActivate="${envDir}/bin/activate"
+#if declare -F deactivate >& /dev/null ; then
+envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
+if [ -n "${envDir}" ] ; then
+	echo "Using currently active environment ${envDir} to install the dependencies"
+else
+	envDir="${wfexsDir}/.pyWEenv"
 
-echo "Creating WfExS-backend python virtual environment at ${envDir}"
+	echo "Creating WfExS-backend python virtual environment at ${envDir}"
 
-# Checking whether the environment exists
-if [ ! -f "${envActivate}" ] ; then
-	python3 -m venv "${envDir}"
+	# Checking whether the environment exists
+	if [ ! -f "${envActivate}" ] ; then
+		python3 -m venv "${envDir}"
+	fi
+
+	# Activating the python environment
+	envActivate="${envDir}/bin/activate"
+	source "${envActivate}"
 fi
-
-# Activating the python environment
-source "${envActivate}"
 
 # Checking whether the modules were already installed
 echo "Installing WfExS-backend python dependencies"
 pip install --upgrade pip wheel
 pip install -r "${wfexsDir}"/requirements.txt
 
+
 # Now, it is time to install the binaries
-if [ ! -x "${envDir}/bin/java" ] ; then
+if [ -x "${envDir}/bin/java" ] ; then
+	echo "OpenJDK already installed"
+else
 	echo "Installing openjdk ${JDK_VER}+${JDK_REV} in the environment (to be used with Nextflow)"
 	( cd "${downloadDir}" && curl -L -O "https://download.java.net/openjdk/jdk${JDK_VER}/ri/openjdk-${JDK_VER}+${JDK_REV}_linux-x64_bin.tar.gz" )
 	tar -x -C "${envDir}" -f "${downloadDir}"/openjdk*.tar.gz
@@ -62,14 +71,18 @@ if [ ! -x "${envDir}/bin/java" ] ; then
 	mv "${envDir}"/jdk-${JDK_VER}/* "${envDir}"
 fi
 
-if [ ! -x "${envDir}/bin/gocryptfs" ] ; then
+if [ -x "${envDir}/bin/gocryptfs" ] ; then
+	echo "GoCryptFS already installed"
+else
 	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_linux-static_amd64.tar.gz"
 	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
 	( cd "${downloadDir}" && curl -L -O "${gocryptfs_url}" )
 	tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz
 fi
 
-if [ ! -x "${envDir}/bin/bash-linux-x86_64" ] ; then
+if [ -x "${envDir}/bin/bash-linux-x86_64" ] ; then
+	echo "Static bash copy (to patch buggy bash within singularity containers being run by Nextflow)"
+else
 	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/bash-linux-x86_64"
 	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
 	( cd "${downloadDir}" && curl -L -O "${static_bash_url}" )
