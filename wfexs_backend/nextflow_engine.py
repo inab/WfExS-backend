@@ -96,8 +96,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
     def WorkflowType(cls) -> WorkflowType:
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
+            name='Nextflow',
             clazz=cls,
-            uri='https://www.nextflow.io/',
+            uriMatch=[ 'https://www.nextflow.io/' ],
+            uriTemplate='https://www.nextflow.io/',
+            url='https://www.nextflow.io/',
             trs_descriptor='NFL',
             rocrate_programming_language='#nextflow'
         )
@@ -180,7 +183,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if engineVer is None:
             engineVer = self.nxf_version
         
-        return engineVer, LocalWorkflow(dir=nfDir, relPath=candidateNf, effectiveCheckout=localWf.effectiveCheckout)
+        # The engine version should be used to create the id of the workflow language
+        return engineVer, LocalWorkflow(dir=nfDir, relPath=candidateNf, effectiveCheckout=localWf.effectiveCheckout, langVersion=engineVer)
 
     def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
         """

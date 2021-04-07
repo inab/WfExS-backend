@@ -23,7 +23,8 @@ import enum
 import functools
 import hashlib
 import os
-from typing import Any, Callable, List, Mapping, NamedTuple, NewType, Tuple, Type, Union
+from typing import Any, Callable, List, Mapping, NamedTuple
+from typing import NewType, Pattern, Tuple, Type, Union
 
 DEFAULT_GIT_CMD = 'git'
 DEFAULT_DOCKER_CMD = 'docker'
@@ -62,6 +63,9 @@ EnginePath = NewType('EnginePath', AbsPath)
 
 # This is a workflow engine version
 EngineVersion = NewType('EngineVersion', str)
+
+# This is a workflow language version
+WFLangVersion = NewType('WFLangVersion', str)
 
 # This represents a fingerprint from an installation, a docker image, etc...
 # It should follow next format
@@ -186,10 +190,12 @@ class LocalWorkflow(NamedTuple):
     dir: The path to the directory where the checkout was applied
     relPath: Inside the checkout, the relative path to the workflow definition
     effectiveCheckout: hex hash of the materialized checkout
+    langVersion: workflow language version / revision
     """
     dir: AbsPath
     relPath: RelPath
     effectiveCheckout: RepoTag
+    langVersion: WFLangVersion = None
 
 
 # This skeleton is here only for type mapping reasons
@@ -203,14 +209,20 @@ TRS_Workflow_Descriptor = str
 class WorkflowType(NamedTuple):
     """
     engineName: symbolic name of the engine
+    name: Textual representation of the workflow language
     clazz: Class implementing the engine invocation
-    uri: The URI used in RO-Crate to identify the workflow type
+    uriMatch: The URI patterns used in RO-Crate to identify the workflow type
+    uriTemplate: The URI template to be used when RO-Crate ComputerLanguage is generated
+    url: The URL used in RO-Crate to represent the workflow language
     trs_descriptor: The string used in GA4GH TRSv2 specification to define this workflow type
     rocrate_programming_language: Traditional internal id in RO-Crate implementations used for this workflow type (to be deprecated)
     """
     engineName: str
+    name: str
     clazz: Type[AbstractWorkflowEngineType]
-    uri: URIType
+    uriMatch: List[Union[Pattern, URIType]]
+    uriTemplate: URIType
+    url: URIType
     trs_descriptor: TRS_Workflow_Descriptor
     rocrate_programming_language: str
 

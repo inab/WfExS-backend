@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 import json
+import re
 import subprocess
 import tempfile
 import venv
@@ -83,8 +84,11 @@ class CWLWorkflowEngine(WorkflowEngine):
     def WorkflowType(cls) -> WorkflowType:
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
+            name='Common Workflow Language',
             clazz=cls,
-            uri='https://w3id.org/cwl/v1.0/',
+            uriMatch=[ re.compile(r'^https://w3id\.org/cwl/') ],
+            uriTemplate=r'https://w3id.org/cwl/{}/',
+            url='https://www.commonwl.org/',
             trs_descriptor='CWL',
             rocrate_programming_language='#cwl'
         )
@@ -110,6 +114,8 @@ class CWLWorkflowEngine(WorkflowEngine):
         if cwlVersion is None:
             return None, None
         
+        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=localWf.relPath, effectiveCheckout=localWf.effectiveCheckout, langVersion=cwlVersion)
+        
         # TODO: Check best version of the engine
         if localWf.relPath is not None:
             engineVer = self.cwl_version
@@ -117,7 +123,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         if engineVer is None:
             engineVer = self.cwl_version
 
-        return engineVer, localWf
+        return engineVer, newLocalWf
 
     def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
         """
@@ -237,8 +243,10 @@ class CWLWorkflowEngine(WorkflowEngine):
         containerTags = set()
         
         # Getting the identifiers
+        cwlVersion = None
         with open(packedLocalWorkflowFile, encoding='utf-8') as pLWH:
             wf_yaml = yaml.safe_load(pLWH)  # parse packed CWL
+            cwlVersion = wf_yaml.get('cwlVersion','v1.0')
             dockerExprParser = jsonpath_ng.ext.parse('$."$graph"..requirements[?class = "DockerRequirement"][*]')
             for match in dockerExprParser.find(wf_yaml):
                 dockerPullId = match.value.get('dockerPull')
@@ -252,7 +260,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 
                 containerTags.add(dockerPullId)
         
-        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=packedLocalWorkflowFile, effectiveCheckout=localWf.effectiveCheckout)
+        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=packedLocalWorkflowFile, effectiveCheckout=localWf.effectiveCheckout, langVersion=cwlVersion)
         newWfEngine = MaterializedWorkflowEngine(
                             instance=matWorkflowEngine.instance,
                             version=engineVersion,

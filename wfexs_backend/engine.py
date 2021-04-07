@@ -33,6 +33,9 @@ from collections import namedtuple
 from .container import Container, ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 
+from rocrate.rocrate import ROCrate
+from rocrate.model.computerlanguage import ComputerLanguage
+
 # Constants
 WORKDIR_INPUTS_RELDIR = 'inputs'
 WORKDIR_INTERMEDIATE_RELDIR = 'intermediate'
@@ -204,7 +207,30 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @property
     def workflowType(self) -> WorkflowType:
         return self.WorkflowType()
-
+    
+    def getEmptyCrateAndComputerLanguage(self, langVersion: WFLangVersion) -> ComputerLanguage:
+        """
+        Due the internal synergies between an instance of ComputerLanguage
+        and the RO-Crate it is attached to, both of them should be created
+        here, just at the same time
+        """
+        
+        wfType = self.workflowType
+        crate = ROCrate()
+        compLang = ComputerLanguage(crate, identifier=wfType.rocrate_programming_language, properties={
+            "name": wfType.name,
+            "alternateName": wfType.trs_descriptor,
+            "identifier": {
+                "@id": wfType.uriTemplate.format(langVersion)
+            },
+            "url": {
+                "@id": wfType.url
+            },
+            "version": langVersion
+        })
+        
+        return crate , compLang  
+    
     @abc.abstractmethod
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """

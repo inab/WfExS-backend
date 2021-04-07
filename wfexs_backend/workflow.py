@@ -29,8 +29,11 @@ import time
 import types
 import uuid
 
+from pathlib import Path
+from typing import Pattern
 from urllib import request, parse
 from rocrate import rocrate, rocrate_api
+import bagit
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
@@ -82,7 +85,6 @@ class WF:
     WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
-    RECOGNIZED_ROCRATE_PROG_LANG = dict(map(lambda t: (t.uri, t), WORKFLOW_ENGINES))
 
     DEFAULT_SCHEME_HANDLERS = {
         'http': fetchers.fetchClassicURL,
@@ -99,7 +101,7 @@ class WF:
         from pwgen_passphrase.__main__ import generate_passphrase, list_wordlists, read_wordlist
 
         wordlists_filenames = list_wordlists()
-        wordlists_tags = [*wordlists_filenames.keys()]
+        wordlists_tags = [ *wordlists_filenames.keys() ]
         wordlist_filename = wordlists_filenames[wordlists_tags[random.randrange(len(wordlists_tags))]]
 
         wordlist = read_wordlist(wordlist_filename).splitlines()
@@ -327,7 +329,9 @@ class WF:
         self.encWorkDir = None
         self.encfsThread = None
         self.doUnmount = False
-
+        self.paranoidMode = False
+        self.bag = None
+        
         # And the copy of scheme handlers
         self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
 
@@ -403,8 +407,8 @@ class WF:
             self.rawWorkDir = uniqueRawWorkDir
 
         if self.workDir is None:
-            doSecureWorkDir = workflow_config.get('secure', True)
-
+            doSecureWorkDir = workflow_config.get('secure',True) or self.paranoidMode
+            
             self.setupWorkdir(doSecureWorkDir)
 
         metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
@@ -492,7 +496,7 @@ class WF:
                         sender_pubkey=None
                     )
 
-                encfs_type, _, securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
+                encfs_type , _ , securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
                 self.logger.debug(encfs_type + ' ' + securePassphrase)
                 try:
                     encfs_type = EncryptedFSType(encfs_type)
@@ -575,9 +579,9 @@ class WF:
                     ).wait()
 
                     if retval != 0:
-                        with open(encfs_umount_stdout.name, "r") as c_stF:
+                        with open(encfs_umount_stdout.name, mode="r") as c_stF:
                             encfs_umount_stdout_v = c_stF.read()
-                        with open(encfs_umount_stderr.name, "r") as c_stF:
+                        with open(encfs_umount_stderr.name, mode="r") as c_stF:
                             encfs_umount_stderr_v = c_stF.read()
 
                         errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
@@ -620,10 +624,13 @@ class WF:
         # In order to be able to build next paths to call
         workflowMetaFilename = os.path.join(metaDir, WORKDIR_WORKFLOW_META_FILE)
         securityContextFilename = os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-
+        
         return self.fromFiles(workflowMetaFilename, securityContextFilename)
-
-    def fromFiles(self, workflowMetaFilename, securityContextsConfigFilename=None):
+    
+    def enableParanoidMode(self):
+        self.paranoidMode = True
+    
+    def fromFiles(self, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode=False):
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = yaml.load(wcf, Loader=YAMLLoader)
 
@@ -633,10 +640,10 @@ class WF:
                 creds_config = yaml.load(scf, Loader=YAMLLoader)
         else:
             creds_config = {}
-
-        return self.fromDescription(workflow_meta, creds_config)
-
-    def fromDescription(self, workflow_meta, creds_config=None):
+        
+        return self.fromDescription(workflow_meta, creds_config, paranoidMode=paranoidMode)
+    
+    def fromDescription(self, workflow_meta, creds_config=None, paranoidMode=False):
         """
 
         :param workflow_meta: The configuration describing both the workflow
@@ -646,7 +653,9 @@ class WF:
         :type creds_config: dict
         :return: Workflow configuration
         """
-
+        if paranoidMode:
+            self.enableParanoidMode()
+        
         return self.newSetup(
             workflow_meta['workflow_id'],
             workflow_meta.get('version'),
@@ -696,6 +705,7 @@ class WF:
         self.repoRelPath = repoRelPath
 
         repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
+        # Workflow Language version cannot be assumed here yet
         localWorkflow = LocalWorkflow(dir=repoDir, relPath=repoRelPath, effectiveCheckout=repoEffectiveCheckout)
         self.logger.info("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
 
@@ -771,9 +781,44 @@ class WF:
 
         self.schemeHandlers[scheme.lower()] = handler
 
-    def materializeInputs(self, offline: bool = False):
-        theParams, numInputs = self.fetchInputs(self.params, workflowInputs_destdir=self.inputsDir,
-                                                workflowInputs_cacheDir=self.cacheWorkflowInputsDir, offline=offline)
+    def injectInputs(self, paths, workflowInputs_destdir=None, workflowInputs_cacheDir=None, lastInput=0):
+        if workflowInputs_destdir is None:
+            workflowInputs_destdir = self.inputsDir
+        if workflowInputs_cacheDir is None:
+            workflowInputs_cacheDir = self.cacheWorkflowInputsDir
+        
+        cacheable = not self.paranoidMode
+        # The storage dir depends on whether it can be cached or not
+        storeDir = workflowInputs_cacheDir  if cacheable  else  workflowInputs_destdir
+        for path in paths:
+            # We are sending the context name thinking in the future,
+            # as it could contain potential hints for authenticated access
+            fileuri = parse.urlunparse(('file','',os.path.abspath(path),'','',''))
+            matContent = self.downloadInputFile(fileuri, workflowInputs_destdir=storeDir)
+            
+            # Now, time to create the symbolic link
+            lastInput += 1
+            
+            prettyLocal = os.path.join(workflowInputs_destdir, matContent.prettyFilename)
+            hardenPrettyLocal = False
+            if os.path.islink(prettyLocal):
+                oldLocal = os.readlink(prettyLocal)
+                
+                hardenPrettyLocal = oldLocal != matContent.local
+            elif os.path.exists(prettyLocal):
+                hardenPrettyLocal = True
+            
+            if hardenPrettyLocal:
+                # Trying to avoid collisions on input naming
+                prettyLocal = os.path.join(workflowInputs_destdir, str(lastInput) + '_' + matContent.prettyFilename)
+            
+            if not os.path.exists(prettyLocal):
+                os.symlink(matContent.local,prettyLocal)
+        
+        return lastInput
+    
+    def materializeInputs(self, offline:bool=False, lastInput=0):
+        theParams, numInputs = self.fetchInputs(self.params, workflowInputs_destdir=self.inputsDir, workflowInputs_cacheDir=self.cacheWorkflowInputsDir, offline=offline, lastInput=lastInput)
         self.materializedParams = theParams
 
     def fetchInputs(self, params, workflowInputs_destdir: AbsPath = None, workflowInputs_cacheDir: AbsPath = None,
@@ -819,7 +864,7 @@ class WF:
                             os.makedirs(inputDestDir, exist_ok=True)
 
                         remote_files = inputs['url']
-                        cacheable = True if inputs.get('cache', True) else False
+                        cacheable = not self.paranoidMode  if inputs.get('cache',True)  else  False
                         if not isinstance(remote_files, list):  # more than one input file
                             remote_files = [remote_files]
 
@@ -877,7 +922,13 @@ class WF:
                 theInputs.append(MaterializedInput(linearKey, inputs))
 
         return theInputs, lastInput
-
+    
+    def workdirToBagit(self):
+        """
+        BEWARE: This is a destructive step! So, once run, there is no back!
+        """
+        self.bag = bagit.make_bag(self.workDir)
+    
     DefaultCardinality = '1'
     CardinalityMapping = {
         '1': (1, 1),
@@ -954,21 +1005,66 @@ class WF:
         Create RO-crate from execution provenance.
         """
         # TODO: digest the results from executeWorkflow plus all the provenance
-        global wfCrate
 
         # Create RO-crate using crate.zip downloaded from WorkflowHub
         if os.path.isfile(str(self.cacheROCrateFilename)):
             wfCrate = rocrate.ROCrate(self.cacheROCrateFilename)
-
+            
         # Create RO-Crate using rocrate_api
         # TODO no exists the version implemented for Nextflow in rocrate_api
         else:
+            # FIXME: What to do when workflow is in git repository different from GitHub??
+            # FIXME: What to do when workflow is not in a git repository??
             wf_path = os.path.join(self.localWorkflow.dir, self.localWorkflow.relPath)
-            wf_type = self.engine.ENGINE_NAME
+            wfCrate , compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(self.localWorkflow.langVersion)
             wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(self.localWorkflow.relPath)
-            # TODO create method to parse wf_url
+            
+            # TODO create method to create wf_url
+            matWf = self.materializedEngine.workflow
+            parsed_repo_url = parse.urlparse(self.repoURL)
+            if parsed_repo_url.netloc == 'github.com':
+                parsed_repo_path = parsed_repo_url.path.split('/')
+                repo_name = parsed_repo_path[2]
+                if repo_name.endswith('.git'):
+                    repo_name = repo_name[:-4]
+                wf_entrypoint_path = [
+                    '', # Needed to prepend a slash
+                    parsed_repo_path[1],
+                    repo_name,
+                    matWf.effectiveCheckout,
+                    matWf.relPath
+                ]
+                wf_entrypoint_url = parse.urlunparse(
+                    ('https', 'raw.githubusercontent.com', '/'.join(wf_entrypoint_path), '', '', ''))
+            else:
+                raise WFException("FIXME: Unsupported http(s) git repository {}".format(self.repoURL))
+            
+            # TODO assign something meaningful to cwl
+            cwl = True
 
-            wfCrate = rocrate_api.make_workflow_rocrate(workflow_path=wf_path, wf_type=wf_type)
+            workflow_path = Path(wf_path)
+            wf_file = wfCrate.add_workflow(
+                str(workflow_path), workflow_path.name, fetch_remote=False,
+                main=True, lang=compLang, gen_cwl=(cwl is None)
+            )
+            # This is needed, as it is not automatically added when the
+            # `lang` argument in workflow creation was not a string
+            wfCrate.add(compLang)
+
+            # if the source is a remote URL then add https://schema.org/codeRepository
+            # property to it this can be checked by checking if the source is a URL
+            # instead of a local path
+            wf_file.properties()['url'] = wf_entrypoint_url
+            wf_file.properties()['codeRepository'] = wf_url
+            #if 'url' in wf_file.properties():
+            #    wf_file['codeRepository'] = wf_file['url']
+
+            # TODO: add extra files, like nextflow.config in the case of
+            # Nextflow workflows, the diagram, an abstract CWL
+            # representation of the workflow (when it is not a CWL workflow)
+            # etc...
+            #for file_entry in include_files:
+            #    wfCrate.add_file(file_entry)
             wfCrate.isBasedOn = wf_url
 
         # Add inputs provenance to RO-crate
@@ -1022,8 +1118,8 @@ class WF:
         #         else:
         #             pass # TODO raise Exception
 
-        # Save RO-crate as crate.zip
-        wfCrate.writeZip(self.outputsDir + "/crate")
+        # Save RO-crate as execution.crate.zip
+        wfCrate.writeZip(os.path.join(self.outputsDir, "execution.crate"))
         self.logger.info("RO-Crate created: {}".format(self.outputsDir))
 
         # TODO error handling
@@ -1230,14 +1326,14 @@ class WF:
             chosenDescriptorType, safe='') + '/files?' + parse.urlencode({'format': 'zip'})
 
         return self.getWorkflowRepoFromROCrate(roCrateURL,
-                                               expectedProgrammingLanguageId=self.RECOGNIZED_TRS_DESCRIPTORS[
-                                                   chosenDescriptorType].uri)
+                                               expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
+                                                   chosenDescriptorType])
 
-    def getWorkflowRepoFromROCrate(self, roCrateURL, expectedProgrammingLanguageId=None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+    def getWorkflowRepoFromROCrate(self, roCrateURL, expectedEngineDesc:WorkflowType=None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
         :param roCrateURL:
-        :param expectedProgrammingLanguageId:
+        :param expectedEngineDesc: If defined, an instance of WorkflowType
         :return:
         """
         roCrateFile = self.downloadROcrate(roCrateURL)
@@ -1247,6 +1343,7 @@ class WF:
         # TODO: get roCrateObj mainEntity programming language
         # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
         mainEntityProgrammingLanguageId = None
+        mainEntityProgrammingLanguageUrl = None
         mainEntityIdHolder = None
         mainEntityId = None
         workflowUploadURL = None
@@ -1262,17 +1359,44 @@ class WF:
                 workflowTypeId = eAsLD['programmingLanguage']['@id']
             elif e['@id'] == workflowTypeId:
                 # A bit dirty, but it works
-                mainEntityProgrammingLanguageId = e.as_jsonld()['identifier']['@id']
-
-        if mainEntityProgrammingLanguageId not in self.RECOGNIZED_ROCRATE_PROG_LANG:
+                eAsLD = e.as_jsonld()
+                mainEntityProgrammingLanguageId = eAsLD.get('identifier', {}).get('@id')
+                mainEntityProgrammingLanguageUrl = eAsLD.get('url', {}).get('@id')
+        
+        # Now, it is time to match the language id
+        engineDescById = None
+        engineDescByUrl = None
+        for possibleEngineDesc in self.WORKFLOW_ENGINES:
+            if (engineDescById is None) and (mainEntityProgrammingLanguageId is not None):
+                for pat in possibleEngineDesc.uriPats:
+                    if isinstance(pat, Pattern):
+                        match = pat.search(mainEntityProgrammingLanguageId)
+                        if match:
+                            engineDescById = possibleEngineDesc
+                    elif pat == mainEntityProgrammingLanguageId:
+                        engineDescById = possibleEngineDesc
+            
+            if (engineDescByUrl is None) and (mainEntityProgrammingLanguageUrl == possibleEngineDesc.url):
+                engineDescByUrl = possibleEngineDesc
+        
+        engineDesc = None
+        if engineDescById is not None:
+            engineDesc = engineDescById
+        elif engineDescByUrl is not None:
+            engineDesc = engineDescByUrl
+        else:
             raise WFException(
-                'Found programming language {} in RO-Crate manifest is not among the acknowledged ones'.format(
-                    mainEntityProgrammingLanguageId))
-        elif (
-                expectedProgrammingLanguageId is not None) and mainEntityProgrammingLanguageId != expectedProgrammingLanguageId:
+                'Found programming language {} (url {}) in RO-Crate manifest is not among the acknowledged ones'.format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl))
+        
+        if (engineDescById is not None) and (engineDescByUrl is not None) and engineDescById != engineDescByUrl:
+            self.logger.warning('Found programming language {} (url {}) leads to different engines'.format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl))
+        
+        if (expectedEngineDesc is not None) and engineDesc != expectedEngineDesc:
             raise WFException(
-                'Expected programming language {} does not match found one {} in RO-Crate manifest'.format(
-                    expectedProgrammingLanguageId, mainEntityProgrammingLanguageId))
+                'Expected programming language {} does not match identified one {} in RO-Crate manifest'.format(
+                    expectedEngineDesc.engineName, engineDesc.engineName))
 
         # This workflow URL, in the case of github, can provide the repo,
         # the branch/tag/checkout , and the relative directory in the
@@ -1285,7 +1409,7 @@ class WF:
             raise WFException('Unable to guess repository from RO-Crate manifest')
 
         # It must return four elements:
-        return self.RECOGNIZED_ROCRATE_PROG_LANG[mainEntityProgrammingLanguageId], repoURL, repoTag, repoRelPath
+        return engineDesc, repoURL, repoTag, repoRelPath
 
     def guessRepoParams(self, wf_url: str) -> Tuple[RepoURL, RepoTag, RelPath]:
         repoURL = None
@@ -1329,6 +1453,9 @@ class WF:
 
                     if len(wf_path) >= 5:
                         repoRelPath = '/'.join(wf_path[4:])
+        else:
+            raise WFException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
+            
 
         self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
 
