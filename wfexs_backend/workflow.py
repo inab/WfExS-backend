@@ -1368,7 +1368,7 @@ class WF:
         engineDescByUrl = None
         for possibleEngineDesc in self.WORKFLOW_ENGINES:
             if (engineDescById is None) and (mainEntityProgrammingLanguageId is not None):
-                for pat in possibleEngineDesc.uriPats:
+                for pat in possibleEngineDesc.uriMatch:
                     if isinstance(pat, Pattern):
                         match = pat.search(mainEntityProgrammingLanguageId)
                         if match:
