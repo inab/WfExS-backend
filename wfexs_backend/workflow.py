@@ -1076,7 +1076,7 @@ class WF:
                     if os.path.isfile(itemInSource):
                         properties = {
                             'name': in_item.name,
-                            'uri': itemInValues.uri
+                            'url': itemInValues.uri
                         }
                         wfCrate.add_file(source=itemInSource, properties=properties)
 
