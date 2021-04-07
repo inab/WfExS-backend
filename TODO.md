@@ -39,7 +39,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
   - [ ] **Step 9.a**: Use Crypt4GH to encrypt with crypt4gh the generated RO-Crate.
 
-  - [ ] **Step 9.b**: Generated RO-Crate should be consumable by WorkflowHub.
+  - [x] **Step 9.b**: Generated RO-Crate should be consumable by WorkflowHub.
 
   - [ ] **Step 9.c**: Generated RO-Crate should be consumable by WfExS-backend.
   

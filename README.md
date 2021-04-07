@@ -62,6 +62,8 @@ WfExS commands are:
 
 * `execute`: This command's behaviour is equivalent to `stage` followed by `offline-execute`.
 
+When the execution has finished properly, the working directory `outputs` subdirectory should contain both the outputs and an `execution.crate.zip`, which can be used to create a workflow entry in <https://workflowhub.eu>.
+
 ## Configuration files
 
 The program uses three different types of configuration files:
