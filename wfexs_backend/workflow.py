@@ -1032,7 +1032,7 @@ class WF:
                     parsed_repo_path[1],
                     repo_name,
                     matWf.effectiveCheckout,
-                    matWf.relPath
+                    self.localWorkflow.relPath
                 ]
                 wf_entrypoint_url = parse.urlunparse(
                     ('https', 'raw.githubusercontent.com', '/'.join(wf_entrypoint_path), '', '', ''))
