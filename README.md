@@ -112,10 +112,10 @@ The program uses three different types of configuration files:
 ## WorkflowHub scenario
 
 <span style="display:block;text-align:center">
-![WfExS-backend flowchart, WorkflowHub scenario](docs/wfexs-flowchart.svg)
+<img src="docs/wfexs-flowchart.svg" alt="WfExS-backend flowchart, WorkflowHub scenario" />
 </span>
 
 ## GitHub repo scenario
 <span style="display:block;text-align:center">
-![WfExS-backend, bare GitHub scenario](wfexs-flowchart-github.svg)
+<img src="docs/wfexs-flowchart-github.svg" alt="WfExS-backend, bare GitHub scenario" />
 </span>
