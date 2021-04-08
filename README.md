@@ -108,7 +108,14 @@ The program uses three different types of configuration files:
 
 * Security contexts file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_credentials_nxf.yaml), [CWL example](tests/wetlab2variations_credentials_cwl.yaml)).
 
+# Scenarios
+## WorkflowHub scenario
 
-## Flowchart
+<span style="display:block;text-align:center">
+![WfExS-backend flowchart (WorkflowHub scenario)](docs/wfexs-flowchart.svg)
+</span>
 
-![WfExS-backend flowchart](docs/wfexs-flowchart.svg)
+## GitHub repo scenario
+<span style="display:block;text-align:center">
+![WfExS-backend (bare GitHub scenario)](wfexs-flowchart-github.svg)
+</span>
