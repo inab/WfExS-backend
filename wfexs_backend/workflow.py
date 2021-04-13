@@ -188,7 +188,7 @@ class WF:
         return updated, local_config
 
     @classmethod
-    def FromDescription(cls, workflow_meta, local_config, creds_config=None):
+    def FromDescription(cls, workflow_meta, local_config, creds_config=None, config_directory=None):
         """
 
         :param workflow_meta: The configuration describing both the workflow
@@ -202,9 +202,12 @@ class WF:
         """
         if creds_config is None:
             creds_config = {}
+        
+        _ , updated_local_config = cls.bootstrap(local_config, config_directory=config_directory)
 
         return cls(
-            local_config
+            local_config,
+            config_directory=config_directory
         ).newSetup(
             workflow_meta['workflow_id'],
             workflow_meta.get('version'),
@@ -217,7 +220,7 @@ class WF:
         )
 
     @classmethod
-    def fromForm(cls, workflow_meta, local_config):  # NEW
+    def fromForm(cls, workflow_meta, local_config, config_directory=None):  # NEW
         """
 
         :param workflow_meta: The configuration describing both the workflow
@@ -227,9 +230,12 @@ class WF:
         :type local_config: dict
         :return: Workflow configuration
         """
-
+        
+        _ , updated_local_config = cls.bootstrap(local_config, config_directory=config_directory)
+        
         return cls(
-            local_config=local_config
+            local_config=local_config,
+            config_directory=config_directory
         ).newSetup(
             workflow_meta['workflow_id'],
             workflow_meta.get('version'),
