@@ -119,3 +119,8 @@ The program uses three different types of configuration files:
 <span style="display:block;text-align:center">
 <img src="docs/wfexs-flowchart-github.svg" alt="WfExS-backend, bare GitHub scenario" />
 </span>
+
+## License
+* © 2020-2021 Barcelona Supercomputing Center (BSC), ES
+
+Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE.txt` for details.
