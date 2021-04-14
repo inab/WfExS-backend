@@ -28,45 +28,70 @@ import stat
 from urllib import request, parse
 
 from .common import *
+from .utils.ftp_downloader import FTPDownloader
 
 
-def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None, offline:bool=False) -> None:
+def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
     """
     Method to fetch contents from http, https and ftp
 
     :param remote_file:
     :param cachedFilename:
     :param secContext:
-    :param offline:
     """
     
-    # As this is a handler for online resources, complain in offline mode
-    if offline:
-        raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, cachedFilename))
+    if isinstance(secContext, dict):
+        username = secContext.get('username')
+        password = secContext.get('password')
+        if username is not None:
+            if password is None:
+                password = ''
+
+            # Time to set up user and password in URL
+            parsedInputURL = parse.urlparse(remote_file)
+
+            netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
+                                                                        safe='') + '@' + parsedInputURL.hostname
+            if parsedInputURL.port is not None:
+                netloc += ':' + str(parsedInputURL.port)
+
+            # Now the credentials are properly set up
+            remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
+                                            parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
+    with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
+        shutil.copyfileobj(url_response, download_file)
     
-    try:
-        if isinstance(secContext, dict):
-            username = secContext.get('username')
-            password = secContext.get('password')
-            if username is not None:
-                if password is None:
-                    password = ''
+    return ContentKind.File
 
-                # Time to set up user and password in URL
-                parsedInputURL = parse.urlparse(remote_file)
+def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
+    """
+    Method to fetch contents from ftp
 
-                netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
-                                                                            safe='') + '@' + parsedInputURL.hostname
-                if parsedInputURL.port is not None:
-                    netloc += ':' + str(parsedInputURL.port)
-
-                # Now the credentials are properly set up
-                remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
-                                                parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
-        with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
-            shutil.copyfileobj(url_response, download_file)
-    except Exception as e:
-        raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
+    :param remote_file:
+    :param cachedFilename:
+    :param secContext:
+    """
+    
+    parsedInputURL = parse.urlparse(remote_file)
+    kind = None
+    connParams = {
+        'HOST': parsedInputURL.hostname,
+    }
+    if parsedInputURL.port is not None:
+        connParams['PORT'] = parsedInputURL.port
+    
+    if isinstance(secContext, dict):
+        connParams['USER'] = secContext.get('username')
+        connParams['PASSWORD'] = secContext.get('password')
+    
+    ftp_client = FTPDownloader(**connParams)
+    retval = ftp_client.download(download_path=parsedInputURL.path, upload_path=cachedFilename)
+    if isinstance(retval, list):
+        kind = ContentKind.Directory
+    else:
+        kind = ContentKind.File
+    
+    return kind
 
 def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None):
     if sshStat is None:
@@ -75,8 +100,10 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None):
     # Trios
     transTrios = []
     recur = []
+    kind = None
     if stat.S_ISREG(sshStat.st_mode):
         transTrios.append((sshPath, sshStat, localPath))
+        kind = ContentKind.File
     elif stat.S_ISDIR(sshStat.st_mode):
         # Recursive
         os.makedirs(localPath, exist_ok=True)
@@ -91,8 +118,9 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None):
                 transTrios.append((rPath, rStat, lPath))
             elif stat.S_ISDIR(rStat.st_mode):
                 recur.append((rPath, rStat, lPath))
+        kind = ContentKind.Directory
     else:
-        return False
+        return False, None
     
     # Now, transfer these
     numCopied = 0
@@ -105,10 +133,10 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None):
     for rDir, rStat, lDir in recur:
         numCopied += sftpCopy(sftp, rDir, lDir, sshStat=rStat)
     
-    return numCopied
+    return numCopied, kind
 
 # TODO: test this codepath
-def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None, offline:bool=False) -> None:
+def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
     """
     Method to fetch contents from ssh / sftp servers
 
@@ -116,10 +144,6 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Security
     :param cachedFilename: Destination filename for the fetched content
     :param secContext: The security context containing the credentials
     """
-    
-    # As this is a handler for online resources, complain in offline mode
-    if offline:
-        raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, cachedFilename))
     
     # Sanitizing possible ill-formed inputs
     if not isinstance(secContext, dict):
@@ -158,15 +182,14 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Security
         t.connect(**connBlock)
         sftp = paramiko.SFTPClient.from_transport(t)
         
-        sftpCopy(sftp,sshPath,cachedFilename)
-    except Exception as e:
-        raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
+        _ , kind = sftpCopy(sftp,sshPath,cachedFilename)
+        return kind
     finally:
         # Closing the SFTP connection
         if t is not None:
             t.close()
 
-def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None, offline:bool=False) -> None:
+def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
     """
     Method to fetch contents from ssh / sftp servers
 
@@ -175,18 +198,28 @@ def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityCo
     :param secContext: The security context containing the credentials
     """
     
-    # As this is a handler for resources which could not be available outside the working directory, complain in offline mode
-    if offline:
-        raise WFException("Cannot transfer content in offline mode from {} to {}".format(remote_file, cachedFilename))
-    
     parsedInputURL = parse.urlparse(remote_file)
     localPath = parsedInputURL.path
     if not os.path.exists(localPath):
         raise WFException("Local path {} is not available".format(localPath))
     
+    kind = None
     if os.path.isdir(localPath):
         shutil.copytree(localPath, cachedFilename)
+        kind = ContentKind.Directory
     elif os.path.isfile(localPath):
         shutil.copy2(localPath, cachedFilename)
+        kind = ContentKind.File
     else:
         raise WFException("Local path {} is neither a file nor a directory".format(localPath))
+    
+    return kind
+
+DEFAULT_SCHEME_HANDLERS = {
+    'http': fetchClassicURL,
+    'https': fetchClassicURL,
+    'ftp': fetchClassicURL,
+    'sftp': fetchSSHURL,
+    'ssh': fetchSSHURL,
+    'file': fetchFile,
+}

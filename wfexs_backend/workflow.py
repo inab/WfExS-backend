@@ -86,15 +86,6 @@ class WF:
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
 
-    DEFAULT_SCHEME_HANDLERS = {
-        'http': fetchers.fetchClassicURL,
-        'https': fetchers.fetchClassicURL,
-        'ftp': fetchers.fetchClassicURL,
-        'sftp': fetchers.fetchSSHURL,
-        'ssh': fetchers.fetchSSHURL,
-        'file': fetchers.fetchFile,
-    }
-
     @classmethod
     def generate_passphrase(cls) -> str:
         import random
@@ -339,7 +330,7 @@ class WF:
         self.bag = None
         
         # And the copy of scheme handlers
-        self.schemeHandlers = self.DEFAULT_SCHEME_HANDLERS.copy()
+        self.schemeHandlers = fetchers.DEFAULT_SCHEME_HANDLERS.copy()
 
     def newSetup(self,
                  workflow_id,
@@ -908,7 +899,7 @@ class WF:
                                 os.symlink(matContent.local, prettyLocal)
 
                             remote_pairs.append(
-                                MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename))
+                                MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename, matContent.kind))
 
                         theInputs.append(MaterializedInput(linearKey, remote_pairs))
                     else:
@@ -944,9 +935,9 @@ class WF:
     }
 
     OutputClassMapping = {
-        'File': OutputKind.File,
-        'Directory': OutputKind.Directory,
-        'Value': OutputKind.Value,
+        'File': ContentKind.File,
+        'Directory': ContentKind.Directory,
+        'Value': ContentKind.Value,
     }
 
     def parseExpectedOutputs(self, outputs: List[Any]) -> List[ExpectedOutput]:
@@ -1085,7 +1076,8 @@ class WF:
                             'url': itemInValues.uri
                         }
                         wfCrate.add_file(source=itemInSource, properties=properties)
-
+                    elif os.path.isdir(itemInSource):
+                        self.logger.error("FIXME: input directory / dataset handling in RO-Crate")
                     else:
                         pass  # TODO raise Exception
 
@@ -1492,7 +1484,7 @@ class WF:
     def downloadInputFile(self, remote_file, workflowInputs_destdir: AbsPath = None,
                           contextName=None, offline: bool = False) -> MaterializedContent:
         """
-        Download remote file.
+        Download remote file or directory / dataset.
 
         :param remote_file: URL or CURIE to download remote file
         :param contextName:
@@ -1538,7 +1530,22 @@ class WF:
                         raise WFException(
                             'No security context {} is available, needed by {}'.format(contextName, remote_file))
 
+                # As this is a handler for online resources, comply with offline mode
+                if offline:
+                    raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, cachedFilename))
+                
                 # Content is fetched here
-                schemeHandler(remote_file, cachedFilename, secContext=secContext, offline=offline)
+                try:
+                    inputKind = schemeHandler(remote_file, cachedFilename, secContext=secContext)
+                except WFException as we:
+                    raise we
+                except Exception as e:
+                    raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
+            elif os.path.isfile(cachedFilename):
+                inputKind = ContentKind.File
+            elif os.path.isdir(cachedFilename):
+                inputKind = ContentKind.Directory
+            else:
+                raise WFException("Cached {} from {} is neither file nor directory".format(cachedFilename, remote_file))
 
-            return MaterializedContent(cachedFilename, remote_file, prettyFilename)
+            return MaterializedContent(cachedFilename, remote_file, prettyFilename, inputKind)
