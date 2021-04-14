@@ -333,7 +333,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             matValues = []
             if expectedOutput.glob is not None:
                 filterMethod = None
-                if expectedOutput.kind == OutputKind.Directory:
+                if expectedOutput.kind == ContentKind.Directory:
                     filterMethod = os.path.isdir
                 else:
                     filterMethod = os.path.isfile
@@ -349,13 +349,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 
                 for matchedPath in matchedPaths:
                     theContent = None
-                    if expectedOutput.kind == OutputKind.Directory:
+                    if expectedOutput.kind == ContentKind.Directory:
                         theContent = GetGeneratedDirectoryContent(
                             matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised
                             preferredFilename=expectedOutput.preferredFilename
                         )
-                    elif expectedOutput.kind == OutputKind.File:
+                    elif expectedOutput.kind == ContentKind.File:
                         theContent = GeneratedContent(
                             local=matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised

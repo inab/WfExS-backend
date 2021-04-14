@@ -84,6 +84,12 @@ SecurityContextConfig = Mapping[str, object]
 ContainerFileNamingMethod = Callable[[URIType], RelPath]
 
 
+class ContentKind(enum.Enum):
+    File = 'file'
+    Directory = 'dir'
+    Value = 'val'
+
+
 class MaterializedContent(NamedTuple):
     """
     local: Local absolute path of the content which was materialized. It
@@ -97,6 +103,7 @@ class MaterializedContent(NamedTuple):
     local: AbsPath
     uri: URIType
     prettyFilename: RelPath
+    kind: ContentKind = ContentKind.File
 
 
 class MaterializedInput(NamedTuple):
@@ -107,12 +114,6 @@ class MaterializedInput(NamedTuple):
     """
     name: SymbolicParamName
     values: List[Union[bool, str, int, float, MaterializedContent]]
-
-
-class OutputKind(enum.Enum):
-    File = 'file'
-    Directory = 'dir'
-    Value = 'val'
 
 
 GlobPattern = NewType('GlobPattern', str)
@@ -133,7 +134,7 @@ class ExpectedOutput(NamedTuple):
       local path, based on the output / working directory.
     """
     name: SymbolicOutputName
-    kind: OutputKind
+    kind: ContentKind
     preferredFilename: RelPath
     cardinality: Tuple[int, int]
     glob: GlobPattern
@@ -180,7 +181,7 @@ class MaterializedOutput(NamedTuple):
     prettyFilename: Relative "pretty" name to be used in provenance
     """
     name: SymbolicOutputName
-    kind: OutputKind
+    kind: ContentKind
     expectedCardinality: Tuple[int, int]
     values: List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]
 
@@ -327,9 +328,9 @@ def GetGeneratedDirectoryContent(thePath: AbsPath, uri: URIType = None, preferre
 
 
 CWLClass2WfExS = {
-    'Directory': OutputKind.Directory,
-    'File': OutputKind.File
-    # '???': OutputKind.Value
+    'Directory': ContentKind.Directory,
+    'File': ContentKind.File
+    # '???': ContentKind.Value
 }
 
 
@@ -346,7 +347,7 @@ def CWLDesc2Content(cwlDescs: Mapping[str, Any], logger, expectedOutput: Expecte
             logger.warning("For output {} obtained kind does not match ({} vs {})".format(expectedOutput.name, expectedOutput.kind, foundKind))
 
         matValue = None
-        if foundKind == OutputKind.Directory:
+        if foundKind == ContentKind.Directory:
             theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger)
             matValue = GeneratedDirectoryContent(
                 local=cwlDesc['path'],
@@ -355,7 +356,7 @@ def CWLDesc2Content(cwlDescs: Mapping[str, Any], logger, expectedOutput: Expecte
                 preferredFilename=None if expectedOutput is None else expectedOutput.preferredFilename,
                 values=theValues
             )
-        elif foundKind == OutputKind.File:
+        elif foundKind == ContentKind.File:
             matValue = GeneratedContent(
                 local=cwlDesc['path'],
                 signature=ComputeDigestFromFile(cwlDesc['path'])

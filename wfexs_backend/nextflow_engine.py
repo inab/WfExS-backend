@@ -678,11 +678,13 @@ STDERR
             
             for value in matInput.values:
                 if isinstance(value, MaterializedContent):
-                    if os.path.isfile(value.local):
+                    if value.kind in (ContentKind.Directory, ContentKind.File):
+                        if not os.path.exists(value.local):
+                            self.logger.warning("Input {} has values which are not materialized".format(matInput.name))
                         nxfValues.append(value.local)
                     else:
                         raise WorkflowEngineException(
-                            "ERROR: Input {} has values which are not materialized".format(matInput.name))
+                            "ERROR: Input {} has values of type {} this code does not know how to handle".format(matInput.name, value.kind))
                 else:
                     nxfValues.append(value)
             

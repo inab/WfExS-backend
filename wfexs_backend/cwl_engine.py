@@ -463,8 +463,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             raise WorkflowEngineException(
                 "ERROR: cannot create YAML file {}, {}".format(filename, error))
 
-    @staticmethod
-    def executionInputs(matInputs: List[MaterializedInput], cwlInputs):
+    def executionInputs(self, matInputs: List[MaterializedInput], cwlInputs):
         """
         Setting execution inputs needed to execute the workflow
         """
@@ -486,7 +485,9 @@ class CWLWorkflowEngine(WorkflowEngine):
                     
                     value = input_value
                     if isinstance(value, MaterializedContent):  # value of an input contains MaterializedContent
-                        if os.path.isfile(value.local):
+                        if value.kind in (ContentKind.Directory, ContentKind.File):
+                            if not os.path.exists(value.local):
+                                self.logger.warning("Input {} is not materialized".format(name))
                             value_local = value.local
                             if isinstance(value_type, dict):    # MaterializedContent is a List of File
                                 classType = value_type['items']
@@ -496,7 +497,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 execInputs[name] = {"class": classType, "location": value_local}
                         else:
                             raise WorkflowEngineException(
-                                "ERROR: Input {} is not materialized".format(name))
+                                "ERROR: Input {} has values of type {} this code does not know how to handle".format(name, value.kind))
                     else:
                         execInputs[name] = value
         
