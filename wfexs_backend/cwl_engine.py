@@ -17,7 +17,10 @@
 from __future__ import absolute_import
 
 import json
+import os
 import re
+import shutil
+import stat
 import subprocess
 import tempfile
 import venv
@@ -62,6 +65,8 @@ class CWLWorkflowEngine(WorkflowEngine):
     
     DEFAULT_CWL_UTILS_VERSION = '0.9'
     DEFAULT_SCHEMA_SALAD_VERSION = '7.1.20210309094900'
+    
+    NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
 
     ENGINE_NAME = 'cwl'
 
@@ -75,7 +80,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                          config_directory=config_directory)
 
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
-
+        
         # Setting up packed directory
         self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, 'wf-pack')
         os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
@@ -150,7 +155,23 @@ class CWLWorkflowEngine(WorkflowEngine):
         # from workflow execution backend
         if not os.path.isdir(cwl_install_dir):
             venv.create(cwl_install_dir, with_pip=True)
-
+        
+        # Let's be sure the nodejs wrapper, needed by cwltool
+        # is in place
+        node_wrapper_source_path = os.path.join(self.payloadsDir, self.NODEJS_SINGULARITY_WRAPPER)
+        node_wrapper_inst_path = os.path.join(cwl_install_dir,'bin','node')
+        if not os.path.isfile(node_wrapper_inst_path):
+            shutil.copy2(node_wrapper_source_path, node_wrapper_inst_path)
+        
+        # Assuring it has the permissions
+        if not os.access(node_wrapper_inst_path, os.X_OK):
+            os.chmod(node_wrapper_inst_path, stat.S_IREAD | stat.S_IEXEC)
+        
+        # And the symlink from nodejs to node
+        nodejs_wrapper_inst_path = os.path.join(cwl_install_dir,'bin','nodejs')
+        if not os.path.islink(nodejs_wrapper_inst_path):
+            os.symlink('node',nodejs_wrapper_inst_path)
+        
         # Now, time to run it
         instEnv = dict(os.environ)
         

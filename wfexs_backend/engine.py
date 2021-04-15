@@ -198,6 +198,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 break
         else:
             raise WorkflowEngineException("FATAL: No container factory implementation for {}".format(container_type))
+        
+        # Locating the payloads directory, where the nodejs wrapper should be placed
+        self.payloadsDir = os.path.join(os.path.dirname(__file__), 'payloads')
 
     @classmethod
     @abc.abstractmethod
