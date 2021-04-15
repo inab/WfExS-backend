@@ -41,12 +41,26 @@ with open('requirements.txt') as f:
         m = egg.search(line)
         requirements.append(line if m is None else m.group(1))
 
+data_files = []
+# Gathering the list of generated files
+for reldirname,ext in [("wfexs_backend/payloads",'.bash')]:
+    absdirname = os.path.join(setupDir,reldirname)
+    relfilelist = []
+    for entry in os.scandir(absdirname):
+        # We are avoiding to enter in loops around '.' and '..'
+        if entry.name[0] != '.' and entry.is_file(follow_symlinks=False) and entry.name.endswith(ext):
+            relfilelist.append(os.path.join(reldirname,entry.name))
+
+    if len(relfilelist) > 0:
+        data_files.append((reldirname,relfilelist))
+
 setuptools.setup(
     name="wfexs_backend",
     version=wfexs_backend_version,
     scripts=["WfExS-backend.py"],
+    data_files=data_files,
     author=wfexs_backend_author,
-    author_email="lrodrin@users.noreply.github.com",
+    author_email="lrodrin@users.noreply.github.com, jose.m.fernandez@bsc.es",
     license=wfexs_backend_license,
     description="Workflow Execution Service backend",
     long_description=long_description,
