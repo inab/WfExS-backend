@@ -57,7 +57,7 @@ for reldirname,ext in [("wfexs_backend/payloads",'.bash')]:
 setuptools.setup(
     name="wfexs_backend",
     version=wfexs_backend_version,
-    scripts=["WfExS-backend.py"],
+    scripts=["WfExS-backend.py","WfExS-config-replicator.py"],
     data_files=data_files,
     author=wfexs_backend_author,
     author_email="lrodrin@users.noreply.github.com, jose.m.fernandez@bsc.es",
