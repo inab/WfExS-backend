@@ -9,7 +9,7 @@ This development is relevant for projects like [EOSC-Life](https://www.eosc-life
 
 In order to use it you have to install first the dependencies described at [INSTALL.md](INSTALL.md).
 
-## Usage
+## WfExS-backend Usage
 
 ```
 python WfExS-backend.py -h
@@ -119,6 +119,42 @@ The program uses three different types of configuration files:
 <span style="display:block;text-align:center">
 <img src="docs/wfexs-flowchart-github.svg" alt="WfExS-backend, bare GitHub scenario" />
 </span>
+
+## WfExS-config-replicator usage
+
+Example and usage of this tool, which helps generating a bunch of workflow instantiation files
+from a template one and an Excel or CSV file with the fields to substitute:
+
+```bash
+python WfExS-config-replicator.py -W tests/wetlab2variations_execution_nxf.yaml --params-file tests/wetlab2variations_execution_nxf.variations.xlsx /tmp/generated
+```
+
+```
+python WfExS-config-replicator.py -h
+usage: WfExS-config-replicator.py [-h] -W WORKFLOWCONFIGFILENAME
+                                  (-p PARAM_NAME VALUE | --params-file PARAMS_FILES)
+                                  [--fname-template FILENAME_TEMPLATE]
+                                  [--symbol-template PARAMSYMBOLTEMPLATE]
+                                  [destdir]
+
+WfExS config replicator
+
+positional arguments:
+  destdir               Directory where all the variations of the workflow
+                        configuration file are going to be created
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
+                        Workflow configuration file, to be used as template
+  -p PARAM_NAME VALUE, --param PARAM_NAME VALUE
+                        Param to substitute. Repeat to tell arrays of values
+  --params-file PARAMS_FILES
+                        Tabular params file with the different variations
+  --fname-template FILENAME_TEMPLATE
+                        Filename template for the created workflows
+  --symbol-template PARAMSYMBOLTEMPLATE
+```
 
 ## License
 * © 2020-2021 Barcelona Supercomputing Center (BSC), ES
