@@ -32,7 +32,7 @@ import uuid
 from pathlib import Path
 from typing import Pattern
 from urllib import request, parse
-from rocrate import rocrate, rocrate_api
+from rocrate import rocrate
 import bagit
 
 # We have preference for the C based loader and dumper, but the code
@@ -92,7 +92,7 @@ class WF:
         from pwgen_passphrase.__main__ import generate_passphrase, list_wordlists, read_wordlist
 
         wordlists_filenames = list_wordlists()
-        wordlists_tags = [ *wordlists_filenames.keys() ]
+        wordlists_tags = [*wordlists_filenames.keys()]
         wordlist_filename = wordlists_filenames[wordlists_tags[random.randrange(len(wordlists_tags))]]
 
         wordlist = read_wordlist(wordlist_filename).splitlines()
@@ -186,15 +186,17 @@ class WF:
         and the inputs to use when it is being instantiated.
         :param local_config: Relevant local configuration, like the cache directory.
         :param creds_config: Dictionary with the different credential contexts (to be implemented)
+        :param config_directory:
         :type workflow_meta: dict
         :type local_config: dict
         :type creds_config: dict
+        :type config_directory:
         :return: Workflow configuration
         """
         if creds_config is None:
             creds_config = {}
-        
-        _ , updated_local_config = cls.bootstrap(local_config, config_directory=config_directory)
+
+        _, updated_local_config = cls.bootstrap(local_config, config_directory=config_directory)
 
         return cls(
             local_config,
@@ -208,30 +210,6 @@ class WF:
             outputs=workflow_meta.get('outputs', {}),
             workflow_config=workflow_meta.get('workflow_config'),
             creds_config=creds_config
-        )
-
-    @classmethod
-    def fromForm(cls, workflow_meta, local_config, config_directory=None):  # NEW
-        """
-
-        :param workflow_meta: The configuration describing both the workflow
-        and the inputs to use when it is being instantiated.
-        :param local_config: Relevant local configuration, like the cache directory.
-        :type workflow_meta: dict
-        :type local_config: dict
-        :return: Workflow configuration
-        """
-        
-        _ , updated_local_config = cls.bootstrap(local_config, config_directory=config_directory)
-        
-        return cls(
-            local_config=local_config,
-            config_directory=config_directory
-        ).newSetup(
-            workflow_meta['workflow_id'],
-            workflow_meta.get('version'),
-            trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
-            # TODO inputs, outputs, params
         )
 
     def __init__(self, local_config=None, config_directory=None):
@@ -328,7 +306,7 @@ class WF:
         self.doUnmount = False
         self.paranoidMode = False
         self.bag = None
-        
+
         # And the copy of scheme handlers
         self.schemeHandlers = fetchers.DEFAULT_SCHEME_HANDLERS.copy()
 
@@ -404,8 +382,8 @@ class WF:
             self.rawWorkDir = uniqueRawWorkDir
 
         if self.workDir is None:
-            doSecureWorkDir = workflow_config.get('secure',True) or self.paranoidMode
-            
+            doSecureWorkDir = workflow_config.get('secure', True) or self.paranoidMode
+
             self.setupWorkdir(doSecureWorkDir)
 
         metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
@@ -493,7 +471,7 @@ class WF:
                         sender_pubkey=None
                     )
 
-                encfs_type , _ , securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
+                encfs_type, _, securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
                 self.logger.debug(encfs_type + ' ' + securePassphrase)
                 try:
                     encfs_type = EncryptedFSType(encfs_type)
@@ -621,12 +599,12 @@ class WF:
         # In order to be able to build next paths to call
         workflowMetaFilename = os.path.join(metaDir, WORKDIR_WORKFLOW_META_FILE)
         securityContextFilename = os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-        
+
         return self.fromFiles(workflowMetaFilename, securityContextFilename)
-    
+
     def enableParanoidMode(self):
         self.paranoidMode = True
-    
+
     def fromFiles(self, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode=False):
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = yaml.load(wcf, Loader=YAMLLoader)
@@ -637,22 +615,24 @@ class WF:
                 creds_config = yaml.load(scf, Loader=YAMLLoader)
         else:
             creds_config = {}
-        
+
         return self.fromDescription(workflow_meta, creds_config, paranoidMode=paranoidMode)
-    
+
     def fromDescription(self, workflow_meta, creds_config=None, paranoidMode=False):
         """
 
         :param workflow_meta: The configuration describing both the workflow
         and the inputs to use when it is being instantiated.
         :param creds_config: Dictionary with the different credential contexts (to be implemented)
+        :param paranoidMode:
         :type workflow_meta: dict
         :type creds_config: dict
+        :type paranoidMode:
         :return: Workflow configuration
         """
         if paranoidMode:
             self.enableParanoidMode()
-        
+
         return self.newSetup(
             workflow_meta['workflow_id'],
             workflow_meta.get('version'),
@@ -662,6 +642,27 @@ class WF:
             outputs=workflow_meta.get('outputs', {}),
             workflow_config=workflow_meta.get('workflow_config'),
             creds_config=creds_config
+        )
+
+    def fromForm(self, workflow_meta, paranoidMode=False):  # VRE
+        """
+
+        :param workflow_meta: The configuration describing both the workflow
+        and the inputs to use when it is being instantiated.
+        :param paranoidMode:
+        :type workflow_meta: dict
+        :type paranoidMode:
+        :return: Workflow configuration
+        """
+        if paranoidMode:
+            self.enableParanoidMode()
+
+        return self.newSetup(
+            workflow_meta['workflow_id'],
+            workflow_meta.get('version'),
+            descriptor_type=workflow_meta.get('workflow_type'),
+            trs_endpoint=workflow_meta.get('trs_endpoint', self.DEFAULT_TRS_ENDPOINT),
+            workflow_config=workflow_meta.get('workflow_config')
         )
 
     def fetchWorkflow(self, offline=False):
@@ -783,39 +784,41 @@ class WF:
             workflowInputs_destdir = self.inputsDir
         if workflowInputs_cacheDir is None:
             workflowInputs_cacheDir = self.cacheWorkflowInputsDir
-        
+
         cacheable = not self.paranoidMode
         # The storage dir depends on whether it can be cached or not
-        storeDir = workflowInputs_cacheDir  if cacheable  else  workflowInputs_destdir
+        storeDir = workflowInputs_cacheDir if cacheable else workflowInputs_destdir
         for path in paths:
             # We are sending the context name thinking in the future,
             # as it could contain potential hints for authenticated access
-            fileuri = parse.urlunparse(('file','',os.path.abspath(path),'','',''))
+            fileuri = parse.urlunparse(('file', '', os.path.abspath(path), '', '', ''))
             matContent = self.downloadInputFile(fileuri, workflowInputs_destdir=storeDir)
-            
+
             # Now, time to create the symbolic link
             lastInput += 1
-            
+
             prettyLocal = os.path.join(workflowInputs_destdir, matContent.prettyFilename)
             hardenPrettyLocal = False
             if os.path.islink(prettyLocal):
                 oldLocal = os.readlink(prettyLocal)
-                
+
                 hardenPrettyLocal = oldLocal != matContent.local
             elif os.path.exists(prettyLocal):
                 hardenPrettyLocal = True
-            
+
             if hardenPrettyLocal:
                 # Trying to avoid collisions on input naming
                 prettyLocal = os.path.join(workflowInputs_destdir, str(lastInput) + '_' + matContent.prettyFilename)
-            
+
             if not os.path.exists(prettyLocal):
-                os.symlink(matContent.local,prettyLocal)
-        
+                os.symlink(matContent.local, prettyLocal)
+
         return lastInput
-    
-    def materializeInputs(self, offline:bool=False, lastInput=0):
-        theParams, numInputs = self.fetchInputs(self.params, workflowInputs_destdir=self.inputsDir, workflowInputs_cacheDir=self.cacheWorkflowInputsDir, offline=offline, lastInput=lastInput)
+
+    def materializeInputs(self, offline: bool = False, lastInput=0):
+        theParams, numInputs = self.fetchInputs(self.params, workflowInputs_destdir=self.inputsDir,
+                                                workflowInputs_cacheDir=self.cacheWorkflowInputsDir, offline=offline,
+                                                lastInput=lastInput)
         self.materializedParams = theParams
 
     def fetchInputs(self, params, workflowInputs_destdir: AbsPath = None, workflowInputs_cacheDir: AbsPath = None,
@@ -861,7 +864,7 @@ class WF:
                             os.makedirs(inputDestDir, exist_ok=True)
 
                         remote_files = inputs['url']
-                        cacheable = not self.paranoidMode  if inputs.get('cache',True)  else  False
+                        cacheable = not self.paranoidMode if inputs.get('cache', True) else False
                         if not isinstance(remote_files, list):  # more than one input file
                             remote_files = [remote_files]
 
@@ -899,7 +902,8 @@ class WF:
                                 os.symlink(matContent.local, prettyLocal)
 
                             remote_pairs.append(
-                                MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename, matContent.kind))
+                                MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename,
+                                                    matContent.kind))
 
                         theInputs.append(MaterializedInput(linearKey, remote_pairs))
                     else:
@@ -919,13 +923,13 @@ class WF:
                 theInputs.append(MaterializedInput(linearKey, inputs))
 
         return theInputs, lastInput
-    
+
     def workdirToBagit(self):
         """
         BEWARE: This is a destructive step! So, once run, there is no back!
         """
         self.bag = bagit.make_bag(self.workDir)
-    
+
     DefaultCardinality = '1'
     CardinalityMapping = {
         '1': (1, 1),
@@ -1006,16 +1010,18 @@ class WF:
         # Create RO-crate using crate.zip downloaded from WorkflowHub
         if os.path.isfile(str(self.cacheROCrateFilename)):
             wfCrate = rocrate.ROCrate(self.cacheROCrateFilename)
-            
+
         # Create RO-Crate using rocrate_api
         # TODO no exists the version implemented for Nextflow in rocrate_api
         else:
             # FIXME: What to do when workflow is in git repository different from GitHub??
             # FIXME: What to do when workflow is not in a git repository??
             wf_path = os.path.join(self.localWorkflow.dir, self.localWorkflow.relPath)
-            wfCrate , compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(self.localWorkflow.langVersion)
-            wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(self.localWorkflow.relPath)
-            
+            wfCrate, compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(
+                self.localWorkflow.langVersion)
+            wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(
+                self.localWorkflow.relPath)
+
             # TODO create method to create wf_url
             matWf = self.materializedEngine.workflow
             parsed_repo_url = parse.urlparse(self.repoURL)
@@ -1025,7 +1031,7 @@ class WF:
                 if repo_name.endswith('.git'):
                     repo_name = repo_name[:-4]
                 wf_entrypoint_path = [
-                    '', # Needed to prepend a slash
+                    '',  # Needed to prepend a slash
                     parsed_repo_path[1],
                     repo_name,
                     matWf.effectiveCheckout,
@@ -1035,7 +1041,7 @@ class WF:
                     ('https', 'raw.githubusercontent.com', '/'.join(wf_entrypoint_path), '', '', ''))
             else:
                 raise WFException("FIXME: Unsupported http(s) git repository {}".format(self.repoURL))
-            
+
             # TODO assign something meaningful to cwl
             cwl = True
 
@@ -1053,14 +1059,14 @@ class WF:
             # instead of a local path
             wf_file.properties()['url'] = wf_entrypoint_url
             wf_file.properties()['codeRepository'] = wf_url
-            #if 'url' in wf_file.properties():
+            # if 'url' in wf_file.properties():
             #    wf_file['codeRepository'] = wf_file['url']
 
             # TODO: add extra files, like nextflow.config in the case of
             # Nextflow workflows, the diagram, an abstract CWL
             # representation of the workflow (when it is not a CWL workflow)
             # etc...
-            #for file_entry in include_files:
+            # for file_entry in include_files:
             #    wfCrate.add_file(file_entry)
             wfCrate.isBasedOn = wf_url
 
@@ -1327,7 +1333,7 @@ class WF:
                                                expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
                                                    chosenDescriptorType])
 
-    def getWorkflowRepoFromROCrate(self, roCrateURL, expectedEngineDesc:WorkflowType=None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+    def getWorkflowRepoFromROCrate(self, roCrateURL, expectedEngineDesc: WorkflowType = None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
         :param roCrateURL:
@@ -1360,7 +1366,7 @@ class WF:
                 eAsLD = e.as_jsonld()
                 mainEntityProgrammingLanguageId = eAsLD.get('identifier', {}).get('@id')
                 mainEntityProgrammingLanguageUrl = eAsLD.get('url', {}).get('@id')
-        
+
         # Now, it is time to match the language id
         engineDescById = None
         engineDescByUrl = None
@@ -1373,10 +1379,10 @@ class WF:
                             engineDescById = possibleEngineDesc
                     elif pat == mainEntityProgrammingLanguageId:
                         engineDescById = possibleEngineDesc
-            
+
             if (engineDescByUrl is None) and (mainEntityProgrammingLanguageUrl == possibleEngineDesc.url):
                 engineDescByUrl = possibleEngineDesc
-        
+
         engineDesc = None
         if engineDescById is not None:
             engineDesc = engineDescById
@@ -1386,11 +1392,11 @@ class WF:
             raise WFException(
                 'Found programming language {} (url {}) in RO-Crate manifest is not among the acknowledged ones'.format(
                     mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl))
-        
+
         if (engineDescById is not None) and (engineDescByUrl is not None) and engineDescById != engineDescByUrl:
             self.logger.warning('Found programming language {} (url {}) leads to different engines'.format(
-                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl))
-        
+                mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl))
+
         if (expectedEngineDesc is not None) and engineDesc != expectedEngineDesc:
             raise WFException(
                 'Expected programming language {} does not match identified one {} in RO-Crate manifest'.format(
@@ -1453,7 +1459,6 @@ class WF:
                         repoRelPath = '/'.join(wf_path[4:])
         else:
             raise WFException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
-            
 
         self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
 
@@ -1533,7 +1538,7 @@ class WF:
                 # As this is a handler for online resources, comply with offline mode
                 if offline:
                     raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, cachedFilename))
-                
+
                 # Content is fetched here
                 try:
                     inputKind = schemeHandler(remote_file, cachedFilename, secContext=secContext)
