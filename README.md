@@ -11,16 +11,19 @@ In order to use it you have to install first the dependencies described at [INST
 
 ## WfExS-backend Usage
 
-```
+```bash
 python WfExS-backend.py -h
+```
+```
 usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
                         [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR]
                         [-W WORKFLOWCONFIGFILENAME]
                         [-Z SECURITYCONTEXTSCONFIGFILENAME]
-                        [-J WORKFLOWWORKINGDIRECTORY]
+                        [-J WORKFLOWWORKINGDIRECTORY] [-V]
                         [{init,stage,mount-workdir,offline-execute,execute}]
 
-WfExS (workflow execution service) backend
+WfExS (workflow execution service) backend 0.3.3-1-gbd81b3e
+(bd81b3ec0f1f2fb58b74aa8b998486f8ee13ee42)
 
 positional arguments:
   {init,stage,mount-workdir,offline-execute,execute}
@@ -46,6 +49,7 @@ optional arguments:
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (to be used with offline-
                         execute)
+  -V, --version         show program's version number and exit
 ```
 
 WfExS commands are:

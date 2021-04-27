@@ -34,6 +34,7 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from wfexs_backend.workflow import WF
+from wfexs_backend import get_WfExS_version
 
 # Adapted from https://gist.github.com/ptmcg/23ba6e42d51711da44ba1216c53af4ea
 # in order to show the value instead of the class name
@@ -60,8 +61,15 @@ DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
 
 if __name__ == "__main__":
+    
+    wfexs_version = get_WfExS_version()
+    if wfexs_version[1] is None:
+        verstr = wfexs_version[0]
+    else:
+        verstr = "{0[0]} ({0[1]})".format(wfexs_version)
+    
     defaultLocalConfigFilename = os.path.join(os.getcwd(),DEFAULT_LOCAL_CONFIG_RELNAME)
-    ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend")
+    ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend "+verstr)
     ap.add_argument('--log-file', dest="logFilename", help='Store messages in a file instead of using standard error and standard output')
     ap.add_argument('-q','--quiet', dest='logLevel', action='store_const', const=logging.WARNING, help='Only show engine warnings and errors')
     ap.add_argument('-v','--verbose', dest='logLevel', action='store_const', const=logging.INFO, help='Show verbose (informational) messages')
@@ -75,6 +83,8 @@ if __name__ == "__main__":
     ap.add_argument('-J','--staged-job-dir', dest='workflowWorkingDirectory',
                     help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
     ap.add_argument('command',help='Command to run',nargs='?',type=WfExS_Commands.argtype,choices=WfExS_Commands,default=WfExS_Commands.Execute)
+    ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
+    
     args = ap.parse_args()
     
     # Setting up the log
