@@ -2,9 +2,10 @@
 
 # These are the software versions being installed
 # in the virtual environment
-JDK_VER=11
-JDK_REV=28
-GOCRYPTFS_VER=v2.0-beta2
+JDK_MAJOR_VER=11
+JDK_VER=${JDK_MAJOR_VER}.0.2
+JDK_REV=9
+GOCRYPTFS_VER=v2.0-beta3
 STATIC_BASH_VER=5.1.004-1.2.2
 
 # Getting the installation directory
@@ -58,21 +59,55 @@ pip install -r "${wfexsDir}"/requirements.txt
 
 # Now, it is time to install the binaries
 if [ -x "${envDir}/bin/java" ] ; then
-	echo "OpenJDK already installed"
+	if "${envDir}/bin/java" -version 2>&1 | grep -qF "${JDK_VER}+${JDK_REV}" ; then
+		OPENJDK_INSTALLED=1
+	fi
+fi
+
+if [ -n "${OPENJDK_INSTALLED}" ] ; then
+	echo "OpenJDK ${JDK_VER}+${JDK_REV} already installed"
 else
 	echo "Installing openjdk ${JDK_VER}+${JDK_REV} in the environment (to be used with Nextflow)"
-	( cd "${downloadDir}" && curl -L -O "https://download.java.net/openjdk/jdk${JDK_VER}/ri/openjdk-${JDK_VER}+${JDK_REV}_linux-x64_bin.tar.gz" )
+	# Obtained either from
+	# https://jdk.java.net/archive/
+	# or
+	# https://jdk.java.net/java-se-ri/${JDK_MAJOR_VER}
+	if [ "${JDK_VER}" = "${JDK_MAJOR_VER}" ] ; then
+		OPENJDK_URL="https://download.java.net/openjdk/jdk${JDK_MAJOR_VER}/ri/openjdk-${JDK_VER}+${JDK_REV}_linux-x64_bin.tar.gz"
+	else
+		OPENJDK_URL="https://download.java.net/java/GA/jdk${JDK_MAJOR_VER}/${JDK_REV}/GPL/openjdk-${JDK_VER}_linux-x64_bin.tar.gz"
+	fi
+	( cd "${downloadDir}" && curl -L -O "${OPENJDK_URL}" )
 	tar -x -C "${envDir}" -f "${downloadDir}"/openjdk*.tar.gz
 	for path in bin lib ; do
+		for elem in "${envDir}"/jdk-${JDK_VER}/${path}/* ; do
+			destelem="${envDir}/${path}/$(basename "$elem")"
+			if [ -e "$destelem" ] ; then
+				rm -rf "$destelem"
+			fi
+		done
 		mv "${envDir}"/jdk-${JDK_VER}/${path}/* "${envDir}/${path}"
 		rmdir "${envDir}"/jdk-${JDK_VER}/${path}
 	done
-
+	
+	for elem in "${envDir}"/jdk-${JDK_VER}/* ; do
+		destelem="${envDir}/$(basename "$elem")"
+		if [ -e "$destelem" ] ; then
+			rm -rf "$destelem"
+		fi
+	done
 	mv "${envDir}"/jdk-${JDK_VER}/* "${envDir}"
 fi
 
+# Checking gocryptfs is installed and the latest version
 if [ -x "${envDir}/bin/gocryptfs" ] ; then
-	echo "GoCryptFS already installed"
+	if "${envDir}/bin/gocryptfs" -version | grep -qF "${GOCRYPTFS_VER}" ; then
+		GOCRYPTFS_INSTALLED=1
+	fi
+fi
+
+if [ -n "${GOCRYPTFS_INSTALLED}" ] ; then
+	echo "GoCryptFS ${GOCRYPTFS_VER} already installed"
 else
 	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_linux-static_amd64.tar.gz"
 	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
@@ -80,8 +115,9 @@ else
 	tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz
 fi
 
+
 if [ -x "${envDir}/bin/bash-linux-x86_64" ] ; then
-	echo "Static bash copy (to patch buggy bash within singularity containers being run by Nextflow)"
+	echo "Static bash copy already available (to patch buggy bash within singularity containers being run by Nextflow)"
 else
 	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/bash-linux-x86_64"
 	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
