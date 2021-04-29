@@ -47,20 +47,7 @@ package_data = {
         'payloads/*.bash'
     ],
 }
-
-data_files = []
-# Gathering the list of generated files
-for reldirname,ext in [("wfexs_backend/payloads",'.bash')]:
-    absdirname = os.path.join(setupDir,reldirname)
-    relfilelist = []
-    for entry in os.scandir(absdirname):
-        # We are avoiding to enter in loops around '.' and '..'
-        if entry.name[0] != '.' and entry.is_file(follow_symlinks=False) and entry.name.endswith(ext):
-            relfilelist.append(os.path.join(reldirname,entry.name))
-
-    if len(relfilelist) > 0:
-        data_files.append((reldirname,relfilelist))
-
+    
 setuptools.setup(
     name="wfexs_backend",
     version=wfexs_backend_version,
