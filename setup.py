@@ -23,7 +23,8 @@ import setuptools
 # In this way, we are sure we are getting
 # the installer's version of the library
 # not the system's one
-sys.path.insert(0, os.path.dirname(__file__))
+setupDir = os.path.dirname(__file__)
+sys.path.insert(0, setupDir)
 
 from wfexs_backend import __version__ as wfexs_backend_version
 from wfexs_backend import __author__ as wfexs_backend_author

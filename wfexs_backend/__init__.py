@@ -20,7 +20,7 @@ __copyright__ = '© 2020-2021 Barcelona Supercomputing Center (BSC), ES'
 __license__ = 'Apache 2.0'
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = '0.3.3'
+__version__ = '0.3.4'
 
 def describeGitRepo(repo):
     """Describe the repository version.
@@ -101,6 +101,7 @@ def describeGitRepo(repo):
 import os
 import sys
 
+# It returns something similar to 'git describe --tags'
 def get_WfExS_version():
     executable = os.path.basename(sys.argv[0])
     #try:
