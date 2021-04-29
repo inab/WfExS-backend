@@ -42,6 +42,12 @@ with open('requirements.txt') as f:
         m = egg.search(line)
         requirements.append(line if m is None else m.group(1))
 
+package_data = {
+    'wfexs_backend': [
+        'payloads/*.bash'
+    ],
+}
+
 data_files = []
 # Gathering the list of generated files
 for reldirname,ext in [("wfexs_backend/payloads",'.bash')]:
@@ -59,7 +65,7 @@ setuptools.setup(
     name="wfexs_backend",
     version=wfexs_backend_version,
     scripts=["WfExS-backend.py","WfExS-config-replicator.py"],
-    data_files=data_files,
+    package_data=package_data,
     author=wfexs_backend_author,
     author_email="lrodrin@users.noreply.github.com, jose.m.fernandez@bsc.es",
     license=wfexs_backend_license,

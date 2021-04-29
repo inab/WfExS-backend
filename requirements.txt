@@ -7,5 +7,5 @@ bagit
 aioftp
 openpyxl
 xlrd2
-dulwich --global-option=--pure
+dulwich
 git+https://github.com/inab/ro-crate-py.git#egg=rocrate
