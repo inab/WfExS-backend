@@ -20,7 +20,7 @@ __copyright__ = '© 2020-2021 Barcelona Supercomputing Center (BSC), ES'
 __license__ = 'Apache 2.0'
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = '0.3.4'
+__version__ = '0.3.5'
 
 def describeGitRepo(repo):
     """Describe the repository version.
