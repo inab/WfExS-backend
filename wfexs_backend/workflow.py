@@ -662,6 +662,7 @@ class WF:
             workflow_meta.get('version'),
             descriptor_type=workflow_meta.get('workflow_type'),
             trs_endpoint=workflow_meta.get('trs_endpoint', self.DEFAULT_TRS_ENDPOINT),
+            params=workflow_meta.get('params', {}),
             workflow_config=workflow_meta.get('workflow_config')
         )
 
