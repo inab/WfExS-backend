@@ -3,8 +3,9 @@
 # These are the software versions being installed
 # in the virtual environment
 JDK_MAJOR_VER=11
-JDK_VER=${JDK_MAJOR_VER}.0.2
+JDK_VER=${JDK_MAJOR_VER}.0.11
 JDK_REV=9
+OPENJ9_VER=0.26.0
 GOCRYPTFS_VER=v2.0-beta3
 STATIC_BASH_VER=5.1.004-1.2.2
 
@@ -68,35 +69,36 @@ if [ -n "${OPENJDK_INSTALLED}" ] ; then
 	echo "OpenJDK ${JDK_VER}+${JDK_REV} already installed"
 else
 	echo "Installing openjdk ${JDK_VER}+${JDK_REV} in the environment (to be used with Nextflow)"
-	# Obtained either from
+	# OBSOLETE: Obtained either from
 	# https://jdk.java.net/archive/
 	# or
 	# https://jdk.java.net/java-se-ri/${JDK_MAJOR_VER}
-	if [ "${JDK_VER}" = "${JDK_MAJOR_VER}" ] ; then
-		OPENJDK_URL="https://download.java.net/openjdk/jdk${JDK_MAJOR_VER}/ri/openjdk-${JDK_VER}+${JDK_REV}_linux-x64_bin.tar.gz"
-	else
-		OPENJDK_URL="https://download.java.net/java/GA/jdk${JDK_MAJOR_VER}/${JDK_REV}/GPL/openjdk-${JDK_VER}_linux-x64_bin.tar.gz"
-	fi
+	#if [ "${JDK_VER}" = "${JDK_MAJOR_VER}" ] ; then
+	#	OPENJDK_URL="https://download.java.net/openjdk/jdk${JDK_MAJOR_VER}/ri/openjdk-${JDK_VER}+${JDK_REV}_linux-x64_bin.tar.gz"
+	#else
+	#	OPENJDK_URL="https://download.java.net/java/GA/jdk${JDK_MAJOR_VER}/${JDK_REV}/GPL/openjdk-${JDK_VER}_linux-x64_bin.tar.gz"
+	#fi
+	OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}_openj9-${OPENJ9_VER}/OpenJDK${JDK_MAJOR_VER}U-jdk_x64_linux_openj9_${JDK_VER}_${JDK_REV}_openj9-${OPENJ9_VER}.tar.gz"
 	( cd "${downloadDir}" && curl -L -O "${OPENJDK_URL}" )
-	tar -x -C "${envDir}" -f "${downloadDir}"/openjdk*.tar.gz
+	tar -x -C "${envDir}" -f "${downloadDir}"/OpenJDK*.tar.gz
 	for path in bin lib ; do
-		for elem in "${envDir}"/jdk-${JDK_VER}/${path}/* ; do
+		for elem in "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/${path}/* ; do
 			destelem="${envDir}/${path}/$(basename "$elem")"
 			if [ -e "$destelem" ] ; then
 				rm -rf "$destelem"
 			fi
 		done
-		mv "${envDir}"/jdk-${JDK_VER}/${path}/* "${envDir}/${path}"
-		rmdir "${envDir}"/jdk-${JDK_VER}/${path}
+		mv "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/${path}/* "${envDir}/${path}"
+		rmdir "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/${path}
 	done
 	
-	for elem in "${envDir}"/jdk-${JDK_VER}/* ; do
+	for elem in "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/* ; do
 		destelem="${envDir}/$(basename "$elem")"
 		if [ -e "$destelem" ] ; then
 			rm -rf "$destelem"
 		fi
 	done
-	mv "${envDir}"/jdk-${JDK_VER}/* "${envDir}"
+	mv "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/* "${envDir}"
 fi
 
 # Checking gocryptfs is installed and the latest version
