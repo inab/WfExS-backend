@@ -43,6 +43,13 @@ class FTPDownloader:
         self.PASSWORD = PASSWORD
         
         self.max_retries = max_retries
+        # Trying to be adaptive to the aioftp implementation
+        if hasattr(aioftp, "ClientSession"):
+            # aioftp 0.16.x
+            self.aioSessMethod = aioftp.ClientSession
+        else:
+            # aioftp 0.18.x
+            self.aioSessMethod = aioftp.Client.context
 
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -198,14 +205,8 @@ class FTPDownloader:
         destdir = os.path.abspath(upload_to_dir)
         os.makedirs(destdir, exist_ok=True)
         utdPath = Path(destdir)
-        if hasattr(aioftp, "ClientSession"):
-            # aioftp 0.16.x
-            aioSessMethod = aioftp.ClientSession
-        else:
-            # aioftp 0.18.x
-            aioSessMethod = aioftp.Client.context
         
-        async with aioSessMethod(self.HOST, self.PORT, self.USER, self.PASSWORD) as client:
+        async with self.aioSessMethod(self.HOST, self.PORT, self.USER, self.PASSWORD) as client:
             # Changing to absolute path
             if not dfdPath.is_absolute():
                 currRemoteDir = await client.get_current_directory()
@@ -218,7 +219,7 @@ class FTPDownloader:
         dfdPath = Path(download_from_file)
         destfile = os.path.abspath(upload_to_file)
         utdPath = Path(destfile)
-        async with aioftp.ClientSession(self.HOST, self.PORT, self.USER, self.PASSWORD) as client:
+        async with self.aioSessMethod(self.HOST, self.PORT, self.USER, self.PASSWORD) as client:
             # Changing to absolute path
             if not dfdPath.is_absolute():
                 currRemoteDir = await client.get_current_directory()
