@@ -800,7 +800,7 @@ wfexs_allParams()
         else:
             raise WorkflowEngineException("No parameter was specified! Bailing out")
         
-        runName = 'WfExS-run_'+datetime.datetime.now().isoformat()
+        runName = 'WfExS-run_'+datetime.datetime.now().strftime('%Y%m%dT%H%M%S')
         
         nxf_params = [
             '-log',os.path.join(outputStatsDir,'log.txt'),
