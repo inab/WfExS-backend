@@ -117,8 +117,10 @@ STDERR
             
             containersList.append(
                 Container(
-                    taggedName=tag,
+                    origTaggedName=tag,
+                    taggedName=singTag,
                     signature=imageSignature,
+                    #fingerprint=None,
                     type=self.containerType,
                     localPath=localContainerPath
                 )
