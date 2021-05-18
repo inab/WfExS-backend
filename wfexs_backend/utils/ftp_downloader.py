@@ -236,7 +236,7 @@ class FTPDownloader:
         dfdPath = Path(download_from_df)
         destpath = os.path.abspath(upload_to_df)
         utdPath = Path(destpath)
-        async with aioftp.ClientSession(self.HOST, self.PORT, self.USER, self.PASSWORD) as client:
+        async with self.aioSessMethod(self.HOST, self.PORT, self.USER, self.PASSWORD) as client:
             # Changing to absolute path
             if not dfdPath.is_absolute():
                 currRemoteDir = await client.get_current_directory()
