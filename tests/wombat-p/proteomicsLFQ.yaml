@@ -9,7 +9,6 @@ params:
   database:
     c-l-a-s-s: File
     url: https://raw.githubusercontent.com/nf-core/test-datasets/proteomicslfq/testdata-aws/uniprot_yeast_reviewed_isoforms_ups1_crap.fasta_td.fasta
-  separator: ","
   outdir:
     c-l-a-s-s: Directory
     # This hint tells that this parameter is the output directory
