@@ -259,19 +259,19 @@ class Container(NamedTuple):
     origTaggedName: Symbolic name or identifier of the container
         (including tag) which appears in the workflow.
     taggedName: Symbolic name or identifier of the container (including tag)
+    type: Container type
+    localPath: The full local path to the container file (it can be None)
     signature: Signature (aka file fingerprint) of the container
         (sha256 or similar). It could be None outside Singularity solutions.
     fingerprint: Server fingerprint of the container.
         Mainly from docker registries.
-    type: Container type
-    localPath: The full local path to the container file (it can be None)
     """
     origTaggedName: str
     taggedName: URIType
-    signature: Fingerprint = None
-    fingerprint: Fingerprint = None
     type: ContainerType
     localPath: AbsPath
+    signature: Fingerprint = None
+    fingerprint: Fingerprint = None
 
 
 class WFException(Exception):
