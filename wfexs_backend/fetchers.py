@@ -26,6 +26,7 @@ import shutil
 import stat
 
 from urllib import request, parse
+import urllib.error
 
 from .common import *
 from .utils.ftp_downloader import FTPDownloader
@@ -58,8 +59,12 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Secu
             # Now the credentials are properly set up
             remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
                                             parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
-    with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
-        shutil.copyfileobj(url_response, download_file)
+    
+    try:
+        with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
+            shutil.copyfileobj(url_response, download_file)
+    except urllib.error.HTTPError as he:
+        raise WFException("Error fetching {} : {} {}".format(remote_file, he.code, he.reason))
     
     return ContentKind.File
 
