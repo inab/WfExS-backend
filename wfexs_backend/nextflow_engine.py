@@ -771,6 +771,8 @@ dag {{
         # Building the NXF trojan horse in order to obtain a full list of 
         # input parameters, for provenance purposes
         trojanDir = os.path.join(self.engineTweaksDir,'nxf_trojan')
+        if os.path.exists(trojanDir):
+            shutil.rmtree(trojanDir)
         shutil.copytree(localWf.dir, trojanDir)
         
         allParamsFile = os.path.join(self.outputMetaDir,'all-params.json')
