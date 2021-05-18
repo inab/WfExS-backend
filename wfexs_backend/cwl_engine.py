@@ -90,7 +90,15 @@ class CWLWorkflowEngine(WorkflowEngine):
                          outputMetaDir=outputMetaDir, tempDir=tempDir,
                          config_directory=config_directory)
 
-        self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
+        # Getting a fixed version of the engine
+        toolsSect = local_config.get('tools', {})
+        engineConf =  toolsSect.get(self.ENGINE_NAME, {})
+        workflowEngineConf = workflow_config.get(self.ENGINE_NAME, {})
+        
+        cwl_version = workflowEngineConf.get('version')
+        if cwl_version is None:
+            cwl_version = engineConf.get('version', self.DEFAULT_CWLTOOL_VERSION)
+        self.cwl_version = cwl_version
         
         # Setting up packed directory
         self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, 'wf-pack')

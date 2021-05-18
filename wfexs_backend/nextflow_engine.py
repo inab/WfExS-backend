@@ -80,15 +80,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
         wfexs_dirname = os.path.dirname(os.path.abspath(sys.argv[0]))
         self.unset_java_home = os.path.commonpath([self.java_cmd,wfexs_dirname]) == wfexs_dirname
         
-        engineConf =  local_config.get(self.ENGINE_NAME, {})
+        engineConf =  toolsSect.get(self.ENGINE_NAME, {})
+        workflowEngineConf = workflow_config.get(self.ENGINE_NAME, {})
         
         self.nxf_image = engineConf.get('dockerImage', self.DEFAULT_NEXTFLOW_DOCKER_IMAGE)
-        self.nxf_version = engineConf.get('version', self.DEFAULT_NEXTFLOW_VERSION)
+        nxf_version = workflowEngineConf.get('version')
+        if nxf_version is None:
+            nxf_version = engineConf.get('version', self.DEFAULT_NEXTFLOW_VERSION)
+        self.nxf_version = nxf_version
         self.max_retries = engineConf.get('maxRetries', self.DEFAULT_MAX_RETRIES)
         self.max_cpus = engineConf.get('maxCpus', self.DEFAULT_MAX_CPUS)
         
         # The profile to force, in case it cannot be guessed
-        self.nxf_profile = workflow_config.get('profile')
+        self.nxf_profile = workflowEngineConf.get('profile')
         
         # Setting the assets directory
         self.nxf_assets = os.path.join(self.engineTweaksDir,'assets')
