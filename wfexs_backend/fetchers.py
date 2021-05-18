@@ -223,7 +223,7 @@ def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityCo
 DEFAULT_SCHEME_HANDLERS = {
     'http': fetchClassicURL,
     'https': fetchClassicURL,
-    'ftp': fetchClassicURL,
+    'ftp': fetchFTPURL,
     'sftp': fetchSSHURL,
     'ssh': fetchSSHURL,
     'file': fetchFile,
