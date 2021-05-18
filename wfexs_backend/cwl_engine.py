@@ -70,13 +70,24 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     ENGINE_NAME = 'cwl'
 
-    def __init__(self, cacheDir=None, workflow_config=None, local_config=None, engineTweaksDir=None,
-                 cacheWorkflowDir=None, workDir=None, outputsDir=None, outputMetaDir=None, intermediateDir=None,
-                 config_directory=None):
+    def __init__(self,
+            cacheDir=None,
+            workflow_config=None,
+            local_config=None,
+            engineTweaksDir=None,
+            cacheWorkflowDir=None,
+            workDir=None,
+            outputsDir=None,
+            outputMetaDir=None,
+            intermediateDir=None,
+            tempDir=None,
+            config_directory=None
+        ):
 
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
-                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir, workDir=workDir,
-                         outputsDir=outputsDir, intermediateDir=intermediateDir, outputMetaDir=outputMetaDir,
+                         engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
+                         workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
+                         outputMetaDir=outputMetaDir, tempDir=tempDir,
                          config_directory=config_directory)
 
         self.cwl_version = local_config.get(self.ENGINE_NAME, {}).get('version', self.DEFAULT_CWLTOOL_VERSION)
@@ -411,6 +422,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             if isinstance(self.container_factory, SingularityContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
+                                instEnv['SINGULARITY_TMPDIR'] = self.tempDir
                             elif isinstance(self.container_factory, NoContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:

@@ -57,12 +57,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
             outputsDir=None,
             outputMetaDir=None,
             intermediateDir=None,
+            tempDir=None,
             config_directory=None
         ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
-                         outputMetaDir=outputMetaDir, config_directory=config_directory)
+                         tempDir=tempDir, outputMetaDir=outputMetaDir,
+                         config_directory=config_directory)
         
         toolsSect = local_config.get('tools', {})
         # Obtaining the full path to Java
@@ -207,18 +209,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return engineVersion, nextflow_install_dir, engineFingerprint
     
-    def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[ExitVal,str,str]:
         self.logger.debug('Command => nextflow '+' '.join(commandLine))
         if self.engine_mode == EngineMode.Docker:
-            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename)
+            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename, runEnv=runEnv)
         elif self.engine_mode == EngineMode.Local:
-            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir, nextflow_install_dir=nextflow_path, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename)
+            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir, nextflow_install_dir=nextflow_path, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename, runEnv=runEnv)
         else:
             raise WorkflowEngineException('Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
         
         return retval , nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runLocalNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None) -> Tuple[int,str,str]:
+    def runLocalNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[int,str,str]:
         if nextflow_install_dir is None:
             nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
         cachedScript = os.path.join(nextflow_install_dir, 'nextflow')
@@ -234,7 +236,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         # Now, time to run it
         NXF_HOME = os.path.join(nextflow_install_dir,'.nextflow')
-        instEnv = dict(os.environ)
+        instEnv = dict(os.environ  if runEnv is None  else  runEnv)
         instEnv['NXF_HOME'] = NXF_HOME
         # Needed to tie Nextflow short
         instEnv['NXF_OFFLINE'] = 'TRUE'
@@ -320,7 +322,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return retval, nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[ExitVal,str,str]:
         # Now, we have to assure the nextflow image is already here
         docker_tag = self.nxf_image + ':' + nextflow_version
         checkimage_params = [
@@ -726,13 +728,19 @@ STDERR
         traceFile = os.path.join(outputStatsDir,'trace.tsv')
         dagFile = os.path.join(outputStatsDir,STATS_DAG_DOT_FILE)
         
+        # Custom variables setup
+        runEnv = dict(os.environ)
+        if isinstance(self.container_factory,SingularityContainerFactory):
+            if self.static_bash_cmd is not None:
+                optBash = "-B {0}:/bin/bash".format(self.static_bash_cmd)
+            else:
+                optBash = ""
+            
+            runEnv['SINGULARITY_TMPDIR'] = self.tempDir
+
         forceParamsConfFile = os.path.join(self.engineTweaksDir,'force-params.config')
         with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:
             if isinstance(self.container_factory,SingularityContainerFactory):
-                if self.static_bash_cmd is not None:
-                    optBash = "-B {0}:/bin/bash".format(self.static_bash_cmd)
-                else:
-                    optBash = ""
                 print(
 """docker.enabled = false
 singularity.enabled = true
@@ -834,7 +842,8 @@ wfexs_allParams()
             workdir=self.outputsDir,
             nextflow_path=matWfEng.engine_path,
             stdoutFilename=stdoutFilename,
-            stderrFilename=stderrFilename
+            stderrFilename=stderrFilename,
+            runEnv=runEnv
         )
         self.logger.debug(launch_retval)
         self.logger.debug(launch_stdout)

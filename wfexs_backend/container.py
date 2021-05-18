@@ -36,7 +36,7 @@ class ContainerFactoryException(Exception):
     pass
 
 class ContainerFactory(abc.ABC):
-    def __init__(self, cacheDir=None, local_config=None, engine_name='unset'):
+    def __init__(self, cacheDir=None, local_config=None, engine_name='unset', tempDir=None):
         """
         Abstract init method
         
@@ -58,7 +58,15 @@ class ContainerFactory(abc.ABC):
                 cacheDir = tempfile.mkdtemp(prefix='wfexs', suffix='backend')
                 # Assuring this temporal directory is removed at the end
                 atexit.register(shutil.rmtree, cacheDir)
-
+        
+        if tempDir is None:
+            tempDir = tempfile.mkdtemp(prefix='WfExS-container', suffix='tempdir')
+            # Assuring this temporal directory is removed at the end
+            atexit.register(shutil.rmtree, tempDir)
+        
+        # This directory might be needed by temporary processes, like
+        # image materialization in singularity or podman
+        self.tempDir = tempDir
         # But, for materialized containers, we should use common directories
         # This for the containers themselves
         self.containersCacheDir = os.path.join(cacheDir, 'containers', self.__class__.__name__)

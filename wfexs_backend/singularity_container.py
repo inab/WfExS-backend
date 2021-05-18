@@ -30,8 +30,8 @@ from .common import *
 from .container import ContainerFactory, ContainerFactoryException
 
 class SingularityContainerFactory(ContainerFactory):
-    def __init__(self, cacheDir=None, local_config=None, engine_name='unset'):
-        super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name)
+    def __init__(self, cacheDir=None, local_config=None, engine_name='unset', tempDir=None):
+        super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name, tempDir=tempDir)
         self.singularity_cmd = local_config.get('tools', {}).get('singularityCommand', DEFAULT_SINGULARITY_CMD)
     
     @classmethod
@@ -43,7 +43,9 @@ class SingularityContainerFactory(ContainerFactory):
         It is assured the containers are materialized
         """
         containersList = []
-	
+        
+        matEnv = dict(os.environ)
+        matEnv['SINGULARITY_TMPDIR'] = self.tempDir
         for tag in tagList:
             # It is not an absolute URL, we are prepending the docker://
             parsedTag = parse.urlparse(tag)
@@ -62,6 +64,7 @@ class SingularityContainerFactory(ContainerFactory):
                     # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
                     s_retval = subprocess.Popen(
                     [self.singularity_cmd, 'pull', '--disable-cache', '--name', tmpContainerPath, singTag],
+                    env=matEnv,
                     stdout=s_out,
                     stderr=s_err
                     ).wait()

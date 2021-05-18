@@ -302,6 +302,7 @@ class WF:
         self.rawWorkDir = None
         self.workDir = None
         self.encWorkDir = None
+        self.tempDir = None
         self.encfsThread = None
         self.doUnmount = False
         self.paranoidMode = False
@@ -522,10 +523,17 @@ class WF:
         else:
             uniqueEncWorkDir = None
             uniqueWorkDir = uniqueRawWorkDir
+        
+        # The temporary directory is in the raw working directory as
+        # some container engine could fail
+        uniqueTempDir = os.path.join(uniqueRawWorkDir,'.TEMP')
+        os.makedirs(uniqueTempDir, exist_ok=True)
+        os.chmod(uniqueTempDir, 0o1777)
 
         # Setting up working directories, one per instance
         self.encWorkDir = uniqueEncWorkDir
         self.workDir = uniqueWorkDir
+        self.tempDir = uniqueTempDir
 
     def _wakeupEncDir(self):
         """
@@ -722,6 +730,7 @@ class WF:
                                           local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
                                           cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
                                           outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
+                                          tempDir=self.tempDir,
                                           config_directory=self.config_directory)
                 try:
                     engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
@@ -739,6 +748,7 @@ class WF:
                                       local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
                                       cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
                                       outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
+                                      tempDir=self.tempDir,
                                       config_directory=self.config_directory)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:

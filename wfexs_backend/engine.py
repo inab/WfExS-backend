@@ -77,6 +77,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                  outputsDir=None,
                  outputMetaDir=None,
                  intermediateDir=None,
+                 tempDir=None,
                  config_directory=None
                  ):
         """
@@ -92,6 +93,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         :param workDir:
         :param outputsDir:
         :param intermediateDir:
+        :param tempDir:
+        :param config_directory:
         """
         if local_config is None:
             local_config = dict()
@@ -177,6 +180,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         os.makedirs(engineTweaksDir, exist_ok=True)
         self.engineTweaksDir = engineTweaksDir
         
+        # This directory is here for temporary files of any program launched from
+        # WfExS or the engine itself. It should be set to TMPDIR on subprocess calls
+        if tempDir is None:
+            tempDir = tempfile.mkdtemp(prefix='WfExS-exec', suffix='tempdir')
+            # Assuring this temporal directory is removed at the end
+            atexit.register(shutil.rmtree, tempDir)
+        self.tempDir = tempDir
+        
         # Setting up common properties
         self.docker_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
         engine_mode = local_config.get('tools', {}).get('engineMode')
@@ -194,7 +205,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         for containerFactory in CONTAINER_FACTORY_CLASSES:
             if containerFactory.ContainerType() == container_type:
-                self.container_factory = containerFactory(cacheDir=cacheDir, local_config=local_config, engine_name=self.__class__.__name__)
+                self.container_factory = containerFactory(
+                    cacheDir=cacheDir,
+                    local_config=local_config,
+                    engine_name=self.__class__.__name__,
+                    tempDir=self.tempDir
+                )
                 break
         else:
             raise WorkflowEngineException("FATAL: No container factory implementation for {}".format(container_type))
