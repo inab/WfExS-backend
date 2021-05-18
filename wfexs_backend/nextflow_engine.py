@@ -124,7 +124,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             candidateNf = os.path.basename(nfPath)
 
         nfConfig = os.path.join(nfDir, 'nextflow.config')
-        verPat = re.compile(r"nextflowVersion *= *['\"][>=]*([^ ]+)['\"]")
+        verPat = re.compile(r"nextflowVersion *= *['\"]!?[>=]*([^ ]+)['\"]")
         mainPat = re.compile(r"mainScript *= *['\"]([^\"]+)['\"]")
 	# Setting up the default value, in case nothing is found
         if engineVer is None:
