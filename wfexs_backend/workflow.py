@@ -21,6 +21,7 @@ import http
 import io
 import json
 import logging
+import pathlib
 import platform
 import shutil
 import sys
@@ -858,6 +859,7 @@ class WF:
                 if inputClass is not None:
                     if inputClass in ("File", "Directory"):  # input files
                         inputDestDir = workflowInputs_destdir
+                        globExplode = None
                         if inputClass == 'Directory':
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
@@ -869,6 +871,8 @@ class WF:
 
                                 theInputs.append(MaterializedInput(linearKey, [autoFilledDir]))
                                 continue
+                            
+                            globExplode = inputs.get('globExplode')
 
                             # This is to nest the directory where to place the different files
                             inputDestDir = os.path.join(inputDestDir, *linearKey.split('.'))
@@ -911,10 +915,30 @@ class WF:
 
                             if not os.path.exists(prettyLocal):
                                 os.symlink(matContent.local, prettyLocal)
-
-                            remote_pairs.append(
-                                MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename,
-                                                    matContent.kind))
+                            
+                            if globExplode is not None:
+                                prettyLocalPath = pathlib.Path(prettyLocal)
+                                matParse = parse.urlparse(matContent.uri)
+                                for exp in prettyLocalPath.glob(globExplode):
+                                    relPath = exp.relative_to(prettyLocalPath)
+                                    relName = str(relPath)
+                                    relExpPath = matParse.path
+                                    if relExpPath[-1] != '/':
+                                        relExpPath += '/'
+                                    relExpPath += '/'.join(map(lambda part: parse.quote_plus(part), relPath.parts))
+                                    expUri = parse.urlunparse((matParse.scheme, matParse.netloc, relExpPath, matParse.params, matParse.query, matParse.fragment))
+                                    remote_pairs.append(
+                                        MaterializedContent(
+                                            local=str(exp),
+                                            uri=expUri,
+                                            prettyFilename=relName,
+                                            kind=ContentKind.Directory  if exp.is_dir()  else  ContentKind.File
+                                        )
+                                    )
+                            else:
+                                remote_pairs.append(
+                                    MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename,
+                                                        matContent.kind))
 
                         theInputs.append(MaterializedInput(linearKey, remote_pairs))
                     else:
