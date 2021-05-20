@@ -1546,7 +1546,7 @@ class WF:
         """
         parsedInputURL = parse.urlparse(remote_file)
 
-        if not all([parsedInputURL.scheme, parsedInputURL.netloc, parsedInputURL.path]):
+        if not all([parsedInputURL.scheme, parsedInputURL.path]):
             raise RuntimeError("Input is not a valid remote URL or CURIE source")
 
         else:
