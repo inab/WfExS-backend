@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import hashlib
 import json
+import logging
 import os
 import os.path
 import shutil
@@ -32,6 +33,9 @@ from .common import *
 
 class SchemeHandlerCacheHandler:
     def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
+        # Getting a logger focused on specific classes
+        self.logger = logging.getLogger(self.__class__.__name__)
+        
         # TODO: create caching database
         self.cacheDir = cacheDir
         self.schemeHandlers = {}
