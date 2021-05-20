@@ -91,6 +91,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.max_retries = engineConf.get('maxRetries', self.DEFAULT_MAX_RETRIES)
         self.max_cpus = engineConf.get('maxCpus', self.DEFAULT_MAX_CPUS)
         
+        self.writable_containers = workflowEngineConf.get('writable_containers', False)
+        
         # The profile to force, in case it cannot be guessed
         self.nxf_profile = workflowEngineConf.get('profile')
         
@@ -734,11 +736,18 @@ STDERR
         
         # Custom variables setup
         runEnv = dict(os.environ)
+        optBash = None
+        optWritable = None
         if isinstance(self.container_factory,SingularityContainerFactory):
             if self.static_bash_cmd is not None:
                 optBash = "-B {0}:/bin/bash".format(self.static_bash_cmd)
             else:
                 optBash = ""
+            
+            if self.writable_containers:
+                optWritable = "--writable"
+            else:
+                optWritable = ""
             
             runEnv['SINGULARITY_TMPDIR'] = self.tempDir
 
@@ -749,9 +758,9 @@ STDERR
 """docker.enabled = false
 singularity.enabled = true
 singularity.envWhitelist = 'SINGULARITY_TMPDIR'
-singularity.runOptions = '--userns {}'
+singularity.runOptions = '--userns {} {}'
 singularity.autoMounts = true
-""".format(optBash), file=fPC)
+""".format(optWritable, optBash), file=fPC)
 
             # Trace fields are detailed at
             # https://www.nextflow.io/docs/latest/tracing.html#trace-fields

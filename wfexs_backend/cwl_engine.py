@@ -100,6 +100,8 @@ class CWLWorkflowEngine(WorkflowEngine):
             cwl_version = engineConf.get('version', self.DEFAULT_CWLTOOL_VERSION)
         self.cwl_version = cwl_version
         
+        self.writable_containers = workflowEngineConf.get('writable_containers', False)
+        
         # Setting up packed directory
         self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, 'wf-pack')
         os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
@@ -431,6 +433,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
                                 instEnv['SINGULARITY_TMPDIR'] = self.tempDir
+                                if self.writable_containers:
+                                    instEnv['SINGULARITY_WRITABLE'] = '1'
                             elif isinstance(self.container_factory, NoContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:
