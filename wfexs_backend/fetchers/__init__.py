@@ -25,14 +25,16 @@ from paramiko.config import SSH_PORT as DEFAULT_SSH_PORT
 import shutil
 import stat
 
+from typing import Any, List, Optional, Tuple, Union
+
 from urllib import request, parse
 import urllib.error
 
-from .common import *
-from .utils.ftp_downloader import FTPDownloader
+from ..common import *
+from ..utils.ftp_downloader import FTPDownloader
 
 
-def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
+def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
     """
     Method to fetch contents from http, https and ftp
 
@@ -60,15 +62,17 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Secu
             remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
                                             parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
     
+    uri_with_metadata = None
     try:
         with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
+            uri_with_metadata = URIWithMetadata(url_response.url, dict(url_response.headers.items()))
             shutil.copyfileobj(url_response, download_file)
     except urllib.error.HTTPError as he:
         raise WFException("Error fetching {} : {} {}".format(remote_file, he.code, he.reason))
     
-    return ContentKind.File
+    return ContentKind.File, [ uri_with_metadata ]
 
-def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
+def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
     """
     Method to fetch contents from ftp
 
@@ -96,9 +100,9 @@ def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Security
     else:
         kind = ContentKind.File
     
-    return kind
+    return kind, [ URIWithMetadata(remote_file, {}) ]
 
-def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None):
+def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None) -> Tuple[Union[int,bool], ContentKind]:
     if sshStat is None:
         sshStat = sftp.stat(sshPath)
     
@@ -141,7 +145,7 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None):
     return numCopied, kind
 
 # TODO: test this codepath
-def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
+def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
     """
     Method to fetch contents from ssh / sftp servers
 
@@ -188,15 +192,15 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Security
         sftp = paramiko.SFTPClient.from_transport(t)
         
         _ , kind = sftpCopy(sftp,sshPath,cachedFilename)
-        return kind
+        return kind, [ URIWithMetadata(remote_file, {}) ]
     finally:
         # Closing the SFTP connection
         if t is not None:
             t.close()
 
-def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityContextConfig=None) -> ContentKind:
+def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
     """
-    Method to fetch contents from ssh / sftp servers
+    Method to fetch contents from local contents
 
     :param remote_file:
     :param cachedFilename: Destination filename for the fetched content
@@ -218,7 +222,7 @@ def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:SecurityCo
     else:
         raise WFException("Local path {} is neither a file nor a directory".format(localPath))
     
-    return kind
+    return kind, [ URIWithMetadata(remote_file, {}) ]
 
 DEFAULT_SCHEME_HANDLERS = {
     'http': fetchClassicURL,

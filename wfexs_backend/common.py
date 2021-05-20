@@ -24,7 +24,7 @@ import functools
 import hashlib
 import os
 from typing import Any, Callable, List, Mapping, NamedTuple
-from typing import NewType, Pattern, Tuple, Type, Union
+from typing import NewType, Optional, Pattern, Tuple, Type, Union
 
 DEFAULT_GIT_CMD = 'git'
 DEFAULT_DOCKER_CMD = 'docker'
@@ -77,7 +77,7 @@ Fingerprint = NewType('Fingerprint', str)
 # Exit value from any kind of execution
 ExitVal = NewType('ExitVal', int)
 
-SecurityContextConfig = Mapping[str, object]
+SecurityContextConfig = Mapping[str, Any]
 
 # As each workflow engine can have its own naming convention, leave them to
 # provide it
@@ -89,6 +89,14 @@ class ContentKind(enum.Enum):
     Directory = 'dir'
     Value = 'val'
 
+
+class URIWithMetadata(NamedTuple):
+    """
+    uri: The uri
+    metadata: A dictionary with the metadata associated to that URI.
+    """
+    uri: URIType
+    metadata: Mapping[str,Any]
 
 class MaterializedContent(NamedTuple):
     """
@@ -104,6 +112,9 @@ class MaterializedContent(NamedTuple):
     uri: URIType
     prettyFilename: RelPath
     kind: ContentKind = ContentKind.File
+    metadata_array: Optional[List[URIWithMetadata]] = None
+
+ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]]
 
 
 class MaterializedInput(NamedTuple):
@@ -282,8 +293,16 @@ class WFException(Exception):
 DEFAULT_DIGEST_ALGORITHM = 'sha256'
 DEFAULT_DIGEST_BUFFER_SIZE = 65536
 
+def stringifyDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
+    return '{0}={1}'.format(digestAlgorithm, str(base64.standard_b64encode(digest), 'iso-8859-1'))
 
-def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE) -> Fingerprint:
+def stringifyFilenameDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
+    return '{0}~{1}'.format(digestAlgorithm, str(base64.urlsafe_b64encode(digest), 'iso-8859-1'))
+
+def nullProcessDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
+    return digest
+
+def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
     """
     Accessory method used to compute the digest of an input file-like object
     """
@@ -293,17 +312,63 @@ def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM
         h.update(buf)
         buf = filelike.read(bufferSize)
 
-    return '{0}={1}'.format(digestAlgorithm, str(base64.standard_b64encode(h.digest()), 'iso-8859-1'))
+    return repMethod(digestAlgorithm, h.digest())
 
 
 @functools.lru_cache(maxsize=32)
-def ComputeDigestFromFile(filename: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE) -> Fingerprint:
+def ComputeDigestFromFile(filename: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
     """
     Accessory method used to compute the digest of an input file
     """
     with open(filename, mode='rb') as f:
-        return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize)
+        return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize, repMethod)
 
+def scantree(path):
+    """Recursively yield DirEntry objects for given directory."""
+
+    hasDirs = False
+    for entry in os.scandir(path):
+        # We are avoiding to enter in loops around '.' and '..'
+        if entry.is_dir(follow_symlinks=False):
+            if entry.name[0] != '.':
+                hasDirs = True
+        else:
+            yield entry
+
+    # We are leaving the dirs to the end
+    if hasDirs:
+        for entry in os.scandir(path):
+            # We are avoiding to enter in loops around '.' and '..'
+            if entry.is_dir(follow_symlinks=False) and entry.name[0] != '.':
+                yield entry
+                yield from scantree(entry.path)
+
+def ComputeDigestFromDirectory(dirname: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
+    """
+    Accessory method used to compute the digest of an input directory,
+    based on the names and digest of the files in the directory
+    """
+    cEntries = [ ]
+    # First, gather and compute all the files
+    for entry in scantree(dirname):
+        if entry.is_file():
+            cEntries.append(
+                (
+                    os.path.relpath(entry.path, dirname).encode('utf-8'),
+                    ComputeDigestFromFile(entry.path, repMethod=nullProcessDigest)
+                )
+            )
+    
+    # Second, sort by the relative path, bytes encoded in utf-8
+    cEntries.sort(key=lambda e: e[0])
+    
+    # Third, digest compute
+    h = hashlib.new(digestAlgorithm)
+    for cRelPathB , cDigest in cEntries:
+        h.update(cRelPathB)
+        h.update(cDigest)
+    
+    return repMethod(digestAlgorithm, h.digest())
 
 def GetGeneratedDirectoryContent(thePath: AbsPath, uri: URIType = None, preferredFilename: RelPath = None) -> GeneratedDirectoryContent:
     """

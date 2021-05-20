@@ -58,7 +58,9 @@ from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
 from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, \
     WORKDIR_ENGINE_TWEAKS_RELDIR
-from . import fetchers
+from .cache_handler import SchemeHandlerCacheHandler
+from .fetchers import DEFAULT_SCHEME_HANDLERS
+from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
@@ -309,8 +311,14 @@ class WF:
         self.paranoidMode = False
         self.bag = None
 
-        # And the copy of scheme handlers
-        self.schemeHandlers = fetchers.DEFAULT_SCHEME_HANDLERS.copy()
+        # cacheHandler is created on first use
+        self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, {})
+        
+        # All the custom ones should be added here
+        self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
+        
+        # These ones should have prevalence over other custom ones
+        self.cacheHandler.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
 
     def newSetup(self,
                  workflow_id,
@@ -789,7 +797,7 @@ class WF:
                 types.BuiltinMethodType)):
             raise WFException('Trying to set for scheme {} a invalid handler'.format(scheme))
 
-        self.schemeHandlers[scheme.lower()] = handler
+        self.cacheHandler.addSchemeHandlers({scheme.lower(): handler})
 
     def injectInputs(self, paths, workflowInputs_destdir=None, workflowInputs_cacheDir=None, lastInput=0):
         if workflowInputs_destdir is None:
@@ -804,7 +812,7 @@ class WF:
             # We are sending the context name thinking in the future,
             # as it could contain potential hints for authenticated access
             fileuri = parse.urlunparse(('file', '', os.path.abspath(path), '', '', ''))
-            matContent = self.downloadInputFile(fileuri, workflowInputs_destdir=storeDir)
+            matContent = self.downloadInputFile(fileuri, workflowInputs_destdir=storeDir, ignoreCache=not cacheable, registerInCache=cacheable)
 
             # Now, time to create the symbolic link
             lastInput += 1
@@ -893,7 +901,9 @@ class WF:
                             matContent = self.downloadInputFile(remote_file,
                                                                 workflowInputs_destdir=storeDir,
                                                                 contextName=contextName,
-                                                                offline=offline
+                                                                offline=offline,
+                                                                ignoreCache=not cacheable,
+                                                                registerInCache=cacheable,
                                                                 )
 
                             # Now, time to create the symbolic link
@@ -932,13 +942,14 @@ class WF:
                                             local=str(exp),
                                             uri=expUri,
                                             prettyFilename=relName,
+                                            metadata_array=matContent.metadata_array,
                                             kind=ContentKind.Directory  if exp.is_dir()  else  ContentKind.File
                                         )
                                     )
                             else:
                                 remote_pairs.append(
                                     MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename,
-                                                        matContent.kind))
+                                                        matContent.kind, matContent.metadata_array))
 
                         theInputs.append(MaterializedInput(linearKey, remote_pairs))
                     else:
@@ -1110,6 +1121,7 @@ class WF:
             if isinstance(in_item, MaterializedInput):
                 itemInValues = in_item.values[0]
                 if isinstance(itemInValues, MaterializedContent):
+                    # TODO: embed metadata_array in some way
                     itemInSource = itemInValues.local
                     if os.path.isfile(itemInSource):
                         properties = {
@@ -1522,7 +1534,7 @@ class WF:
         return cachedFilename
 
     def downloadInputFile(self, remote_file, workflowInputs_destdir: AbsPath = None,
-                          contextName=None, offline: bool = False) -> MaterializedContent:
+                          contextName=None, offline: bool = False, ignoreCache:bool=False, registerInCache:bool=True) -> MaterializedContent:
         """
         Download remote file or directory / dataset.
 
@@ -1538,54 +1550,22 @@ class WF:
             raise RuntimeError("Input is not a valid remote URL or CURIE source")
 
         else:
-            input_file = hashlib.sha1(remote_file.encode('utf-8')).hexdigest()
-
             prettyFilename = parsedInputURL.path.split('/')[-1]
 
             # Assure workflow inputs directory exists before the next step
             if workflowInputs_destdir is None:
                 workflowInputs_destdir = self.cacheWorkflowInputsDir
 
-            if not os.path.exists(workflowInputs_destdir):
-                try:
-                    os.makedirs(workflowInputs_destdir)
-                except IOError:
-                    errstr = "ERROR: Unable to create directory for workflow inputs {}.".format(workflowInputs_destdir)
-                    raise WFException(errstr)
-
-            cachedFilename = os.path.join(self.cacheWorkflowInputsDir, input_file)
-            self.logger.info("downloading workflow input: {} => {}".format(remote_file, cachedFilename))
-            if not os.path.exists(cachedFilename):
-                theScheme = parsedInputURL.scheme.lower()
-                schemeHandler = self.schemeHandlers.get(theScheme)
-
-                if schemeHandler is None:
-                    raise WFException('No {} scheme handler for {}'.format(theScheme, remote_file))
-
-                # Security context is obtained here
-                secContext = None
-                if contextName is not None:
-                    secContext = self.creds_config.get(contextName)
-                    if secContext is None:
-                        raise WFException(
-                            'No security context {} is available, needed by {}'.format(contextName, remote_file))
-
-                # As this is a handler for online resources, comply with offline mode
-                if offline:
-                    raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, cachedFilename))
-
-                # Content is fetched here
-                try:
-                    inputKind = schemeHandler(remote_file, cachedFilename, secContext=secContext)
-                except WFException as we:
-                    raise we
-                except Exception as e:
-                    raise WFException("Cannot download content from {} to {}: {}".format(remote_file, cachedFilename, e))
-            elif os.path.isfile(cachedFilename):
-                inputKind = ContentKind.File
-            elif os.path.isdir(cachedFilename):
-                inputKind = ContentKind.Directory
-            else:
-                raise WFException("Cached {} from {} is neither file nor directory".format(cachedFilename, remote_file))
-
-            return MaterializedContent(cachedFilename, remote_file, prettyFilename, inputKind)
+            self.logger.info("downloading workflow input: {}".format(remote_file))
+            # Security context is obtained here
+            secContext = None
+            if contextName is not None:
+                secContext = self.creds_config.get(contextName)
+                if secContext is None:
+                    raise WFException(
+                        'No security context {} is available, needed by {}'.format(contextName, remote_file))
+            
+            inputKind, cachedFilename, metadata_array = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
+            self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
+            
+            return MaterializedContent(cachedFilename, remote_file, prettyFilename, inputKind, metadata_array)
