@@ -143,6 +143,8 @@ class SchemeHandlerCacheHandler:
                     else:
                         next_input_file = hashlib.sha1(the_remote_file.encode('utf-8')).hexdigest()
                     
+                    if os.path.exists(uriCachedFilename):
+                        os.unlink(uriCachedFilename)
                     os.symlink(next_input_file, uriCachedFilename)
                 except WFException as we:
                     raise we
