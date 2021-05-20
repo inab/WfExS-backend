@@ -47,11 +47,6 @@ import yaml
 import crypt4gh.lib
 import crypt4gh.keys
 
-if platform.system() == "Darwin":
-    import ssl
-
-    ssl._create_default_https_context = ssl._create_unverified_context
-
 from .common import *
 from .encrypted_fs import *
 from .engine import WorkflowEngine, WorkflowEngineException
