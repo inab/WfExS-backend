@@ -1,6 +1,7 @@
 pyyaml
 jsonpath-ng
 paramiko[ed25519]
+certifi
 crypt4gh
 pwgen-passphrase
 bagit

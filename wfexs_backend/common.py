@@ -26,6 +26,24 @@ import os
 from typing import Any, Callable, List, Mapping, NamedTuple
 from typing import NewType, Optional, Pattern, Tuple, Type, Union
 
+
+
+# Patching default context in order to load CA certificates from certifi
+import certifi
+import ssl
+
+def create_augmented_context(purpose=ssl.Purpose.SERVER_AUTH, *, cafile=None, capath=None, cadata=None):
+    context = ssl.create_default_context(purpose=purpose, cafile=cafile, capath=capath, cadata=cadata)
+    
+    context.load_verify_locations(cafile=certifi.where())
+    
+    return context
+
+if ssl._create_default_https_context != create_augmented_context:
+    ssl._create_default_https_context = create_augmented_context
+
+
+
 DEFAULT_GIT_CMD = 'git'
 DEFAULT_DOCKER_CMD = 'docker'
 DEFAULT_SINGULARITY_CMD = 'singularity'
