@@ -113,12 +113,17 @@ class SchemeHandlerCacheHandler:
                     
                     fingerprint = None
                     if isinstance(inputKind, ContentKind):
-                        if inputKind == ContentKind.File:
+                        if os.path.isfile(tempCachedFilename): # inputKind == ContentKind.File:
                             fingerprint = ComputeDigestFromFile(tempCachedFilename, repMethod=stringifyFilenameDigest)
-                        elif inputKind == ContentKind.Directory:
+                            putativeInputKind = ContentKind.File
+                        elif os.path.isdir(tempCachedFilename): # inputKind == ContentKind.Directory:
                             fingerprint = ComputeDigestFromDirectory(tempCachedFilename, repMethod=stringifyFilenameDigest)
+                            putativeInputKind = ContentKind.Directory
                         else:
                             raise WFException("Cached {} from {} is neither file nor directory".format(tempCachedFilename, remote_file))
+                        
+                        if inputKind != putativeInputKind:
+                            self.logger.error("FIXME: Mismatch at {} : {} vs {}".format(remote_file, inputKind, putativeInputKind))
                     
                     # Saving the metadata
                     with open(uriMetaCachedFilename, mode="w", encoding="utf-8") as mOut:
@@ -147,7 +152,7 @@ class SchemeHandlerCacheHandler:
                     else:
                         next_input_file = hashlib.sha1(inputKind.encode('utf-8')).hexdigest()
                     
-                    if os.path.exists(uriCachedFilename):
+                    if os.path.lexists(uriCachedFilename):
                         os.unlink(uriCachedFilename)
                     os.symlink(next_input_file, uriCachedFilename)
                 except WFException as we:
