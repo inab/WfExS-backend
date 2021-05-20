@@ -258,11 +258,16 @@ class FTPDownloader:
             ,
         )
         try:
-            retval = loop.run_until_complete(asyncio.wait(tasks))
+            done, _ = loop.run_until_complete(asyncio.wait(tasks))
         finally:
             loop.close()
         
-        return retval.result
+        retval_exception = done.exception()
+        
+        if retval_exception is not None:
+            raise retval_exception
+        
+        return done.result()
     
     def download_file(self, download_from_file, upload_to_file):
         loop = asyncio.new_event_loop()
@@ -271,11 +276,16 @@ class FTPDownloader:
             ,
         )
         try:
-            retval = loop.run_until_complete(asyncio.wait(tasks))
+            done, _ = loop.run_until_complete(asyncio.wait(tasks))
         finally:
             loop.close()
         
-        return retval.result
+        retval_exception = done.exception()
+        
+        if retval_exception is not None:
+            raise retval_exception
+        
+        return done.result()
     
     def download(self, download_path, upload_path, exclude_ext=[]):
         loop = asyncio.new_event_loop()
@@ -284,11 +294,16 @@ class FTPDownloader:
             ,
         )
         try:
-            retval = loop.run_until_complete(asyncio.wait(tasks))
+            done, _ = loop.run_until_complete(asyncio.wait(tasks))
         finally:
             loop.close()
         
-        return retval.result
+        retval_exception = done.exception()
+        
+        if retval_exception is not None:
+            raise retval_exception
+        
+        return done.result()
 
     @staticmethod
     def clear_tasks():
