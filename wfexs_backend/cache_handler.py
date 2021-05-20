@@ -109,7 +109,7 @@ class SchemeHandlerCacheHandler:
 
                 try:
                     # Content is fetched here
-                    inputKind, fetched_metadata_array = schemeHandler(remote_file, tempCachedFilename, secContext=secContext)
+                    inputKind, fetched_metadata_array = schemeHandler(the_remote_file, tempCachedFilename, secContext=secContext)
                     
                     fingerprint = None
                     if isinstance(inputKind, ContentKind):
