@@ -748,6 +748,7 @@ STDERR
                 print(
 """docker.enabled = false
 singularity.enabled = true
+singularity.envWhitelist = 'SINGULARITY_TMPDIR'
 singularity.runOptions = '--userns {}'
 singularity.autoMounts = true
 """.format(optBash), file=fPC)
