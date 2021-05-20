@@ -91,8 +91,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.max_retries = engineConf.get('maxRetries', self.DEFAULT_MAX_RETRIES)
         self.max_cpus = engineConf.get('maxCpus', self.DEFAULT_MAX_CPUS)
         
-        self.writable_containers = workflowEngineConf.get('writable_containers', False)
-        
         # The profile to force, in case it cannot be guessed
         self.nxf_profile = workflowEngineConf.get('profile')
         

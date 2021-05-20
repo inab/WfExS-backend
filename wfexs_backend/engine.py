@@ -217,6 +217,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         
         # Locating the payloads directory, where the nodejs wrapper should be placed
         self.payloadsDir = os.path.join(os.path.dirname(__file__), 'payloads')
+        
+        # Whether the containers of each step are writable
+        self.writable_containers = workflow_config.get('writable_containers', False)
 
     @classmethod
     @abc.abstractmethod

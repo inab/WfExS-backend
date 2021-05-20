@@ -100,8 +100,6 @@ class CWLWorkflowEngine(WorkflowEngine):
             cwl_version = engineConf.get('version', self.DEFAULT_CWLTOOL_VERSION)
         self.cwl_version = cwl_version
         
-        self.writable_containers = workflowEngineConf.get('writable_containers', False)
-        
         # Setting up packed directory
         self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, 'wf-pack')
         os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
