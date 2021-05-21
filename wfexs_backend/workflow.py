@@ -509,7 +509,7 @@ class WF:
             # Warn/fail earlier
             if os.path.ismount(uniqueWorkDir):
                 # raise WFException("Destination mount point {} is already in use")
-                self.logger.warning("Destination mount point {} is already in use")
+                self.logger.warning("Destination mount point {} is already in use".format(uniqueWorkDir))
             else:
                 # Now, time to mount the encrypted FS
                 ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir,
