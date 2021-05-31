@@ -1,4 +1,4 @@
-workflow_id: https://raw.githubusercontent.com/wombat-p/Compomics-Workflow/v0.26/Nextflow/main.nf
+workflow_id: https://raw.githubusercontent.com/wombat-p/Compomics-Workflow/v0.27/Nextflow/main.nf
 workflow_config:
   secure: false
   writable_containers: true
@@ -13,7 +13,7 @@ params:
     globExplode: "*.raw"
   fasta:
     c-l-a-s-s: File
-    url: https://raw.githubusercontent.com/wombat-p/Compomics-Workflow/v0.26/Results/yeast_UPS.fasta
+    url: https://raw.githubusercontent.com/wombat-p/Compomics-Workflow/v0.27/Results/yeast_UPS.fasta
   miscleavages: 2
   fragment_mass_tolerance: 0.8
   precursor_mass_tolerance: 5
@@ -21,7 +21,7 @@ params:
   variable_mods: 'Oxidation of M,Acetylation of protein N-term'
   experiment_design:
     c-l-a-s-s: File
-    url: https://raw.githubusercontent.com/wombat-p/Compomics-Workflow/v0.26/Results/pxd001819.txt
+    url: https://raw.githubusercontent.com/wombat-p/Compomics-Workflow/v0.27/Results/pxd001819.txt
   max_cpus: 8
   max_memory: 8GB
   outdir:
