@@ -38,7 +38,7 @@ class SingularityContainerFactory(ContainerFactory):
     def ContainerType(cls) -> ContainerType:
         return ContainerType.Singularity
     
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod) -> List[Container]:
+    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, offline: bool = False) -> List[Container]:
         """
         It is assured the containers are materialized
         """
@@ -58,8 +58,12 @@ class SingularityContainerFactory(ContainerFactory):
             # First, let's materialize the container image
             imageSignature = None
             if not os.path.isfile(localContainerPath):
+                if offline:
+                    raise WFException("Cannot download containers in offline mode from {} to {}".format(tag, localContainerPath))
+                    
                 with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
                     tmpContainerPath = os.path.join(self.containersCacheDir,str(uuid.uuid4()))
+                    self.logger.debug("downloading temporary container: {} => {}".format(tag, tmpContainerPath))
                     # Singularity command line borrowed from
                     # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
                     s_retval = subprocess.Popen(
@@ -69,8 +73,22 @@ class SingularityContainerFactory(ContainerFactory):
                     stderr=s_err
                     ).wait()
                     
+                    self.logger.debug("singularity pull retval: {}".format(s_retval))
+                    
+                    with open(s_out.name,"r") as c_stF:
+                        s_out_v = c_stF.read()
+                    with open(s_err.name,"r") as c_stF:
+                        s_err_v = c_stF.read()
+                    
+                    self.logger.debug("singularity pull stdout: {}".format(s_out_v))
+                    
+                    self.logger.debug("singularity pull stderr: {}".format(s_err_v))
+                    
                     # Reading the output and error for the report
                     if s_retval == 0:
+                        if not os.path.exists(tmpContainerPath):
+                            raise ContainerFactoryException("FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(tag, tmpContainerPath))
+                        
                         imageSignature = ComputeDigestFromFile(tmpContainerPath)
                         # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
                         canonicalContainerPath = os.path.join(self.containersCacheDir, imageSignature.replace('=','~').replace('/','-').replace('+','_'))
@@ -91,11 +109,6 @@ class SingularityContainerFactory(ContainerFactory):
                         os.symlink(os.path.relpath(canonicalContainerPath,self.engineContainersSymlinkDir),localContainerPath)
                             
                     else:
-                        with open(s_out.name,"r") as c_stF:
-                            s_out_v = c_stF.read()
-                        with open(s_err.name,"r") as c_stF:
-                            s_err_v = c_stF.read()
-                        
                         errstr = """Could not materialize singularity image {}. Retval {}
 ======
 STDOUT
