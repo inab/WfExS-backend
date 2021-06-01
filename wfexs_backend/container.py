@@ -93,7 +93,7 @@ class ContainerFactory(abc.ABC):
         return self.engineContainersSymlinkDir
     
     @abc.abstractmethod
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod) -> List[Container]:
+    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, offline: bool = False) -> List[Container]:
         """
         It is assured the containers are materialized
         """
@@ -110,7 +110,7 @@ class NoContainerFactory(ContainerFactory):
     def ContainerType(cls) -> ContainerType:
         return ContainerType.NoContainer
     
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod) -> List[Container]:
+    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, offline: bool = False) -> List[Container]:
         """
         It is assured the no-containers are materialized
         i.e. it is a no-op
