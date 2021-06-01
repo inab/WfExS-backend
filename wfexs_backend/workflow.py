@@ -779,7 +779,7 @@ class WF:
 
         # This information is badly needed for provenance
         if self.listOfContainers is None:
-            self.materializedEngine, self.listOfContainers = WorkflowEngine.MaterializeWorkflow(self.materializedEngine)
+            self.materializedEngine, self.listOfContainers = WorkflowEngine.MaterializeWorkflow(self.materializedEngine, offline=offline)
 
     def addSchemeHandler(self, scheme, handler):
         """
@@ -1030,22 +1030,65 @@ class WF:
         # This is needed to be sure all the elements are in place
         self.materializeWorkflow(offline=offline)
         self.materializeInputs(offline=offline)
+        
+        # TODO: substitute previous calls by next one
+        self.unmarshallStage()
 
         exitVal, augmentedInputs, matCheckOutputs = WorkflowEngine.ExecuteWorkflow(self.materializedEngine,
                                                                                    self.materializedParams,
                                                                                    self.outputs)
-
+        
         self.exitVal = exitVal
         self.augmentedInputs = augmentedInputs
         self.matCheckOutputs = matCheckOutputs
+        
         self.logger.debug(exitVal)
         self.logger.debug(augmentedInputs)
         self.logger.debug(matCheckOutputs)
-
-    def createResearchObject(self):
+        
+        # TODO: implement store serialized version of exitVal, augmentedInputs and matCheckOutputs
+        self.marshallExecute()
+    
+    def marshallStage(self, exist_ok : bool = True):
+        # TODO
+        pass
+    
+    def unmarshallStage(self):
+        # TODO
+        pass
+    
+    def marshallExecute(self, exist_ok : bool = True):
+        self.marshallStage(exist_ok=exist_ok)
+        # TODO
+        pass
+    
+    def unmarshallExecute(self):
+        self.unmarshallStage()
+        # TODO
+        pass
+    
+    def createStageResearchObject(self, doMaterializedROCrate : bool = False):
+        """
+        Create RO-crate from stage provenance.
+        """
+        
+        # TODO: implement deserialization
+        self.unmarshallStage()
+        
+        # TODO: implement logic of doMaterializedROCrate
+        
+        # TODO
+        pass
+    
+    def createResultsResearchObject(self, doMaterializedROCrate : bool = False):
         """
         Create RO-crate from execution provenance.
         """
+        # TODO: implement deserialization
+        self.unmarshallExecute()
+        
+        # TODO: implement logic of doMaterializedROCrate
+        
         # TODO: digest the results from executeWorkflow plus all the provenance
 
         # Create RO-crate using crate.zip downloaded from WorkflowHub

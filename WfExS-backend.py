@@ -54,8 +54,10 @@ class WfExS_Commands(ArgTypeMixin,enum.Enum):
     Init = 'init'
     Stage = 'stage'
     MountWorkDir = 'mount-workdir'
+    ExportStage = 'export-stage'
     OfflineExecute = 'offline-execute'
     Execute = 'execute'
+    ExportResults = 'export-results'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
@@ -82,6 +84,8 @@ if __name__ == "__main__":
                     help="Configuration file, describing security contexts, which hold credentials and similar")
     ap.add_argument('-J','--staged-job-dir', dest='workflowWorkingDirectory',
                     help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
+    ap.add_argument('--full', dest='doMaterializedROCrate',
+                    help="Should the RO-Crate contain a copy of the inputs (and outputs)?")
     ap.add_argument('command',help='Command to run',nargs='?',type=WfExS_Commands.argtype,choices=WfExS_Commands,default=WfExS_Commands.Execute)
     ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
     
@@ -154,7 +158,7 @@ if __name__ == "__main__":
     if args.command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
     
-    if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.MountWorkDir):
+    if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.MountWorkDir,WfExS_Commands.ExportStage):
         wfInstance.fromWorkDir(args.workflowWorkingDirectory)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
@@ -170,8 +174,13 @@ if __name__ == "__main__":
         wfInstance.setupEngine()
         wfInstance.materializeWorkflow()
         wfInstance.materializeInputs()
+        wfInstance.marshallStage()
         
         print("* Instance {} (to be used with -J)".format(wfInstance.instanceId))
+    
+    if args.command == WfExS_Commands.ExportStage:
+        wfInstance.createStageResearchObject(args.doMaterializedROCrate)
+        sys.exit(0)
     
     # These lines should be deleted out once code is near production
     # import pprint
@@ -179,4 +188,6 @@ if __name__ == "__main__":
     
     if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.Execute):
         wfInstance.executeWorkflow(offline= args.command==WfExS_Commands.OfflineExecute)
-        wfInstance.createResearchObject()
+    
+    if args.command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
+        wfInstance.createResultsResearchObject(args.doMaterializedROCrate)
