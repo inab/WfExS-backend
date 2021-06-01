@@ -19,14 +19,14 @@ usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
                         [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR]
                         [-W WORKFLOWCONFIGFILENAME]
                         [-Z SECURITYCONTEXTSCONFIGFILENAME]
-                        [-J WORKFLOWWORKINGDIRECTORY] [-V]
-                        [{init,stage,mount-workdir,offline-execute,execute}]
+                        [-J WORKFLOWWORKINGDIRECTORY] [--full] [-V]
+                        [{init,stage,mount-workdir,export-stage,offline-execute,execute,export-results}]
 
-WfExS (workflow execution service) backend 0.3.3-1-gbd81b3e
-(bd81b3ec0f1f2fb58b74aa8b998486f8ee13ee42)
+WfExS (workflow execution service) backend 0.4.0-17-g051f17f
+(051f17f549a91d677d124c9db46dc8dbc12bff41)
 
 positional arguments:
-  {init,stage,mount-workdir,offline-execute,execute}
+  {init,stage,mount-workdir,export-stage,offline-execute,execute,export-results}
                         Command to run
 
 optional arguments:
@@ -49,6 +49,9 @@ optional arguments:
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (to be used with offline-
                         execute)
+  --full                Should the RO-Crate contain a copy of the inputs (and
+                        outputs)? (to be used with export-stage or export-
+                        results)
   -V, --version         show program's version number and exit
 ```
 

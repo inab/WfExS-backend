@@ -84,8 +84,8 @@ if __name__ == "__main__":
                     help="Configuration file, describing security contexts, which hold credentials and similar")
     ap.add_argument('-J','--staged-job-dir', dest='workflowWorkingDirectory',
                     help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
-    ap.add_argument('--full', dest='doMaterializedROCrate',
-                    help="Should the RO-Crate contain a copy of the inputs (and outputs)?")
+    ap.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
+                    help="Should the RO-Crate contain a copy of the inputs (and outputs)? (to be used with {})".format(' or '.join(map(lambda command: str(command), (WfExS_Commands.ExportStage, WfExS_Commands.ExportResults)))))
     ap.add_argument('command',help='Command to run',nargs='?',type=WfExS_Commands.argtype,choices=WfExS_Commands,default=WfExS_Commands.Execute)
     ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
     
