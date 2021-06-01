@@ -22,3 +22,6 @@ dist/
 # keys
 *.pub
 *.key
+
+# tests
+wfexs-backend-test*
