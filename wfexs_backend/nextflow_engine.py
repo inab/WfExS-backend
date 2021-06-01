@@ -594,7 +594,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     # Pattern for searching for container ['"]([^'"]+)['"] in main workflow
     ContScriptPat = re.compile(r"^\s*container\s+['\"]([^'\"]+)['\"]")
     
-    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
+    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine, offline: bool = False) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers

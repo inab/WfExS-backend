@@ -225,7 +225,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         return engineVersion, cwl_install_dir, ""
 
-    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
+    def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine, offline: bool = False) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers.
@@ -258,6 +258,9 @@ class CWLWorkflowEngine(WorkflowEngine):
         # TODO: check whether the repo is newer than the packed file
 
         if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(packedLocalWorkflowFile) == 0:
+            if offline:
+                raise WFException("Cannot allow to materialize packed CWL workflow in offline mode. Risk to access external content.")
+            
             # Execute cwltool --pack
             with open(packedLocalWorkflowFile, mode='wb') as packedH:
                 with tempfile.NamedTemporaryFile() as cwl_pack_stderr:

@@ -298,7 +298,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                         )
 
     @abc.abstractmethod
-    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
+    def materializeWorkflow(self, matWorfklowEngine: MaterializedWorkflowEngine, offline: bool = False) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
@@ -334,10 +334,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         return exitVal, augmentedInputs, matOutputs
 
     @classmethod
-    def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
-        matWfEng, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng)
+    def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine, offline: bool = False) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
+        matWfEng, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng, offline=offline)
 
-        listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags)
+        listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags, offline=offline)
 
         return matWfEng, listOfContainers
     
