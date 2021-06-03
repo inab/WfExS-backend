@@ -77,10 +77,12 @@ class WF:
     CRYPT4GH_PUBKEY_KEY = 'pub'
     CRYPT4GH_PASSPHRASE_KEY = 'passphrase'
 
+    TRS_METADATA_FILE = 'trs_metadata.json'
     TRS_QUERY_CACHE_FILE = 'trs_result.json'
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
-    DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/tools/"  # root of GA4GH TRS API
+    DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
+    TRS_TOOLS_PATH = 'tools/'
     WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
@@ -373,8 +375,13 @@ class WF:
         self.outputs = self.parseExpectedOutputs(outputs)
 
         # The endpoint should always end with a slash
-        if isinstance(trs_endpoint, str) and trs_endpoint[-1] != '/':
-            trs_endpoint += '/'
+        if isinstance(trs_endpoint, str):
+            if trs_endpoint[-1] != '/':
+                trs_endpoint += '/'
+
+            # Removing the tools suffix, which appeared in first WfExS iterations
+            if trs_endpoint.endswith('/' + self.TRS_TOOLS_PATH):
+                trs_endpoint = trs_endpoint[0:-len(self.TRS_TOOLS_PATH)]
 
         self.trs_endpoint = trs_endpoint
 
@@ -391,26 +398,6 @@ class WF:
             doSecureWorkDir = workflow_config.get('secure', True) or self.paranoidMode
 
             self.setupWorkdir(doSecureWorkDir)
-
-        metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
-        if not os.path.exists(metaDir):
-            # Now it is time to save a snapshot of workflow and security docs
-            os.makedirs(metaDir, exist_ok=True)
-
-            with open(os.path.join(metaDir, WORKDIR_WORKFLOW_META_FILE), mode='w', encoding='utf-8') as wmF:
-                workflow_meta = {
-                    'trs_endpoint': trs_endpoint,
-                    'workflow_id': workflow_id,
-                    'version': version_id,
-                    'workflow_type': descriptor_type,
-                    'params': params,
-                    'outputs': outputs,
-                    'workflow_config': workflow_config
-                }
-                yaml.dump(workflow_meta, wmF, Dumper=YAMLDumper)
-
-            with open(os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE), mode='w', encoding='utf-8') as crF:
-                yaml.dump(creds_config, crF, Dumper=YAMLDumper)
 
         # This directory will hold either symbolic links to the cached
         # inputs, or the inputs properly post-processed (decompressed,
@@ -429,6 +416,24 @@ class WF:
         # to tweak or patch workflow executions
         self.engineTweaksDir = os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
         os.makedirs(self.engineTweaksDir, exist_ok=True)
+        # This directory will hold metadata related to the execution
+        self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
+        os.makedirs(self.metaDir, exist_ok=True)
+
+        with open(os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE), mode='w', encoding='utf-8') as wmF:
+            workflow_meta = {
+                'trs_endpoint': trs_endpoint,
+                'workflow_id': workflow_id,
+                'version': version_id,
+                'workflow_type': descriptor_type,
+                'params': params,
+                'outputs': outputs,
+                'workflow_config': workflow_config
+            }
+            yaml.dump(workflow_meta, wmF, Dumper=YAMLDumper)
+
+        with open(os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE), mode='w', encoding='utf-8') as crF:
+            yaml.dump(creds_config, crF, Dumper=YAMLDumper)
 
         self.repoURL = None
         self.repoTag = None
@@ -534,7 +539,7 @@ class WF:
         uniqueTempDir = os.path.join(uniqueRawWorkDir,'.TEMP')
         os.makedirs(uniqueTempDir, exist_ok=True)
         os.chmod(uniqueTempDir, 0o1777)
-
+        
         # Setting up working directories, one per instance
         self.encWorkDir = uniqueEncWorkDir
         self.workDir = uniqueWorkDir
@@ -692,16 +697,22 @@ class WF:
 
         # It is not an absolute URL, so it is being an identifier in the workflow
         if parsedRepoURL.scheme == '':
-            engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromTRS(offline=offline)
+            if (self.trs_endpoint is not None) and len(self.trs_endpoint) > 0:
+                engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromTRS(offline=offline)
+            else:
+                raise WFException('trs_endpoint was not provided')
         else:
             engineDesc = None
 
             # Trying to be smarter
-            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(parsedRepoURL)
-            repoURL = guessedRepoURL
-            repoTag = guessedRepoTag if guessedRepoTag is not None else self.version_id
-            repoRelPath = guessedRepoRelPath
-
+            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(parsedRepoURL, fail_ok=False)
+            
+            if guessedRepoURL is not None:
+                repoURL = guessedRepoURL
+                repoTag = guessedRepoTag if guessedRepoTag is not None else self.version_id
+                repoRelPath = guessedRepoRelPath
+            else:
+                engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromROCrateURL(self.id, offline=offline)
         if repoURL is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
             repoURL = self.id
@@ -1314,33 +1325,50 @@ class WF:
 
         :return:
         """
-        # First, check the tool does exist in the TRS, and the version
-        trs_tool_url = parse.urljoin(self.trs_endpoint, parse.quote(self.id, safe=''))
+        # Now, time to check whether it is a TRSv2
+        trs_endpoint_v2_meta = self.trs_endpoint + 'service-info'
+        trs_endpoint_v2_beta2_meta = self.trs_endpoint + 'metadata'
+        trs_endpoint_meta = None
+        
+        # Needed to store this metadata
+        trsMetadataCache = os.path.join(self.metaDir, self.TRS_METADATA_FILE)
+        
+        try:
+            metaContentKind , cachedTRSMetaFile , trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_meta, self.metaDir, offline)
+            trs_endpoint_meta = trs_endpoint_v2_meta
+        except WFException as wfe:
+            try:
+                metaContentKind , cachedTRSMetaFile , trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_beta2_meta, self.metaDir, offline)
+                trs_endpoint_meta = trs_endpoint_v2_beta2_meta
+            except WFException as wfebeta:
+                raise WFException("Unable to fetch metadata from {} in order to identify whether it is a working GA4GH TRSv2 endpoint. Exceptions:\n{}\n{}".format(self.trs_endpoint, wfe, wfebeta))
+        
+        # Giving a friendly name
+        if not os.path.exists(trsMetadataCache):
+            os.symlink(os.path.basename(cachedTRSMetaFile), trsMetadataCache)
+        
+        with open(trsMetadataCache, mode="r", encoding="utf-8") as ctmf:
+            self.trs_endpoint_meta = json.load(ctmf)
+        
+        # Minimal check
+        trs_version = self.trs_endpoint_meta.get('api_version')
+        if trs_version is None:
+            trs_version = self.trs_endpoint_meta.get('type', {}).get('version')
+        
+        if trs_version is None:
+            raise WFException("Unable to identify TRS version from {}".format(trs_endpoint_meta))
+        
+        # Now, check the tool does exist in the TRS, and the version
+        trs_tool_url = parse.urljoin(self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe=''))
 
-        trsQueryCache = os.path.join(self.workDir, self.TRS_QUERY_CACHE_FILE)
-        if offline:
-            with open(trsQueryCache, mode="r", encoding="utf-8") as tQ:
-                rawToolDesc = tQ.read()
-        else:
-            # The original bytes
-            response = b''
-            with request.urlopen(trs_tool_url) as req:
-                while True:
-                    try:
-                        # Try getting it
-                        responsePart = req.read()
-                    except http.client.IncompleteRead as icread:
-                        # Getting at least the partial content
-                        response += icread.partial
-                        continue
-                    else:
-                        # In this case, saving all
-                        response += responsePart
-                    break
-            # Storing this both for provenance and offline execution
-            with open(trsQueryCache, mode="wb") as tQB:
-                tQB.write(response)
-            rawToolDesc = response.decode('utf-8')
+        trsQueryCache = os.path.join(self.metaDir, self.TRS_QUERY_CACHE_FILE)
+        _ , cachedTRSQueryFile , _ = self.cacheHandler.fetch(trs_tool_url, self.metaDir, offline)
+        # Giving a friendly name
+        if not os.path.exists(trsQueryCache):
+            os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
+        
+        with open(trsQueryCache, mode="r", encoding="utf-8") as tQ:
+            rawToolDesc = tQ.read()
 
         # If the tool does not exist, an exception will be thrown before
         jd = json.JSONDecoder()
@@ -1415,19 +1443,29 @@ class WF:
                                                                safe='') + '/' + parse.quote(
             chosenDescriptorType, safe='') + '/files?' + parse.urlencode({'format': 'zip'})
 
-        return self.getWorkflowRepoFromROCrate(roCrateURL,
+        return self.getWorkflowRepoFromROCrateURL(roCrateURL,
                                                expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
-                                                   chosenDescriptorType])
+                                                   chosenDescriptorType], offline=offline)
 
-    def getWorkflowRepoFromROCrate(self, roCrateURL, expectedEngineDesc: WorkflowType = None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+    def getWorkflowRepoFromROCrateURL(self, roCrateURL, expectedEngineDesc: WorkflowType = None, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
         :param roCrateURL:
         :param expectedEngineDesc: If defined, an instance of WorkflowType
         :return:
         """
-        roCrateFile = self.downloadROcrate(roCrateURL)
-        self.logger.info("downloaded RO-Crate: {}".format(roCrateFile))
+        roCrateFile = self.downloadROcrate(roCrateURL, offline=offline)
+        self.logger.info("downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile))
+        
+        return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
+        
+    def getWorkflowRepoFromROCrateFile(self, roCrateFile: AbsPath, expectedEngineDesc: WorkflowType = None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+        """
+
+        :param roCrateFile:
+        :param expectedEngineDesc: If defined, an instance of WorkflowType
+        :return:
+        """
         roCrateObj = rocrate.ROCrate(roCrateFile)
 
         # TODO: get roCrateObj mainEntity programming language
@@ -1436,13 +1474,16 @@ class WF:
         mainEntityProgrammingLanguageUrl = None
         mainEntityIdHolder = None
         mainEntityId = None
+        workflowPID = None
         workflowUploadURL = None
         workflowTypeId = None
         for e in roCrateObj.get_entities():
-            if (mainEntityIdHolder is None) and e['@type'] == 'CreativeWork':
+            if (mainEntityIdHolder is None) and e['@type'] == 'CreativeWork' and '.json' in e['@id']:
                 mainEntityIdHolder = e.as_jsonld()['about']['@id']
             elif e['@id'] == mainEntityIdHolder:
-                mainEntityId = e.as_jsonld()['mainEntity']['@id']
+                eAsLD = e.as_jsonld()
+                mainEntityId = eAsLD['mainEntity']['@id']
+                workflowPID = eAsLD.get('identifier')
             elif e['@id'] == mainEntityId:
                 eAsLD = e.as_jsonld()
                 workflowUploadURL = eAsLD.get('url')
@@ -1501,7 +1542,7 @@ class WF:
         # It must return four elements:
         return engineDesc, repoURL, repoTag, repoRelPath
 
-    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult]) -> Tuple[RepoURL, RepoTag, RelPath]:
+    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = True) -> Tuple[RepoURL, RepoTag, RelPath]:
         repoURL = None
         repoTag = None
         repoRelPath = None
@@ -1573,32 +1614,36 @@ class WF:
 
                     if len(wf_path) >= 5:
                         repoRelPath = '/'.join(wf_path[4:])
-        else:
+        elif fail_ok:
             raise WFException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
 
         self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
 
         return repoURL, repoTag, repoRelPath
 
-    def downloadROcrate(self, roCrateURL) -> AbsPath:
+    def downloadROcrate(self, roCrateURL, offline: bool = False) -> AbsPath:
         """
         Download RO-crate from WorkflowHub (https://dev.workflowhub.eu/)
         using GA4GH TRS API and save RO-Crate in path.
 
         :param roCrateURL: location path to save RO-Crate
+        :param offline: Are we in offline mode?
         :type roCrateURL: str
+        :type offline: bool
         :return:
         """
+        
+        try:
+            roCK , roCrateFile , _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
+        except Exception as e:
+            raise WFException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e))
+        
         crate_hashed_id = hashlib.sha1(roCrateURL.encode('utf-8')).hexdigest()
         cachedFilename = os.path.join(self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION)
         if not os.path.exists(cachedFilename):
-            try:
-                with request.urlopen(roCrateURL) as url_response, open(cachedFilename, "wb") as download_file:
-                    shutil.copyfileobj(url_response, download_file)
-            except Exception as e:
-                raise WFException("Cannot download RO-Crate, {}".format(e))
+            os.symlink(os.path.basename(roCrateFile),cachedFilename)
 
-        self.cacheROCrateFilename = cachedFilename  # TODO pass to downloadInputFile method
+        self.cacheROCrateFilename = cachedFilename
 
         return cachedFilename
 
