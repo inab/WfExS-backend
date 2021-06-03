@@ -46,7 +46,7 @@ class SchemeHandlerCacheHandler:
         if isinstance(schemeHandlers, dict):
             self.schemeHandlers.update(schemeHandlers)
     
-    def fetch(self, remote_file:Union[urllib.parse.ParseResult, URIType], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, List[URIWithMetadata]]:
+    def fetch(self, remote_file:Union[urllib.parse.ParseResult, URIType], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
         # The directory with the content, whose name is based on sha256
         if not os.path.exists(destdir):
             try:
