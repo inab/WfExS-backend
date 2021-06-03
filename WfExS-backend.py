@@ -50,7 +50,8 @@ class ArgTypeMixin(enum.Enum):
     def __str__(self):
         return str(self.value)
 
-class WfExS_Commands(ArgTypeMixin,enum.Enum):
+
+class WfExS_Commands(ArgTypeMixin, enum.Enum):
     Init = 'init'
     Stage = 'stage'
     MountWorkDir = 'mount-workdir'
@@ -58,6 +59,7 @@ class WfExS_Commands(ArgTypeMixin,enum.Enum):
     OfflineExecute = 'offline-execute'
     Execute = 'execute'
     ExportResults = 'export-results'
+
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
@@ -70,23 +72,23 @@ if __name__ == "__main__":
     else:
         verstr = "{0[0]} ({0[1]})".format(wfexs_version)
     
-    defaultLocalConfigFilename = os.path.join(os.getcwd(),DEFAULT_LOCAL_CONFIG_RELNAME)
+    defaultLocalConfigFilename = os.path.join(os.getcwd(), DEFAULT_LOCAL_CONFIG_RELNAME)
     ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend "+verstr)
     ap.add_argument('--log-file', dest="logFilename", help='Store messages in a file instead of using standard error and standard output')
-    ap.add_argument('-q','--quiet', dest='logLevel', action='store_const', const=logging.WARNING, help='Only show engine warnings and errors')
-    ap.add_argument('-v','--verbose', dest='logLevel', action='store_const', const=logging.INFO, help='Show verbose (informational) messages')
-    ap.add_argument('-d','--debug', dest='logLevel', action='store_const', const=logging.DEBUG, help='Show debug messages (use with care, as it can disclose passphrases and passwords)')
+    ap.add_argument('-q', '--quiet', dest='logLevel', action='store_const', const=logging.WARNING, help='Only show engine warnings and errors')
+    ap.add_argument('-v', '--verbose', dest='logLevel', action='store_const', const=logging.INFO, help='Show verbose (informational) messages')
+    ap.add_argument('-d', '--debug', dest='logLevel', action='store_const', const=logging.DEBUG, help='Show debug messages (use with care, as it can disclose passphrases and passwords)')
     ap.add_argument('-L', '--local-config', dest="localConfigFilename", default=defaultLocalConfigFilename, help="Local installation configuration file")
     ap.add_argument('--cache-dir', dest="cacheDir", help="Caching directory")
     ap.add_argument('-W', '--workflow-config', dest="workflowConfigFilename",
                     help="Configuration file, describing workflow and inputs")
     ap.add_argument('-Z', '--creds-config', dest="securityContextsConfigFilename",
                     help="Configuration file, describing security contexts, which hold credentials and similar")
-    ap.add_argument('-J','--staged-job-dir', dest='workflowWorkingDirectory',
+    ap.add_argument('-J', '--staged-job-dir', dest='workflowWorkingDirectory',
                     help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
     ap.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
                     help="Should the RO-Crate contain a copy of the inputs (and outputs)? (to be used with {})".format(' or '.join(map(lambda command: str(command), (WfExS_Commands.ExportStage, WfExS_Commands.ExportResults)))))
-    ap.add_argument('command',help='Command to run',nargs='?',type=WfExS_Commands.argtype,choices=WfExS_Commands,default=WfExS_Commands.Execute)
+    ap.add_argument('command', help='Command to run', nargs='?', type=WfExS_Commands.argtype, choices=WfExS_Commands, default=WfExS_Commands.Execute)
     ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
     
     args = ap.parse_args()
@@ -137,39 +139,38 @@ if __name__ == "__main__":
     config_relname = os.path.basename(localConfigFilename)
     
     # Initialize (and create config file)
-    if args.command in (WfExS_Commands.Init,WfExS_Commands.Stage,WfExS_Commands.Execute):
-        updated_config, local_config = WF.bootstrap(local_config,config_directory,key_prefix=config_relname)
+    if args.command in (WfExS_Commands.Init, WfExS_Commands.Stage, WfExS_Commands.Execute):
+        updated_config, local_config = WF.bootstrap(local_config, config_directory, key_prefix=config_relname)
         
         # Last, should config be saved back?
         if updated_config or not os.path.exists(localConfigFilename):
             print("* Storing updated configuration at {}".format(localConfigFilename))
             with open(localConfigFilename, mode="w", encoding="utf-8") as cf:
-                yaml.dump(local_config,cf,Dumper=YAMLDumper)
+                yaml.dump(local_config, cf, Dumper=YAMLDumper)
         
         # We are finishing here!
         if args.command == WfExS_Commands.Init:
             sys.exit(0)
-    
-    
+
     # Is the work already staged?
-    wfInstance = WF(local_config,config_directory)
+    wfInstance = WF(local_config, config_directory)
     
     # This is needed to be sure the encfs instance is unmounted
     if args.command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
     
-    if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.MountWorkDir,WfExS_Commands.ExportStage):
+    if args.command in (WfExS_Commands.OfflineExecute, WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage):
         wfInstance.fromWorkDir(args.workflowWorkingDirectory)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
     else:
-        wfInstance.fromFiles(args.workflowConfigFilename,args.securityContextsConfigFilename)
+        wfInstance.fromFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
     
-    print("* Command \"{}\". Working directory will be {}".format(args.command,wfInstance.workDir),file=sys.stderr)
+    print("* Command \"{}\". Working directory will be {}".format(args.command, wfInstance.workDir), file=sys.stderr)
     sys.stderr.flush()
     
-    if args.command in (WfExS_Commands.Stage,WfExS_Commands.Execute):
+    if args.command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
         wfInstance.fetchWorkflow()
         wfInstance.setupEngine()
         wfInstance.materializeWorkflow()
@@ -182,12 +183,8 @@ if __name__ == "__main__":
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)
         sys.exit(0)
     
-    # These lines should be deleted out once code is near production
-    # import pprint
-    # pprint.pprint(wfInstance.materializedParams)
-    
-    if args.command in (WfExS_Commands.OfflineExecute,WfExS_Commands.Execute):
-        wfInstance.executeWorkflow(offline= args.command==WfExS_Commands.OfflineExecute)
+    if args.command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
+        wfInstance.executeWorkflow(offline=args.command == WfExS_Commands.OfflineExecute)
     
     if args.command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
         wfInstance.createResultsResearchObject(args.doMaterializedROCrate)
