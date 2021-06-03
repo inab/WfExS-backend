@@ -19,7 +19,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
   
   - [x] **Step 5.b**: Launch CWL workflows in an execution environment.
   
-  - [x] **Step 5.c**: Launch Nextlfow workflows in an execution environment.
+  - [x] **Step 5.c**: Launch Nextflow workflows in an execution environment.
 
 - [ ] **Step 6**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
 
@@ -54,7 +54,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] Create a JSON Schema formally describing the different configuration files.
 
-- [ ] Supporting `file` protocol and lean and mean paths, so WfExS can be used with local routes and paths. The main drawback is that RO-Crate provenance can suffer in these scenarios, as it is not provided a public URL/URI.
+- [x] Supporting `file` protocol and lean and mean paths, so WfExS can be used with local routes and paths. The main drawback is that RO-Crate provenance can suffer in these scenarios, as it is not provided a public URL/URI.
 
 - [ ] Supporting post-process steps on inputs, which allow implementing decrypt crypt4gh encrypted files from EGA.
 
