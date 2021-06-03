@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+import http.client
 import os
 import paramiko
 import paramiko.pkey
@@ -66,7 +67,17 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Opti
     try:
         with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
             uri_with_metadata = URIWithMetadata(url_response.url, dict(url_response.headers.items()))
-            shutil.copyfileobj(url_response, download_file)
+            
+            while True:
+                try:
+                    # Try getting it
+                    shutil.copyfileobj(url_response, download_file)
+                except http.client.IncompleteRead as icread:
+                    download_file.write(icread.partial)
+                    # Restarting the copy
+                    continue
+                break
+            
     except urllib.error.HTTPError as he:
         raise WFException("Error fetching {} : {} {}".format(remote_file, he.code, he.reason))
     
