@@ -31,8 +31,9 @@ import types
 import uuid
 
 from pathlib import Path
-from typing import Pattern
+from typing import List, Pattern, Tuple, Union
 from urllib import request, parse
+
 from rocrate import rocrate
 import bagit
 
@@ -83,7 +84,7 @@ class WF:
     WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
-
+    
     @classmethod
     def generate_passphrase(cls) -> str:
         import random
@@ -696,7 +697,7 @@ class WF:
             engineDesc = None
 
             # Trying to be smarter
-            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(self.id)
+            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(parsedRepoURL)
             repoURL = guessedRepoURL
             repoTag = guessedRepoTag if guessedRepoTag is not None else self.version_id
             repoRelPath = guessedRepoRelPath
@@ -1500,14 +1501,44 @@ class WF:
         # It must return four elements:
         return engineDesc, repoURL, repoTag, repoRelPath
 
-    def guessRepoParams(self, wf_url: str) -> Tuple[RepoURL, RepoTag, RelPath]:
+    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult]) -> Tuple[RepoURL, RepoTag, RelPath]:
         repoURL = None
         repoTag = None
         repoRelPath = None
 
-        # TODO handling other additional cases
-        parsed_wf_url = parse.urlparse(wf_url)
-        if parsed_wf_url.netloc == 'github.com':
+        # Deciding which is the input
+        if isinstance(wf_url, parse.ParseResult):
+            parsed_wf_url = wf_url
+        else:
+            parsed_wf_url = parse.urlparse(wf_url)
+        
+        # These are the usual URIs which can be understood by pip
+        # See https://pip.pypa.io/en/stable/cli/pip_install/#git
+        if parsed_wf_url.scheme.startswith('git+') or parsed_wf_url.scheme == 'git':
+            # Getting the scheme git is going to understand
+            if len(parsed_wf_url.scheme) > 3:
+                gitScheme = parsed_wf_url.scheme[4:]
+            else:
+                gitScheme = parsed_wf_url.scheme
+            
+            # Getting the tag or branch
+            if '@' in parsed_wf_url.path:
+                gitPath , repoTag = parsed_wf_url.path.split('@',1)
+            else:
+                gitPath = parsed_wf_url.path
+            
+            # Getting the repoRelPath (if available)
+            if len(parsed_wf_url.fragment) > 0:
+                frag_qs = parse.parse_qs(parsed_wf_url.fragment)
+                subDirArr = frag_qs.get('subdirectory',[])
+                if len(subDirArr) > 0:
+                    repoRelPath = subDirArr[0]
+            
+            # Now, reassemble the repoURL
+            repoURL = parse.urlunparse((gitScheme, parsed_wf_url.netloc, gitPath, '', '', ''))
+            
+        # TODO handling other popular cases, like bitbucket
+        elif parsed_wf_url.netloc == 'github.com':
             wf_path = parsed_wf_url.path.split('/')
 
             if len(wf_path) >= 3:

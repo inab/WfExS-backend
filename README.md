@@ -1,9 +1,17 @@
 # ![WfExS-backend:](docs/logo/WfExS-logo-final_paths.svg) Workflow Execution Service backend
 
-WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") project aims to fetch a workflow from a TRS-enabled [WorkflowHub](https://workflowhub.eu) instance,
-fetch the inputs and workflow execution engine (currently working on [Nextflow](https://www.nextflow.io/)
-and [cwltool](https://github.com/common-workflow-language/cwltool)), and execute the workflow in a
-secure way.
+WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") project aims to automate next steps:
+
+* Fetch and cache a workflow from either a TRS-enabled [WorkflowHub](https://workflowhub.eu) instance,
+a git repository ([using this syntax](https://pip.pypa.io/en/stable/cli/pip_install/#git) for the URI)
+or a public GitHub URL (like [this example](https://raw.githubusercontent.com/inab/ipc_workflows/cosifer-20210322/cosifer/cwl/cosifer-workflow.cwl)).
+* Identify the kind of workflow.
+* Fetch and set up workflow execution engine (currently supported [Nextflow](https://www.nextflow.io/)
+and [cwltool](https://github.com/common-workflow-language/cwltool)).
+* Identify the needed containers by the workflow, and fetch/cache them.
+* Fetch and cache the inputs, represented either through an URL or a [CURIE-represented](https://en.wikipedia.org/wiki/CURIE) PID (public [persistent identifier](https://en.wikipedia.org/wiki/Persistent_identifier)).
+* Execute the workflow in a secure way.
+* Optionally describe the results through an [RO-Crate](https://www.researchobject.org/ro-crate/), and upload both RO-Crate and the results elsewhere in a secure way.
 
 This development is relevant for projects like [EOSC-Life](https://www.eosc-life.eu/) or [EJP-RD](https://www.ejprarediseases.org/). The list of high level scheduled and pending developments can be seen at [TODO.md](TODO.md).
 
@@ -63,11 +71,15 @@ WfExS commands are:
 
 * `stage`: This command is used to fetch all the workflow preconditions and files, staging them for an execution. It honours `-L`, `-W` and `-Z` parameters, and once the staging is finished it prints the path to the parent execution environment.
 
-* `offline-execute`: This command is complementary to `stage`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`.
+* `export-stage` _(to be done)_: This command is complementary to `stage`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`. It will bundle the description of the staged environment in an RO-Crate, in order to be reused later, or uploaded to places like WorkflowHub. All of this assuming there is an stage there.
 
-* `mount-workdir`: This command is a helper to inspect encrypted execution environments, as it mounts its working directory for a limited time. As `offline-execute`, it recognizes `-L` parameter and depends on `-J` parameter.
+* `offline-execute`: This command is complementary to `stage`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`. It executes the workflow, assuming all the preconditions are in place.
 
-* `execute`: This command's behaviour is equivalent to `stage` followed by `offline-execute`.
+* `export-results` _(to be finished)_: This command is complementary to `offline-execute`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute`. It bundles the results from an execution at a working directory in an RO-Crate, assuming there is an execution there.
+
+* `mount-workdir`: This command is a helper to inspect encrypted execution environments, as it mounts its working directory for a limited time. As `export-stage`, `offline-execute` or `export-results`, it recognizes `-L` parameter and depends on `-J` parameter.
+
+* `execute`: This command's behaviour is equivalent to `stage` followed by `offline-execute`, followed by `export-results`.
 
 When the execution has finished properly, the working directory `outputs` subdirectory should contain both the outputs and an `execution.crate.zip`, which can be used to create a workflow entry in <https://workflowhub.eu>.
 
