@@ -317,8 +317,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
         pass
     
-    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName]) -> List[Container]:
-        return self.container_factory.materializeContainers(listOfContainerTags, self.simpleContainerFileName)
+    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName], offline: bool = False) -> List[Container]:
+        return self.container_factory.materializeContainers(listOfContainerTags, self.simpleContainerFileName, offline=offline)
 
     @abc.abstractmethod
     def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput],
