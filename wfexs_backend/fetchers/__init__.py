@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import http.client
+import io
 import os
 import paramiko
 import paramiko.pkey
@@ -35,7 +36,7 @@ from ..common import *
 from ..utils.ftp_downloader import FTPDownloader
 
 
-def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
+def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
     """
     Method to fetch contents from http, https and ftp
 
@@ -44,6 +45,9 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Opti
     :param secContext:
     """
     
+    headers = {}
+    method = None
+    orig_remote_file = remote_file
     if isinstance(secContext, dict):
         username = secContext.get('username')
         password = secContext.get('password')
@@ -62,10 +66,20 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Opti
             # Now the credentials are properly set up
             remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
                                             parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
+        method = secContext.get('method')
+        headers = secContext.get('headers', {})
+    
+    # Preparing where it is going to be written
+    if isinstance(cachedFilename, (io.TextIOBase, io.BufferedIOBase, io.RawIOBase, io.IOBase)):
+        download_file = cachedFilename
+    else:
+        download_file = open(cachedFilename, 'wb')
     
     uri_with_metadata = None
     try:
-        with request.urlopen(remote_file) as url_response, open(cachedFilename, 'wb') as download_file:
+        req_remote = request.Request(remote_file, headers=headers, method=method)
+        with request.urlopen(req_remote) as url_response:
+            
             uri_with_metadata = URIWithMetadata(url_response.url, dict(url_response.headers.items()))
             
             while True:
@@ -79,7 +93,11 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Opti
                 break
             
     except urllib.error.HTTPError as he:
-        raise WFException("Error fetching {} : {} {}".format(remote_file, he.code, he.reason))
+        raise WFException("Error fetching {} : {} {}".format(orig_remote_file, he.code, he.reason))
+    finally:
+        # Closing files opened by this code
+        if download_file != cachedFilename:
+            download_file.close()
     
     return ContentKind.File, [ uri_with_metadata ]
 
