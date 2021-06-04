@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+import io
 import json
 
 from typing import List, Optional, Tuple
@@ -24,6 +25,7 @@ from typing import List, Optional, Tuple
 from urllib import request, parse
 import urllib.error
 
+from . import fetchClassicURL
 from ..common import *
 
 
@@ -47,9 +49,10 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
     ]
     metadata = None
     try:
-        with request.urlopen(metadata_url) as url_response:
-            metadata = json.load(url_response)
-            metadata_array.append(URIWithMetadata(metadata_url, metadata))
+        metaio = io.BytesIO()
+        _ , metametaio = fetchClassicURL(metadata_url, metaio)
+        metadata = json.loads(metaio.getvalue().decode('utf-8'))
+        metadata_array.extend(metametaio)
     except urllib.error.HTTPError as he:
         raise WFException("Error fetching PRIDE metadata for {} : {} {}".format(projectId, he.code, he.reason))
     
