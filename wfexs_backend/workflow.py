@@ -57,6 +57,7 @@ from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_
 from .cache_handler import SchemeHandlerCacheHandler
 from .fetchers import DEFAULT_SCHEME_HANDLERS
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
+from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX, SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
@@ -79,6 +80,7 @@ class WF:
 
     TRS_METADATA_FILE = 'trs_metadata.json'
     TRS_QUERY_CACHE_FILE = 'trs_result.json'
+    TRS_TOOL_FILES_FILE = 'trs_tool_files.json'
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
     DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
@@ -284,6 +286,8 @@ class WF:
         os.makedirs(self.cacheWorkflowDir, exist_ok=True)
         self.cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
         os.makedirs(self.cacheROCrateDir, exist_ok=True)
+        self.cacheTRSFilesDir = os.path.join(cacheDir, 'trs-files-cache')
+        os.makedirs(self.cacheTRSFilesDir, exist_ok=True)
         self.cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
         os.makedirs(self.cacheWorkflowInputsDir, exist_ok=True)
 
@@ -314,6 +318,7 @@ class WF:
         
         # All the custom ones should be added here
         self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
+        self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
         
         # These ones should have prevalence over other custom ones
         self.cacheHandler.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
@@ -713,21 +718,32 @@ class WF:
                 repoRelPath = guessedRepoRelPath
             else:
                 engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromROCrateURL(self.id, offline=offline)
+        
         if repoURL is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
             repoURL = self.id
             repoTag = self.version_id
             repoRelPath = None
+        
+        repoDir = None
+        repoEffectiveCheckout = None
+        if ':' in repoURL:
+            parsedRepoURL = parse.urlparse(repoURL)
+            if len(parsedRepoURL.scheme) > 0:
+                self.repoURL = repoURL
+                self.repoTag = repoTag
+                # It can be either a relative path to a directory or to a file
+                # It could be even empty!
+                if repoRelPath == '':
+                    repoRelPath = None
+                self.repoRelPath = repoRelPath
 
-        self.repoURL = repoURL
-        self.repoTag = repoTag
-        # It can be either a relative path to a directory or to a file
-        # It could be even empty!
-        if repoRelPath == '':
-            repoRelPath = None
-        self.repoRelPath = repoRelPath
-
-        repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
+                repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
+        
+        # For the cases of pure TRS repos, like Dockstore
+        if repoDir is None:
+            repoDir = repoURL
+        
         # Workflow Language version cannot be assumed here yet
         localWorkflow = LocalWorkflow(dir=repoDir, relPath=repoRelPath, effectiveCheckout=repoEffectiveCheckout)
         self.logger.info("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
@@ -1359,10 +1375,10 @@ class WF:
             raise WFException("Unable to identify TRS version from {}".format(trs_endpoint_meta))
         
         # Now, check the tool does exist in the TRS, and the version
-        trs_tool_url = parse.urljoin(self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe=''))
+        trs_tools_url = parse.urljoin(self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe=''))
 
         trsQueryCache = os.path.join(self.metaDir, self.TRS_QUERY_CACHE_FILE)
-        _ , cachedTRSQueryFile , _ = self.cacheHandler.fetch(trs_tool_url, self.metaDir, offline)
+        _ , cachedTRSQueryFile , _ = self.cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
         # Giving a friendly name
         if not os.path.exists(trsQueryCache):
             os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
@@ -1390,9 +1406,12 @@ class WF:
         toolVersionId = self.version_id
         if (toolVersionId is not None) and len(toolVersionId) > 0:
             for possibleToolVersion in possibleToolVersions:
-                if isinstance(possibleToolVersion, dict) and str(possibleToolVersion.get('id', '')) == self.version_id:
-                    toolVersion = possibleToolVersion
-                    break
+                if isinstance(possibleToolVersion, dict):
+                    possibleId = str(possibleToolVersion.get('id', ''))
+                    possibleName = str(possibleToolVersion.get('name', ''))
+                    if self.version_id in (possibleId, possibleName):
+                        toolVersion = possibleToolVersion
+                        break
             else:
                 raise WFException(
                     'Version {} not found in workflow {} from {} . Raw answer:\n{}'.format(self.version_id, self.id,
@@ -1437,15 +1456,42 @@ class WF:
             raise WFException(
                 'Descriptor type {} is not among the acknowledged ones by this backend. Version {} of workflow {} from {} . Raw answer:\n{}'.format(
                     self.descriptor_type, self.version_id, self.id, self.trs_endpoint, rawToolDesc))
+        
+        toolFilesURL = trs_tools_url + '/versions/' + parse.quote(toolVersionId, safe='') + '/' + parse.quote(chosenDescriptorType, safe='') + '/files'
+        
+        # Detecting whether RO-Crate trick will work
+        if self.trs_endpoint_meta.get('organization',{}).get('name') == 'WorkflowHub':
+            self.logger.debug("WorkflowHub workflow")
+            # And this is the moment where the RO-Crate must be fetched
+            roCrateURL = toolFilesURL + '?' + parse.urlencode({'format': 'zip'})
 
-        # And this is the moment where the RO-Crate must be fetched
-        roCrateURL = trs_tool_url + '/versions/' + parse.quote(toolVersionId,
-                                                               safe='') + '/' + parse.quote(
-            chosenDescriptorType, safe='') + '/files?' + parse.urlencode({'format': 'zip'})
-
-        return self.getWorkflowRepoFromROCrateURL(roCrateURL,
-                                               expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
-                                                   chosenDescriptorType], offline=offline)
+            return self.getWorkflowRepoFromROCrateURL(roCrateURL,
+                                                   expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
+                                                       chosenDescriptorType], offline=offline)
+        else:
+            self.logger.debug("TRS workflow")
+            # Learning the available files and maybe
+            # which is the entrypoint to the workflow
+            _ , trsFilesDir , trsFilesMeta = self.cacheHandler.fetch(INTERNAL_TRS_SCHEME_PREFIX + ':' + toolFilesURL, self.cacheTRSFilesDir, offline)
+            
+            expectedEngineDesc = self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
+            remote_workflow_entrypoint = trsFilesMeta[0].metadata.get('remote_workflow_entrypoint')
+            if remote_workflow_entrypoint is not None:
+                # Give it a chance to identify the original repo of the workflow
+                repoURL, repoTag, repoRelPath = self.guessRepoParams(remote_workflow_entrypoint, fail_ok=False)
+                
+                if repoURL is not None:
+                    self.logger.debug("Derived repository {} ({} , rel {}) from {}".format(repoURL, repoTag, repoRelPath, trs_tools_url))
+                    return expectedEngineDesc , repoURL, repoTag, repoRelPath
+            
+            workflow_entrypoint = trsFilesMeta[0].metadata.get('workflow_entrypoint')
+            if workflow_entrypoint is not None:
+                self.logger.debug("Using raw files from TRS tool {}".format(trs_tools_url))
+                repoDir = trsFilesDir
+                repoRelPath = workflow_entrypoint
+                return expectedEngineDesc , repoDir, None, repoRelPath
+                
+        raise WFException("Unable to find a workflow in {}".format(trs_tools_url))
 
     def getWorkflowRepoFromROCrateURL(self, roCrateURL, expectedEngineDesc: WorkflowType = None, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """

@@ -2,10 +2,12 @@
 
 WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") project aims to automate next steps:
 
-* Fetch and cache a workflow from either a TRS-enabled [WorkflowHub](https://workflowhub.eu) instance (which provides RO-Crates),
-a straight URL to an existing [RO-Crate](https://www.researchobject.org/ro-crate/) in ZIP archive describing a workflow,
-a git repository ([using this syntax](https://pip.pypa.io/en/stable/cli/pip_install/#git) for the URI)
-or a public GitHub URL (like [this example](https://raw.githubusercontent.com/inab/ipc_workflows/cosifer-20210322/cosifer/cwl/cosifer-workflow.cwl)).
+* Fetch and cache a workflow from either:
+  * A TRSv2-enabled [WorkflowHub](https://workflowhub.eu) instance (which provides RO-Crates).
+  * A TRSv2 (2.0.0-beta2 or 2.0.0) enabled service. Currently tested with [Dockstore](https://dockstore.org).
+  * A straight URL to an existing [RO-Crate](https://www.researchobject.org/ro-crate/) in ZIP archive describing a workflow.
+  * A git repository ([using this syntax](https://pip.pypa.io/en/stable/cli/pip_install/#git) for the URI)
+  * A public GitHub URL (like [this example](https://raw.githubusercontent.com/inab/ipc_workflows/cosifer-20210322/cosifer/cwl/cosifer-workflow.cwl)).
 * Identify the kind of workflow.
 * Fetch and set up workflow execution engine (currently supported [Nextflow](https://www.nextflow.io/)
 and [cwltool](https://github.com/common-workflow-language/cwltool)).

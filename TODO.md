@@ -62,7 +62,8 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] Generate an abstract CWL description of a workflow execution. In the case of CWL will be a no-op, in the case of Nextflow it will use execution provenance.
 
-- [ ] Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
-  - Example:
+- [x] Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
+  - Incomplete example 1 at [tests/somatic_cnv_dockstore_cwl.yaml](tests/somatic_cnv_dockstore_cwl.yaml).
+  - Example of the kind of entries being understood:
     - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902
     - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902/versions/master/CWL/files
