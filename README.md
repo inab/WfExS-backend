@@ -130,7 +130,13 @@ The program uses three different types of configuration files:
 
 * Security contexts file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_credentials_nxf.yaml), [CWL example](tests/wetlab2variations_credentials_cwl.yaml)).
 
-# Scenarios
+# Scenarios (version 0.4)
+
+<span style="display:block;text-align:center">
+<img src="docs/wfexs-flowchart-0.4.x.svg" alt="WfExS-backend 0.4.x flowchart scenarios" />
+</span>
+
+# Scenarios (version 0.3)
 ## WorkflowHub scenario
 
 <span style="display:block;text-align:center">
@@ -142,7 +148,7 @@ The program uses three different types of configuration files:
 <img src="docs/wfexs-flowchart-github.svg" alt="WfExS-backend, bare GitHub scenario" />
 </span>
 
-## WfExS-config-replicator usage
+# WfExS-config-replicator usage
 
 Example and usage of this tool, which helps generating a bunch of workflow instantiation files
 from a template one and an Excel or CSV file with the fields to substitute:
