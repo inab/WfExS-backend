@@ -1,33 +1,29 @@
-trs_endpoint: https://dev.workflowhub.eu/ga4gh/trs/v2/tools/
-workflow_id: 119
-version: 1
+workflow_id: https://raw.githubusercontent.com/kids-first/kf-alignment-workflow/v2.7.3/workflows/kfdrc_alignment_wf.cwl
+workflow_config:
+  secure: false
 # All the inputs must be URLs or CURIEs from identifiers.org
 params:
   input_bam_list:
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/C835.HCC1143.2.converted.realigned.base_recalibrated.bam
+    c-l-a-s-s: File
+    url: file:///scratch/laura/chop/C835.HCC1143.2.converted.realigned.base_recalibrated.bam
   biospecimen_name: C835
   reference_tar:
     c-l-a-s-s: File
-    location: /home/user/chop_test/Homo_sapiens_assembly38.tar
+    url: file:///scratch/laura/chop/Homo_sapiens_assembly38.tar
   knownsites:
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/1000G_omni2.5.hg38.vcf.gz
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/1000G_phase1.snps.high_confidence.hg38.vcf.gz
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/Homo_sapiens_assembly38.known_indels.vcf.gz
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+    c-l-a-s-s: File
+    url: 
+      - file:///scratch/laura/chop/1000G_omni2.5.hg38.vcf.gz
+      - file:///scratch/laura/chop/1000G_phase1.snps.high_confidence.hg38.vcf.gz
+      - file:///scratch/laura/chop/Homo_sapiens_assembly38.known_indels.vcf.gz
+      - file:///scratch/laura/chop/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
   knownsites_indexes:
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/1000G_omni2.5.hg38.vcf.gz.tbi
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/1000G_phase1.snps.high_confidence.hg38.vcf.gz.tbi
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/Homo_sapiens_assembly38.known_indels.vcf.gz.tbi
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi
+    c-l-a-s-s: File
+    url: 
+      - file:///scratch/laura/chop/1000G_omni2.5.hg38.vcf.gz.tbi
+      - file:///scratch/laura/chop/1000G_phase1.snps.high_confidence.hg38.vcf.gz.tbi
+      - file:///scratch/laura/chop/Homo_sapiens_assembly38.known_indels.vcf.gz.tbi
+      - file:///scratch/laura/chop/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi
   output_basename: C835-bamfastq-test
   run_bam_processing: True
   run_pe_reads_processing: True
@@ -37,10 +33,10 @@ params:
   run_agg_metrics: False
   run_gvcf_processing: False
   input_pe_reads_list:
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/C835.HCC1143.2.converted.pe_1.fastq
+    c-l-a-s-s: File
+    url: file:///scratch/laura/chop/C835.HCC1143.2.converted.pe_1.fastq
   input_pe_mates_list:
-    - c-l-a-s-s: File
-      location: /home/user/chop_test/C835.HCC1143.2.converted.pe_2.fastq
+    c-l-a-s-s: File
+    url: file:///scratch/laura/chop/C835.HCC1143.2.converted.pe_2.fastq
   input_pe_rgs_list:
     - '@RG\tID:C835.HCC1143.2.converted.pe\tLB:C835.HCC1143.2.converted.pe\tPL:ILLUMINA\tSM:HCC1143'
