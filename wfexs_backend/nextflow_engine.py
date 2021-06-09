@@ -119,7 +119,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         nfPath = localWf.dir
         if localWf.relPath is not None:
-            engineVer = self.nxf_version
             nfPath = os.path.join(nfPath, localWf.relPath)
 
         if os.path.isdir(nfPath):
@@ -132,9 +131,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         nfConfig = os.path.join(nfDir, 'nextflow.config')
         verPat = re.compile(r"nextflowVersion *= *['\"]!?[>=]*([^ ]+)['\"]")
         mainPat = re.compile(r"mainScript *= *['\"]([^\"]+)['\"]")
-	# Setting up the default value, in case nothing is found
-        if engineVer is None:
-            engineVer = self.nxf_version
+        engineVer = None
+        
         #else:
         #    # We are deactivating the engine version capture from the config
         #    verPat = None
@@ -165,9 +163,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         if candidateNf is None:
             # Default case
+            self.logger.debug("Default candidateNf")
             candidateNf = 'main.nf'
-
+        
         entrypoint = os.path.join(nfDir, candidateNf)
+        self.logger.debug("Testing entrypoint {} (dir {} candidate {})".format(entrypoint, nfDir, candidateNf))
         # Checking that the workflow entrypoint does exist
         if not os.path.isfile(entrypoint):
             raise WorkflowEngineException(
@@ -185,7 +185,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 # No nextflow keyword was detected
                 return None, None
                 
-        
+        # Setting a default engineVer
         if engineVer is None:
             engineVer = self.nxf_version
         

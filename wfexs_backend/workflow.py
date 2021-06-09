@@ -63,7 +63,13 @@ from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
 
 # The list of classes to be taken into account
-WORKFLOW_ENGINE_CLASSES = [NextflowWorkflowEngine, CWLWorkflowEngine]
+# CWL detection is before, as Nextflow one is
+# a bit lax (only detects a couple of too common
+# keywords)
+WORKFLOW_ENGINE_CLASSES = [
+    CWLWorkflowEngine,
+    NextflowWorkflowEngine,
+]
 
 
 class WF:
