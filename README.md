@@ -20,6 +20,11 @@ This development is relevant for projects like [EOSC-Life](https://www.eosc-life
 
 In order to use it you have to install first the dependencies described at [INSTALL.md](INSTALL.md).
 
+## WfExS-backend analysis life cycle
+
+![wfexs-analysis-lifecycle](docs/wfexs-analysis-lifecycle.svg)
+
+
 ## WfExS-backend Usage
 
 ```bash
