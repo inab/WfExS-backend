@@ -1589,7 +1589,7 @@ class WF:
         if workflowUploadURL is not None:
             repoURL, repoTag, repoRelPath = self.guessRepoParams(workflowUploadURL, fail_ok=False)
         
-        if repoURL is None
+        if repoURL is None:
             repoURL, repoTag, repoRelPath = self.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=False)
         
         if repoURL is None:
