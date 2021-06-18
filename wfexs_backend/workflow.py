@@ -1584,10 +1584,14 @@ class WF:
         # This workflow URL, in the case of github, can provide the repo,
         # the branch/tag/checkout , and the relative directory in the
         # fetched content (needed by Nextflow)
-        wf_url = workflowUploadURL if workflowUploadURL is not None else roCrateObj.root_dataset['isBasedOn']
-
-        repoURL, repoTag, repoRelPath = self.guessRepoParams(wf_url)
-
+        
+        # Some RO-Crates might have this value missing or ill-built
+        if workflowUploadURL is not None:
+            repoURL, repoTag, repoRelPath = self.guessRepoParams(workflowUploadURL, fail_ok=False)
+        
+        if repoURL is None
+            repoURL, repoTag, repoRelPath = self.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=False)
+        
         if repoURL is None:
             raise WFException('Unable to guess repository from RO-Crate manifest')
 
