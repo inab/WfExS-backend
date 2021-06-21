@@ -24,10 +24,34 @@ import logging
 import math
 import os
 from pathlib import Path, PurePosixPath
+import socket
 import sys
 import time
 
 import aioftp
+
+
+def asyncio_run(tasks):
+    """
+      Helper method which abstracts differences from
+      Python 3.7 and before about coroutines
+    """
+    if hasattr(asyncio, "run"):
+        done , _ = asyncio.run(asyncio.wait(tasks))
+    else:
+        loop = asyncio.new_event_loop()
+        try:
+            done, _ = loop.run_until_complete(asyncio.wait(tasks))
+        finally:
+            loop.close()
+
+    task = done.pop()
+    retval_exception = task.exception()
+    
+    if retval_exception is not None:
+        raise retval_exception
+        
+    return task.result()
 
 class FTPDownloader:
     DEFAULT_USER = 'ftp'
@@ -37,7 +61,12 @@ class FTPDownloader:
     DEFAULT_MAX_RETRIES = 5
 
     def __init__(self, HOST, PORT=DEFAULT_FTP_PORT, USER=DEFAULT_USER, PASSWORD=DEFAULT_PASS, max_retries=DEFAULT_MAX_RETRIES):
-        self.HOST = HOST
+        # Due a misbehaviour in asyncio.open_connection with
+        # EPSV connection in ftp-trace.ncbi.nih.gov
+        # this only works always when HOST is an IP address
+        # instead of a hostname
+        # FIXME: Prepare it for IPv6
+        self.HOST = socket.gethostbyname(HOST)
         self.PORT = PORT
         self.USER = USER
         self.PASSWORD = PASSWORD
@@ -252,65 +281,34 @@ class FTPDownloader:
             return retval
     
     def download_dir(self, download_from_dir, upload_to_dir='.', exclude_ext=[]):
-        loop = asyncio.new_event_loop()
         tasks = (
             self.download_dir_async(download_from_dir, upload_to_dir, exclude_ext)
             ,
         )
-        try:
-            done, _ = loop.run_until_complete(asyncio.wait(tasks))
-        finally:
-            loop.close()
-        
-        task = done.pop()
-        retval_exception = task.exception()
-        
-        if retval_exception is not None:
-            raise retval_exception
-        
-        return task.result()
+        return asyncio_run(tasks)
     
     def download_file(self, download_from_file, upload_to_file):
-        loop = asyncio.new_event_loop()
         tasks = (
             self.download_file_async(download_from_file, upload_to_file)
             ,
         )
-        try:
-            done, _ = loop.run_until_complete(asyncio.wait(tasks))
-        finally:
-            loop.close()
-        
-        task = done.pop()
-        retval_exception = task.exception()
-        
-        if retval_exception is not None:
-            raise retval_exception
-        
-        return task.result()
+        return asyncio_run(tasks)
     
     def download(self, download_path, upload_path, exclude_ext=[]):
-        loop = asyncio.new_event_loop()
         tasks = (
             self.download_async(download_path, upload_path, exclude_ext)
             ,
         )
-        try:
-            done, _ = loop.run_until_complete(asyncio.wait(tasks))
-        finally:
-            loop.close()
-        
-        task = done.pop()
-        retval_exception = task.exception()
-        
-        if retval_exception is not None:
-            raise retval_exception
-        
-        return task.result()
+        return asyncio_run(tasks)
 
     @staticmethod
     def clear_tasks():
         # This line should be asyncio.current_task(asyncio.get_running_loop())
         # when it is migrated to python 3.7 and later
-        for task in asyncio.Task.current_task():
+        if hasattr(asyncio, "current_task"):
+            task_enum = asyncio.current_task(asyncio.get_running_loop())
+        else:
+            task_enum = asyncio.Task.current_task()
+
+        for task in task_enum:
             task.cancel()
