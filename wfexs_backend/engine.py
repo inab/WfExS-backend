@@ -394,7 +394,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         matOutputs.append(matOutput)
             else:
                 # Engines like CWL
-                for outputName, outputVal in outputsMapping:
+                for outputName, outputVal in outputsMapping.items():
                     matValues = CWLDesc2Content(outputVal, self.logger)
                     
                     matValueClassName = matValues[0].__class__.__name__
