@@ -1,0 +1,16 @@
+trs_endpoint: https://dev.workflowhub.eu/ga4gh/trs/v2/tools/
+workflow_id: 139
+version: 2
+workflow_config:
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  data_matrix:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/PhosphorylatedRabbits/cosifer/f2e2a259d218b9a56a01d84bc9d6a7cd7c8d9bf1/examples/interactive/data_matrix.csv
+  sep: ","
+  outputsDir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: true
