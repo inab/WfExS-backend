@@ -552,8 +552,6 @@ class CWLWorkflowEngine(WorkflowEngine):
                         
                         isArray = False
                         if classType == 'null':
-                            # FIXME: do something better when null values
-                            # are supported
                             if value is not None:
                                 continue
                         elif classType == 'array':
@@ -570,12 +568,18 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 if not os.path.exists(value.local):
                                     self.logger.warning("Input {} is not materialized".format(name))
                                 value_local = value.local
-                                    
-                                execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
-                            #else: # The error now is managed outside
-                            #    raise WorkflowEngineException(
-                            #        "ERROR: Input {} has values of type {} this code does not know how to handle".format(
-                            #            name, value.kind))
+                                
+                                if isArray:
+                                    execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
+                                else:
+                                    execInputs[name] = {"class": classType, "location": value_local}
+                            else: # The error now is managed outside
+                                # FIXME: do something better for other kinds
+                                #
+                                # raise WorkflowEngineException(
+                                #     "ERROR: Input {} has values of type {} this code does not know how to handle".format(
+                                #         name, value.kind))
+                                continue
                         elif isArray:
                             # FIXME: apply additional validations
                             execInputs.setdefault(name, []).append(value)
