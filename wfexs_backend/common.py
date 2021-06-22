@@ -424,18 +424,19 @@ CWLClass2WfExS = {
 }
 
 
-def CWLDesc2Content(cwlDescs: Mapping[str, Any], logger, expectedOutput: ExpectedOutput = None) -> List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]:
+def CWLDesc2Content(cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]], logger, expectedOutput: ExpectedOutput = None) -> List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]:
     """
     """
     matValues = []
 
     if not isinstance(cwlDescs, list):
         cwlDescs = [cwlDescs]
+    
     for cwlDesc in cwlDescs:
         foundKind = CWLClass2WfExS.get(cwlDesc['class'])
         if (expectedOutput is not None) and foundKind != expectedOutput.kind:
             logger.warning("For output {} obtained kind does not match ({} vs {})".format(expectedOutput.name, expectedOutput.kind, foundKind))
-
+        
         matValue = None
         if foundKind == ContentKind.Directory:
             theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger)
@@ -451,9 +452,13 @@ def CWLDesc2Content(cwlDescs: Mapping[str, Any], logger, expectedOutput: Expecte
                 local=cwlDesc['path'],
                 signature=ComputeDigestFromFile(cwlDesc['path'])
             )
-            # TODO: What to do with auxiliary/secondary files?
-
+        
         if matValue is not None:
             matValues.append(matValue)
+            
+            # What to do with auxiliary/secondary files?
+            secondaryFiles = cwlDesc.get('secondaryFiles', [])
+            if len(secondaryFiles) > 0:
+                matValues.extend(CWLDesc2Content(secondaryFiles, logger))
 
     return matValues
