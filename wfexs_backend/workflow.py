@@ -1648,7 +1648,7 @@ class WF:
                     (parsed_wf_url.scheme, parsed_wf_url.netloc, '/'.join(repoGitPath), '', '', ''))
 
                 # And now, guessing the tag and the relative path
-                if len(wf_path) >= 5 and wf_path[3] == 'blob':
+                if len(wf_path) >= 5 and (wf_path[3] in ('blob', 'tree')):
                     repoTag = wf_path[4]
 
                     if len(wf_path) >= 6:
