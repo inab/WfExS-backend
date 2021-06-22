@@ -363,23 +363,54 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         matOutputs = []
         # This is only applied when no outputs sections is specified
         if len(expectedOutputs) == 0:
-            for outputName, outputVal in outputsMapping:
-                matValues = CWLDesc2Content(outputVal, self.logger)
-                
-                matValueClassName = matValues[0].__class__.__name__
-                guessedOutputKind = self.GuessedOutputKindMapping.get(matValueClassName)
-                
-                if guessedOutputKind is None:
-                    self.logger.error("FIXME: Define mapping for {}".format(matValueClassName))
-                
-                matOutput = MaterializedOutput(
-                    name=outputName,
-                    kind=guessedOutputKind,
-                    expectedCardinality=self.GuessedCardinalityMapping.get(len(matValues) > 1),
-                    values=matValues
-                )
-                
-                matOutputs.append(matOutput)
+            if len(outputsMapping) == 0:
+                # Engines like Nextflow
+                iEntry = 0
+                for entry in os.scandir(outputsDir):
+                    matValues = None
+                    # We are avoiding to enter in loops around '.' and '..'
+                    if entry.is_file():
+                        matValues = [
+                            GeneratedContent(
+                                local=entry.path,
+                                signature=ComputeDigestFromFile(entry.path)
+                            )
+                        ]
+                        guessedOutputKind = ContentKind.File
+                    elif entry.is_dir(follow_symlinks=False):
+                        matValues = [ GetGeneratedDirectoryContent(entry.path) ]
+                        guessedOutputKind = ContentKind.Directory
+                    
+                    if matValues is not None:
+                        outputName = 'unnamed_output_{}'.format(iEntry)
+                        iEntry += 1
+                        matOutput = MaterializedOutput(
+                            name=outputName,
+                            kind=guessedOutputKind,
+                            expectedCardinality=self.GuessedCardinalityMapping[False],
+                            values=matValues
+                        )
+                    
+                        matOutputs.append(matOutput)
+            else:
+                # Engines like CWL
+                for outputName, outputVal in outputsMapping:
+                    matValues = CWLDesc2Content(outputVal, self.logger)
+                    
+                    matValueClassName = matValues[0].__class__.__name__
+                    guessedOutputKind = self.GuessedOutputKindMapping.get(matValueClassName)
+                    
+                    if guessedOutputKind is None:
+                        self.logger.error("FIXME: Define mapping for {}".format(matValueClassName))
+                    
+                    matOutput = MaterializedOutput(
+                        name=outputName,
+                        kind=guessedOutputKind,
+                        expectedCardinality=self.GuessedCardinalityMapping.get(len(matValues) > 1),
+                        values=matValues
+                    )
+                    
+                    matOutputs.append(matOutput)
         
         # This is only applied when the expected outputs is specified
         for expectedOutput in expectedOutputs:
