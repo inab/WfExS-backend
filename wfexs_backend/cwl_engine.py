@@ -597,27 +597,3 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 name, value_types, value.kind))
 
         return execInputs
-
-    @staticmethod
-    def executionOutputs(expectedOutputs, cwlOutputs):
-        """
-        Setting execution outputs provenance
-        """
-        execOutputs = dict()
-
-        if len(cwlOutputs.keys()) != 0:  # dict of execution outputs is not empty
-            for out_rec in cwlOutputs.keys():
-                execOutputs[out_rec] = [
-                    {"class": cwlOutputs[out_rec]['class'], "location": cwlOutputs[out_rec]['path']}]
-                if "secondaryFiles" in cwlOutputs[out_rec]:
-                    secondaryFiles = cwlOutputs[out_rec]['secondaryFiles']
-                    for secondaryFile in secondaryFiles:
-                        execOutputs[out_rec].append(
-                            {"class": secondaryFile['class'], "location": secondaryFile['path']})
-
-                # TODO is not a File
-
-            return execOutputs
-
-        else:
-            raise WorkflowEngineException("List of execution outputs is empty, {}".format(execOutputs))
