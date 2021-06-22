@@ -529,39 +529,65 @@ class CWLWorkflowEngine(WorkflowEngine):
                 # numberOfInputs = len(matInput.values)  # number of inputs inside a MaterializedInput
                 for input_value in matInput.values:
                     name = matInput.name
-                    value_type = cwlInputs.get(name, {}).get('type')
-                    if value_type is None:
+                    value_types = cwlInputs.get(name, {}).get('type')
+                    if value_types is None:
                         raise WorkflowEngineException("ERROR: input {} not available in workflow".format(name))
-
+                    
+                    if not isinstance(value_types, list):
+                        value_types = [ value_types ]
+                    
                     value = input_value
-                    if isinstance(value, MaterializedContent):  # value of an input contains MaterializedContent
-                        if value.kind in (ContentKind.Directory, ContentKind.File):
-                            if not os.path.exists(value.local):
-                                self.logger.warning("Input {} is not materialized".format(name))
-                            value_local = value.local
-                            if isinstance(value_type, dict):
-                                # MaterializedContent is a List of File and cwlInputs value_type is a dict
-                                classType = value_type['items']
-                                execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
-                            elif isinstance(value_type, list):
-                                # MaterializedContent is a List of File and cwlInputs value_type is a list
-                                classType = value_type[1]['items']
-                                execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
-                            else:  # MaterializedContent is a File
-                                classType = value_type
-                                execInputs[name] = {"class": classType, "location": value_local}
+                    for value_type in value_types:
+                        classType = None
+                        if isinstance(value_type, 'str'):
+                            classType = value_type
+                            value_type = {
+                                'type': classType
+                            }
+                        elif isinstance(value_type, dict):
+                            classType = value_type['type']
                         else:
-                            raise WorkflowEngineException(
-                                "ERROR: Input {} has values of type {} this code does not know how to handle".format(
-                                    name, value.kind))
-                    else:
-                        if isinstance(value_type, list):  # argument is a list
-                            if isinstance(value_type[1], dict) and value_type[1]['type'] == "array":
-                                execInputs.setdefault(name, []).append(value)
-                            else:
-                                execInputs[name] = value    # TODO add more value types
+                            self.logger.debug("FIXME? value_type of class {}".format(value_type.__class__.__name__))
+                            continue
+                        
+                        isArray = False
+                        if classType == 'null':
+                            # FIXME: do something better when null values
+                            # are supported
+                            if value is not None:
+                                continue
+                        elif classType == 'array':
+                            isArray = True
+                            classType = value_type.get('items')
+                            if classType is None:
+                                raise WorkflowEngineException(
+                                    "ERROR: Ill formed array input type for {} in workflow definition: {}".format(
+                                        name, value_type))
+                        #else: # the other types are managed below
+                        
+                        if isinstance(value, MaterializedContent):  # value of an input contains MaterializedContent
+                            if value.kind in (ContentKind.Directory, ContentKind.File):
+                                if not os.path.exists(value.local):
+                                    self.logger.warning("Input {} is not materialized".format(name))
+                                value_local = value.local
+                                    
+                                execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
+                            #else: # The error now is managed outside
+                            #    raise WorkflowEngineException(
+                            #        "ERROR: Input {} has values of type {} this code does not know how to handle".format(
+                            #            name, value.kind))
+                        elif isArray:
+                            # FIXME: apply additional validations
+                            execInputs.setdefault(name, []).append(value)
                         else:
+                            # FIXME: apply additional validations
                             execInputs[name] = value
+                        break
+                    else:
+                        # If we reach this, no value was set up
+                        raise WorkflowEngineException(
+                            "ERROR: Input {} has value types {} for value of type {}, and this code does not know how to handle it (check types)".format(
+                                name, value_types, value.kind))
 
         return execInputs
 
