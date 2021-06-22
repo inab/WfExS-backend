@@ -539,7 +539,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                     value = input_value
                     for value_type in value_types:
                         classType = None
-                        if isinstance(value_type, 'str'):
+                        if isinstance(value_type, str):
                             classType = value_type
                             value_type = {
                                 'type': classType
