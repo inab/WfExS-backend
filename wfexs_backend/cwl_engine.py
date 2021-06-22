@@ -571,6 +571,9 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 
                                 if isArray:
                                     execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
+                                elif name in execInputs:
+                                    raise WorkflowEngineException(
+                                        "ERROR: Input {} is not array, but it received more than one value".format(name))
                                 else:
                                     execInputs[name] = {"class": classType, "location": value_local}
                             else: # The error now is managed outside
