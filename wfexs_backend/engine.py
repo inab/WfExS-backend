@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 import os
+import sys
 import tempfile
 import atexit
 import shutil
@@ -341,6 +342,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         return matWfEng, listOfContainers
     
+    GuessedCardinalityMapping = {
+        False: (0, 1),
+        True: (0, sys.maxsize),
+    }
+    
+    GuessedOutputKindMapping = {
+        GeneratedDirectoryContent.__class__.__name__: ContentKind.Directory,
+        GeneratedContent.__class__.__name__: ContentKind.File,
+    }
+    
     def identifyMaterializedOutputs(self, expectedOutputs:List[ExpectedOutput], outputsDir:AbsPath, outputsMapping:Mapping[SymbolicOutputName,Any]=None) -> List[MaterializedOutput]:
         """
         This method is used to identify outputs by either file glob descriptions
@@ -350,6 +361,27 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             outputsMapping = {}
         
         matOutputs = []
+        # This is only applied when no outputs sections is specified
+        if len(expectedOutputs) == 0:
+            for outputName, outputVal in outputsMapping:
+                matValues = CWLDesc2Content(outputVal, self.logger)
+                
+                matValueClassName = matValues[0].__class__.__name__
+                guessedOutputKind = self.GuessedOutputKindMapping.get(matValueClassName)
+                
+                if guessedOutputKind is None:
+                    self.logger.error("FIXME: Define mapping for {}".format(matValueClassName))
+                
+                matOutput = MaterializedOutput(
+                    name=outputName,
+                    kind=guessedOutputKind,
+                    expectedCardinality=self.GuessedCardinalityMapping.get(len(matValues) > 1),
+                    values=matValues
+                )
+                
+                matOutputs.append(matOutput)
+        
+        # This is only applied when the expected outputs is specified
         for expectedOutput in expectedOutputs:
             cannotBeEmpty = expectedOutput.cardinality[0] != 0
             matValues = []
