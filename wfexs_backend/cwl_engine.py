@@ -466,7 +466,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 outputsMapping = None
                                 cwl_yaml_stderr_v = "Output cwltool JSON decode error: {}".format(e.msg)
 
-                            if (outputsMapping is None) or retVal > 125:
+                            if retVal > 125:
                                 # Reading the error for the report
                                 cwl_yaml_stderr.seek(0)
                                 cwl_yaml_stderr_v += cwl_yaml_stderr.read().decode('utf-8', 'ignore')
