@@ -375,7 +375,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         matValues = [
                             GeneratedContent(
                                 local=entry.path,
-                                signature=ComputeDigestFromFile(entry.path)
+                                signature=ComputeDigestFromFile(entry.path, repMethod=nihDigest)
                             )
                         ]
                         guessedOutputKind = ContentKind.File
@@ -446,7 +446,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         theContent = GeneratedContent(
                             local=matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised
-                            signature=ComputeDigestFromFile(matchedPath),
+                            signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigest),
                             preferredFilename=expectedOutput.preferredFilename
                         )
                     else:

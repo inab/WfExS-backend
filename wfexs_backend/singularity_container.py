@@ -46,6 +46,10 @@ class SingularityContainerFactory(ContainerFactory):
         
         matEnv = dict(os.environ)
         matEnv['SINGULARITY_TMPDIR'] = self.tempDir
+        #matEnv['SINGULARITY_CACHEDIR']
+        #matEnv['SREGISTRY_DATABASE']
+        #matEnv['SREGISTRY_CLIENT_SECRETS']
+        #matEnv['SREGISTRY_TMPDIR']
         for tag in tagList:
             # It is not an absolute URL, we are prepending the docker://
             parsedTag = parse.urlparse(tag)
@@ -129,7 +133,7 @@ STDERR
             
             # Then, compute the signature
             if imageSignature is None:
-                imageSignature = ComputeDigestFromFile(localContainerPath)
+                imageSignature = ComputeDigestFromFile(localContainerPath, repMethod=nihDigest)
             
             containersList.append(
                 Container(

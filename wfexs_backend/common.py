@@ -320,6 +320,11 @@ def stringifyFilenameDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint,
 def nullProcessDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
     return digest
 
+from rfc6920.methods import generate_nih_from_digest
+
+def nihDigest(digestAlgorithm, digest: bytes) -> Union[Fingerprint, bytes]:
+    return generate_nih_from_digest(digest, algo=digestAlgorithm)
+
 def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
     """
     Accessory method used to compute the digest of an input file-like object
@@ -401,7 +406,7 @@ def GetGeneratedDirectoryContent(thePath: AbsPath, uri: URIType = None, preferre
                     theValue = GeneratedContent(
                         local=entry.path,
                         # uri=None, 
-                        signature=ComputeDigestFromFile(entry.path)
+                        signature=ComputeDigestFromFile(entry.path, repMethod=nihDigest)
                     )
                 elif entry.is_dir():
                     theValue = GetGeneratedDirectoryContent(entry.path)
@@ -450,7 +455,7 @@ def CWLDesc2Content(cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]],
         elif foundKind == ContentKind.File:
             matValue = GeneratedContent(
                 local=cwlDesc['path'],
-                signature=ComputeDigestFromFile(cwlDesc['path'])
+                signature=ComputeDigestFromFile(cwlDesc['path'], repMethod=nihDigest)
             )
         
         if matValue is not None:
