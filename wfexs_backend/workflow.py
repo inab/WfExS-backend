@@ -1073,11 +1073,6 @@ class WF:
         return expectedOutputs
 
     def executeWorkflow(self, offline : bool = False):
-        # This is needed to be sure all the elements are in place
-        self.materializeWorkflow(offline=offline)
-        self.materializeInputs(offline=offline)
-        
-        # TODO: substitute previous calls by next one
         self.unmarshallStage(offline=offline)
 
         exitVal, augmentedInputs, matCheckOutputs = WorkflowEngine.ExecuteWorkflow(self.materializedEngine,
@@ -1134,7 +1129,10 @@ class WF:
                     'repoEffectiveCheckout': self.repoEffectiveCheckout,
                     'engineDesc': self.engineDesc,
                     'engineVer': self.engineVer,
-                    # TODO
+                    'materializedEngine': self.materializedEngine,
+                    'containers': self.listOfContainers,
+                    'materializedParams': self.materializedParams
+                    # TODO: check nothing essential was left
                 }
                 
                 self.logger.debug("Creating marshalled stage file {}".format(marshalled_stage_file))
@@ -1147,11 +1145,32 @@ class WF:
             raise WFException("Marshalled stage file already exists")
     
     def unmarshallStage(self, offline : bool = False):
-        # This is needed to be sure all the elements are in place
-        self.materializeWorkflow(offline=offline)
-        self.materializeInputs(offline=offline)
-        # TODO
-        pass
+        if not self.stageMarshalled:
+            marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
+            if not os.path.exists(marshalled_stage_file):
+                raise WFException("Marshalled stage file does not exists. Stage state was not stored")
+            
+            self.logger.debug("Parsing marshalled stage state file {}".format(marshalled_stage_file))
+            with open(marshalled_stage_file, mode='r', encoding='utf-8') as msF:
+                marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
+                try:
+                    stage = unmarshall_namedtuple(marshalled_stage, globals())
+                    self.repoURL = stage['repoURL']
+                    self.repoTag = stage['repoTag']
+                    self.repoRelPath = stage['repoRelPath']
+                    self.repoEffectiveCheckout = stage['repoEffectiveCheckout']
+                    self.engineDesc = stage['engineDesc']
+                    self.engineVer = stage['engineVer']
+                    self.materializedEngine = stage['materializedEngine']
+                    self.listOfContainers = stage['containers']
+                    self.materializedParams = stage['materializedParams']
+                    
+                    # This is needed to properly set up the materializedEngine
+                    self.setupEngine(offline=True)
+                except Exception as e:
+                    raise WFException("Error while unmarshalling content from stage state file {}. Reason: {}".format(marshalled_stage_file,e))
+            
+            self.stageMarshalled = True
     
     def marshallExecute(self, exist_ok : bool = True):
         if not self.executionMarshalled:
@@ -1167,6 +1186,7 @@ class WF:
                     'exitVal': self.exitVal,
                     'augmentedInputs': self.augmentedInputs,
                     'matCheckOutputs': self.matCheckOutputs
+                    # TODO: check nothing essential was left
                 }
                 
                 self.logger.debug("Creating marshalled execution file {}".format(marshalled_execution_file))
@@ -1178,9 +1198,25 @@ class WF:
             raise WFException("Marshalled execution file already exists")
     
     def unmarshallExecute(self, offline : bool = True):
-        self.unmarshallStage(offline=offline)
-        # TODO
-        pass
+        if not self.executionMarshalled:
+            self.unmarshallStage(offline=offline)
+            marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
+            if not os.path.exists(marshalled_execution_file):
+                raise WFException("Marshalled execution file does not exists. Execution state was not stored")
+            
+            self.logger.debug("Parsing marshalled execution state file {}".format(marshalled_execution_file))
+            with open(marshalled_execution_file, mode='r', encoding='utf-8') as meF:
+                marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
+                try:
+                    execution = unmarshall_namedtuple(marshalled_execution, globals())
+                    
+                    self.exitVal = execution['exitVal']
+                    self.augmentedInputs = execution['augmentedInputs']
+                    self.matCheckOutputs = execution['matCheckOutputs']
+                except Exception as e:
+                    raise WFException("Error while unmarshalling content from execution state file {}. Reason: {}".format(marshalled_execution_file, e))
+            
+            self.executionMarshalled = True
     
     def createStageResearchObject(self, doMaterializedROCrate : bool = False):
         """
