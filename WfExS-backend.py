@@ -159,7 +159,7 @@ if __name__ == "__main__":
     if args.command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
     
-    if args.command in (WfExS_Commands.OfflineExecute, WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage):
+    if args.command in (WfExS_Commands.OfflineExecute, WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.ExportResults):
         wfInstance.fromWorkDir(args.workflowWorkingDirectory)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
@@ -171,17 +171,12 @@ if __name__ == "__main__":
     sys.stderr.flush()
     
     if args.command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
-        wfInstance.fetchWorkflow()
-        wfInstance.setupEngine()
-        wfInstance.materializeWorkflow()
-        wfInstance.materializeInputs()
-        wfInstance.marshallStage()
+        instanceId = wfInstance.stageWorkDir()
         
-        print("* Instance {} (to be used with -J)".format(wfInstance.instanceId))
+        print("* Instance {} (to be used with -J)".format(instanceId))
     
-    if args.command == WfExS_Commands.ExportStage:
+    if args.command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)
-        sys.exit(0)
     
     if args.command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
         wfInstance.executeWorkflow(offline=args.command == WfExS_Commands.OfflineExecute)

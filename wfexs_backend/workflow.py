@@ -52,9 +52,13 @@ from .common import *
 from .encrypted_fs import *
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
+from .engine import WORKDIR_MARSHALLED_STAGE_FILE, WORKDIR_MARSHALLED_EXECUTE_FILE
 from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, \
     WORKDIR_ENGINE_TWEAKS_RELDIR
 from .cache_handler import SchemeHandlerCacheHandler
+
+from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
+
 from .fetchers import DEFAULT_SCHEME_HANDLERS
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX, SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
@@ -318,6 +322,9 @@ class WF:
         self.doUnmount = False
         self.paranoidMode = False
         self.bag = None
+        
+        self.stageMarshalled = False
+        self.executionMarshalled = False
 
         # cacheHandler is created on first use
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, {})
@@ -430,22 +437,9 @@ class WF:
         # This directory will hold metadata related to the execution
         self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
         os.makedirs(self.metaDir, exist_ok=True)
-
-        with open(os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE), mode='w', encoding='utf-8') as wmF:
-            workflow_meta = {
-                'trs_endpoint': trs_endpoint,
-                'workflow_id': workflow_id,
-                'version': version_id,
-                'workflow_type': descriptor_type,
-                'params': params,
-                'outputs': outputs,
-                'workflow_config': workflow_config
-            }
-            yaml.dump(workflow_meta, wmF, Dumper=YAMLDumper)
-
-        with open(os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE), mode='w', encoding='utf-8') as crF:
-            yaml.dump(creds_config, crF, Dumper=YAMLDumper)
-
+        
+        self.marshallConfig(overwrite=False)
+        
         self.repoURL = None
         self.repoTag = None
         self.repoRelPath = None
@@ -636,12 +630,12 @@ class WF:
 
     def fromFiles(self, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode=False):
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = yaml.load(wcf, Loader=YAMLLoader)
+            workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
 
         # Last, try loading the security contexts credentials file
         if securityContextsConfigFilename and os.path.exists(securityContextsConfigFilename):
             with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
-                creds_config = yaml.load(scf, Loader=YAMLLoader)
+                creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
         else:
             creds_config = {}
 
@@ -659,6 +653,12 @@ class WF:
         :type paranoidMode:
         :return: Workflow configuration
         """
+        
+        # The preserved paranoid mode must be honoured
+        preserved_paranoid_mode = workflow_meta.get('paranoid_mode')
+        if preserved_paranoid_mode is not None:
+            paranoidMode = preserved_paranoid_mode
+            
         if paranoidMode:
             self.enableParanoidMode()
 
@@ -998,7 +998,19 @@ class WF:
                 theInputs.append(MaterializedInput(linearKey, inputs))
 
         return theInputs, lastInput
-
+    
+    def stageWorkDir(self):
+        """
+        This method is here to simplify the understanding of the needed steps
+        """
+        self.fetchWorkflow()
+        self.setupEngine()
+        self.materializeWorkflow()
+        self.materializeInputs()
+        self.marshallStage()
+        
+        return self.instanceId
+    
     def workdirToBagit(self):
         """
         BEWARE: This is a destructive step! So, once run, there is no back!
@@ -1060,13 +1072,13 @@ class WF:
 
         return expectedOutputs
 
-    def executeWorkflow(self, offline=False):
+    def executeWorkflow(self, offline : bool = False):
         # This is needed to be sure all the elements are in place
         self.materializeWorkflow(offline=offline)
         self.materializeInputs(offline=offline)
         
         # TODO: substitute previous calls by next one
-        self.unmarshallStage()
+        self.unmarshallStage(offline=offline)
 
         exitVal, augmentedInputs, matCheckOutputs = WorkflowEngine.ExecuteWorkflow(self.materializedEngine,
                                                                                    self.materializedParams,
@@ -1083,21 +1095,90 @@ class WF:
         # TODO: implement store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute()
     
-    def marshallStage(self, exist_ok : bool = True):
-        # TODO
-        pass
+    def marshallConfig(self, overwrite : bool = False):
+        workflow_meta_file = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
+        if overwrite or not os.path.exists(workflow_meta_file):
+            with open(workflow_meta_file, mode='w', encoding='utf-8') as wmF:
+                workflow_meta = {
+                    'trs_endpoint': self.trs_endpoint,
+                    'workflow_id': self.id,
+                    'version': self.version_id,
+                    'workflow_type': self.descriptor_type,
+                    'paranoid_mode': self.paranoidMode,
+                    'params': self.params,
+                    'outputs': self.outputs,
+                    'workflow_config': self.workflow_config
+                }
+                yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
+        
+        creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
+        if overwrite or not os.path.exists(creds_file):
+            with open(creds_file, mode='w', encoding='utf-8') as crF:
+                yaml.dump(marshall_namedtuple(self.creds_config), crF, Dumper=YAMLDumper)
+        
     
-    def unmarshallStage(self):
+    def marshallStage(self, exist_ok : bool = True):
+        if not self.stageMarshalled:
+            self.marshallConfig(overwrite=False)
+            
+            marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
+            if os.path.exists(marshalled_stage_file):
+                if not exist_ok:
+                    raise WFException("Marshalled stage file already exists")
+                self.logger.debug("Marshalled stage file {} already exists".format(marshalled_stage_file))
+            else:
+                stage = {
+                    'repoURL': self.repoURL,
+                    'repoTag': self.repoTag,
+                    'repoRelPath': self.repoRelPath,
+                    'repoEffectiveCheckout': self.repoEffectiveCheckout,
+                    'engineDesc': self.engineDesc,
+                    'engineVer': self.engineVer,
+                    # TODO
+                }
+                
+                self.logger.debug("Creating marshalled stage file {}".format(marshalled_stage_file))
+                with open(marshalled_stage_file, mode='w', encoding='utf-8') as msF:
+                    marshalled_stage = marshall_namedtuple(stage)
+                    yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
+            
+            self.stageMarshalled = True
+        elif not exist_ok:
+            raise WFException("Marshalled stage file already exists")
+    
+    def unmarshallStage(self, offline : bool = False):
+        # This is needed to be sure all the elements are in place
+        self.materializeWorkflow(offline=offline)
+        self.materializeInputs(offline=offline)
         # TODO
         pass
     
     def marshallExecute(self, exist_ok : bool = True):
-        self.marshallStage(exist_ok=exist_ok)
-        # TODO
-        pass
+        if not self.executionMarshalled:
+            self.marshallStage(exist_ok=exist_ok)
+            
+            marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
+            if os.path.exists(marshalled_execution_file):
+                if not exist_ok:
+                    raise WFException("Marshalled execution file already exists")
+                self.logger.debug("Marshalled execution file {} already exists".format(marshalled_execution_file))
+            else:
+                execution = {
+                    'exitVal': self.exitVal,
+                    'augmentedInputs': self.augmentedInputs,
+                    'matCheckOutputs': self.matCheckOutputs
+                }
+                
+                self.logger.debug("Creating marshalled execution file {}".format(marshalled_execution_file))
+                with open(marshalled_execution_file, mode='w', encoding='utf-8') as msF:
+                    yaml.dump(marshall_namedtuple(execution), msF, Dumper=YAMLDumper)
+            
+            self.executionMarshalled = True
+        elif not exist_ok:
+            raise WFException("Marshalled execution file already exists")
     
-    def unmarshallExecute(self):
-        self.unmarshallStage()
+    def unmarshallExecute(self, offline : bool = True):
+        self.unmarshallStage(offline=offline)
         # TODO
         pass
     
@@ -1107,7 +1188,7 @@ class WF:
         """
         
         # TODO: implement deserialization
-        self.unmarshallStage()
+        self.unmarshallStage(offline=True)
         
         # TODO: implement logic of doMaterializedROCrate
         
@@ -1119,7 +1200,7 @@ class WF:
         Create RO-crate from execution provenance.
         """
         # TODO: implement deserialization
-        self.unmarshallExecute()
+        self.unmarshallExecute(offline=True)
         
         # TODO: implement logic of doMaterializedROCrate
         
