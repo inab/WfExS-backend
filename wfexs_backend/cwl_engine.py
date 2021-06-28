@@ -197,11 +197,13 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retVal = subprocess.Popen(
-                    ". '{0}'/bin/activate && pip install --upgrade pip wheel ; pip install {1}=={2}  {3}=={4}  {5}{6}{7}".format(
+                    ". '{0}'/bin/activate && pip install --upgrade pip wheel ; pip install {1}=={2}  {3}{4}{5}".format(
                         cwl_install_dir,
                         self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
-                        self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
-                        cwltoolPackage, cwltoolMatchOp, engineVersion),
+                        cwltoolPackage, cwltoolMatchOp, engineVersion,
+                    # Commented out, as WfExS is not currently using cwl-utils
+                    #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
+                    ),
                     stdout=cwl_install_stdout,
                     stderr=cwl_install_stderr,
                     cwd=cwl_install_dir,
