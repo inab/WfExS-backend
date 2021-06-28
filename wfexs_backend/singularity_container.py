@@ -36,7 +36,7 @@ class SingularityContainerFactory(ContainerFactory):
         
         # This is needed due a bug in singularity 3.6, where
         # singularity pull --disable-cache does not create a container
-        singularityCacheDir = os.path.join(self.containersCacheDir, '.singularity', 'cache')
+        singularityCacheDir = os.path.join(self.containersCacheDir, '.singularity')
         os.makedirs(singularityCacheDir, exist_ok=True)
         
         self._environment.update({
@@ -116,6 +116,8 @@ class SingularityContainerFactory(ContainerFactory):
                             shutil.move(tmpContainerPath,canonicalContainerPath)
                         
                         # Now, create the relative symbolic link
+                        if os.path.lexists(localContainerPath):
+                            os.unlink(localContainerPath)
                         os.symlink(os.path.relpath(canonicalContainerPath,self.engineContainersSymlinkDir),localContainerPath)
                             
                     else:
