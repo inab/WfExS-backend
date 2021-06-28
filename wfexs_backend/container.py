@@ -73,11 +73,19 @@ class ContainerFactory(abc.ABC):
         # This for the symlinks to the containers, following the engine convention
         self.engineContainersSymlinkDir = os.path.join(self.containersCacheDir, engine_name)
         os.makedirs(self.engineContainersSymlinkDir, exist_ok=True)
-    
+        
+        # This variable contains the dictionary of set up environment
+        # variables needed to run the tool with the proper setup
+        self._environment = dict()
+        
     @classmethod
     @abc.abstractmethod
     def ContainerType(cls) -> ContainerType:
         pass
+    
+    @property
+    def environment(self) -> Dict[str, str]:
+        return self._environment
     
     @property
     def containerType(self) -> ContainerType:

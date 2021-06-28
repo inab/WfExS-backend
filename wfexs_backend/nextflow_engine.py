@@ -727,18 +727,19 @@ STDERR
         
         outputStatsDir = self.outputStatsDir
         
-        timelineFile = os.path.join(outputStatsDir,'timeline.html')
-        reportFile = os.path.join(outputStatsDir,'report.html')
-        traceFile = os.path.join(outputStatsDir,'trace.tsv')
-        dagFile = os.path.join(outputStatsDir,STATS_DAG_DOT_FILE)
+        timelineFile = os.path.join(outputStatsDir, 'timeline.html')
+        reportFile = os.path.join(outputStatsDir, 'report.html')
+        traceFile = os.path.join(outputStatsDir, 'trace.tsv')
+        dagFile = os.path.join(outputStatsDir, STATS_DAG_DOT_FILE)
         
         # Custom variables setup
         runEnv = dict(os.environ)
         optBash = None
         optWritable = None
-        if isinstance(self.container_factory,SingularityContainerFactory):
+        runEnv.update(self.container_factory.environment)
+        if isinstance(self.container_factory, SingularityContainerFactory):
             if self.static_bash_cmd is not None:
-                optBash = "-B {0}:/bin/bash".format(self.static_bash_cmd)
+                optBash = f"-B {self.static_bash_cmd}:/bin/bash"
             else:
                 optBash = ""
             
@@ -746,36 +747,34 @@ STDERR
                 optWritable = "--writable"
             else:
                 optWritable = ""
-            
-            runEnv['SINGULARITY_TMPDIR'] = self.tempDir
 
-        forceParamsConfFile = os.path.join(self.engineTweaksDir,'force-params.config')
-        with open(forceParamsConfFile,mode="w",encoding="utf-8") as fPC:
-            if isinstance(self.container_factory,SingularityContainerFactory):
+        forceParamsConfFile = os.path.join(self.engineTweaksDir, 'force-params.config')
+        with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
+            if isinstance(self.container_factory, SingularityContainerFactory):
                 print(
-"""docker.enabled = false
+f"""docker.enabled = false
 singularity.enabled = true
-singularity.envWhitelist = 'SINGULARITY_TMPDIR'
-singularity.runOptions = '--userns {} {}'
+singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
+singularity.runOptions = '--userns {optWritable} {optBash}'
 singularity.autoMounts = true
-""".format(optWritable, optBash), file=fPC)
+""", file=fPC)
 
             # Trace fields are detailed at
             # https://www.nextflow.io/docs/latest/tracing.html#trace-fields
             print(
-"""timeline {{
+f"""timeline {{
 	enabled = true
-	file = "{}"
+	file = "{timelineFile}"
 }}
 		
 report {{
 	enabled = true
-	file = "{}"
+	file = "{reportFile}"
 }}
 
 trace {{
 	enabled = true
-	file = "{}"
+	file = "{traceFile}"
     fields = 'task_id,process,tag,name,status,exit,module,container,cpus,time,disk,memory,attempt,submit,start,complete,duration,realtime,%cpu,%mem,rss,vmem,peak_rss,peak_vmem,rchar,wchar,syscr,syscw,read_bytes,write_bytes,env,script,error_action'
     raw = true
     sep = '\0\t\0'
@@ -783,10 +782,10 @@ trace {{
 
 dag {{
 	enabled = true
-	file = "{}"
+	file = "{dagFile}"
 }}
 // executor.cpus=1
-""".format(timelineFile, reportFile, traceFile, dagFile), file=fPC)
+""", file=fPC)
         
         # Building the NXF trojan horse in order to obtain a full list of 
         # input parameters, for provenance purposes

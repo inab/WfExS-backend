@@ -433,10 +433,10 @@ class CWLWorkflowEngine(WorkflowEngine):
 
                             # This is needed to teach cwltool where to find the cached images
                             instEnv = dict()
+                            instEnv.update(self.container_factory.environment)
                             if isinstance(self.container_factory, SingularityContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
-                                instEnv['SINGULARITY_TMPDIR'] = self.tempDir
                                 if self.writable_containers:
                                     instEnv['SINGULARITY_WRITABLE'] = '1'
                             elif isinstance(self.container_factory, NoContainerFactory):

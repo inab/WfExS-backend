@@ -33,6 +33,16 @@ class SingularityContainerFactory(ContainerFactory):
     def __init__(self, cacheDir=None, local_config=None, engine_name='unset', tempDir=None):
         super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name, tempDir=tempDir)
         self.singularity_cmd = local_config.get('tools', {}).get('singularityCommand', DEFAULT_SINGULARITY_CMD)
+        
+        # This is needed due a bug in singularity 3.6, where
+        # singularity pull --disable-cache does not create a container
+        singularityCacheDir = os.path.join(self.containersCacheDir, '.singularity', 'cache')
+        os.makedirs(singularityCacheDir, exist_ok=True)
+        
+        self._environment.update({
+            'SINGULARITY_TMPDIR': self.tempDir,
+            'SINGULARITY_CACHEDIR': singularityCacheDir,
+        })
     
     @classmethod
     def ContainerType(cls) -> ContainerType:
@@ -45,11 +55,7 @@ class SingularityContainerFactory(ContainerFactory):
         containersList = []
         
         matEnv = dict(os.environ)
-        matEnv['SINGULARITY_TMPDIR'] = self.tempDir
-        #matEnv['SINGULARITY_CACHEDIR']
-        #matEnv['SREGISTRY_DATABASE']
-        #matEnv['SREGISTRY_CLIENT_SECRETS']
-        #matEnv['SREGISTRY_TMPDIR']
+        matEnv.update(self.environment)
         for tag in tagList:
             # It is not an absolute URL, we are prepending the docker://
             parsedTag = parse.urlparse(tag)
@@ -71,7 +77,7 @@ class SingularityContainerFactory(ContainerFactory):
                     # Singularity command line borrowed from
                     # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
                     s_retval = subprocess.Popen(
-                    [self.singularity_cmd, 'pull', '--disable-cache', '--name', tmpContainerPath, singTag],
+                    [self.singularity_cmd, 'pull', '--name', tmpContainerPath, singTag],
                     env=matEnv,
                     stdout=s_out,
                     stderr=s_err
