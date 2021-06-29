@@ -127,7 +127,9 @@ STDERR
             
             # Then, compute the signature
             tagId = manifest['Id']
-            fingerprint = manifest['RepoDigests'][0]
+            fingerprint = None
+            if len(manifest['RepoDigests']) > 0:
+                fingerprint = manifest['RepoDigests'][0]
             
             containersList.append(
                 Container(
