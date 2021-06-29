@@ -298,7 +298,7 @@ class Container(NamedTuple):
     origTaggedName: str
     taggedName: URIType
     type: ContainerType
-    localPath: AbsPath
+    localPath: AbsPath = None
     signature: Fingerprint = None
     fingerprint: Fingerprint = None
 
