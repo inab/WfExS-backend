@@ -11,7 +11,7 @@ WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") proje
 * Identify the kind of workflow.
 * Fetch and set up workflow execution engine (currently supported [Nextflow](https://www.nextflow.io/)
 and [cwltool](https://github.com/common-workflow-language/cwltool)).
-* Identify the needed containers by the workflow, and fetch/cache them.
+* Identify the needed containers by the workflow, and fetch/cache them. Depending on the local setup, `singularity` or `docker` will be used.
 * Fetch and cache the inputs, represented either through an URL or a [CURIE-represented](https://en.wikipedia.org/wiki/CURIE) PID (public [persistent identifier](https://en.wikipedia.org/wiki/Persistent_identifier)).
 * Execute the workflow in a secure way.
 * Optionally describe the results through an [RO-Crate](https://www.researchobject.org/ro-crate/), and upload both RO-Crate and the results elsewhere in a secure way.
@@ -98,12 +98,12 @@ The program uses three different types of configuration files:
 * Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
   
   - `cacheDir`: The path in this key sets up the place where all the contents which can be cached are hold. It contains downloaded RO-Crate,
-     downloaded workflow git repositories, downloaded workflow engines. It is recommended to have it outside `/tmp` directory,
-     due undesirable side interactions with the way workflow engines use Singularity.
+     downloaded workflow git repositories, downloaded workflow engines. It is recommended to have it outside `/tmp` directory when
+     Singularity is being used, due undesirable side interactions with the way workflow engines use Singularity.
   
   - `workDir`: The path in this key sets up the place where all the executions are going to store both intermediate and final results,
-    having a separate directory for each execution. It is recommended to have it outside `/tmp` directory, due undesirable side
-    interactions with the way workflow engines use Singularity.
+    having a separate directory for each execution. It is recommended to have it outside `/tmp` directory when Singularity is being
+    used, due undesirable side interactions with the way workflow engines use Singularity.
   
   - `crypt4gh.key`: The path to the secret key used in this installation. It is paired to `crypt4gh.pub`.
   
@@ -113,15 +113,15 @@ The program uses three different types of configuration files:
   
   - `tools.engineMode`: Currently, local mode only.
   
-  - `tools.containerType`: Currently, singulary.
+  - `tools.containerType`: Currently, `singularity` or `docker`.
   
-  - `tools.gitCommand`: Path to git command
+  - `tools.gitCommand`: Path to `git` command
 
-  - `tools.dockerCommand`: Path to docker command (only used when needed)
+  - `tools.dockerCommand`: Path to `docker` command (only used when needed)
 
-  - `tools.singularityCommand`: Path to singularity command (only used when needed)
+  - `tools.singularityCommand`: Path to `singularity` command (only used when needed)
 
-  - `tools.javaCommand`: Path to java command (only used when needed)
+  - `tools.javaCommand`: Path to `java` command (only used when needed)
   
   - `tools.encrypted_fs.type`: Kind of FUSE encryption filesystem to use for secure working directories. Currently only `encfs` is supported.
   

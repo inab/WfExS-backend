@@ -29,4 +29,6 @@ pip install -r requirements.txt
   
   * [git](https://git-scm.com/) is used to fetch workflows from git repositories.
   
-  * [singularity](https://sylabs.io/singularity/): a version which supports user namespaces, 3.5 or later.
+  * [singularity](https://sylabs.io/singularity/): when local installation is set up to use singularity, a version which supports user namespaces, 3.5 or later.
+  
+  * [docker](https://www.docker.com/): when local installation is set up to use docker.
