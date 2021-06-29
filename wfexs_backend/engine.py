@@ -220,6 +220,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         for containerFactory in CONTAINER_FACTORY_CLASSES:
             if containerFactory.ContainerType() == container_type:
+                self.logger.debug(f"Container type {container_type}")
                 self.container_factory = containerFactory(
                     cacheDir=cacheDir,
                     local_config=local_config,
