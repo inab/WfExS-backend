@@ -58,12 +58,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
             outputMetaDir=None,
             intermediateDir=None,
             tempDir=None,
+            secure_exec : bool = False,
             config_directory=None
         ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
-                         tempDir=tempDir, outputMetaDir=outputMetaDir,
+                         tempDir=tempDir, outputMetaDir=outputMetaDir, secure_exec=secure_exec,
                          config_directory=config_directory)
         
         toolsSect = local_config.get('tools', {})
@@ -744,9 +745,9 @@ STDERR
                 optBash = ""
             
             if self.writable_containers:
-                optWritable = "--writable"
+                optWritable = "--writable-tmpfs"
             else:
-                optWritable = ""
+                optWritable = "--userns"
 
         forceParamsConfFile = os.path.join(self.engineTweaksDir, 'force-params.config')
         with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
@@ -755,7 +756,7 @@ STDERR
 f"""docker.enabled = false
 singularity.enabled = true
 singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
-singularity.runOptions = '--userns {optWritable} {optBash}'
+singularity.runOptions = '--contain {optWritable} {optBash}'
 singularity.autoMounts = true
 """, file=fPC)
 

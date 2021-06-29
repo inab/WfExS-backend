@@ -80,13 +80,14 @@ class CWLWorkflowEngine(WorkflowEngine):
                  outputMetaDir=None,
                  intermediateDir=None,
                  tempDir=None,
+                 secure_exec : bool = False,
                  config_directory=None
                  ):
 
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
-                         outputMetaDir=outputMetaDir, tempDir=tempDir,
+                         outputMetaDir=outputMetaDir, tempDir=tempDir, secure_exec=secure_exec,
                          config_directory=config_directory)
 
         # Getting a fixed version of the engine
@@ -439,6 +440,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             if isinstance(self.container_factory, SingularityContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
+                                instEnv['SINGULARITY_CONTAIN'] = '1'
                                 if self.writable_containers:
                                     instEnv['SINGULARITY_WRITABLE'] = '1'
                             elif isinstance(self.container_factory, NoContainerFactory):

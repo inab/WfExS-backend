@@ -81,6 +81,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                  outputMetaDir=None,
                  intermediateDir=None,
                  tempDir=None,
+                 secure_exec : bool = False,
                  config_directory=None
                  ):
         """
@@ -97,6 +98,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         :param outputsDir:
         :param intermediateDir:
         :param tempDir:
+        :param secure_exec:
         :param config_directory:
         """
         if local_config is None:
@@ -223,6 +225,11 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         
         # Whether the containers of each step are writable
         self.writable_containers = workflow_config.get('writable_containers', False)
+        
+        if secure_exec and self.writable_containers and self.container_factory.ContainerType() == ContainerType.Singularity:
+            raise WorkflowEngineException("FATAL: secure execution and writable containers are incompatible when singularity is being used")
+        
+        self.secure_exec = secure_exec
 
     @classmethod
     @abc.abstractmethod

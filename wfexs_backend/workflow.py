@@ -412,8 +412,9 @@ class WF:
             os.makedirs(uniqueRawWorkDir, exist_ok=True)
             self.rawWorkDir = uniqueRawWorkDir
 
+        self.secure = workflow_config.get('secure', True)
         if self.workDir is None:
-            doSecureWorkDir = workflow_config.get('secure', True) or self.paranoidMode
+            doSecureWorkDir = self.secure or self.paranoidMode
 
             self.setupWorkdir(doSecureWorkDir)
 
@@ -768,7 +769,7 @@ class WF:
                                           local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
                                           cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
                                           outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
-                                          tempDir=self.tempDir,
+                                          tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
                                           config_directory=self.config_directory)
                 try:
                     engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
@@ -786,7 +787,7 @@ class WF:
                                       local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
                                       cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
                                       outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
-                                      tempDir=self.tempDir,
+                                      tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
                                       config_directory=self.config_directory)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
