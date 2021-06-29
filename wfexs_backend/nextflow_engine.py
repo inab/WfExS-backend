@@ -756,7 +756,7 @@ STDERR
 f"""docker.enabled = false
 singularity.enabled = true
 singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
-singularity.runOptions = '--contain {optWritable} {optBash}'
+singularity.runOptions = '{optWritable} {optBash}'
 singularity.autoMounts = true
 """, file=fPC)
 
