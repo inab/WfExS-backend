@@ -767,7 +767,9 @@ class WF:
                 self.logger.debug("Testing engine " + engineDesc.trs_descriptor)
                 engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
                                           local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
-                                          cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
+                                          cacheWorkflowDir=self.cacheWorkflowDir,
+                                          cacheWorkflowInputsDir=self.cacheWorkflowInputsDir,
+                                          workDir=self.workDir,
                                           outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
                                           tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
                                           config_directory=self.config_directory)
@@ -785,7 +787,9 @@ class WF:
             self.logger.debug("Fixed engine " + engineDesc.trs_descriptor)
             engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
                                       local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
-                                      cacheWorkflowDir=self.cacheWorkflowDir, workDir=self.workDir,
+                                      cacheWorkflowDir=self.cacheWorkflowDir,
+                                      cacheWorkflowInputsDir=self.cacheWorkflowInputsDir,
+                                      workDir=self.workDir,
                                       outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
                                       tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
                                       config_directory=self.config_directory)

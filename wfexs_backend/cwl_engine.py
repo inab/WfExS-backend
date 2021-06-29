@@ -33,6 +33,7 @@ from .container import NoContainerFactory
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .engine import WorkflowEngine, WorkflowEngineException
 from .singularity_container import SingularityContainerFactory
+from .docker_container import DockerContainerFactory
 
 
 # Next methods are borrowed from
@@ -75,6 +76,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                  local_config=None,
                  engineTweaksDir=None,
                  cacheWorkflowDir=None,
+                 cacheWorkflowInputsDir=None,
                  workDir=None,
                  outputsDir=None,
                  outputMetaDir=None,
@@ -86,6 +88,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
+                         cacheWorkflowInputsDir=cacheWorkflowInputsDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
                          outputMetaDir=outputMetaDir, tempDir=tempDir, secure_exec=secure_exec,
                          config_directory=config_directory)
@@ -443,6 +446,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 instEnv['SINGULARITY_CONTAIN'] = '1'
                                 if self.writable_containers:
                                     instEnv['SINGULARITY_WRITABLE'] = '1'
+                            elif isinstance(self.container_factory, DockerContainerFactory):
+                                cmdTemplate = "cwltool --debug --outdir {0} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif isinstance(self.container_factory, NoContainerFactory):
                                 cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:

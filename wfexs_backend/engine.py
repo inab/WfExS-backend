@@ -33,6 +33,7 @@ from collections import namedtuple
 
 from .container import Container, ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
+from .docker_container import DockerContainerFactory
 
 from rocrate.rocrate import ROCrate
 from rocrate.model.computerlanguage import ComputerLanguage
@@ -65,6 +66,7 @@ class WorkflowEngineException(Exception):
 
 CONTAINER_FACTORY_CLASSES = [
     SingularityContainerFactory,
+    DockerContainerFactory,
     NoContainerFactory,
 ]
 
@@ -76,6 +78,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                  local_config=None,
                  engineTweaksDir=None,
                  cacheWorkflowDir=None,
+                 cacheWorkflowInputsDir=None,
                  workDir=None,
                  outputsDir=None,
                  outputMetaDir=None,
@@ -94,6 +97,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         :param local_config:
         :param engineTweaksDir:
         :param cacheWorkflowDir:
+        :param cacheWorkflowInputsDir:
         :param workDir:
         :param outputsDir:
         :param intermediateDir:
@@ -142,7 +146,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
             os.makedirs(cacheWorkflowDir, exist_ok=True)
         self.cacheWorkflowDir = cacheWorkflowDir
-
+        
+        # Needed for those cases where there is a shared cache
+        if cacheWorkflowInputsDir is None:
+            cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
+            os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
+        self.cacheWorkflowInputsDir = cacheWorkflowInputsDir
+        
         # Setting up working directories, one per instance
         if workDir is None:
             workDir = tempfile.mkdtemp(prefix='WfExS-exec', suffix='workdir')

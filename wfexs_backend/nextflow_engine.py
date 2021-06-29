@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 import datetime
+import functools
 import json
 import os
 import re
@@ -28,14 +29,27 @@ import yaml
 
 from typing import Any, Dict, List, Tuple
 from .common import *
+from .container import NoContainerFactory
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .fetchers import fetchClassicURL
 from .singularity_container import SingularityContainerFactory
+from .docker_container import DockerContainerFactory
 
 
 # A default name for the static bash
 DEFAULT_STATIC_BASH_CMD = 'bash.static'
+
+@functools.lru_cache()
+def _tzstring():
+    try:
+        with open("/etc/timezone","r") as tzreader:
+            tzstring = tzreader.readline().rstrip()
+    except:
+        # The default for the worst case
+        tzstring = 'Europe/Madrid'
+    
+    return tzstring
 
 class NextflowWorkflowEngine(WorkflowEngine):
     NEXTFLOW_REPO = 'https://github.com/nextflow-io/nextflow'
@@ -53,6 +67,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             local_config=None,
             engineTweaksDir=None,
             cacheWorkflowDir=None,
+            cacheWorkflowInputsDir=None,
             workDir=None,
             outputsDir=None,
             outputMetaDir=None,
@@ -63,6 +78,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
                          engineTweaksDir=engineTweaksDir, cacheWorkflowDir=cacheWorkflowDir,
+                         cacheWorkflowInputsDir=cacheWorkflowInputsDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
                          tempDir=tempDir, outputMetaDir=outputMetaDir, secure_exec=secure_exec,
                          config_directory=config_directory)
@@ -111,7 +127,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             trs_descriptor='NFL',
             rocrate_programming_language='#nextflow'
         )
-
+    
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
         This method should return the effective engine version needed
@@ -393,12 +409,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             gid = str(os.getgid())
             
             # Timezone is needed to get logs properly timed
-            try:
-                with open("/etc/timezone","r") as tzreader:
-                    tzstring = tzreader.readline().rstrip()
-            except:
-                # The default for the worst case
-                tzstring = 'Europe/Madrid'
+            tzstring = _tzstring()
             
             # FIXME: should it be something more restrictive?
             homedir = os.path.expanduser("~")
@@ -758,6 +769,19 @@ singularity.enabled = true
 singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
 singularity.runOptions = '{optWritable} {optBash}'
 singularity.autoMounts = true
+""", file=fPC)
+            elif isinstance(self.container_factory, DockerContainerFactory):
+                print(
+f"""singularity.enabled = false
+docker.enabled = true
+docker.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
+docker.runOptions = '-v {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z -e TZ="{_tzstring()}"'
+docker.fixOwnership = true
+""", file=fPC)
+            elif isinstance(self.container_factory, NoContainerFactory):
+                print(
+f"""docker.enabled = false
+singularity.enabled = false
 """, file=fPC)
 
             # Trace fields are detailed at
