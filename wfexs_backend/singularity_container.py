@@ -16,6 +16,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import json
 import os
 import os.path
 import re
@@ -28,8 +29,10 @@ import uuid
 from typing import Dict, List, Tuple
 from .common import *
 from .container import ContainerFactory, ContainerFactoryException
+from .utils.docker import DockerHelper
 
 class SingularityContainerFactory(ContainerFactory):
+    META_JSON_POSTFIX = '_meta.json'
     def __init__(self, cacheDir=None, local_config=None, engine_name='unset', tempDir=None):
         super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name, tempDir=tempDir)
         self.singularity_cmd = local_config.get('tools', {}).get('singularityCommand', DEFAULT_SINGULARITY_CMD)
@@ -56,6 +59,7 @@ class SingularityContainerFactory(ContainerFactory):
         
         matEnv = dict(os.environ)
         matEnv.update(self.environment)
+        dhelp = DockerHelper()
         for tag in tagList:
             # It is not an absolute URL, we are prepending the docker://
             parsedTag = parse.urlparse(tag)
@@ -63,24 +67,57 @@ class SingularityContainerFactory(ContainerFactory):
             
             containerFilename = simpleFileNameMethod(tag)
             localContainerPath = os.path.join(self.engineContainersSymlinkDir,containerFilename)
-                
+            localContainerPathMeta = localContainerPath + self.META_JSON_POSTFIX
+            
             self.logger.info("downloading container: {} => {}".format(tag, localContainerPath))
             # First, let's materialize the container image
             imageSignature = None
+            
+            tmpContainerPath = None
+            tmpContainerPathMeta = None
+            if os.path.isfile(localContainerPathMeta):
+                with open(localContainerPathMeta, mode="r", encoding="utf8") as tcpm:
+                    metadata = json.load(tcpm)
+                    registryServer = metadata['registryServer']
+                    repo = metadata['repo']
+                    alias = metadata['alias']
+                    partial_fingerprint = metadata['dcd']
+            elif offline:
+                raise ContainerFactoryException("Cannot download containers metadata in offline mode from {} to {}".format(tag, localContainerPath))
+            else:
+                tmpContainerPath = os.path.join(self.containersCacheDir,str(uuid.uuid4()))
+                tmpContainerPathMeta = tmpContainerPath + self.META_JSON_POSTFIX
+                
+                self.logger.debug("downloading temporary container metadata: {} => {}".format(tag, tmpContainerPathMeta))
+                
+                with open(tmpContainerPathMeta, mode="w", encoding="utf8") as tcpm:
+                    registryServer, repo, alias, partial_fingerprint = dhelp.query_tag(singTag)
+                    json.dump({
+                        'registryServer': registryServer,
+                        'repo': repo,
+                        'alias': alias,
+                        'dcd': partial_fingerprint,
+                    }, tcpm)
+            
+                
+            canonicalContainerPath = None
+            canonicalContainerPathMeta = None
             if not os.path.isfile(localContainerPath):
                 if offline:
-                    raise WFException("Cannot download containers in offline mode from {} to {}".format(tag, localContainerPath))
+                    raise ContainerFactoryException("Cannot download containers in offline mode from {} to {}".format(tag, localContainerPath))
                     
                 with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
-                    tmpContainerPath = os.path.join(self.containersCacheDir,str(uuid.uuid4()))
+                    if tmpContainerPath is None:
+                        tmpContainerPath = os.path.join(self.containersCacheDir,str(uuid.uuid4()))
+                    
                     self.logger.debug("downloading temporary container: {} => {}".format(tag, tmpContainerPath))
                     # Singularity command line borrowed from
                     # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
                     s_retval = subprocess.Popen(
-                    [self.singularity_cmd, 'pull', '--name', tmpContainerPath, singTag],
-                    env=matEnv,
-                    stdout=s_out,
-                    stderr=s_err
+                        [self.singularity_cmd, 'pull', '--name', tmpContainerPath, singTag],
+                        env=matEnv,
+                        stdout=s_out,
+                        stderr=s_err
                     ).wait()
                     
                     self.logger.debug("singularity pull retval: {}".format(s_retval))
@@ -108,12 +145,17 @@ class SingularityContainerFactory(ContainerFactory):
                             
                             # Remove the temporary one
                             os.unlink(tmpContainerPath)
+                            tmpContainerPath = None
+                            if tmpContainerPathMeta is not None:
+                                os.unlink(tmpContainerPathMeta)
+                                tmpContainerPathMeta = None
                             if tmpSize != canonicalSize:
                                 # If files were not the same complain
                                 # This should not happen!!!!!
                                 raise ContainerFactoryException("FATAL ERROR: Singularity cache collision for {}, with differing sizes ({} local, {} remote {})".format(imageSignature,canonicalSize,tmpSize,tag))
                         else:
-                            shutil.move(tmpContainerPath,canonicalContainerPath)
+                            shutil.move(tmpContainerPath, canonicalContainerPath)
+                            tmpContainerPath = None
                         
                         # Now, create the relative symbolic link
                         if os.path.lexists(localContainerPath):
@@ -137,6 +179,18 @@ STDERR
                             except:
                                 pass
                         raise ContainerFactoryException(errstr)
+            
+            # Only metadata was generated
+            if tmpContainerPathMeta is not None:
+                if canonicalContainerPath is None:
+                    canonicalContainerPath = os.path.normpath(os.path.join(self.engineContainersSymlinkDir, os.readlink(localContainerPath)))
+                canonicalContainerPathMeta = canonicalContainerPath + self.META_JSON_POSTFIX
+                shutil.move(tmpContainerPathMeta, canonicalContainerPathMeta)
+            
+            if canonicalContainerPathMeta is not None:
+                if os.path.lexists(localContainerPathMeta):
+                    os.unlink(localContainerPathMeta)
+                os.symlink(os.path.relpath(canonicalContainerPathMeta,self.engineContainersSymlinkDir),localContainerPathMeta)
                 
             
             # Then, compute the signature
@@ -148,7 +202,7 @@ STDERR
                     origTaggedName=tag,
                     taggedName=singTag,
                     signature=imageSignature,
-                    #fingerprint=None,
+                    fingerprint=repo + '@' + partial_fingerprint,
                     type=self.containerType,
                     localPath=localContainerPath
                 )
