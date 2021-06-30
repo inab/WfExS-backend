@@ -810,7 +810,12 @@ class WF:
         if self.engine is None:
             self.fetchWorkflow(offline=offline)
 
-        self.materializedEngine = self.engine.materializeEngine(self.localWorkflow, self.engineVer)
+        if self.materializedEngine is None:
+            localWorkflow = self.localWorkflow
+        else:
+            localWorkflow = self.materializedEngine.workflow
+
+        self.materializedEngine = self.engine.materializeEngine(localWorkflow, self.engineVer)
 
     def materializeWorkflow(self, offline=False):
         if self.materializedEngine is None:

@@ -407,6 +407,9 @@ class CWLWorkflowEngine(WorkflowEngine):
                     cwl_yaml_inputs = wf.get('inputs', [])
                     cwl_yaml_outputs = wf.get('outputs', [])
 
+                if cwl_yaml_inputs is None:
+                    raise WorkflowEngineException(f"FIXME?: No input was found in workflow {localWorkflowFile}")
+
                 # Setting packed CWL inputs (id, type)
                 for cwl_yaml_input in cwl_yaml_inputs:  # clean string of packed CWL inputs
                     cwl_yaml_input_id = str(cwl_yaml_input['id'])
