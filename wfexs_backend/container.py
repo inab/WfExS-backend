@@ -78,6 +78,8 @@ class ContainerFactory(abc.ABC):
         # variables needed to run the tool with the proper setup
         self._environment = dict()
         
+        self.runtime_cmd = None
+        
     @classmethod
     @abc.abstractmethod
     def ContainerType(cls) -> ContainerType:
@@ -90,6 +92,10 @@ class ContainerFactory(abc.ABC):
     @property
     def containerType(self) -> ContainerType:
         return self.ContainerType()
+    
+    @property
+    def command(self) -> str:
+        return self.runtime_cmd
     
     @property
     def cacheDir(self) -> AbsPath:
