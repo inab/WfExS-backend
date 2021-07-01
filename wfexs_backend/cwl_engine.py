@@ -25,16 +25,15 @@ import subprocess
 import tempfile
 import venv
 
+from typing import Set, Tuple
+
 import jsonpath_ng
 import jsonpath_ng.ext
 import yaml
 
 from .common import *
-from .container import NoContainerFactory
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .engine import WorkflowEngine, WorkflowEngineException
-from .singularity_container import SingularityContainerFactory
-from .docker_container import DockerContainerFactory
 
 
 # Next methods are borrowed from
@@ -70,6 +69,12 @@ class CWLWorkflowEngine(WorkflowEngine):
     NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
 
     ENGINE_NAME = 'cwl'
+
+    SUPPORTED_CONTAINER_TYPES = {
+        ContainerType.NoContainer,
+        ContainerType.Singularity,
+        ContainerType.Docker,
+    }
 
     def __init__(self,
                  cacheDir=None,
@@ -120,6 +125,10 @@ class CWLWorkflowEngine(WorkflowEngine):
             trs_descriptor='CWL',
             rocrate_programming_language='#cwl'
         )
+
+    @classmethod
+    def SupportedContainerTypes(cls) -> Set[ContainerType]:
+        return cls.SUPPORTED_CONTAINER_TYPES
 
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
@@ -451,15 +460,17 @@ class CWLWorkflowEngine(WorkflowEngine):
                             elif self.logger.getEffectiveLevel() <= logging.INFO:
                                 debugFlag = '--verbose'
                             
-                            if isinstance(self.container_factory, SingularityContainerFactory):
+                            if self.container_factory.containerType == ContainerType.Singularity:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
                                 instEnv['SINGULARITY_CONTAIN'] = '1'
                                 if self.writable_containers:
                                     instEnv['SINGULARITY_WRITABLE'] = '1'
-                            elif isinstance(self.container_factory, DockerContainerFactory):
+                            elif self.container_factory.containerType == ContainerType.Docker:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
-                            elif isinstance(self.container_factory, NoContainerFactory):
+                            elif self.container_factory.containerType == ContainerType.Podman:
+                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull '--user-space-docker-cmd=" + self.container_factory.command + "' --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                            elif self.container_factory.containerType == ContainerType.NoContainer:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:
                                 raise WorkflowEngineException("FATAL ERROR: Unsupported container factory {}".format(

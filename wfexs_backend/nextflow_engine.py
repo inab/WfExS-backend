@@ -28,15 +28,11 @@ import sys
 import tempfile
 import yaml
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Set, Tuple
 from .common import *
-from .container import NoContainerFactory
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .fetchers import fetchClassicURL
-from .singularity_container import SingularityContainerFactory
-from .docker_container import DockerContainerFactory
-
 
 # A default name for the static bash
 DEFAULT_STATIC_BASH_CMD = 'bash.static'
@@ -55,12 +51,19 @@ def _tzstring():
 class NextflowWorkflowEngine(WorkflowEngine):
     NEXTFLOW_REPO = 'https://github.com/nextflow-io/nextflow'
     DEFAULT_NEXTFLOW_VERSION = '19.04.1'
+    DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN = '20.01.0'
     DEFAULT_NEXTFLOW_DOCKER_IMAGE = 'nextflow/nextflow'
 
     DEFAULT_MAX_RETRIES = 5
     DEFAULT_MAX_CPUS = 4
 
     ENGINE_NAME = 'nextflow'
+
+    SUPPORTED_CONTAINER_TYPES = {
+        ContainerType.NoContainer,
+        ContainerType.Singularity,
+        ContainerType.Docker,
+    }
 
     def __init__(self,
             cacheDir=None,
@@ -104,7 +107,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.nxf_image = engineConf.get('dockerImage', self.DEFAULT_NEXTFLOW_DOCKER_IMAGE)
         nxf_version = workflowEngineConf.get('version')
         if nxf_version is None:
-            nxf_version = engineConf.get('version', self.DEFAULT_NEXTFLOW_VERSION)
+            if self.container_factory.containerType == ContainerType.Podman:
+                default_nextflow_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
+            else:
+                default_nextflow_version = self.DEFAULT_NEXTFLOW_VERSION
+            nxf_version = engineConf.get('version', default_nextflow_version)
+        elif self.container_factory.containerType == ContainerType.Podman  and nxf_version < self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN:
+            nxf_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
         self.nxf_version = nxf_version
         self.max_retries = engineConf.get('maxRetries', self.DEFAULT_MAX_RETRIES)
         self.max_cpus = engineConf.get('maxCpus', self.DEFAULT_MAX_CPUS)
@@ -128,6 +137,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
             trs_descriptor='NFL',
             rocrate_programming_language='#nextflow'
         )
+
+    @classmethod
+    def SupportedContainerTypes(cls) -> Set[ContainerType]:
+        return cls.SUPPORTED_CONTAINER_TYPES
     
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
@@ -206,6 +219,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # Setting a default engineVer
         if engineVer is None:
             engineVer = self.nxf_version
+        elif self.container_factory.containerType == ContainerType.Podman  and engineVer < self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN:
+            engineVer = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
         
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(dir=nfDir, relPath=candidateNf, effectiveCheckout=localWf.effectiveCheckout, langVersion=engineVer)
@@ -278,7 +293,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # FIXME: Should we set NXF_TEMP???
         
         # This is needed to have Nextflow using the cached contents
-        if isinstance(self.container_factory,SingularityContainerFactory):
+        if self.container_factory.containerType == ContainerType.Singularity:
             instEnv['NXF_SINGULARITY_CACHEDIR'] = self.container_factory.cacheDir
         
         # This is done only once
@@ -755,7 +770,7 @@ STDERR
         optBash = None
         optWritable = None
         runEnv.update(self.container_factory.environment)
-        if isinstance(self.container_factory, SingularityContainerFactory):
+        if self.container_factory.containerType == ContainerType.Singularity:
             if self.static_bash_cmd is not None:
                 optBash = f"-B {self.static_bash_cmd}:/bin/bash"
             else:
@@ -768,26 +783,36 @@ STDERR
 
         forceParamsConfFile = os.path.join(self.engineTweaksDir, 'force-params.config')
         with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
-            if isinstance(self.container_factory, SingularityContainerFactory):
+            if self.container_factory.containerType == ContainerType.Singularity:
                 print(
 f"""docker.enabled = false
+podman.enabled = false
 singularity.enabled = true
 singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
 singularity.runOptions = '{optWritable} {optBash}'
 singularity.autoMounts = true
 """, file=fPC)
-            elif isinstance(self.container_factory, DockerContainerFactory):
+            elif self.container_factory.containerType == ContainerType.Docker:
                 print(
 f"""singularity.enabled = false
+podman.enabled = false
 docker.enabled = true
 docker.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
 docker.runOptions = '-v {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z -e TZ="{_tzstring()}"'
 docker.fixOwnership = true
 """, file=fPC)
-            elif isinstance(self.container_factory, NoContainerFactory):
+            elif self.container_factory.containerType == ContainerType.Podman:
+                print(
+f"""singularity.enabled = false
+docker.enabled = false
+podman.enabled = true
+podman.runOptions = '-v {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z -e TZ="{_tzstring()}"'
+""", file=fPC)
+            elif self.container_factory.containerType == ContainerType.NoContainer:
                 print(
 f"""docker.enabled = false
 singularity.enabled = false
+podman.enabled = false
 """, file=fPC)
 
             # Trace fields are detailed at

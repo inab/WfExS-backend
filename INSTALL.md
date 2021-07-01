@@ -31,4 +31,6 @@ pip install -r requirements.txt
   
   * [singularity](https://sylabs.io/singularity/): when local installation is set up to use singularity, a version which supports user namespaces, 3.5 or later.
   
-  * [docker](https://www.docker.com/): when local installation is set up to use docker.
+  * [docker](https://www.docker.com/): when local installation is set up to use docker. When docker is used, secure intermediate results feature will not work.
+  
+  * [podman](https://podman.io/): when local installation is set up to use podman. When docker is used, secure intermediate results feature will not work.

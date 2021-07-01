@@ -28,12 +28,13 @@ import logging
 
 from .common import *
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Set, Tuple
 from collections import namedtuple
 
 from .container import Container, ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 from .docker_container import DockerContainerFactory
+from .podman_container import PodmanContainerFactory
 
 from rocrate.rocrate import ROCrate
 from rocrate.model.computerlanguage import ComputerLanguage
@@ -67,6 +68,7 @@ class WorkflowEngineException(Exception):
 CONTAINER_FACTORY_CLASSES = [
     SingularityContainerFactory,
     DockerContainerFactory,
+    PodmanContainerFactory,
     NoContainerFactory,
 ]
 
@@ -217,6 +219,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             container_type = DEFAULT_CONTAINER_TYPE
         else:
             container_type = ContainerType(container_type)
+        
+        if not self.supportsContainerType(container_type):
+            raise WorkflowEngineException(f"Current implementation of {self.__class__.__name__} does not support {container_type}")
+        
+        if secure_exec and container_type in (ContainerType.Docker, ContainerType.Podman):
+            raise WorkflowEngineException(f"Due technical limitations, secure or paranoid executions are incompatible with {container_type}")
 
         for containerFactory in CONTAINER_FACTORY_CLASSES:
             if containerFactory.ContainerType() == container_type:
@@ -250,6 +258,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @property
     def workflowType(self) -> WorkflowType:
         return self.WorkflowType()
+    
+    @classmethod
+    @abc.abstractmethod
+    def SupportedContainerTypes(cls) -> Set[ContainerType]:
+        pass
+
+    def supportsContainerType(self, containerType : ContainerType) -> bool:
+        return containerType in self.SupportedContainerTypes()
     
     def getEmptyCrateAndComputerLanguage(self, langVersion: WFLangVersion) -> ComputerLanguage:
         """
