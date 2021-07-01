@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 import json
+import logging
 import re
 import shutil
 import stat
@@ -443,21 +444,28 @@ class CWLWorkflowEngine(WorkflowEngine):
                             # This is needed to teach cwltool where to find the cached images
                             instEnv = dict()
                             instEnv.update(self.container_factory.environment)
+                            
+                            debugFlag = ''
+                            if self.logger.getEffectiveLevel() <= logging.DEBUG:
+                                debugFlag = '--debug'
+                            elif self.logger.getEffectiveLevel() <= logging.INFO:
+                                debugFlag = '--verbose'
+                            
                             if isinstance(self.container_factory, SingularityContainerFactory):
-                                cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
                                 instEnv['SINGULARITY_CONTAIN'] = '1'
                                 if self.writable_containers:
                                     instEnv['SINGULARITY_WRITABLE'] = '1'
                             elif isinstance(self.container_factory, DockerContainerFactory):
-                                cmdTemplate = "cwltool --debug --outdir {0} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif isinstance(self.container_factory, NoContainerFactory):
-                                cmdTemplate = "cwltool --outdir {0} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:
                                 raise WorkflowEngineException("FATAL ERROR: Unsupported container factory {}".format(
                                     self.container_factory.ContainerType()))
 
-                            cmd = cmdTemplate.format(outputDir, intermediateDir, localWorkflowFile, yamlFile)
+                            cmd = cmdTemplate.format(outputDir, intermediateDir, localWorkflowFile, yamlFile, debugFlag)
                             self.logger.debug("Command => {}".format(cmd))
 
                             retVal = subprocess.Popen(". '{0}'/bin/activate && {1}".format(cwl_install_dir, cmd),

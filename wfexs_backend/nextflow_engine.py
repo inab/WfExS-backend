@@ -19,6 +19,7 @@ from __future__ import absolute_import
 import datetime
 import functools
 import json
+import logging
 import os
 import re
 import shutil
@@ -268,6 +269,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         instEnv['NXF_WORKDIR'] = workdir  if workdir is not None  else  self.intermediateDir
         instEnv['NXF_ASSETS'] = self.nxf_assets
+        if self.logger.getEffectiveLevel() <= logging.DEBUG:
+            instEnv['NXF_DEBUG'] = '1'
+        #    instEnv['NXF_DEBUG'] = '2'
+        #elif self.logger.getEffectiveLevel() <= logging.INFO:
+        #    instEnv['NXF_DEBUG'] = '1'
         
         # FIXME: Should we set NXF_TEMP???
         
