@@ -30,7 +30,7 @@ DOCKER_PROTO = 'docker://'
 class DockerContainerFactory(ContainerFactory):
     def __init__(self, cacheDir=None, local_config=None, engine_name='unset', tempDir=None):
         super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name, tempDir=tempDir)
-        self.docker_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
+        self.runtime_cmd = local_config.get('tools', {}).get('dockerCommand', DEFAULT_DOCKER_CMD)
     
     @classmethod
     def ContainerType(cls) -> ContainerType:
@@ -40,7 +40,7 @@ class DockerContainerFactory(ContainerFactory):
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying docker container {dockerTag}")
             d_retval = subprocess.Popen(
-                [self.docker_cmd, 'inspect', dockerTag],
+                [self.runtime_cmd, 'inspect', dockerTag],
                 env=matEnv,
                 stdout=d_out,
                 stderr=d_err
@@ -63,7 +63,7 @@ class DockerContainerFactory(ContainerFactory):
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"pulling docker container {dockerTag}")
             d_retval = subprocess.Popen(
-                [self.docker_cmd, 'pull', dockerTag],
+                [self.runtime_cmd, 'pull', dockerTag],
                 env=matEnv,
                 stdout=d_out,
                 stderr=d_err
@@ -76,9 +76,9 @@ class DockerContainerFactory(ContainerFactory):
             with open(d_err.name,"r") as c_stF:
                 d_err_v = c_stF.read()
             
-            self.logger.debug(f"docker inspect stdout: {d_out_v}")
+            self.logger.debug(f"docker pull stdout: {d_out_v}")
             
-            self.logger.debug(f"docker inspect stderr: {d_err_v}")
+            self.logger.debug(f"docker pull stderr: {d_err_v}")
             
             return d_retval , d_out_v , d_err_v
     
