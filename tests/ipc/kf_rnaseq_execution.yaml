@@ -1,0 +1,34 @@
+workflow_id: https://raw.githubusercontent.com/kids-first/kf-rnaseq-workflow/v2.4.1/workflow/kfdrc-rnaseq-workflow.cwl
+workflow_config:
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  sample_name: "C835"
+  STAR_outSAMattrRGline: "@RG\\tID:7316-242\\tLB:750189\\tPL:ILLUMINA\\tSM:BS_W72364MN"
+  STARgenome: 
+    c-l-a-s-s: File
+    url: file:///path/to/local/STAR_GENCODE37.tar.gz
+  RSEMgenome: 
+    c-l-a-s-s: File
+    url: file:///path/to/local/RSEM_GENCODE37.tar.gz
+  reference_fasta: 
+    c-l-a-s-s: File
+    url: file:///path/to/local/GRCh38.primary_assembly.genome.fa
+  gtf_anno: 
+    c-l-a-s-s: File
+    url: file:///path/to/local/gencode.v37.primary_assembly.annotation.gtf
+  FusionGenome: 
+    c-l-a-s-s: File
+    url: file:///path/to/local/GRCh38_gencode_v37_CTAT_lib_Mar012021.plug-n-play.tar.gz
+  runThread: 4
+  RNAseQC_GTF: 
+    c-l-a-s-s: File
+    url:  file:///path/to/local/gencode.v37.primary_assembly.RNAseQC.gtf
+  kallisto_idx: 
+    c-l-a-s-s: File
+    url:  file:///path/to/local/gencode.v37.kallisto.index
+  wf_strand_param: "default"
+  input_type: "BAM"
+  reads1:
+    c-l-a-s-s: File
+    url: file:///path/to/local/G20479.HCC1143_1M.aligned.bam
