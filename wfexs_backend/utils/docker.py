@@ -185,7 +185,7 @@ class DockerHelper(abc.ABC):
             if manifest.get('schemaVersion',1) == 1:
                 partial_fingerprint = dxffat._get_dcd(alias)
         except Exception as e:
-            raise DockerHelperException("Unable to obtain fingerprint from ")
+            raise DockerHelperException(f"Unable to obtain fingerprint from {tag}. Reason {e}")
         
         return registryServer, repo, alias, partial_fingerprint
 
