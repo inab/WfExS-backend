@@ -20,7 +20,7 @@ import json
 from typing import NamedTuple, Optional, Tuple
 import urllib.parse
 
-from dxf import DXF
+from dxf import DXF, _schema2_mimetype as DockerManifestV2MIMEType
 
 class DockerHelperException(Exception):
     pass
@@ -37,7 +37,7 @@ class DXFFat(DXF):
     # "fat" manifest description
     FAT_schema2_mimetype = 'application/vnd.docker.distribution.manifest.list.v2+json'
     
-    def get_fat_manifest_and_response(self, alias):
+    def get_fat_manifest_and_response(self, alias, http_method='get'):
         """
         Request the "fat" manifest for an alias, which returns the list
         of all the available architectures, and returns the manifest and
@@ -50,12 +50,15 @@ class DXFFat(DXF):
         :returns: Tuple containing the "fat" manifest as a string (JSON)
         and the `requests.Response <http://docs.python-requests.org/en/master/api/#requests.Response>`_
         """
-        r = self._request('get',
+        r = self._request(http_method,
                           'manifests/' + alias,
-                          headers={'Accept': self.FAT_schema2_mimetype})
+                          headers={
+                            'Accept': ', '.join((self.FAT_schema2_mimetype, DockerManifestV2MIMEType + ';0.9'))
+                        }
+                    )
         return r.content.decode('utf-8'), r
 
-    def get_fat_manifest_and_dcd(self, alias):
+    def get_fat_manifest_and_dcd(self, alias, http_method='get'):
         """
         Request the "fat" manifest for an alias, which returns the list
         of all the available architectures, and returns the manifest and
@@ -68,10 +71,8 @@ class DXFFat(DXF):
         :returns: Tuple containing the "fat" manifest as a string (JSON)
         and the dcd
         """
-        r = self._request('get',
-                          'manifests/' + alias,
-                          headers={'Accept': self.FAT_schema2_mimetype})
-        return r.content.decode('utf-8'), r.headers.get('Docker-Content-Digest')
+        fat_manifest, r = self.get_fat_manifest_and_response(alias, http_method=http_method)
+        return fat_manifest, r.headers.get('Docker-Content-Digest')
 
     def get_fat_manifest(self, alias):
         """
@@ -102,11 +103,8 @@ class DXFFat(DXF):
         # the following header must be used when HEAD or GET-ing the manifest
         # to obtain the correct digest to delete:
         # Accept: application/vnd.docker.distribution.manifest.v2+json
-        return self._request(
-            'head',
-            'manifests/{}'.format(alias),
-            headers={'Accept': self.FAT_schema2_mimetype},
-        ).headers.get('Docker-Content-Digest')
+        _ , fat_dcd = self.get_fat_manifest_and_dcd(alias, http_method='head')
+        return fat_dcd
 
 
 class DockerHelper(abc.ABC):
