@@ -22,6 +22,9 @@ import urllib.parse
 
 from dxf import DXF, _schema2_mimetype as DockerManifestV2MIMEType
 
+# Needed for proper error handling
+import requests
+
 class DockerHelperException(Exception):
     pass
 
@@ -50,12 +53,20 @@ class DXFFat(DXF):
         :returns: Tuple containing the "fat" manifest as a string (JSON)
         and the `requests.Response <http://docs.python-requests.org/en/master/api/#requests.Response>`_
         """
-        r = self._request(http_method,
-                          'manifests/' + alias,
-                          headers={
-                            'Accept': ', '.join((self.FAT_schema2_mimetype, DockerManifestV2MIMEType + ';0.9'))
-                        }
-                    )
+        try:
+            headersFATV2 = {
+                'Accept': self.FAT_schema2_mimetype
+            }
+            r = self._request(http_method, 'manifests/' + alias, headers=headersFATV2)
+        except requests.exceptions.HTTPError as he:
+            if he.response.status_code != 404:
+                raise he
+            
+            headersV2 = {
+                'Accept': DockerManifestV2MIMEType
+            }
+            r = self._request(http_method, 'manifests/' + alias, headers=headersV2)
+
         return r.content.decode('utf-8'), r
 
     def get_fat_manifest_and_dcd(self, alias, http_method='get'):
