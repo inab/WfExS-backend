@@ -405,21 +405,35 @@ class CWLWorkflowEngine(WorkflowEngine):
 
                 # As the workflow has been packed, the #main element appears
                 io_parser = jsonpath_ng.ext.parse('$."$graph"[?class = "Workflow"]')
-                cwl_yaml_inputs = None
-                cwl_yaml_outputs = None
-                wfId = None
-                wfIdPrefix = None
+                
+                workflows = dict()
+                first_workflow = None
                 for match in io_parser.find(cwl_yaml):
                     wf = match.value
                     wfId = wf.get('id')
                     wfIdPrefix = '' if wfId is None else wfId + '/'
 
-                    cwl_yaml_inputs = wf.get('inputs', [])
-                    cwl_yaml_outputs = wf.get('outputs', [])
-
-                if cwl_yaml_inputs is None:
-                    raise WorkflowEngineException(f"FIXME?: No input was found in workflow {localWorkflowFile}")
-
+                    wf_cwl_yaml_inputs = wf.get('inputs', [])
+                    wf_cwl_yaml_outputs = wf.get('outputs', [])
+                    
+                    workflow = (wfId, wfIdPrefix, wf_cwl_yaml_inputs, wf_cwl_yaml_outputs)
+                    workflows[wfId] = workflow
+                    if first_workflow is None:
+                        first_workflow = workflow
+                
+                # Now, deciding
+                workflow = None
+                if first_workflow is None:
+                    raise WorkflowEngineException(f"FIXME?: No workflow was found in {localWorkflowFile}")
+                elif len(workflows) > 1 and '#main' in workflows:
+                    # TODO: have a look at cwltool code and more workflows,
+                    # to be sure this heuristic is valid
+                    workflow = workflows['#main']
+                else:
+                    workflow = first_workflow
+                
+                wfId, wfIdPrefix, cwl_yaml_inputs, cwl_yaml_outputs = workflow
+                
                 # Setting packed CWL inputs (id, type)
                 for cwl_yaml_input in cwl_yaml_inputs:  # clean string of packed CWL inputs
                     cwl_yaml_input_id = str(cwl_yaml_input['id'])
