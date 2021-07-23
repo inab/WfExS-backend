@@ -36,13 +36,13 @@ usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
                         [-W WORKFLOWCONFIGFILENAME]
                         [-Z SECURITYCONTEXTSCONFIGFILENAME]
                         [-J WORKFLOWWORKINGDIRECTORY] [--full] [-V]
-                        [{init,stage,mount-workdir,export-stage,offline-execute,execute,export-results}]
+                        [{init,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}]
 
-WfExS (workflow execution service) backend 0.4.0-17-g051f17f
-(051f17f549a91d677d124c9db46dc8dbc12bff41)
+WfExS (workflow execution service) backend 0.4.5
+(fba2d95b66276dd140112afcd8c1ebadd3b8a5b9)
 
 positional arguments:
-  {init,stage,mount-workdir,export-stage,offline-execute,execute,export-results}
+  {init,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         Command to run
 
 optional arguments:
@@ -67,7 +67,7 @@ optional arguments:
                         execute)
   --full                Should the RO-Crate contain a copy of the inputs (and
                         outputs)? (to be used with export-stage or export-
-                        results)
+                        crate)
   -V, --version         show program's version number and exit
 ```
 
@@ -83,11 +83,13 @@ WfExS commands are:
 
 * `offline-execute`: This command is complementary to `stage`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`. It executes the workflow, assuming all the preconditions are in place.
 
-* `export-results` _(to be finished)_: This command is complementary to `offline-execute`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute`. It bundles the results from an execution at a working directory in an RO-Crate, assuming there is an execution there.
+* `export-results` _(to be finished)_: This command is complementary to `offline-execute`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute`. It export the results from an execution at a working directory, assuming there is an execution there. Export rules should be described in the file used in `-W` parameter when the working directory was staged.
+
+* `export-crate` _(to be finished)_: This command is complementary to `export-results`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute` and `export-results`. It bundles the metadata and provenance results from an execution at a working directory in an RO-Crate, assuming there is an execution there.
 
 * `mount-workdir`: This command is a helper to inspect encrypted execution environments, as it mounts its working directory for a limited time. As `export-stage`, `offline-execute` or `export-results`, it recognizes `-L` parameter and depends on `-J` parameter.
 
-* `execute`: This command's behaviour is equivalent to `stage` followed by `offline-execute`, followed by `export-results`.
+* `execute`: This command's behaviour is equivalent to `stage` followed by `offline-execute`, `export-results` and `export-crate`.
 
 When the execution has finished properly, the working directory `outputs` subdirectory should contain both the outputs and an `execution.crate.zip`, which can be used to create a workflow entry in <https://workflowhub.eu>.
 
