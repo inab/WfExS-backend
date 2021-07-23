@@ -59,6 +59,7 @@ class WfExS_Commands(ArgTypeMixin, enum.Enum):
     OfflineExecute = 'offline-execute'
     Execute = 'execute'
     ExportResults = 'export-results'
+    ExportCrate = 'export-crate'
 
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
@@ -87,7 +88,7 @@ if __name__ == "__main__":
     ap.add_argument('-J', '--staged-job-dir', dest='workflowWorkingDirectory',
                     help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
     ap.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
-                    help="Should the RO-Crate contain a copy of the inputs (and outputs)? (to be used with {})".format(' or '.join(map(lambda command: str(command), (WfExS_Commands.ExportStage, WfExS_Commands.ExportResults)))))
+                    help="Should the RO-Crate contain a copy of the inputs (and outputs)? (to be used with {})".format(' or '.join(map(lambda command: str(command), (WfExS_Commands.ExportStage, WfExS_Commands.ExportCrate)))))
     ap.add_argument('command', help='Command to run', nargs='?', type=WfExS_Commands.argtype, choices=WfExS_Commands, default=WfExS_Commands.Execute)
     ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
     
@@ -159,7 +160,7 @@ if __name__ == "__main__":
     if args.command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
     
-    if args.command in (WfExS_Commands.OfflineExecute, WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.ExportResults):
+    if args.command in (WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
         wfInstance.fromWorkDir(args.workflowWorkingDirectory)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
@@ -182,4 +183,7 @@ if __name__ == "__main__":
         wfInstance.executeWorkflow(offline=args.command == WfExS_Commands.OfflineExecute)
     
     if args.command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
+        wfInstance.exportResults()
+    
+    if args.command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
         wfInstance.createResultsResearchObject(args.doMaterializedROCrate)

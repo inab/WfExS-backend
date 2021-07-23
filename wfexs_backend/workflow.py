@@ -52,7 +52,7 @@ from .common import *
 from .encrypted_fs import *
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
-from .engine import WORKDIR_MARSHALLED_STAGE_FILE, WORKDIR_MARSHALLED_EXECUTE_FILE
+from .engine import WORKDIR_MARSHALLED_STAGE_FILE, WORKDIR_MARSHALLED_EXECUTE_FILE, WORKDIR_MARSHALLED_EXPORT_FILE
 from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, \
     WORKDIR_ENGINE_TWEAKS_RELDIR
 from .cache_handler import SchemeHandlerCacheHandler
@@ -325,6 +325,7 @@ class WF:
         
         self.stageMarshalled = False
         self.executionMarshalled = False
+        self.exportMarshalled = False
 
         # cacheHandler is created on first use
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, {})
@@ -1099,6 +1100,13 @@ class WF:
         
         # TODO: implement store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute()
+        
+    def exportResults(self):
+        self.unmarshallExecute(offline=True)
+        
+        # TODO
+        self.marshallExport()
+    
     
     def marshallConfig(self, overwrite : bool = False):
         workflow_meta_file = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
@@ -1228,6 +1236,47 @@ class WF:
             
             self.executionMarshalled = True
     
+    def marshallExport(self, exist_ok : bool = True):
+        if not self.exportMarshalled:
+            self.marshallExecute(exist_ok=exist_ok)
+            
+            marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
+            if os.path.exists(marshalled_export_file):
+                if not exist_ok:
+                    raise WFException("Marshalled export results file already exists")
+                self.logger.debug("Marshalled export results file {} already exists".format(marshalled_export_file))
+            else:
+                exported_results = {
+                    # TODO
+                }
+                
+                self.logger.debug("Creating marshalled export results file {}".format(marshalled_export_file))
+                with open(marshalled_export_file, mode='w', encoding='utf-8') as msF:
+                    yaml.dump(marshall_namedtuple(exported_results), msF, Dumper=YAMLDumper)
+            
+            self.exportMarshalled = True
+        elif not exist_ok:
+            raise WFException("Marshalled export results file already exists")
+    
+    def unmarshallExport(self, offline : bool = True):
+        if not self.exportMarshalled:
+            self.unmarshallExecute(offline=offline)
+            marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
+            if not os.path.exists(marshalled_export_file):
+                raise WFException("Marshalled export results file does not exists. Export results state was not stored")
+            
+            self.logger.debug("Parsing marshalled export results state file {}".format(marshalled_export_file))
+            with open(marshalled_export_file, mode='r', encoding='utf-8') as meF:
+                marshalled_export = yaml.load(meF, Loader=YAMLLoader)
+                try:
+                    exported_results = unmarshall_namedtuple(marshalled_export, globals())
+                    
+                    # TODO
+                except Exception as e:
+                    raise WFException(f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}")
+            
+            self.exportMarshalled = True
+    
     def createStageResearchObject(self, doMaterializedROCrate : bool = False):
         """
         Create RO-crate from stage provenance.
@@ -1246,7 +1295,7 @@ class WF:
         Create RO-crate from execution provenance.
         """
         # TODO: implement deserialization
-        self.unmarshallExecute(offline=True)
+        self.unmarshallExport(offline=True)
         
         # TODO: implement logic of doMaterializedROCrate
         
