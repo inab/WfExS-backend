@@ -20,6 +20,7 @@ import atexit
 import http
 import io
 import json
+import jsonschema
 import logging
 import pathlib
 import platform
@@ -91,6 +92,9 @@ class WF:
     TRS_METADATA_FILE = 'trs_metadata.json'
     TRS_QUERY_CACHE_FILE = 'trs_result.json'
     TRS_TOOL_FILES_FILE = 'trs_tool_files.json'
+    
+    SCHEMAS_REL_DIR = 'schemas'
+    CONFIG_SCHEMA = 'config.json'
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
     DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
@@ -224,7 +228,21 @@ class WF:
             workflow_config=workflow_meta.get('workflow_config'),
             creds_config=creds_config
         )
-
+    
+    @classmethod
+    def ConfigValidate(cls, configToValidate, relSchemaFile):
+        # Locating the schemas directory, where all the schemas should be placed
+        schemaFile = os.path.join(os.path.dirname(__file__), cls.SCHEMAS_REL_DIR, relSchemaFile)
+        
+        try:
+            with open(schemaFile, mode="r", encoding="utf-8") as sF:
+                schema = json.load(sF)
+            
+            jv = jsonschema.validators.validator_for(schema)(schema)
+            return list(jv.iter_errors(instance=configToValidate))
+        except Exception as e:
+            raise WFException(f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}")
+    
     def __init__(self, local_config=None, config_directory=None):
         """
         Init function
@@ -232,13 +250,19 @@ class WF:
         :param local_config: Local setup configuration, telling where caching directories live
         :type local_config: dict
         """
-        if not isinstance(local_config, dict):
-            local_config = {}
-
-        self.local_config = local_config
-
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(self.__class__.__name__)
+
+        if not isinstance(local_config, dict):
+            local_config = {}
+        
+        # TODO: validate the local configuration object
+        valErrors = self.ConfigValidate(local_config, self.CONFIG_SCHEMA)
+        if len(valErrors) > 0:
+            self.logger.error(f'ERROR in local configuration block: {valErrors}')
+            sys.exit(1)
+        
+        self.local_config = local_config
 
         toolSect = local_config.get('tools', {})
         self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)

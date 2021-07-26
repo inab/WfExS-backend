@@ -97,7 +97,7 @@ When the execution has finished properly, the working directory `outputs` subdir
 
 The program uses three different types of configuration files:
 
-* Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
+* Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)). JSON Schema describing the format is available at  [wfexs_backend/schemas/config.json](wfexs_backend/schemas/config.json). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
   
   - `cacheDir`: The path in this key sets up the place where all the contents which can be cached are hold. It contains downloaded RO-Crate,
      downloaded workflow git repositories, downloaded workflow engines. It is recommended to have it outside `/tmp` directory when

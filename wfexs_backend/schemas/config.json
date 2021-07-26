@@ -1,0 +1,152 @@
+{
+	"$id": "https://www.eosc-life.eu/d7/WfExS-backend/Config",
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "WfExS-backend configuration file (EOSC-Life Demonstrator 7 JSON Schemas)",
+	"type": "object",
+	"properties": {
+		"cacheDir": {
+			"title": "Caching directory",
+			"description": "Directory where all the cache-able content will be hold.\nThis directory can be removed, as its contents should be available outside.\nWhen it is not set, a temporary directory is created for the session, being destroyed when the program finishes.",
+			"type": "string",
+			"minLength": 1
+		},
+		"crypt4gh": {
+			"title": "Installation Crypt4GH key setup",
+			"description": "WfExS-backend needs an encryption key for several tasks, like encrypting and decrypting random keys of encrypted working directories. When this block does not exist, WfExS-backend.py creates the installation's keys, and updates the configuration file",
+			"type": "object",
+			"properties": {
+				"key": {
+					"title": "Secret key installation file",
+					"description": "The path to the Crypt4GH secret key file used by this installation. If the path is relative, the directory where the configuration file resides is used for the resolution",
+					"type": "string",
+					"minLength": 1
+				},
+				"passphrase": {
+					"title": "Passphrase used to work with the secret key",
+					"description": "Passphrase which has to be used to work with the secret key",
+					"type": "string",
+					"minLength": 0
+				},
+				"pub": {
+					"title": "Public key installation file",
+					"description": "The path to the Crypt4GH public key file used by this installation. If the path is relative, the directory where the configuration file resides is used for the resolution",
+					"type": "string",
+					"minLength": 1
+				}
+			},
+			"additionalProperties": false,
+			"required": [
+				"key",
+				"pub",
+				"passphrase"
+			]
+		},
+		"tools": {
+			"title": "External tools configuration block",
+			"description": "External tools configuration block",
+			"type": "object",
+			"properties": {
+				"containerType": {
+					"title": "Container technology type in this installation",
+					"description": "Type of container technology to be used when any workflow is launched using this installation. Supported types are:\n- Singularity (default).\n- Docker.\n- Podman\n- No containerisation technology (discouraged)\nEncrypted working directories are unsupported when Docker or Podman are used due technological limitations",
+					"type": "string",
+					"enum": [
+						"singularity",
+						"docker",
+						"podman",
+						"none"
+					],
+					"default": "singularity"
+				},
+				"engineMode": {
+					"title": "Workflow engine invocation mode",
+					"description": "Most of workflow engines are usually available both as installable executables and as containers, but when they are used inside a container usually do not support running containerised jobs, unless a very careful setup is done. Currently, WfExS-backend only partially supports Nextflow in its docker-in-docker mode.",
+					"enum": [
+						"local",
+						"docker"
+					],
+					"default": "local"
+				},
+				"encrypted_fs": {
+					"title": "Working directory FUSE encrypted FS configuration block",
+					"description": "",
+					"type": "object",
+					"properties": {
+						"type": {
+							"title": "Type of encrypted FS",
+							"description": "When an encrypted working directory is needed, the type of encrypted FS to be used is set up through this key. Currently, both encfs (default) and gocryptfs (recommended) are supported",
+							"type": "string",
+							"enum": [
+								"encfs",
+								"gocryptfs"
+							],
+							"default": "encfs"
+						},
+						"command": {
+							"title": "Path to encryption mount program",
+							"description": "When this key is set, it overrides the default command to be used when an encrypted directory has to be created or mounted",
+							"type": "string"
+						},
+						"fusermount_command": {
+							"title": "Path to unmount command",
+							"description": "Path to unmounting command to be used, being 'fusermount' by default",
+							"type": "string",
+							"default": "fusermount"
+						},
+						"idle": {
+							"title": "Idle minutes before autoumount",
+							"description": "Number of minutes before an idle, mounted encrypted directory will automatically unmount",
+							"type": "integer",
+							"default": 5
+						}
+					},
+					"additionalProperties": false
+				},
+				"gitCommand": {
+					"title": "Git client path",
+					"description": "Git is used to materialize workflows being hosted at git repositories, like GitHub. This key sets up custom paths to git command",
+					"type": "string",
+					"default": "git"
+				},
+				"javaCommand": {
+					"title": "Java path",
+					"description": "Java is needed to run Nextflow and future workflow engines. This key sets up custom paths to java installations",
+					"type": "string",
+					"default": "java"
+				},
+				"singularityCommand": {
+					"title": "Singularity client path",
+					"description": "Singularity is used when containerType is 'singularity'. This key sets up custom paths to singularity command",
+					"type": "string",
+					"default": "singularity"
+				},
+				"dockerCommand": {
+					"title": "Docker client path",
+					"description": "Docker is used when containerType is 'docker'. This key sets up custom paths to docker command",
+					"type": "string",
+					"default": "docker"
+				},
+				"podmanCommand": {
+					"title": "Podman client path",
+					"description": "Podman is used when containerType is 'podman'. This key sets up custom paths to podman command",
+					"type": "string",
+					"default": "podman"
+				},
+				"staticBashCommand": {
+					"title": "Static bash command (used in singularity based Nextflow engine executions)",
+					"description": "There is a bug in some bash versions which make them unsuitable to run the trace machinery from Nextflow, as the trace machinery enters in a live lock. As the images containing these faulty bash versions cannot be changed, a 'monkey patch' solution where an external, static bash version is injected on workflow execution is used. The injected static bash is found through this key, which is searched on PATH variable when it is not a full path.",
+					"type": "string",
+					"default": "bash.static"
+				}
+			},
+			"additionalProperties": false
+		},
+		"workDir": {
+			"title": "Working directory",
+			"description": "Directory where all the working directories are going to be created.\nWhen it is not set, a temporary directory is created, which will be removed when the program finishes (which avoids inspecting the working directory after the program has finished).",
+			"type": "string",
+			"minLength": 1
+		}
+	},
+	"additionalProperties": false
+}

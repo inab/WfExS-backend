@@ -1,5 +1,6 @@
 pyyaml
 jsonpath-ng
+jsonschema[format] >= 3.0.0
 paramiko[ed25519]
 certifi
 crypt4gh

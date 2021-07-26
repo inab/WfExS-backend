@@ -44,7 +44,8 @@ with open('requirements.txt') as f:
 
 package_data = {
     'wfexs_backend': [
-        'payloads/*.bash'
+        'payloads/*.bash',
+        'schemas/*.json',
     ],
 }
     
