@@ -116,7 +116,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             nxf_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
         self.nxf_version = nxf_version
         self.max_retries = engineConf.get('maxRetries', self.DEFAULT_MAX_RETRIES)
-        self.max_cpus = engineConf.get('maxCpus', self.DEFAULT_MAX_CPUS)
+        self.max_cpus = engineConf.get('maxProcesses', self.DEFAULT_MAX_CPUS)
         
         # The profile to force, in case it cannot be guessed
         self.nxf_profile = workflowEngineConf.get('profile')
@@ -840,7 +840,12 @@ dag {{
 	enabled = true
 	file = "{dagFile}"
 }}
-// executor.cpus=1
+""", file=fPC)
+
+        if self.max_cpus is not None:
+            print(
+f"""
+executor.cpus={self.max_cpus}
 """, file=fPC)
         
         # Building the NXF trojan horse in order to obtain a full list of 

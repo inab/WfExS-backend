@@ -142,22 +142,37 @@
 					"type": "object",
 					"properties": {
 						"dockerImage": {
+							"title": "Image for docker-in-docker mode",
+							"description": "(unfinished) When `engineMode` is `docker`, the name of the image to be fetched and used. The used tag will depend on the workflow's metadata, being by default the `version`",
 							"type": "string",
 							"default": "nextflow/nextflow"
 						},
 						"version": {
+							"title": "Nextflow's version",
+							"description": "Version of Nextflow engine to be used when workflow's metadata does not provide hints about minimal version needed.",
 							"type": "string",
 							"default": "19.04.1"
 						},
 						"maxRetries": {
+							"title": "Retries in docker mode",
+							"description": "Retries when `engineMode` is `docker`.\nRetries system was introduced when using docker-in-docker pattern because an insidious\nbug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-symlinks-on-bind-mounts/32138",
 							"type": "integer",
-							"minValue": 0,
+							"minimum": 0,
 							"default": 5
 						},
-						"maxCpus": {
-							"type": "integer",
-							"minValue": 1,
-							"default": 4
+						"maxProcesses": {
+							"title": "Max number of CPUs",
+							"description": "Number of CPUs to be used by Nextflow. When this key has an explicit value of `null`, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes",
+							"oneOf": [
+								{
+									"type": "integer",
+									"minimum": 1,
+									"default": 4
+								},
+								{
+									"type": "null"
+								}
+							]
 						}
 					}
 				},
@@ -165,6 +180,8 @@
 					"type": "object",
 					"properties": {
 						"version": {
+							"title": "cwltool's version",
+							"description": "Version of cwltool engine to be used. WfExS is not currently guessing the minimal needed version, so it is either the value set up in this key or the default one",
 							"type": "string",
 							"minLength": 1,
 							"default": "3.1.20210628163208"
