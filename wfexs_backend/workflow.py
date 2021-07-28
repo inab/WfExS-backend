@@ -95,6 +95,8 @@ class WF:
     
     SCHEMAS_REL_DIR = 'schemas'
     CONFIG_SCHEMA = 'config.json'
+    SECURITY_CONTEXT_SCHEMA = 'security-context.json'
+    STAGE_DEFINITION_SCHEMA = 'stage-definition.json'
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
     DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
@@ -256,7 +258,7 @@ class WF:
         if not isinstance(local_config, dict):
             local_config = {}
         
-        # TODO: validate the local configuration object
+        # validate the local configuration object
         valErrors = self.ConfigValidate(local_config, self.CONFIG_SCHEMA)
         if len(valErrors) > 0:
             self.logger.error(f'ERROR in local configuration block: {valErrors}')
@@ -385,7 +387,7 @@ class WF:
         :param params: Optional params for the workflow execution.
         :param outputs:
         :param workflow_config: Tweaks for workflow enactment, like some overrides
-        :param creds_config: Dictionary with the different credential contexts (to be implemented)
+        :param creds_config: Dictionary with the different credential contexts
         :type workflow_id: str
         :type version_id: str
         :type descriptor_type: str
@@ -397,9 +399,19 @@ class WF:
         """
         if not isinstance(workflow_config, dict):
             workflow_config = {}
+        
+        valErrors = self.ConfigValidate(workflow_config, self.STAGE_DEFINITION_SCHEMA)
+        if len(valErrors) > 0:
+            self.logger.error(f'ERROR in workflow staging definition block: {valErrors}')
+            raise WFException(f'ERROR in workflow staging definition block: {valErrors}')
 
         if not isinstance(creds_config, dict):
             creds_config = {}
+        
+        valErrors = self.ConfigValidate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
+        if len(valErrors) > 0:
+            self.logger.error(f'ERROR in security context block: {valErrors}')
+            raise WFException(f'ERROR in security context block: {valErrors}')
 
         if not isinstance(params, dict):
             params = {}
@@ -666,6 +678,42 @@ class WF:
             creds_config = {}
 
         return self.fromDescription(workflow_meta, creds_config, paranoidMode=paranoidMode)
+
+    def validateConfigFiles(self, workflowMetaFilename, securityContextsConfigFilename=None):
+        numErrors = 0
+        self.logger.info(f'Validating {workflowMetaFilename}')
+        
+        with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
+            workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+
+        if not isinstance(workflow_meta, dict):
+            workflow_meta = {}
+        
+        valErrors = self.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
+        if len(valErrors) == 0:
+            self.logger.info('No validation errors in staging definition block')
+        else:
+            for iErr, valError in enumerate(valErrors):
+                self.logger.error(f'ERROR {iErr} in staging definition block: {valError}')
+                numErrors += 1
+        
+
+        # Last, try loading the security contexts credentials file
+        if securityContextsConfigFilename and os.path.exists(securityContextsConfigFilename):
+            self.logger.info(f'Validating {securityContextsConfigFilename}')
+            
+            with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
+                creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+
+            valErrors = self.ConfigValidate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
+            if len(valErrors) == 0:
+                self.logger.info('No validation errors in security block')
+            else:
+                for iErr, valError in enumerate(valErrors):
+                    self.logger.error(f'ERROR {iErr} in security context block: {valError}')
+                    numErrors += 1
+        
+        return 1 if numErrors > 0 else 0
 
     def fromDescription(self, workflow_meta, creds_config=None, paranoidMode=False):
         """

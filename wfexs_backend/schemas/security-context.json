@@ -1,0 +1,44 @@
+{
+	"$id": "https://www.eosc-life.eu/d7/WfExS-backend/Security-Context",
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "WfExS-backend security context file (EOSC-Life Demonstrator 7 JSON Schemas)",
+	"type": "object",
+	"patternProperties": {
+		"^.+$": {
+			"title": "Security context",
+			"type": "object",
+			"oneOf": [
+				{
+					"properties": {
+						"username": {
+							"type": "string",
+							"minLength": 1
+						},
+						"password": {
+							"type": "string",
+							"minLength": 0
+						}
+					},
+					"required": [
+						"username",
+						"password"
+					]
+				},
+				{
+					"properties": {
+						"token": {
+							"type": "string",
+							"minLength": 1
+						}
+					},
+					"required": [
+						"token"
+					]
+				}
+			],
+			"minProperties": 1,
+			"additionalProperties": false
+		}
+	},
+	"additionalProperties": false
+}

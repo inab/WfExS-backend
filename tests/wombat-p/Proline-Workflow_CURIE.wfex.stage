@@ -1,0 +1,38 @@
+workflow_id: https://raw.githubusercontent.com/wombat-p/Proline-Workflow/v0.16/Nextflow/main.nf
+workflow_config:
+  secure: false
+  writable_containers: true
+  nextflow:
+    version: 20.01.0
+    profile: docker
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  raws:
+    c-l-a-s-s: Directory
+    url: pride.project:PXD001819
+    globExplode: "*.raw"
+  fasta:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/Proline-Workflow/v0.16/Results/yeast_UPS.fasta
+  precursor_mass_tolerance: 5
+  fragment_mass_tolerance: 0.8
+  miscleavages: 2
+  variable_mods: 'Oxidation of M,Acetylation of protein N-term'
+  experiment_design:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/Proline-Workflow/v0.16/Results/pxd001819.txt
+  lfq_param:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/Proline-Workflow/v0.16/Results/lfq_param_file.txt
+  # Workflow fails when these options are set
+  #max_cpus: 8
+  #max_memory: 60GB
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: true
+outputs:
+  resdir:
+    c-l-a-s-s: Directory
+    glob: "*"

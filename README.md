@@ -36,13 +36,13 @@ usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
                         [-W WORKFLOWCONFIGFILENAME]
                         [-Z SECURITYCONTEXTSCONFIGFILENAME]
                         [-J WORKFLOWWORKINGDIRECTORY] [--full] [-V]
-                        [{init,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}]
+                        [{init,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}]
 
-WfExS (workflow execution service) backend 0.4.5
-(fba2d95b66276dd140112afcd8c1ebadd3b8a5b9)
+WfExS (workflow execution service) backend 0.4.5-3-gbe1139a
+(be1139ae6f2cca8f1f66c05eb6c91e9b85631d46)
 
 positional arguments:
-  {init,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+  {init,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         Command to run
 
 optional arguments:
@@ -77,7 +77,9 @@ WfExS commands are:
 
 * `init`: This command is used to initialize a WfExS installation. It takes a local configuration file through `-L` parameter, and it can both generate crypt4gh paired keys for installation work and identification purposes and update the path to them in case they are not properly defined. Those keys are needed to decrypt encrypted working directories, and in the future to decrypt secure requests and encrypt secure results.
 
-* `stage`: This command is used to fetch all the workflow preconditions and files, staging them for an execution. It honours `-L`, `-W` and `-Z` parameters, and once the staging is finished it prints the path to the parent execution environment.
+* `config-validate`: This command is used to validate workflow staging configuration file, as well as its paired security context configuration file using the corresponding JSON Schemas. It honours `-L`, `-W` and `-Z` parameters.
+
+* `stage`: This command is used to first validate workflow staging and security context configuration files, then fetch all the workflow preconditions and files, staging them for an execution. It honours `-L`, `-W` and `-Z` parameters, and once the staging is finished it prints the path to the parent execution environment.
 
 * `export-stage` _(to be done)_: This command is complementary to `stage`. It recognizes `-L` parameter, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`. It will bundle the description of the staged environment in an RO-Crate, in order to be reused later, or uploaded to places like WorkflowHub. All of this assuming there is an stage there.
 
@@ -97,7 +99,7 @@ When the execution has finished properly, the working directory `outputs` subdir
 
 The program uses three different types of configuration files:
 
-* Local configuration file: It describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)). JSON Schema describing the format is available at  [wfexs_backend/schemas/config.json](wfexs_backend/schemas/config.json). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
+* Local configuration file: YAML formatted file which describes the local setup of the backend (example at [tests/local_config.yaml](tests/local_config.yaml)). JSON Schema describing the format (and used for validation) is available at  [wfexs_backend/schemas/config.json](wfexs_backend/schemas/config.json). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
   
   - `cacheDir`: The path in this key sets up the place where all the contents which can be cached are hold. It contains downloaded RO-Crate,
      downloaded workflow git repositories, downloaded workflow engines. It is recommended to have it outside `/tmp` directory when
@@ -135,9 +137,9 @@ The program uses three different types of configuration files:
   
   - `tools.encrypted_fs.idle`: Number of minutes of inactivity before the encrypted FUSE filesystem is automatically unmounted. The default is 5 minutes.
   
-* Workflow configuration file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_execution_nxf.yaml), [CWL example](tests/wetlab2variations_execution_cwl.yaml)).
+* Workflow configuration file: YAML formatted file which describes the workflow staging before being executed, like where inputs are located and can be fetched, the security contexts to be used on specific inputs to get those controlled access resources, the parameters, the outputs to capture, ... ([Nextflow example](tests/wetlab2variations_execution_nxf.wfex.stage), [CWL example](tests/wetlab2variations_execution_cwl.wfex.stage)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/stage-definition.json](wfexs_backend/schemas/stage-definition.json).
 
-* Security contexts file: _TO BE DOCUMENTED_ ([Nextflow example](tests/wetlab2variations_credentials_nxf.yaml), [CWL example](tests/wetlab2variations_credentials_cwl.yaml)).
+* Security contexts file: YAML formatted file which holds the `user`/`password` pairs, security tokens or keys needed on different steps, like input fetching. ([Nextflow example](tests/wetlab2variations_credentials_nxf.wfex.ctxt), [CWL example](tests/wetlab2variations_credentials_cwl.wfex.ctxt)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/security-context.json](wfexs_backend/schemas/security-context.json).
 
 # Scenarios (version 0.4)
 
@@ -163,7 +165,7 @@ Example and usage of this tool, which helps generating a bunch of workflow insta
 from a template one and an Excel or CSV file with the fields to substitute:
 
 ```bash
-python WfExS-config-replicator.py -W tests/wetlab2variations_execution_nxf.yaml --params-file tests/wetlab2variations_execution_nxf.variations.xlsx /tmp/generated
+python WfExS-config-replicator.py -W tests/wetlab2variations_execution_nxf.wfex.stage --params-file tests/wetlab2variations_execution_nxf.variations.xlsx /tmp/generated
 ```
 
 ```

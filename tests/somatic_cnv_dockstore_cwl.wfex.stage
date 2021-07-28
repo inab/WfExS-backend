@@ -1,0 +1,32 @@
+# THIS IS AN INCOMPLETE EXAMPLE (use as template)
+# Use this example only to test TRS access to Dockstore works in stage,
+# as its parameters are not properly set
+trs_endpoint: https://dockstore.org/api/api/ga4gh/v2/
+workflow_id: '#workflow/github.com/sevenbridges-openworkflows/Broad-Best-Practice-Somatic-CNV-Workflows/GATK-Somatic-CNV-Panel-Workflow'
+version: master
+workflow_config:
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  sequence_dictionary:
+    c-l-a-s-s: File
+    url: https://example.org/sequence_dictionary
+  intervals:
+    c-l-a-s-s: File
+    url: https://example.org/intervals
+  in_alignments:
+    c-l-a-s-s: File
+    url: https://example.org/in_alignments
+  output_format: TSV
+  pon_entity_id: pon
+  do_explicit_gc_correction: false
+outputs:
+  preprocessed_intervals:
+    c-l-a-s-s: File
+    preferredName: 'preprocessed_intervals.dict'
+  read_counts:
+    c-l-a-s-s: File
+    preferredName: 'read_counts.txt'
+  panel_of_normals:
+    c-l-a-s-s: File
+    preferredName: 'panel_of_normals.hdf5'

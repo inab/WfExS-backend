@@ -1,13 +1,1 @@
-workflow_id: https://raw.githubusercontent.com/inab/ipc_workflows/cosifer-20210322/cosifer/cwl/cosifer-workflow.cwl
-workflow_config:
-  secure: true
-# All the inputs must be URLs or CURIEs from identifiers.org
-params:
-  data_matrix:
-    c-l-a-s-s: File
-    url: https://raw.githubusercontent.com/PhosphorylatedRabbits/cosifer/f2e2a259d218b9a56a01d84bc9d6a7cd7c8d9bf1/examples/interactive/data_matrix.csv
-  separator: ","
-  outdir: "output"
-outputs:
-  resdir:
-    c-l-a-s-s: Directory
+cosifer_test1_cwl_secure.wfex.stage

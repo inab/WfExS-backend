@@ -1,0 +1,30 @@
+workflow_id: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/v0.13/Nextflow/main.nf
+workflow_config:
+  secure: false
+  nextflow:
+    version: 20.01.0
+    profile: docker
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  raws:
+    c-l-a-s-s: Directory
+    url: pride.project:PXD001819
+    globExplode: "*.raw"
+  sdrf:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/v0.13/Results/sdrf_UPS.tsv
+  fasta:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/v0.13/Results/yeast_UPS.fasta
+  experiment_design:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/v0.13/Results/pxd001819.txt
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: true
+outputs:
+  resdir:
+    c-l-a-s-s: Directory
+    glob: "*"

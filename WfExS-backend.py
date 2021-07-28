@@ -53,6 +53,7 @@ class ArgTypeMixin(enum.Enum):
 
 class WfExS_Commands(ArgTypeMixin, enum.Enum):
     Init = 'init'
+    ConfigValidate = 'config-validate'
     Stage = 'stage'
     MountWorkDir = 'mount-workdir'
     ExportStage = 'export-stage'
@@ -89,7 +90,7 @@ if __name__ == "__main__":
                     help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
     ap.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
                     help="Should the RO-Crate contain a copy of the inputs (and outputs)? (to be used with {})".format(' or '.join(map(lambda command: str(command), (WfExS_Commands.ExportStage, WfExS_Commands.ExportCrate)))))
-    ap.add_argument('command', help='Command to run', nargs='?', type=WfExS_Commands.argtype, choices=WfExS_Commands, default=WfExS_Commands.Execute)
+    ap.add_argument('command', help='Command to run', nargs='?', type=WfExS_Commands.argtype, choices=WfExS_Commands, default=WfExS_Commands.ConfigValidate)
     ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
     
     args = ap.parse_args()
@@ -165,6 +166,9 @@ if __name__ == "__main__":
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
+    elif args.command == WfExS_Commands.ConfigValidate:
+        retval = wfInstance.validateConfigFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
+        sys.exit(retval)
     else:
         wfInstance.fromFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
     

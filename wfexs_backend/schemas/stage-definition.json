@@ -1,0 +1,230 @@
+{
+	"$id": "https://www.eosc-life.eu/d7/WfExS-backend/Stage-Definition",
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "WfExS-backend stage definition file (EOSC-Life Demonstrator 7 JSON Schemas)",
+	"type": "object",
+	"definitions": {
+		"Param": {
+			"oneOf": [
+				{
+					"type": [
+						"string",
+						"number",
+						"boolean"
+					]
+				},
+				{
+					"type": "array",
+					"items": {
+						"type": [
+							"string",
+							"number",
+							"boolean"
+						]
+					}
+				},
+				{
+					"oneOf": [
+						{
+							"type": "object",
+							"properties": {
+								"c-l-a-s-s": {
+									"type": "string",
+									"enum": [
+										"File",
+										"Directory"
+									]
+								},
+								"url": {
+									"oneOf": [
+										{
+											"type": "string",
+											"format": "uri",
+											"minLength": 1
+										},
+										{
+											"type": "array",
+											"items": {
+												"type": "string",
+												"format": "uri",
+												"minLength": 1
+											},
+											"minArrayLength": 1
+										}
+									]
+								},
+								"security-context": {
+									"type": "string",
+									"minLength": 1
+								},
+								"globExplode": {
+									"type": "string"
+								},
+								"autoFill": {
+									"type": "boolean",
+									"default": false
+								},
+								"autoPrefix": {
+									"type": "boolean",
+									"default": false
+								}
+							},
+							"required": [
+								"c-l-a-s-s"
+							],
+							"additionalProperties": false,
+							"if": {
+								"properties": {
+									"c-l-a-s-s": {
+										"const": "Directory"
+									}
+								}
+							},
+							"then":	{
+								"if": {
+									"required": [
+										"url"
+									]
+								},
+								"then": {
+									"not": {
+										"required": [
+											"autoFill",
+											"autoPrefix"
+										]
+									}
+								},
+								"else": {
+									"not": {
+										"required": [
+											"security-context",
+											"globExplode"
+										]
+									}
+								}
+							}
+						},
+						{
+							"$ref": "#/definitions/Params"
+						}
+					]
+				}
+			]
+		},
+		"Params": {
+			"type": "object",
+			"patternProperties": {
+				"^(?!c-l-a-s-s).+$": {
+					"$ref": "#/definitions/Param"
+				}
+			},
+			"additionalProperties": false
+		}
+	},
+	"properties": {
+		"trs_endpoint": {
+			"type": "string",
+			"format": "uri"
+		},
+		"version": {
+			"type": [
+				"string",
+				"integer"
+			]
+		},
+		"workflow_id": {
+			"oneOf": [
+				{
+					"type": "string",
+					"format": "uri"
+				},
+				{
+					"type": "integer"
+				}
+			]
+		},
+		"paranoid_mode": {
+			"type": "boolean",
+			"default": false
+		},
+		"workflow_type": {
+			"type": "string",
+			"enum": [
+				"nextflow",
+				"cwl"
+			]
+		},
+		"workflow_config": {
+			"type": "object",
+			"properties": {
+				"secure": {
+					"type": "boolean"
+				},
+				"writable_containers": {
+					"type": "boolean",
+					"default": false
+				},
+				"nextflow": {
+					"type": "object",
+					"properties": {
+						"version": {
+							"type": "string",
+							"minLength": 1,
+							"default": "19.04.1"
+						},
+						"profile": {
+							"type": "string",
+							"minLength": 1
+						}
+					}
+				},
+				"cwl": {
+					"type": "object",
+					"properties": {
+						"version": {
+							"type": "string",
+							"minLength": 1,
+							"default": "3.1.20210628163208"
+						}
+					}
+				}
+			}
+		},
+		"params": {
+			"$ref": "#/definitions/Params"
+		},
+		"outputs": {
+			"type": "object",
+			"patternProperties": {
+				"^.+$": {
+					"type": "object",
+					"properties": {
+						"c-l-a-s-s": {
+							"type": "string",
+							"enum": [
+								"File",
+								"Directory"
+							]
+						},
+						"preferredName": {
+							"type": "string",
+							"minLength": 1
+						},
+						"glob": {
+							"type": "string",
+							"minLength": 1
+						}
+					},
+					"additionalProperties": false,
+					"required": [
+						"c-l-a-s-s"
+					]
+				}
+			}
+		}
+	},
+	"required": [
+		"workflow_id"
+	],
+	"additionalProperties": false
+}
