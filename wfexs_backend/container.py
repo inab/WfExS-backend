@@ -78,6 +78,10 @@ class ContainerFactory(abc.ABC):
         # variables needed to run the tool with the proper setup
         self._environment = dict()
         
+        # This variable contains the set of optional features
+        # supported by this container factory in this installation
+        self._features = set()
+        
         self.runtime_cmd = None
         
     @classmethod
@@ -112,6 +116,13 @@ class ContainerFactory(abc.ABC):
         It is assured the containers are materialized
         """
         pass
+    
+    def supportsFeature(self, feat : str) -> bool:
+        """
+        Checking whether some feature is supported by this container
+        factory in this installation. Currently userns
+        """
+        return feat in self._features
 
 class NoContainerFactory(ContainerFactory):
     """

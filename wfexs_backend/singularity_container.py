@@ -46,6 +46,34 @@ class SingularityContainerFactory(ContainerFactory):
             'SINGULARITY_TMPDIR': self.tempDir,
             'SINGULARITY_CACHEDIR': singularityCacheDir,
         })
+        
+        # Now, detect userns feature using some ideas from
+        # https://github.com/hpcng/singularity/issues/1445#issuecomment-381588444
+        userns_supported = False
+        if os.path.lexists('/proc/self/ns/user'):
+            matEnv = dict(os.environ)
+            matEnv.update(self.environment)
+            with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
+                s_retval = subprocess.Popen(
+                    [self.runtime_cmd, 'exec', '--userns', '/etc', 'true'],
+                    env=matEnv,
+                    stdout=s_out,
+                    stderr=s_err
+                ).wait()
+                
+                # The command always fails.
+                # We only need to find 'Failed to create user namespace'
+                # in order to discard this feature
+                with open(s_err.name,"r") as c_stF:
+                    s_err_v = c_stF.read()
+                if 'Failed to create user namespace' not in s_err_v:
+                    userns_supported = True
+                    self._features.add('userns')
+        
+        self.logger.debug(f'Singularity supports userns: {userns_supported}')
+        if not userns_supported:
+            self.logger.warning('Singularity does not support userns (needed for encrypted working directories)')
+        
     
     @classmethod
     def ContainerType(cls) -> ContainerType:
