@@ -152,12 +152,17 @@ class WF:
 
         # Now, checking whether public and private key pairs exist
         numExist = 0
+        crypt4ghSect = local_config.get(cls.CRYPT4GH_SECTION)
+        if crypt4ghSect is None:
+            local_config[cls.CRYPT4GH_SECTION] = {}
+            crypt4ghSect = local_config[cls.CRYPT4GH_SECTION]
+        
         for elem in (cls.CRYPT4GH_PRIVKEY_KEY, cls.CRYPT4GH_PUBKEY_KEY):
-            fname = local_config.get(cls.CRYPT4GH_SECTION, {}).get(elem)
+            fname = crypt4ghSect.get(elem)
             # The default when no filename exist is creating hidden files in the config directory
             if fname is None:
                 fname = key_prefix + '.' + elem
-                local_config.setdefault(cls.CRYPT4GH_SECTION, {})[elem] = fname
+                crypt4ghSect[elem] = fname
                 updated = True
 
             if not os.path.isabs(fname):
@@ -176,19 +181,19 @@ class WF:
 
         # Time to generate the pairs needed to work with crypt4gh
         if numExist == 0:
-            privKey = local_config[cls.CRYPT4GH_SECTION][cls.CRYPT4GH_PRIVKEY_KEY]
+            privKey = crypt4ghSect[cls.CRYPT4GH_PRIVKEY_KEY]
             if not os.path.isabs(privKey):
                 privKey = os.path.normpath(os.path.join(config_directory, privKey))
-            pubKey = local_config[cls.CRYPT4GH_SECTION][cls.CRYPT4GH_PUBKEY_KEY]
+            pubKey = crypt4ghSect[cls.CRYPT4GH_PUBKEY_KEY]
             if not os.path.isabs(pubKey):
                 pubKey = os.path.normpath(os.path.join(config_directory, pubKey))
 
-            if cls.CRYPT4GH_PASSPHRASE_KEY not in local_config[cls.CRYPT4GH_SECTION]:
+            if cls.CRYPT4GH_PASSPHRASE_KEY not in crypt4ghSect:
                 passphrase = cls.generate_passphrase()
-                local_config[cls.CRYPT4GH_SECTION][cls.CRYPT4GH_PASSPHRASE_KEY] = passphrase
+                crypt4ghSect[cls.CRYPT4GH_PASSPHRASE_KEY] = passphrase
                 updated = True
             else:
-                passphrase = local_config[cls.CRYPT4GH_SECTION][cls.CRYPT4GH_PASSPHRASE_KEY]
+                passphrase = crypt4ghSect[cls.CRYPT4GH_PASSPHRASE_KEY]
 
             comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory,
                                                             datetime.datetime.now().isoformat())
