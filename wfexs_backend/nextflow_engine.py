@@ -778,8 +778,10 @@ STDERR
             
             if self.writable_containers:
                 optWritable = "--writable-tmpfs"
-            else:
+            elif self.container_factory.supportsFeature('userns'):
                 optWritable = "--userns"
+            else:
+                optWritable = "--writable-tmpfs"
 
         forceParamsConfFile = os.path.join(self.engineTweaksDir, 'force-params.config')
         with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
