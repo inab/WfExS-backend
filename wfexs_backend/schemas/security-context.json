@@ -1,7 +1,8 @@
 {
 	"$id": "https://www.eosc-life.eu/d7/WfExS-backend/Security-Context",
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "WfExS-backend security context file (EOSC-Life Demonstrator 7 JSON Schemas)",
+	"title": "WfExS-backend security context",
+	"description": "WfExS-backend security context file (EOSC-Life Demonstrator 7 JSON Schemas)",
 	"type": "object",
 	"patternProperties": {
 		"^.+$": {

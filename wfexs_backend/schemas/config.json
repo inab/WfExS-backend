@@ -1,7 +1,8 @@
 {
 	"$id": "https://www.eosc-life.eu/d7/WfExS-backend/Config",
 	"$schema": "http://json-schema.org/draft-07/schema#",
-	"title": "WfExS-backend configuration file (EOSC-Life Demonstrator 7 JSON Schemas)",
+	"title": "WfExS-backend config",
+	"description": "WfExS-backend configuration file (EOSC-Life Demonstrator 7 JSON Schemas)",
 	"type": "object",
 	"properties": {
 		"cacheDir": {
