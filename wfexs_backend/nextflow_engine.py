@@ -841,9 +841,9 @@ dag {{
 	file = "{dagFile}"
 }}
 """, file=fPC)
-
-        if self.max_cpus is not None:
-            print(
+            
+            if self.max_cpus is not None:
+                print(
 f"""
 executor.cpus={self.max_cpus}
 """, file=fPC)
