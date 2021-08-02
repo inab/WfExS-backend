@@ -100,8 +100,10 @@ if __name__ == "__main__":
         'format': LOGGING_FORMAT,
     }
     
+    logLevel = logging.INFO
     if args.logLevel:
-        loggingConf['level'] = args.logLevel
+        logLevel = args.logLevel
+    loggingConf['level'] = logLevel
     
     if args.logFilename is not None:
         loggingConf['filename'] = args.logFilename
