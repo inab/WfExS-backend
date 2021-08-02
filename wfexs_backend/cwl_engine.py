@@ -464,8 +464,12 @@ class CWLWorkflowEngine(WorkflowEngine):
                             intermediateDir = self.intermediateDir + "/"
                             outputDir = self.outputsDir + "/"
 
-                            # This is needed to teach cwltool where to find the cached images
+                            # This is needed to isolate execution environment
+                            # and teach cwltool where to find the cached images
                             instEnv = dict()
+                            # These variables are needed to have the installation working
+                            for envKey in ('LD_LIBRARY_PATH',):
+                                instEnv[envKey] = os.environ[envKey]
                             instEnv.update(self.container_factory.environment)
                             
                             debugFlag = ''
