@@ -240,8 +240,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         else:
             raise WorkflowEngineException("FATAL: No container factory implementation for {}".format(container_type))
         
-        if secure_exec and
-            self.container_factory.containerType == ContainerType.Singularity and
+        if secure_exec and \
+            self.container_factory.containerType == ContainerType.Singularity and \
             not self.container_factory.supportsFeature('userns'):
             
             self.logger.error(f"Secure or paranoid executions do not work without enabling userns in {container_type} system installation")
