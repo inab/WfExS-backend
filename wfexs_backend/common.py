@@ -176,7 +176,7 @@ class ExpectedOutput(NamedTuple):
         }
         
         if self.preferredFilename is not None:
-            md['preferredName'] = self.preferredFilename
+            mD['preferredName'] = self.preferredFilename
         if self.glob is not None:
             mD['glob'] = self.glob
         
