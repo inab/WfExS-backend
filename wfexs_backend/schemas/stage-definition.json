@@ -207,6 +207,41 @@
 								"Directory"
 							]
 						},
+						"cardinality": {
+							"title": "Output cardinality",
+							"description": "Expected cardinality of this output",
+							"oneOf": [
+								{
+									"type": "string",
+									"enum": [
+										"1",
+										"?",
+										"*",
+										"+"
+									]
+								},
+								{
+									"type": "integer",
+									"minimum": 0
+								},
+								{
+									"type": "array",
+									"items": [
+										{
+											"type": "integer",
+											"minimum": 0
+										},
+										{
+											"type": "integer",
+											"minimum": 1
+										}
+									],
+									"minItems": 2,
+									"maxItems": 2
+								}
+							],
+							"default": 1
+						},
 						"preferredName": {
 							"type": "string",
 							"minLength": 1

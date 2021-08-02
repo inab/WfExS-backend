@@ -101,4 +101,4 @@ must respect the following conditions
 |                |   |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2021-07-28 at 22:36:23 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2021-08-02 at 18:53:16 +0200
