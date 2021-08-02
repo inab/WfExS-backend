@@ -32,7 +32,9 @@ def marshall_namedtuple(obj):
     """
     recurse = lambda x: map(marshall_namedtuple, x)
     obj_is = partial(isinstance, obj)
-    if obj_is(tuple) and hasattr(obj, '_fields'):  # namedtuple
+    if hasattr(obj, '_marshall'):
+        return marshall_namedtuple(obj._marshall())
+    elif obj_is(tuple) and hasattr(obj, '_fields'):  # namedtuple
         fields = zip(obj._fields, recurse(obj))
         class_name = obj.__class__.__name__
         return dict(fields, **{'_type': class_name})

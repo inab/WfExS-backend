@@ -102,6 +102,7 @@ SecurityContextConfig = Mapping[str, Any]
 ContainerFileNamingMethod = Callable[[URIType], RelPath]
 
 
+## BEWARE!!!! The names of these keys MUST NOT CHANGE
 class ContentKind(enum.Enum):
     File = 'file'
     Directory = 'dir'
@@ -167,6 +168,28 @@ class ExpectedOutput(NamedTuple):
     preferredFilename: RelPath
     cardinality: Tuple[int, int]
     glob: GlobPattern
+    
+    def _marshall(self):
+        mD = {
+            'c-l-a-s-s': self.kind.name,
+            'cardinality': list(self.cardinality),
+        }
+        
+        if self.preferredFilename is not None:
+            md['preferredName'] = self.preferredFilename
+        if self.glob is not None:
+            mD['glob'] = self.glob
+        
+        return mD
+    
+    @classmethod
+    def _unmarshall(cls, name, obj):
+        return cls(
+            name=name,
+            kind=ContentKind(obj['c-l-a-s-s'])  if 'c-l-a-s-s' in obj  else  ContentKind.File,
+            preferredFilename=obj.get('preferredName'),
+            glob=obj.get('glob')
+        )
 
 
 class GeneratedContent(NamedTuple):
