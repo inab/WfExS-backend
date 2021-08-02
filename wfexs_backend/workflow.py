@@ -32,7 +32,7 @@ import types
 import uuid
 
 from pathlib import Path
-from typing import List, Pattern, Tuple, Union
+from typing import List, Mapping, Pattern, Tuple, Union
 from urllib import request, parse
 
 from rocrate import rocrate
@@ -1130,12 +1130,12 @@ class WF:
     }
 
     OutputClassMapping = {
-        'File': ContentKind.File,
-        'Directory': ContentKind.Directory,
-        'Value': ContentKind.Value,
+        ContentKind.File.name: ContentKind.File,
+        ContentKind.Directory.name: ContentKind.Directory,
+        ContentKind.Value.name: ContentKind.Value,
     }
 
-    def parseExpectedOutputs(self, outputs: List[Any]) -> List[ExpectedOutput]:
+    def parseExpectedOutputs(self, outputs: Union[List[Any], Mapping[str, Any]]) -> List[ExpectedOutput]:
         expectedOutputs = []
 
         # TODO: implement parsing of outputs
@@ -1167,7 +1167,7 @@ class WF:
 
             eOutput = ExpectedOutput(
                 name=outputKey,
-                kind=self.OutputClassMapping.get(outputDesc.get('c-l-a-s-s'), 'File'),
+                kind=self.OutputClassMapping.get(outputDesc.get('c-l-a-s-s'), ContentKind.File.name),
                 preferredFilename=outputDesc.get('preferredName'),
                 cardinality=cardinality,
                 glob=patS,
@@ -1206,15 +1206,23 @@ class WF:
         if overwrite or not os.path.exists(workflow_meta_file):
             with open(workflow_meta_file, mode='w', encoding='utf-8') as wmF:
                 workflow_meta = {
-                    'trs_endpoint': self.trs_endpoint,
                     'workflow_id': self.id,
-                    'version': self.version_id,
-                    'workflow_type': self.descriptor_type,
-                    'paranoid_mode': self.paranoidMode,
-                    'params': self.params,
-                    'outputs': self.outputs,
-                    'workflow_config': self.workflow_config
+                    'paranoid_mode': self.paranoidMode
                 }
+                if self.version_id is not None:
+                    workflow_meta['version'] = self.version_id
+                if self.descriptor_type is not None:
+                    workflow_meta['workflow_type'] = self.descriptor_type
+                if self.trs_endpoint is not None:
+                    workflow_meta['trs_endpoint'] = self.trs_endpoint
+                if self.workflow_config is not None:
+                    workflow_meta['workflow_config'] = self.workflow_config
+                if self.params is not None:
+                    workflow_meta['params'] = self.params
+                if self.outputs is not None:
+                    outputs = { output.name: output  for output in self.outputs }
+                    workflow_meta['outputs'] = outputs
+                
                 yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
         
         creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
