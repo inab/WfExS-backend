@@ -405,7 +405,23 @@ class WF:
         if not isinstance(workflow_config, dict):
             workflow_config = {}
         
-        valErrors = self.ConfigValidate(workflow_config, self.STAGE_DEFINITION_SCHEMA)
+        workflow_meta = {
+            'workflow_id': workflow_id
+        }
+        if version_id is not None:
+            workflow_meta['version'] = version_id
+        if descriptor_type is not None:
+            workflow_meta['workflow_type'] = descriptor_type
+        if trs_endpoint is not None:
+            workflow_meta['trs_endpoint'] = trs_endpoint
+        if workflow_config is not None:
+            workflow_meta['workflow_config'] = workflow_config
+        if params is not None:
+            workflow_meta['params'] = params
+        if outputs is not None:
+            workflow_meta['outputs'] = outputs
+        
+        valErrors = self.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
         if len(valErrors) > 0:
             self.logger.error(f'ERROR in workflow staging definition block: {valErrors}')
             raise WFException(f'ERROR in workflow staging definition block: {valErrors}')
