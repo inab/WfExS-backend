@@ -468,7 +468,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                             # and teach cwltool where to find the cached images
                             instEnv = dict()
                             # These variables are needed to have the installation working
-                            for envKey in ('LD_LIBRARY_PATH',):
+                            # so external commands like singularity or docker can be found
+                            for envKey in ('LD_LIBRARY_PATH','PATH'):
                                 instEnv[envKey] = os.environ[envKey]
                             instEnv.update(self.container_factory.environment)
                             
