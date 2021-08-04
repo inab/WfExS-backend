@@ -781,7 +781,7 @@ STDERR
             elif self.container_factory.supportsFeature('userns'):
                 optWritable = "--userns"
             else:
-                optWritable = "--writable-tmpfs"
+                optWritable = "--pid"
 
         forceParamsConfFile = os.path.join(self.engineTweaksDir, 'force-params.config')
         with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
@@ -791,7 +791,7 @@ f"""docker.enabled = false
 podman.enabled = false
 singularity.enabled = true
 singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
-singularity.runOptions = '{optWritable} {optBash}'
+singularity.runOptions = '-B {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro {optWritable} {optBash}'
 singularity.autoMounts = true
 """, file=fPC)
             elif self.container_factory.containerType == ContainerType.Docker:
