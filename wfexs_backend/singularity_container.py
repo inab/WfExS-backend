@@ -50,7 +50,7 @@ class SingularityContainerFactory(ContainerFactory):
         # Now, detect userns feature using some ideas from
         # https://github.com/hpcng/singularity/issues/1445#issuecomment-381588444
         userns_supported = False
-        if os.path.lexists('/proc/self/ns/user'):
+        if self.supportsFeature('host_userns'):
             matEnv = dict(os.environ)
             matEnv.update(self.environment)
             with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
@@ -73,7 +73,7 @@ class SingularityContainerFactory(ContainerFactory):
         self.logger.debug(f'Singularity supports userns: {userns_supported}')
         if not userns_supported:
             self.logger.warning('Singularity does not support userns (needed for encrypted working directories)')
-        
+    
     
     @classmethod
     def ContainerType(cls) -> ContainerType:

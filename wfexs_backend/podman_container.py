@@ -36,6 +36,15 @@ class PodmanContainerFactory(ContainerFactory):
             'XDG_DATA_HOME': self.containersCacheDir,
         })
     
+        # Now, detect whether userns could work
+        userns_supported = False
+        if self.supportsFeature('host_userns'):
+            userns_supported = True
+            self._features.add('userns')
+        
+        self.logger.debug(f'Podman supports userns: {userns_supported}')
+    
+    
     @classmethod
     def ContainerType(cls) -> ContainerType:
         return ContainerType.Podman

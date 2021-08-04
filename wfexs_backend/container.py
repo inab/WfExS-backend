@@ -84,6 +84,17 @@ class ContainerFactory(abc.ABC):
         
         self.runtime_cmd = None
         
+        # Detecting host userns support
+        host_userns_supported = False
+        if os.path.lexists('/proc/self/ns/user'):
+            host_userns_supported = True
+            self._features.add('host_userns')
+        else:
+            self.logger.warning('Host does not support userns (needed for encrypted working directories in several container technologies)')
+        
+        self.logger.debug(f'Host supports userns: {host_userns_supported}')
+        
+        
     @classmethod
     @abc.abstractmethod
     def ContainerType(cls) -> ContainerType:
