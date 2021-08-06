@@ -35,7 +35,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [ ] **Step 8**: Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
 
-- [ ] **Step 9**: Generate RO-Crate from execution provenance.
+- [ ] **Step 9**: Generate RO-Crate from execution provenance and exported results.
 
   - [ ] **Step 9.a**: Use Crypt4GH to encrypt with crypt4gh the generated RO-Crate.
 
@@ -52,7 +52,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 ## Other features
 
-- [ ] Create a JSON Schema formally describing the different configuration files.
+- [x] Create a JSON Schema formally describing the different configuration files.
 
 - [x] Supporting `file` protocol and lean and mean paths, so WfExS can be used with local routes and paths. The main drawback is that RO-Crate provenance can suffer in these scenarios, as it is not provided a public URL/URI.
 
