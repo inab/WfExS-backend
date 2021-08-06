@@ -74,6 +74,13 @@ class CWLWorkflowEngine(WorkflowEngine):
         ContainerType.NoContainer,
         ContainerType.Singularity,
         ContainerType.Docker,
+    #    ContainerType.Podman,
+    }
+
+    SUPPORTED_SECURE_EXEC_CONTAINER_TYPES = {
+        ContainerType.NoContainer,
+        ContainerType.Singularity,
+    #    ContainerType.Podman,
     }
 
     def __init__(self,
@@ -129,6 +136,10 @@ class CWLWorkflowEngine(WorkflowEngine):
     @classmethod
     def SupportedContainerTypes(cls) -> Set[ContainerType]:
         return cls.SUPPORTED_CONTAINER_TYPES
+
+    @classmethod
+    def SupportedSecureExecContainerTypes(cls) -> Set[ContainerType]:
+        return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
 
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
@@ -470,7 +481,9 @@ class CWLWorkflowEngine(WorkflowEngine):
                             # These variables are needed to have the installation working
                             # so external commands like singularity or docker can be found
                             for envKey in ('LD_LIBRARY_PATH','PATH'):
-                                instEnv[envKey] = os.environ[envKey]
+                                valToSet = os.environ.get(envKey)
+                                if valToSet is not None:
+                                    instEnv[envKey] = valToSet
                             instEnv.update(self.container_factory.environment)
                             
                             debugFlag = ''
@@ -488,13 +501,15 @@ class CWLWorkflowEngine(WorkflowEngine):
                             elif self.container_factory.containerType == ContainerType.Docker:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif self.container_factory.containerType == ContainerType.Podman:
+                                if self.container_factory.supportsFeature('userns'):
+                                    instEnv['PODMAN_USERNS'] = 'auto'
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull '--user-space-docker-cmd=" + self.container_factory.command + "' --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif self.container_factory.containerType == ContainerType.NoContainer:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:
                                 raise WorkflowEngineException("FATAL ERROR: Unsupported container factory {}".format(
                                     self.container_factory.ContainerType()))
-
+                            
                             cmd = cmdTemplate.format(outputDir, intermediateDir, localWorkflowFile, yamlFile, debugFlag)
                             self.logger.debug("Command => {}".format(cmd))
 

@@ -224,7 +224,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if not self.supportsContainerType(container_type):
             raise WorkflowEngineException(f"Current implementation of {self.__class__.__name__} does not support {container_type}")
         
-        if secure_exec and container_type in (ContainerType.Docker, ContainerType.Podman):
+        if secure_exec and not self.supportsSecureExecContainerType(container_type):
             raise WorkflowEngineException(f"Due technical limitations, secure or paranoid executions are incompatible with {container_type}")
 
         for containerFactory in CONTAINER_FACTORY_CLASSES:
@@ -271,8 +271,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def SupportedContainerTypes(cls) -> Set[ContainerType]:
         pass
 
+    @classmethod
+    @abc.abstractmethod
+    def SupportedSecureExecContainerTypes(cls) -> Set[ContainerType]:
+        pass
+
     def supportsContainerType(self, containerType : ContainerType) -> bool:
         return containerType in self.SupportedContainerTypes()
+    
+    def supportsSecureExecContainerType(self, containerType : ContainerType) -> bool:
+        return containerType in self.SupportedSecureExecContainerTypes()
     
     def getEmptyCrateAndComputerLanguage(self, langVersion: WFLangVersion) -> ComputerLanguage:
         """

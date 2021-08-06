@@ -63,6 +63,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
         ContainerType.NoContainer,
         ContainerType.Singularity,
         ContainerType.Docker,
+        ContainerType.Podman,
+    }
+
+    SUPPORTED_SECURE_EXEC_CONTAINER_TYPES = {
+        ContainerType.NoContainer,
+        ContainerType.Singularity,
+    #   ContainerType.Podman,
     }
 
     def __init__(self,
@@ -141,6 +148,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
     @classmethod
     def SupportedContainerTypes(cls) -> Set[ContainerType]:
         return cls.SUPPORTED_CONTAINER_TYPES
+
+    @classmethod
+    def SupportedSecureExecContainerTypes(cls) -> Set[ContainerType]:
+        return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
     
     def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
         """
@@ -782,6 +793,11 @@ STDERR
                 optWritable = "--userns"
             else:
                 optWritable = "--pid"
+        elif self.container_factory.containerType == ContainerType.Podman:
+            if self.container_factory.supportsFeature('userns'):
+                optWritable = "--userns=auto"
+            else:
+                optWritable = ""
 
         forceParamsConfFile = os.path.join(self.engineTweaksDir, 'force-params.config')
         with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
@@ -808,7 +824,7 @@ docker.fixOwnership = true
 f"""singularity.enabled = false
 docker.enabled = false
 podman.enabled = true
-podman.runOptions = '-v {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z -e TZ="{_tzstring()}"'
+podman.runOptions = '-v {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z {optWritable} -e TZ="{_tzstring()}"'
 """, file=fPC)
             elif self.container_factory.containerType == ContainerType.NoContainer:
                 print(
