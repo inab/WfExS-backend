@@ -471,6 +471,7 @@ class WF:
             self.rawWorkDir = uniqueRawWorkDir
         
         # TODO: enforce restrictive permissions on each raw working directory
+        self.allowOther = False
         
         self.secure = workflow_config.get('secure', True)
         if self.workDir is None:
@@ -527,10 +528,10 @@ class WF:
     def setupWorkdir(self, doSecureWorkDir):
         uniqueRawWorkDir = self.rawWorkDir
 
+        allowOther = False
         if doSecureWorkDir:
             # We need to detect whether fuse has enabled user_allow_other
             # the only way I know is parsing /etc/fuse.conf
-            allowOther = False
             if not self.paranoidMode and os.path.exists(self.FUSE_SYSTEM_CONF):
                 with open(self.FUSE_SYSTEM_CONF, mode="r") as fsc:
                     for line in fsc:
@@ -624,6 +625,7 @@ class WF:
         self.encWorkDir = uniqueEncWorkDir
         self.workDir = uniqueWorkDir
         self.tempDir = uniqueTempDir
+        self.allowOther = allowOther
 
     def _wakeupEncDir(self):
         """
@@ -882,7 +884,7 @@ class WF:
                                           workDir=self.workDir,
                                           outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
                                           tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
-                                          config_directory=self.config_directory)
+                                          allowOther=self.allowOther, config_directory=self.config_directory)
                 try:
                     engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
                     self.logger.debug("Tested engine {} {}".format(engineDesc.trs_descriptor, engineVer))
@@ -902,7 +904,7 @@ class WF:
                                       workDir=self.workDir,
                                       outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
                                       tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
-                                      config_directory=self.config_directory)
+                                      allowOther=self.allowOther, config_directory=self.config_directory)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException(

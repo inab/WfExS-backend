@@ -11,18 +11,18 @@ WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") proje
 * Identify the kind of workflow.
 * Fetch and set up workflow execution engine (currently supported [Nextflow](https://www.nextflow.io/)
 and [cwltool](https://github.com/common-workflow-language/cwltool)).
-* Identify the needed containers by the workflow, and fetch/cache them. Depending on the local setup, `singularity`, `docker` or `podman` will be used.
+* Identify the needed containers by the workflow, and fetch/cache them. Depending on the local setup, `singularity`, `docker`, `podman` or none of them will be used.
 * Fetch and cache the inputs, represented either through an URL or a [CURIE-represented](https://en.wikipedia.org/wiki/CURIE) PID (public [persistent identifier](https://en.wikipedia.org/wiki/Persistent_identifier)).
-* Execute the workflow in a secure way.
+* Execute the workflow in a secure way, if it was requested.
 * Optionally describe the results through an [RO-Crate](https://www.researchobject.org/ro-crate/), and upload both RO-Crate and the results elsewhere in a secure way.
 
 This development is relevant for projects like [EOSC-Life](https://www.eosc-life.eu/) or [EJP-RD](https://www.ejprarediseases.org/). The list of high level scheduled and pending developments can be seen at [TODO.md](TODO.md).
 
 In order to use it you have to install first the dependencies described at [INSTALL.md](INSTALL.md).
 
-## WfExS-backend analysis life cycle
+WfExS-backend analysis lifecycle and usage scenarios are briefly described with flowcharts at [README_LIFECYCLE.md](README_LIFECYCLE.md).
 
-![wfexs-analysis-lifecycle](docs/wfexs-analysis-lifecycle.svg)
+`WfExS-config-replicator.py` usage is explaied at [README_REPLICATOR.md](README_REPLICATOR.md).
 
 
 ## WfExS-backend Usage
@@ -77,7 +77,7 @@ WfExS commands are:
 
 * `init`: This command is used to initialize a WfExS installation. It takes a local configuration file through `-L` parameter, and it can both generate crypt4gh paired keys for installation work and identification purposes and update the path to them in case they are not properly defined. Those keys are needed to decrypt encrypted working directories, and in the future to decrypt secure requests and encrypt secure results.
 
-* `config-validate`: This command is used to validate workflow staging configuration file, as well as its paired security context configuration file using the corresponding JSON Schemas. It honours `-L`, `-W` and `-Z` parameters.
+* `config-validate`: This command is used to validate workflow staging configuration file, as well as its paired security context configuration file using the corresponding JSON Schemas. It honours `-L`, `-W` and `-Z` parameters. If command is not set, this is the default command to be run.
 
 * `stage`: This command is used to first validate workflow staging and security context configuration files, then fetch all the workflow preconditions and files, staging them for an execution. It honours `-L`, `-W` and `-Z` parameters, and once the staging is finished it prints the path to the parent execution environment.
 
@@ -140,60 +140,6 @@ The program uses three different types of configuration files:
 * Workflow configuration file: YAML formatted file which describes the workflow staging before being executed, like where inputs are located and can be fetched, the security contexts to be used on specific inputs to get those controlled access resources, the parameters, the outputs to capture, ... ([Nextflow example](tests/wetlab2variations_execution_nxf.wfex.stage), [CWL example](tests/wetlab2variations_execution_cwl.wfex.stage)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/stage-definition.json](wfexs_backend/schemas/stage-definition.json) and there is also automatically generated documentation (see [stage-definition_schema.md](docs/schemas/stage-definition_schema.md)).
 
 * Security contexts file: YAML formatted file which holds the `user`/`password` pairs, security tokens or keys needed on different steps, like input fetching. ([Nextflow example](tests/wetlab2variations_credentials_nxf.wfex.ctxt), [CWL example](tests/wetlab2variations_credentials_cwl.wfex.ctxt)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/security-context.json](wfexs_backend/schemas/security-context.json) and there is also automatically generated documentation (see [security-context_schema.md](docs/schemas/security-context_schema.md)).
-
-# Scenarios (version 0.4)
-
-<span style="display:block;text-align:center">
-<img src="docs/wfexs-flowchart-0.4.x.svg" alt="WfExS-backend 0.4.x flowchart scenarios" />
-</span>
-
-# Scenarios (version 0.3)
-## WorkflowHub scenario
-
-<span style="display:block;text-align:center">
-<img src="docs/wfexs-flowchart.svg" alt="WfExS-backend flowchart, WorkflowHub scenario" />
-</span>
-
-## GitHub repo scenario
-<span style="display:block;text-align:center">
-<img src="docs/wfexs-flowchart-github.svg" alt="WfExS-backend, bare GitHub scenario" />
-</span>
-
-# WfExS-config-replicator usage
-
-Example and usage of this tool, which helps generating a bunch of workflow instantiation files
-from a template one and an Excel or CSV file with the fields to substitute:
-
-```bash
-python WfExS-config-replicator.py -W tests/wetlab2variations_execution_nxf.wfex.stage --params-file tests/wetlab2variations_execution_nxf.variations.xlsx /tmp/generated
-```
-
-```
-python WfExS-config-replicator.py -h
-usage: WfExS-config-replicator.py [-h] -W WORKFLOWCONFIGFILENAME
-                                  (-p PARAM_NAME VALUE | --params-file PARAMS_FILES)
-                                  [--fname-template FILENAME_TEMPLATE]
-                                  [--symbol-template PARAMSYMBOLTEMPLATE]
-                                  [destdir]
-
-WfExS config replicator
-
-positional arguments:
-  destdir               Directory where all the variations of the workflow
-                        configuration file are going to be created
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
-                        Workflow configuration file, to be used as template
-  -p PARAM_NAME VALUE, --param PARAM_NAME VALUE
-                        Param to substitute. Repeat to tell arrays of values
-  --params-file PARAMS_FILES
-                        Tabular params file with the different variations
-  --fname-template FILENAME_TEMPLATE
-                        Filename template for the created workflows
-  --symbol-template PARAMSYMBOLTEMPLATE
-```
 
 ## License
 * © 2020-2021 Barcelona Supercomputing Center (BSC), ES

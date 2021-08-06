@@ -96,6 +96,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                  intermediateDir=None,
                  tempDir=None,
                  secure_exec : bool = False,
+                 allowOther : bool = False,
                  config_directory=None
                  ):
 
@@ -104,7 +105,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                          cacheWorkflowInputsDir=cacheWorkflowInputsDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
                          outputMetaDir=outputMetaDir, tempDir=tempDir, secure_exec=secure_exec,
-                         config_directory=config_directory)
+                         allowOther=allowOther, config_directory=config_directory)
 
         # Getting a fixed version of the engine
         toolsSect = local_config.get('tools', {})
@@ -502,7 +503,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif self.container_factory.containerType == ContainerType.Podman:
                                 if self.container_factory.supportsFeature('userns'):
-                                    instEnv['PODMAN_USERNS'] = 'auto'
+                                    instEnv['PODMAN_USERNS'] = 'keep-id'
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull '--user-space-docker-cmd=" + self.container_factory.command + "' --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif self.container_factory.containerType == ContainerType.NoContainer:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"

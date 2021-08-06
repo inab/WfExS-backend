@@ -85,6 +85,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             intermediateDir=None,
             tempDir=None,
             secure_exec : bool = False,
+            allowOther : bool = False,
             config_directory=None
         ):
         super().__init__(cacheDir=cacheDir, workflow_config=workflow_config, local_config=local_config,
@@ -92,7 +93,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                          cacheWorkflowInputsDir=cacheWorkflowInputsDir,
                          workDir=workDir, outputsDir=outputsDir, intermediateDir=intermediateDir,
                          tempDir=tempDir, outputMetaDir=outputMetaDir, secure_exec=secure_exec,
-                         config_directory=config_directory)
+                         allowOther=allowOther, config_directory=config_directory)
         
         toolsSect = local_config.get('tools', {})
         # Obtaining the full path to Java
@@ -795,7 +796,7 @@ STDERR
                 optWritable = "--pid"
         elif self.container_factory.containerType == ContainerType.Podman:
             if self.container_factory.supportsFeature('userns'):
-                optWritable = "--userns=auto"
+                optWritable = "--userns=keep-id"
             else:
                 optWritable = ""
 

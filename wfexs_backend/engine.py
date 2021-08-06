@@ -88,6 +88,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                  intermediateDir=None,
                  tempDir=None,
                  secure_exec : bool = False,
+                 allowOther : bool = False,
                  config_directory=None
                  ):
         """
@@ -240,11 +241,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         else:
             raise WorkflowEngineException("FATAL: No container factory implementation for {}".format(container_type))
         
-        if secure_exec and \
-            self.container_factory.containerType == ContainerType.Singularity and \
-            not self.container_factory.supportsFeature('userns'):
-            
-            self.logger.error(f"Secure or paranoid executions do not work without enabling userns in {container_type} system installation")
+        isUserNS = self.container_factory.supportsFeature('userns')
+        self.logger.debug(f"Flags: secure => {secure_exec} , userns => {isUserNS} , allowOther => {allowOther}")
+        if self.container_factory.containerType == ContainerType.Singularity and secure_exec:
+            if not allowOther and not isUserNS:
+                self.logger.error(f"Secure executions do not work without either enabling FUSE use_allow_other in /etc/fuse.conf or userns in {container_type} system installation")
+
+            if not isUserNS:
+                self.logger.error(f"Paranoid executions do not work without enabling userns in {container_type} system installation")
 
         # Locating the payloads directory, where the nodejs wrapper should be placed
         self.payloadsDir = os.path.join(os.path.dirname(__file__), 'payloads')
