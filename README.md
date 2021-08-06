@@ -16,13 +16,15 @@ and [cwltool](https://github.com/common-workflow-language/cwltool)).
 * Execute the workflow in a secure way, if it was requested.
 * Optionally describe the results through an [RO-Crate](https://www.researchobject.org/ro-crate/), and upload both RO-Crate and the results elsewhere in a secure way.
 
-This development is relevant for projects like [EOSC-Life](https://www.eosc-life.eu/) or [EJP-RD](https://www.ejprarediseases.org/). The list of high level scheduled and pending developments can be seen at [TODO.md](TODO.md).
+## Relevant docs:
 
-In order to use it you have to install first the dependencies described at [INSTALL.md](INSTALL.md).
+* [INSTALL.md](INSTALL.md): In order to use WfExS-backend you have to install first at least core dependencies described there.
 
-WfExS-backend analysis lifecycle and usage scenarios are briefly described with flowcharts at [README_LIFECYCLE.md](README_LIFECYCLE.md).
+* [TODO.md](TODO.md): This development is relevant for projects like [EOSC-Life](https://www.eosc-life.eu/) or [EJP-RD](https://www.ejprarediseases.org/). The list of high level scheduled and pending developments can be seen at .
 
-`WfExS-config-replicator.py` usage is explaied at [README_REPLICATOR.md](README_REPLICATOR.md).
+* [README_LIFECYCLE.md](README_LIFECYCLE.md): WfExS-backend analysis lifecycle and usage scenarios are briefly described with flowcharts there.
+
+* [README_REPLICATOR.md](README_REPLICATOR.md): It briefly describes `WfExS-config-replicator.py` usage.
 
 
 ## WfExS-backend Usage
