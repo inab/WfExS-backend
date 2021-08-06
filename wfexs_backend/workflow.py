@@ -469,7 +469,9 @@ class WF:
             uniqueRawWorkDir = os.path.join(self.baseWorkDir, self.instanceId)
             os.makedirs(uniqueRawWorkDir, exist_ok=True)
             self.rawWorkDir = uniqueRawWorkDir
-
+        
+        # TODO: enforce restrictive permissions on each raw working directory
+        
         self.secure = workflow_config.get('secure', True)
         if self.workDir is None:
             doSecureWorkDir = self.secure or self.paranoidMode
@@ -519,11 +521,24 @@ class WF:
         self.cacheROCrateFilename = None
 
         return self
-
+    
+    FUSE_SYSTEM_CONF = '/etc/fuse.conf'
+    
     def setupWorkdir(self, doSecureWorkDir):
         uniqueRawWorkDir = self.rawWorkDir
 
         if doSecureWorkDir:
+            # We need to detect whether fuse has enabled user_allow_other
+            # the only way I know is parsing /etc/fuse.conf
+            allowOther = False
+            if not self.paranoidMode and os.path.exists(self.FUSE_SYSTEM_CONF):
+                with open(self.FUSE_SYSTEM_CONF, mode="r") as fsc:
+                    for line in fsc:
+                        if line.startswith('user_allow_other'):
+                            allowOther = True
+                            break
+                    self.logger.debug(f"FUSE has user_allow_other: {allowOther}")
+            
             uniqueEncWorkDir = os.path.join(uniqueRawWorkDir, '.crypt')
             uniqueWorkDir = os.path.join(uniqueRawWorkDir, 'work')
 
@@ -583,7 +598,8 @@ class WF:
             else:
                 # Now, time to mount the encrypted FS
                 ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir,
-                                                               uniqueWorkDir, uniqueRawWorkDir, securePassphrase)
+                                                               uniqueWorkDir, uniqueRawWorkDir, securePassphrase,
+                                                               allowOther)
 
                 # and start the thread which keeps the mount working 
                 self.encfsThread = threading.Thread(target=self._wakeupEncDir, daemon=True)

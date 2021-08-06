@@ -35,7 +35,7 @@ DEFAULT_ENCRYPTED_FS_CMD = {
 # Idle timeout, in minutes
 DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT = 5
 
-def _mountEncFS(encfs_cmd, encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPass):
+def _mountEncFS(encfs_cmd, encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPass:str, allowOther:bool = False):
     with tempfile.NamedTemporaryFile() as encfs_init_stdout, tempfile.NamedTemporaryFile() as encfs_init_stderr:
         
         encfsCommand = [
@@ -46,6 +46,14 @@ def _mountEncFS(encfs_cmd, encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, u
             uniqueEncWorkDir,
             uniqueWorkDir
         ]
+        
+        # This parameter can be a security hole
+        if allowOther:
+            encfsCommand.extend([
+                '--',
+                '-o',
+                'allow_other'
+            ])
         
         efs = subprocess.Popen(
             encfsCommand,
@@ -67,7 +75,7 @@ def _mountEncFS(encfs_cmd, encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, u
             errstr = "Could not init/mount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(encfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
             raise WFException(errstr)
 
-def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPass):
+def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPass:str, allowOther:bool = False):
     with tempfile.NamedTemporaryFile() as gocryptfs_init_stdout, tempfile.NamedTemporaryFile() as gocryptfs_init_stderr:
         
         # First, detect whether there is an already created filesystem
@@ -110,9 +118,15 @@ def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniq
             gocryptfsMount = [
                 gocryptfs_cmd,
                 '-i',str(gocryptfs_idleMinutes)+'m',
+            ]
+            
+            if allowOther:
+                gocryptfsMount.append('-allow_other')
+            
+            gocryptfsMount.extend([
                 uniqueEncWorkDir,
                 uniqueWorkDir
-            ]
+            ])
             
             gocryptfsCommand = gocryptfsMount
             
