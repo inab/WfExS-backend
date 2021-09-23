@@ -26,6 +26,30 @@ and [cwltool](https://github.com/common-workflow-language/cwltool)).
 
 * [README_REPLICATOR.md](README_REPLICATOR.md): It briefly describes `WfExS-config-replicator.py` usage.
 
+### Presentations and outreach
+
+Laura Rodríguez-Navas (2021): 
+[**WfExS: a software component to enable the use of RO-Crate in the EOSC-Life collaboratory**](https://osf.io/tb5ku/).  
+_FAIR Digital Object Forum_, [CWFR & FDO SEM meeting](https://osf.io/v8xjz/), 2021-07-02
+[[video recording](https://osf.io/wna42/)], [[slides](https://osf.io/tb5ku/)]
+
+Laura Rodríguez-Navas (2021):  
+[**WfExS: a software component to enable the use of RO-Crate in the EOSC-Life tools collaboratory**](https://repository.eoscsecretariat.eu/index.php/s/ERebmpJcyjFRqcx/download?path=%2F17%20June%2F1400%20-%20Technical%20challenges%20on%20EOSC%2FBreakout%203%20-%20Interoperability%20challenges%20for%20thematic%20communities&files=05%20-%20Laura%20Rodr%C3%ADguez-Navas%20-%20WfExS.pdf&downloadStartSecret=zwwx23xrow).  
+_[EOSC Symposium 2021](https://www.eoscsecretariat.eu/eosc-symposium-2021-programme)_, 2021-06-17
+[[video recording](https://youtu.be/x5lLEym-gug?list=PLbISfqJh3Tstmx6CgrBmYI7lyyVXiY5VE&t=3238)]
+[[slides](https://drive.google.com/file/d/1LJkmI_gyl9VnuQ2_ZHBGeFkt_QTWFieg/view)
+
+Salvador Capella-Gutierrez (2021):  
+[**Demonstrator 7: Accessing human sensitive data from analytical workflows available to everyone in EOSC-Life**](https://www.eosc-life.eu/d7/)  
+_Populating EOSC-Life: Success stories from the demonstrators_, 2021-01-19.
+<https://www.eosc-life.eu/d7/>
+[[video](https://www.youtube.com/watch?v=saLxJpejCj0)] [[slides](http://www.eosc-life.eu/wp-content/uploads/2021/02/D7_Wrap-up.pdf)]
+
+Bietrix, Florence; Carazo, José Maria; Capella-Gutierrez, Salvador; Coppens, Frederik; Chiusano, Maria Luisa; David, Romain; Fernandez, Jose Maria; Fratelli, Maddalena; Heriche, Jean-Karim; Goble, Carole; Gribbon, Philip; Holub, Petr; P. Joosten, Robbie; Leo, Simone; Owen, Stuart; Parkinson, Helen; Pieruschka, Roland; Pireddu, Luca; Porcu, Luca; Raess, Michael; Rodriguez- Navas, Laura; Scherer, Andreas; Soiland-Reyes, Stian; Tang, Jing (2021):  
+[**EOSC-Life Methodology framework to enhance reproducibility within EOSC-Life**](https://zenodo.org/record/4705078/files/EOSC-Life_D8.1_Methodology%20framework%20to%20enhance%20reproducibility%20within%20EOSC-Life_April-2021.pdf).  
+EOSC-Life deliverable D8.1, _Zenodo_
+<https://doi.org/10.5281/zenodo.4705078>
+
 
 ## WfExS-backend Usage
 
