@@ -54,8 +54,8 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWL_REPO = 'https://github.com/common-workflow-language/'
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
-
-    DEFAULT_CWLTOOL_VERSION = '3.1.20210628163208'
+    
+    DEFAULT_CWLTOOL_VERSION = '3.1.20211004060744'
 
     DEVEL_CWLTOOL_PACKAGE = f'git+{CWLTOOL_REPO}.git'
     # Set this constant to something meaningful only when a hotfix
@@ -63,9 +63,10 @@ class CWLWorkflowEngine(WorkflowEngine):
     #DEVEL_CWLTOOL_VERSION = 'ed9dd4c3472e940a52dfe90049895f470bfd7329'
     DEVEL_CWLTOOL_VERSION = None
 
-    DEFAULT_CWL_UTILS_VERSION = 'v0.10'
-    DEFAULT_SCHEMA_SALAD_VERSION = '8.1.20210627200047'
+    #DEFAULT_CWL_UTILS_VERSION = 'v0.10'
+    DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20210918131710'
 
+    NO_WRAPPER_CWLTOOL_VERSION = '3.1.20210921111717'
     NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
 
     ENGINE_NAME = 'cwl'
@@ -201,21 +202,22 @@ class CWLWorkflowEngine(WorkflowEngine):
         if not os.path.isdir(cwl_install_dir):
             venv.create(cwl_install_dir, with_pip=True)
 
-        # Let's be sure the nodejs wrapper, needed by cwltool
-        # is in place
-        node_wrapper_source_path = os.path.join(self.payloadsDir, self.NODEJS_SINGULARITY_WRAPPER)
-        node_wrapper_inst_path = os.path.join(cwl_install_dir, 'bin', 'node')
-        if not os.path.isfile(node_wrapper_inst_path):
-            shutil.copy2(node_wrapper_source_path, node_wrapper_inst_path)
+        # Let's be sure the nodejs wrapper, needed by cwltool versions
+        # prior to 3.1.20210921111717 is in place
+        if engineVersion < self.NO_WRAPPER_CWLTOOL_VERSION:
+            node_wrapper_source_path = os.path.join(self.payloadsDir, self.NODEJS_SINGULARITY_WRAPPER)
+            node_wrapper_inst_path = os.path.join(cwl_install_dir, 'bin', 'node')
+            if not os.path.isfile(node_wrapper_inst_path):
+                shutil.copy2(node_wrapper_source_path, node_wrapper_inst_path)
 
-        # Assuring it has the permissions
-        if not os.access(node_wrapper_inst_path, os.X_OK):
-            os.chmod(node_wrapper_inst_path, stat.S_IREAD | stat.S_IEXEC)
+            # Assuring it has the permissions
+            if not os.access(node_wrapper_inst_path, os.X_OK):
+                os.chmod(node_wrapper_inst_path, stat.S_IREAD | stat.S_IEXEC)
 
-        # And the symlink from nodejs to node
-        nodejs_wrapper_inst_path = os.path.join(cwl_install_dir, 'bin', 'nodejs')
-        if not os.path.islink(nodejs_wrapper_inst_path):
-            os.symlink('node', nodejs_wrapper_inst_path)
+            # And the symlink from nodejs to node
+            nodejs_wrapper_inst_path = os.path.join(cwl_install_dir, 'bin', 'nodejs')
+            if not os.path.islink(nodejs_wrapper_inst_path):
+                os.symlink('node', nodejs_wrapper_inst_path)
 
         # Now, time to run it
         instEnv = dict(os.environ)
