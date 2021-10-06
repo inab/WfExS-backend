@@ -65,6 +65,7 @@ class WfExS_Commands(ArgTypeMixin, enum.Enum):
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
+DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s][%(levelname)s] %(message)s'
 
 if __name__ == "__main__":
     
@@ -96,14 +97,19 @@ if __name__ == "__main__":
     args = ap.parse_args()
     
     # Setting up the log
-    loggingConf = {
-        'format': LOGGING_FORMAT,
-    }
-    
     logLevel = logging.INFO
     if args.logLevel:
         logLevel = args.logLevel
-    loggingConf['level'] = logLevel
+    
+    if logLevel < logging.INFO:
+        logFormat = DEBUG_LOGGING_FORMAT
+    else:
+        logFormat = LOGGING_FORMAT
+    
+    loggingConf = {
+        'format': logFormat,
+        'level': logLevel
+    }
     
     if args.logFilename is not None:
         loggingConf['filename'] = args.logFilename
