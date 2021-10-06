@@ -20,6 +20,7 @@
 							"minLength": 0
 						}
 					},
+					"additionalProperties": false,
 					"required": [
 						"username",
 						"password"
@@ -32,13 +33,13 @@
 							"minLength": 1
 						}
 					},
+					"additionalProperties": false,
 					"required": [
 						"token"
 					]
 				}
 			],
-			"minProperties": 1,
-			"additionalProperties": false
+			"minProperties": 1
 		}
 	},
 	"additionalProperties": false
