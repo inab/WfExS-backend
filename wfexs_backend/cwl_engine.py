@@ -66,6 +66,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     #DEFAULT_CWL_UTILS_VERSION = 'v0.10'
     DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20210918131710'
 
+    PODMAN_CWLTOOL_VERSION = '3.1.20210921111717'
     NO_WRAPPER_CWLTOOL_VERSION = '3.1.20210921111717'
     NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
 
@@ -75,7 +76,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         ContainerType.NoContainer,
         ContainerType.Singularity,
         ContainerType.Docker,
-    #    ContainerType.Podman,
+        ContainerType.Podman,
     }
 
     SUPPORTED_SECURE_EXEC_CONTAINER_TYPES = {
@@ -504,9 +505,12 @@ class CWLWorkflowEngine(WorkflowEngine):
                             elif self.container_factory.containerType == ContainerType.Docker:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif self.container_factory.containerType == ContainerType.Podman:
-                                if self.container_factory.supportsFeature('userns'):
-                                    instEnv['PODMAN_USERNS'] = 'keep-id'
-                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull '--user-space-docker-cmd=" + self.container_factory.command + "' --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                if engineVersion < self.PODMAN_CWLTOOL_VERSION:
+                                    if self.container_factory.supportsFeature('userns'):
+                                        instEnv['PODMAN_USERNS'] = 'keep-id'
+                                    cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull '--user-space-docker-cmd=" + self.container_factory.command + "' --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                else:
+                                    cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --podman --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             elif self.container_factory.containerType == ContainerType.NoContainer:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                             else:
