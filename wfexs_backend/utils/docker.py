@@ -17,6 +17,7 @@
 
 import abc
 import json
+import logging
 from typing import NamedTuple, Optional, Tuple
 import urllib.parse
 
@@ -125,6 +126,7 @@ class DockerHelper(abc.ABC):
     DEFAULT_ALIAS = 'latest'
     
     def __init__(self):
+        self.logger = logging.getLogger(self.__class__.__name__)
         # Default credentials are no credentials
         self.creds = {
             None: Credentials(None, None, None)
@@ -152,7 +154,11 @@ class DockerHelper(abc.ABC):
         if parsedTag.scheme == '':
             docker_tag = 'docker://' + tag
             parsedTag = urllib.parse.urlparse(docker_tag)
+        elif parsedTag.scheme == '' or (parsedTag.scheme not in ('http','https','ftp','docker')):
+            docker_tag = f'docker://{self.DEFAULT_DOCKER_REGISTRY}/{tag}'
+            parsedTag = urllib.parse.urlparse(docker_tag)
         else:
+            self.logger.debug(f'Parsed as {parsedTag}')
             docker_tag = tag
         
         if parsedTag.scheme != 'docker':
