@@ -65,7 +65,7 @@ class WfExS_Commands(ArgTypeMixin, enum.Enum):
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
-DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s][%(levelname)s] %(message)s'
+DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s $(lineno)d][%(levelname)s] %(message)s'
 
 if __name__ == "__main__":
     
