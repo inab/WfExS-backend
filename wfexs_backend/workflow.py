@@ -92,7 +92,7 @@ class WF:
     TRS_METADATA_FILE = 'trs_metadata.json'
     TRS_QUERY_CACHE_FILE = 'trs_result.json'
     TRS_TOOL_FILES_FILE = 'trs_tool_files.json'
-    
+
     SCHEMAS_REL_DIR = 'schemas'
     CONFIG_SCHEMA = 'config.json'
     SECURITY_CONTEXT_SCHEMA = 'security-context.json'
@@ -104,7 +104,7 @@ class WF:
     WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
-    
+
     @classmethod
     def generate_passphrase(cls) -> str:
         import random
@@ -156,7 +156,7 @@ class WF:
         if crypt4ghSect is None:
             local_config[cls.CRYPT4GH_SECTION] = {}
             crypt4ghSect = local_config[cls.CRYPT4GH_SECTION]
-        
+
         for elem in (cls.CRYPT4GH_PRIVKEY_KEY, cls.CRYPT4GH_PUBKEY_KEY):
             fname = crypt4ghSect.get(elem)
             # The default when no filename exist is creating hidden files in the config directory
@@ -235,21 +235,21 @@ class WF:
             workflow_config=workflow_meta.get('workflow_config'),
             creds_config=creds_config
         )
-    
+
     @classmethod
     def ConfigValidate(cls, configToValidate, relSchemaFile):
         # Locating the schemas directory, where all the schemas should be placed
         schemaFile = os.path.join(os.path.dirname(__file__), cls.SCHEMAS_REL_DIR, relSchemaFile)
-        
+
         try:
             with open(schemaFile, mode="r", encoding="utf-8") as sF:
                 schema = json.load(sF)
-            
+
             jv = jsonschema.validators.validator_for(schema)(schema)
             return list(jv.iter_errors(instance=configToValidate))
         except Exception as e:
             raise WFException(f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}")
-    
+
     def __init__(self, local_config=None, config_directory=None):
         """
         Init function
@@ -262,13 +262,13 @@ class WF:
 
         if not isinstance(local_config, dict):
             local_config = {}
-        
+
         # validate the local configuration object
         valErrors = self.ConfigValidate(local_config, self.CONFIG_SCHEMA)
         if len(valErrors) > 0:
             self.logger.error(f'ERROR in local configuration block: {valErrors}')
             sys.exit(1)
-        
+
         self.local_config = local_config
 
         toolSect = local_config.get('tools', {})
@@ -353,18 +353,18 @@ class WF:
         self.doUnmount = False
         self.paranoidMode = False
         self.bag = None
-        
+
         self.stageMarshalled = False
         self.executionMarshalled = False
         self.exportMarshalled = False
 
         # cacheHandler is created on first use
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, {})
-        
+
         # All the custom ones should be added here
         self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
         self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
-        
+
         # These ones should have prevalence over other custom ones
         self.cacheHandler.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
 
@@ -404,7 +404,7 @@ class WF:
         """
         if not isinstance(workflow_config, dict):
             workflow_config = {}
-        
+
         workflow_meta = {
             'workflow_id': workflow_id
         }
@@ -420,7 +420,7 @@ class WF:
             workflow_meta['params'] = params
         if outputs is not None:
             workflow_meta['outputs'] = outputs
-        
+
         valErrors = self.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
         if len(valErrors) > 0:
             self.logger.error(f'ERROR in workflow staging definition block: {valErrors}')
@@ -428,7 +428,7 @@ class WF:
 
         if not isinstance(creds_config, dict):
             creds_config = {}
-        
+
         valErrors = self.ConfigValidate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
         if len(valErrors) > 0:
             self.logger.error(f'ERROR in security context block: {valErrors}')
@@ -469,10 +469,10 @@ class WF:
             uniqueRawWorkDir = os.path.join(self.baseWorkDir, self.instanceId)
             os.makedirs(uniqueRawWorkDir, exist_ok=True)
             self.rawWorkDir = uniqueRawWorkDir
-        
+
         # TODO: enforce restrictive permissions on each raw working directory
         self.allowOther = False
-        
+
         self.secure = workflow_config.get('secure', True)
         if self.workDir is None:
             doSecureWorkDir = self.secure or self.paranoidMode
@@ -499,9 +499,9 @@ class WF:
         # This directory will hold metadata related to the execution
         self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
         os.makedirs(self.metaDir, exist_ok=True)
-        
+
         self.marshallConfig(overwrite=False)
-        
+
         self.repoURL = None
         self.repoTag = None
         self.repoRelPath = None
@@ -522,9 +522,9 @@ class WF:
         self.cacheROCrateFilename = None
 
         return self
-    
+
     FUSE_SYSTEM_CONF = '/etc/fuse.conf'
-    
+
     def setupWorkdir(self, doSecureWorkDir):
         uniqueRawWorkDir = self.rawWorkDir
 
@@ -539,7 +539,7 @@ class WF:
                             allowOther = True
                             break
                     self.logger.debug(f"FUSE has user_allow_other: {allowOther}")
-            
+
             uniqueEncWorkDir = os.path.join(uniqueRawWorkDir, '.crypt')
             uniqueWorkDir = os.path.join(uniqueRawWorkDir, 'work')
 
@@ -614,13 +614,13 @@ class WF:
         else:
             uniqueEncWorkDir = None
             uniqueWorkDir = uniqueRawWorkDir
-        
+
         # The temporary directory is in the raw working directory as
         # some container engine could fail
         uniqueTempDir = os.path.join(uniqueRawWorkDir,'.TEMP')
         os.makedirs(uniqueTempDir, exist_ok=True)
         os.chmod(uniqueTempDir, 0o1777)
-        
+
         # Setting up working directories, one per instance
         self.encWorkDir = uniqueEncWorkDir
         self.workDir = uniqueWorkDir
@@ -721,13 +721,13 @@ class WF:
     def validateConfigFiles(self, workflowMetaFilename, securityContextsConfigFilename=None):
         numErrors = 0
         self.logger.info(f'Validating {workflowMetaFilename}')
-        
+
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
 
         if not isinstance(workflow_meta, dict):
             workflow_meta = {}
-        
+
         valErrors = self.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
         if len(valErrors) == 0:
             self.logger.info('No validation errors in staging definition block')
@@ -735,12 +735,11 @@ class WF:
             for iErr, valError in enumerate(valErrors):
                 self.logger.error(f'ERROR {iErr} in staging definition block: {valError}')
                 numErrors += 1
-        
 
         # Last, try loading the security contexts credentials file
         if securityContextsConfigFilename and os.path.exists(securityContextsConfigFilename):
             self.logger.info(f'Validating {securityContextsConfigFilename}')
-            
+
             with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
                 creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
 
@@ -751,7 +750,7 @@ class WF:
                 for iErr, valError in enumerate(valErrors):
                     self.logger.error(f'ERROR {iErr} in security context block: {valError}')
                     numErrors += 1
-        
+
         return 1 if numErrors > 0 else 0
 
     def fromDescription(self, workflow_meta, creds_config=None, paranoidMode=False):
@@ -766,12 +765,12 @@ class WF:
         :type paranoidMode:
         :return: Workflow configuration
         """
-        
+
         # The preserved paranoid mode must be honoured
         preserved_paranoid_mode = workflow_meta.get('paranoid_mode')
         if preserved_paranoid_mode is not None:
             paranoidMode = preserved_paranoid_mode
-            
+
         if paranoidMode:
             self.enableParanoidMode()
 
@@ -830,20 +829,20 @@ class WF:
 
             # Trying to be smarter
             guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(parsedRepoURL, fail_ok=False)
-            
+
             if guessedRepoURL is not None:
                 repoURL = guessedRepoURL
                 repoTag = guessedRepoTag if guessedRepoTag is not None else self.version_id
                 repoRelPath = guessedRepoRelPath
             else:
                 engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromROCrateURL(self.id, offline=offline)
-        
+
         if repoURL is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
             repoURL = self.id
             repoTag = self.version_id
             repoRelPath = None
-        
+
         repoDir = None
         repoEffectiveCheckout = None
         if ':' in repoURL:
@@ -858,11 +857,11 @@ class WF:
                 self.repoRelPath = repoRelPath
 
                 repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
-        
+
         # For the cases of pure TRS repos, like Dockstore
         if repoDir is None:
             repoDir = repoURL
-        
+
         # Workflow Language version cannot be assumed here yet
         localWorkflow = LocalWorkflow(dir=repoDir, relPath=repoRelPath, effectiveCheckout=repoEffectiveCheckout)
         self.logger.info("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
@@ -1030,7 +1029,7 @@ class WF:
 
                                 theInputs.append(MaterializedInput(linearKey, [autoFilledDir]))
                                 continue
-                            
+
                             globExplode = inputs.get('globExplode')
 
                             # This is to nest the directory where to place the different files
@@ -1076,7 +1075,7 @@ class WF:
 
                             if not os.path.exists(prettyLocal):
                                 os.symlink(matContent.local, prettyLocal)
-                            
+
                             if globExplode is not None:
                                 prettyLocalPath = pathlib.Path(prettyLocal)
                                 matParse = parse.urlparse(matContent.uri)
@@ -1094,7 +1093,7 @@ class WF:
                                             uri=expUri,
                                             prettyFilename=relName,
                                             metadata_array=matContent.metadata_array,
-                                            kind=ContentKind.Directory  if exp.is_dir()  else  ContentKind.File
+                                            kind=ContentKind.Directory if exp.is_dir() else ContentKind.File
                                         )
                                     )
                             else:
@@ -1120,7 +1119,7 @@ class WF:
                 theInputs.append(MaterializedInput(linearKey, inputs))
 
         return theInputs, lastInput
-    
+
     def stageWorkDir(self):
         """
         This method is here to simplify the understanding of the needed steps
@@ -1130,9 +1129,9 @@ class WF:
         self.materializeWorkflow()
         self.materializeInputs()
         self.marshallStage()
-        
+
         return self.instanceId
-    
+
     def workdirToBagit(self):
         """
         BEWARE: This is a destructive step! So, once run, there is no back!
@@ -1194,32 +1193,32 @@ class WF:
 
         return expectedOutputs
 
-    def executeWorkflow(self, offline : bool = False):
+    def executeWorkflow(self, offline: bool = False):
         self.unmarshallStage(offline=offline)
 
         exitVal, augmentedInputs, matCheckOutputs = WorkflowEngine.ExecuteWorkflow(self.materializedEngine,
                                                                                    self.materializedParams,
                                                                                    self.outputs)
-        
+
         self.exitVal = exitVal
         self.augmentedInputs = augmentedInputs
         self.matCheckOutputs = matCheckOutputs
-        
+
         self.logger.debug(exitVal)
         self.logger.debug(augmentedInputs)
         self.logger.debug(matCheckOutputs)
-        
+
         # TODO: implement store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute()
-        
+
     def exportResults(self):
         self.unmarshallExecute(offline=True)
-        
+
         # TODO
         self.marshallExport()
-    
-    
-    def marshallConfig(self, overwrite : bool = False):
+
+
+    def marshallConfig(self, overwrite: bool = False):
         workflow_meta_file = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
         if overwrite or not os.path.exists(workflow_meta_file):
             with open(workflow_meta_file, mode='w', encoding='utf-8') as wmF:
@@ -1238,21 +1237,20 @@ class WF:
                 if self.params is not None:
                     workflow_meta['params'] = self.params
                 if self.outputs is not None:
-                    outputs = { output.name: output  for output in self.outputs }
+                    outputs = {output.name: output for output in self.outputs}
                     workflow_meta['outputs'] = outputs
-                
+
                 yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
-        
+
         creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
         if overwrite or not os.path.exists(creds_file):
             with open(creds_file, mode='w', encoding='utf-8') as crF:
                 yaml.dump(marshall_namedtuple(self.creds_config), crF, Dumper=YAMLDumper)
-        
-    
-    def marshallStage(self, exist_ok : bool = True):
+
+    def marshallStage(self, exist_ok: bool = True):
         if not self.stageMarshalled:
             self.marshallConfig(overwrite=False)
-            
+
             marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
             if os.path.exists(marshalled_stage_file):
                 if not exist_ok:
@@ -1271,22 +1269,22 @@ class WF:
                     'materializedParams': self.materializedParams
                     # TODO: check nothing essential was left
                 }
-                
+
                 self.logger.debug("Creating marshalled stage file {}".format(marshalled_stage_file))
                 with open(marshalled_stage_file, mode='w', encoding='utf-8') as msF:
                     marshalled_stage = marshall_namedtuple(stage)
                     yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
-            
+
             self.stageMarshalled = True
         elif not exist_ok:
             raise WFException("Marshalled stage file already exists")
-    
-    def unmarshallStage(self, offline : bool = False):
+
+    def unmarshallStage(self, offline: bool = False):
         if not self.stageMarshalled:
             marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
             if not os.path.exists(marshalled_stage_file):
                 raise WFException("Marshalled stage file does not exists. Stage state was not stored")
-            
+
             self.logger.debug("Parsing marshalled stage state file {}".format(marshalled_stage_file))
             with open(marshalled_stage_file, mode='r', encoding='utf-8') as msF:
                 marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
@@ -1301,18 +1299,18 @@ class WF:
                     self.materializedEngine = stage['materializedEngine']
                     self.listOfContainers = stage['containers']
                     self.materializedParams = stage['materializedParams']
-                    
+
                     # This is needed to properly set up the materializedEngine
                     self.setupEngine(offline=True)
                 except Exception as e:
                     raise WFException("Error while unmarshalling content from stage state file {}. Reason: {}".format(marshalled_stage_file,e))
-            
+
             self.stageMarshalled = True
-    
-    def marshallExecute(self, exist_ok : bool = True):
+
+    def marshallExecute(self, exist_ok: bool = True):
         if not self.executionMarshalled:
             self.marshallStage(exist_ok=exist_ok)
-            
+
             marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
             if os.path.exists(marshalled_execution_file):
                 if not exist_ok:
@@ -1325,40 +1323,40 @@ class WF:
                     'matCheckOutputs': self.matCheckOutputs
                     # TODO: check nothing essential was left
                 }
-                
+
                 self.logger.debug("Creating marshalled execution file {}".format(marshalled_execution_file))
                 with open(marshalled_execution_file, mode='w', encoding='utf-8') as msF:
                     yaml.dump(marshall_namedtuple(execution), msF, Dumper=YAMLDumper)
-            
+
             self.executionMarshalled = True
         elif not exist_ok:
             raise WFException("Marshalled execution file already exists")
-    
-    def unmarshallExecute(self, offline : bool = True):
+
+    def unmarshallExecute(self, offline: bool = True):
         if not self.executionMarshalled:
             self.unmarshallStage(offline=offline)
             marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
             if not os.path.exists(marshalled_execution_file):
                 raise WFException("Marshalled execution file does not exists. Execution state was not stored")
-            
+
             self.logger.debug("Parsing marshalled execution state file {}".format(marshalled_execution_file))
             with open(marshalled_execution_file, mode='r', encoding='utf-8') as meF:
                 marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
                 try:
                     execution = unmarshall_namedtuple(marshalled_execution, globals())
-                    
+
                     self.exitVal = execution['exitVal']
                     self.augmentedInputs = execution['augmentedInputs']
                     self.matCheckOutputs = execution['matCheckOutputs']
                 except Exception as e:
                     raise WFException("Error while unmarshalling content from execution state file {}. Reason: {}".format(marshalled_execution_file, e))
-            
+
             self.executionMarshalled = True
-    
-    def marshallExport(self, exist_ok : bool = True):
+
+    def marshallExport(self, exist_ok: bool = True):
         if not self.exportMarshalled:
             self.marshallExecute(exist_ok=exist_ok)
-            
+
             marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
             if os.path.exists(marshalled_export_file):
                 if not exist_ok:
@@ -1368,63 +1366,63 @@ class WF:
                 exported_results = {
                     # TODO
                 }
-                
+
                 self.logger.debug("Creating marshalled export results file {}".format(marshalled_export_file))
                 with open(marshalled_export_file, mode='w', encoding='utf-8') as msF:
                     yaml.dump(marshall_namedtuple(exported_results), msF, Dumper=YAMLDumper)
-            
+
             self.exportMarshalled = True
         elif not exist_ok:
             raise WFException("Marshalled export results file already exists")
-    
-    def unmarshallExport(self, offline : bool = True):
+
+    def unmarshallExport(self, offline: bool = True):
         if not self.exportMarshalled:
             self.unmarshallExecute(offline=offline)
             marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
             if not os.path.exists(marshalled_export_file):
                 raise WFException("Marshalled export results file does not exists. Export results state was not stored")
-            
+
             self.logger.debug("Parsing marshalled export results state file {}".format(marshalled_export_file))
             with open(marshalled_export_file, mode='r', encoding='utf-8') as meF:
                 marshalled_export = yaml.load(meF, Loader=YAMLLoader)
                 try:
                     exported_results = unmarshall_namedtuple(marshalled_export, globals())
-                    
+
                     # TODO
                 except Exception as e:
                     raise WFException(f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}")
-            
+
             self.exportMarshalled = True
-    
-    def createStageResearchObject(self, doMaterializedROCrate : bool = False):
+
+    def createStageResearchObject(self, doMaterializedROCrate: bool = False):
         """
         Create RO-crate from stage provenance.
         """
-        
+
         # TODO: implement deserialization
         self.unmarshallStage(offline=True)
-        
+
         # TODO: implement logic of doMaterializedROCrate
-        
+
         # TODO
         pass
-    
-    def createResultsResearchObject(self, doMaterializedROCrate : bool = False):
+
+    def createResultsResearchObject(self, doMaterializedROCrate: bool = False):
         """
         Create RO-crate from execution provenance.
         """
         # TODO: implement deserialization
         self.unmarshallExport(offline=True)
-        
+
         # TODO: implement logic of doMaterializedROCrate
-        
+
         # TODO: digest the results from executeWorkflow plus all the provenance
 
         # Create RO-crate using crate.zip downloaded from WorkflowHub
         if os.path.isfile(str(self.cacheROCrateFilename)):
             wfCrate = rocrate.ROCrate(self.cacheROCrateFilename)
 
-        # Create RO-Crate using rocrate_api
+        # Create RO-Crate using rocrate class
         # TODO no exists the version implemented for Nextflow in rocrate_api
         else:
             # FIXME: What to do when workflow is in git repository different from GitHub??
@@ -1504,37 +1502,63 @@ class WF:
                 # TODO digest other types of inputs
 
         # Add outputs provenance to RO-crate
-        # for out_item in self.matCheckOutputs:
-        #     if isinstance(out_item, MaterializedOutput):
-        #         itemOutKind = out_item.kind.value
-        #         itemOutValues = out_item.values[0]
-        #         itemOutSource = itemOutValues.local
-        #         properties = {'name': out_item.name}
-        #         if itemOutKind == "dir":
-        #             if isinstance(itemOutValues, GeneratedDirectoryContent):
-        #                 if os.path.isdir(itemOutSource):
-        #                     dirProperties = dict.fromkeys(['values'])
-        #                     dirProperties['values'] = itemOutValues.values
-        #                     properties.update(dirProperties)
-        #                     wfCrate.add_directory(source=itemOutSource, properties=properties)
-        #
-        #                 else:
-        #                     pass  # TODO raise Exception
-        #
-        #         elif itemOutKind == "file":
-        #             if isinstance(itemOutValues, GeneratedContent):
-        #                 if os.path.isfile(itemOutSource):
-        #                     fileProperties = {
-        #                         'uri': itemOutValues.uri
-        #                     }
-        #                     properties.update(fileProperties)
-        #                     wfCrate.add_file(source=itemOutSource, properties=properties)
-        #
-        #                 else:
-        #                     pass  # TODO raise Exception
-        #         # elif itemOutKind == "val":
-        #         else:
-        #             pass # TODO raise Exception
+        for out_item in self.matCheckOutputs:
+            if isinstance(out_item, MaterializedOutput):
+                itemOutValues = out_item.values[0]
+                itemOutSource = itemOutValues.local                
+                properties = {
+                    'name': out_item.name,
+                    'local': itemOutSource
+                }
+                if isinstance(itemOutValues, GeneratedDirectoryContent):    # is dir
+                    if os.path.isdir(itemOutSource):
+                        dirProperties = dict.fromkeys(['values'])
+
+                        generatedContentList = []
+                        generatedDirectoryContentList = []
+
+                        for item in itemOutValues.values:
+                            if isinstance(item, GeneratedContent):
+                                generatedContentList.append(item.local)     # save output file path
+                            elif isinstance(item, GeneratedDirectoryContent):
+                                generatedDirectoryContentList.append(item.local)    # save output dir path
+
+                                # search recursively for other content inside dir path
+                                def search_new_content(content_list):
+                                    tempList = []
+                                    for content in content_list:
+                                        if isinstance(content, GeneratedContent):
+                                            tempList.append(content.local)  # save output file path
+                                        if isinstance(content, GeneratedDirectoryContent):
+                                            generatedDirectoryContentList.append(content.local)  # save output dir path
+                                            tempList.extend(search_new_content(content.values))
+                                    return tempList
+
+                                generatedDirectoryContentList.append(search_new_content(item.values))
+
+                            else:
+                                pass  # TODO raise Exception
+
+                        dirProperties['values'] = generatedDirectoryContentList + generatedContentList
+                        properties.update(dirProperties)
+                        wfCrate.add_directory(source=itemOutSource, properties=properties)
+
+                    else:
+                        pass  # TODO raise Exception  
+
+                elif isinstance(itemOutValues, GeneratedContent):   # is file
+                    if os.path.isfile(itemOutSource):
+                        fileProperties = {
+                            'local': itemOutValues.local
+                        }
+                        properties.update(fileProperties)
+                        wfCrate.add_file(source=itemOutSource, properties=properties)
+
+                    else:
+                        pass  # TODO raise Exception
+
+                else:
+                    pass  # TODO raise Exception
 
         # Save RO-crate as execution.crate.zip
         wfCrate.writeZip(os.path.join(self.outputsDir, "execution.crate"))
@@ -1646,44 +1670,44 @@ class WF:
         trs_endpoint_v2_meta = self.trs_endpoint + 'service-info'
         trs_endpoint_v2_beta2_meta = self.trs_endpoint + 'metadata'
         trs_endpoint_meta = None
-        
+
         # Needed to store this metadata
         trsMetadataCache = os.path.join(self.metaDir, self.TRS_METADATA_FILE)
-        
+
         try:
-            metaContentKind , cachedTRSMetaFile , trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_meta, self.metaDir, offline)
+            metaContentKind, cachedTRSMetaFile, trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_meta, self.metaDir, offline)
             trs_endpoint_meta = trs_endpoint_v2_meta
         except WFException as wfe:
             try:
-                metaContentKind , cachedTRSMetaFile , trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_beta2_meta, self.metaDir, offline)
+                metaContentKind, cachedTRSMetaFile, trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_beta2_meta, self.metaDir, offline)
                 trs_endpoint_meta = trs_endpoint_v2_beta2_meta
             except WFException as wfebeta:
                 raise WFException("Unable to fetch metadata from {} in order to identify whether it is a working GA4GH TRSv2 endpoint. Exceptions:\n{}\n{}".format(self.trs_endpoint, wfe, wfebeta))
-        
+
         # Giving a friendly name
         if not os.path.exists(trsMetadataCache):
             os.symlink(os.path.basename(cachedTRSMetaFile), trsMetadataCache)
-        
+
         with open(trsMetadataCache, mode="r", encoding="utf-8") as ctmf:
             self.trs_endpoint_meta = json.load(ctmf)
-        
+
         # Minimal check
         trs_version = self.trs_endpoint_meta.get('api_version')
         if trs_version is None:
             trs_version = self.trs_endpoint_meta.get('type', {}).get('version')
-        
+
         if trs_version is None:
             raise WFException("Unable to identify TRS version from {}".format(trs_endpoint_meta))
-        
+
         # Now, check the tool does exist in the TRS, and the version
         trs_tools_url = parse.urljoin(self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe=''))
 
         trsQueryCache = os.path.join(self.metaDir, self.TRS_QUERY_CACHE_FILE)
-        _ , cachedTRSQueryFile , _ = self.cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
+        _, cachedTRSQueryFile, _ = self.cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
         # Giving a friendly name
         if not os.path.exists(trsQueryCache):
             os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
-        
+
         with open(trsQueryCache, mode="r", encoding="utf-8") as tQ:
             rawToolDesc = tQ.read()
 
@@ -1757,11 +1781,11 @@ class WF:
             raise WFException(
                 'Descriptor type {} is not among the acknowledged ones by this backend. Version {} of workflow {} from {} . Raw answer:\n{}'.format(
                     self.descriptor_type, self.version_id, self.id, self.trs_endpoint, rawToolDesc))
-        
+
         toolFilesURL = trs_tools_url + '/versions/' + parse.quote(toolVersionId, safe='') + '/' + parse.quote(chosenDescriptorType, safe='') + '/files'
-        
+
         # Detecting whether RO-Crate trick will work
-        if self.trs_endpoint_meta.get('organization',{}).get('name') == 'WorkflowHub':
+        if self.trs_endpoint_meta.get('organization', {}).get('name') == 'WorkflowHub':
             self.logger.debug("WorkflowHub workflow")
             # And this is the moment where the RO-Crate must be fetched
             roCrateURL = toolFilesURL + '?' + parse.urlencode({'format': 'zip'})
@@ -1773,25 +1797,25 @@ class WF:
             self.logger.debug("TRS workflow")
             # Learning the available files and maybe
             # which is the entrypoint to the workflow
-            _ , trsFilesDir , trsFilesMeta = self.cacheHandler.fetch(INTERNAL_TRS_SCHEME_PREFIX + ':' + toolFilesURL, self.cacheTRSFilesDir, offline)
-            
+            _, trsFilesDir, trsFilesMeta = self.cacheHandler.fetch(INTERNAL_TRS_SCHEME_PREFIX + ':' + toolFilesURL, self.cacheTRSFilesDir, offline)
+
             expectedEngineDesc = self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
             remote_workflow_entrypoint = trsFilesMeta[0].metadata.get('remote_workflow_entrypoint')
             if remote_workflow_entrypoint is not None:
                 # Give it a chance to identify the original repo of the workflow
                 repoURL, repoTag, repoRelPath = self.guessRepoParams(remote_workflow_entrypoint, fail_ok=False)
-                
+
                 if repoURL is not None:
                     self.logger.debug("Derived repository {} ({} , rel {}) from {}".format(repoURL, repoTag, repoRelPath, trs_tools_url))
                     return expectedEngineDesc , repoURL, repoTag, repoRelPath
-            
+
             workflow_entrypoint = trsFilesMeta[0].metadata.get('workflow_entrypoint')
             if workflow_entrypoint is not None:
                 self.logger.debug("Using raw files from TRS tool {}".format(trs_tools_url))
                 repoDir = trsFilesDir
                 repoRelPath = workflow_entrypoint
-                return expectedEngineDesc , repoDir, None, repoRelPath
-                
+                return expectedEngineDesc, repoDir, None, repoRelPath
+
         raise WFException("Unable to find a workflow in {}".format(trs_tools_url))
 
     def getWorkflowRepoFromROCrateURL(self, roCrateURL, expectedEngineDesc: WorkflowType = None, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
@@ -1803,9 +1827,9 @@ class WF:
         """
         roCrateFile = self.downloadROcrate(roCrateURL, offline=offline)
         self.logger.info("downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile))
-        
+
         return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
-        
+
     def getWorkflowRepoFromROCrateFile(self, roCrateFile: AbsPath, expectedEngineDesc: WorkflowType = None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
@@ -1879,14 +1903,14 @@ class WF:
         # This workflow URL, in the case of github, can provide the repo,
         # the branch/tag/checkout , and the relative directory in the
         # fetched content (needed by Nextflow)
-        
+
         # Some RO-Crates might have this value missing or ill-built
         if workflowUploadURL is not None:
             repoURL, repoTag, repoRelPath = self.guessRepoParams(workflowUploadURL, fail_ok=False)
-        
+
         if repoURL is None:
             repoURL, repoTag, repoRelPath = self.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=False)
-        
+
         if repoURL is None:
             raise WFException('Unable to guess repository from RO-Crate manifest')
 
@@ -1903,7 +1927,7 @@ class WF:
             parsed_wf_url = wf_url
         else:
             parsed_wf_url = parse.urlparse(wf_url)
-        
+
         # These are the usual URIs which can be understood by pip
         # See https://pip.pypa.io/en/stable/cli/pip_install/#git
         if parsed_wf_url.scheme.startswith('git+') or parsed_wf_url.scheme == 'git':
@@ -1912,23 +1936,23 @@ class WF:
                 gitScheme = parsed_wf_url.scheme[4:]
             else:
                 gitScheme = parsed_wf_url.scheme
-            
+
             # Getting the tag or branch
             if '@' in parsed_wf_url.path:
-                gitPath , repoTag = parsed_wf_url.path.split('@',1)
+                gitPath, repoTag = parsed_wf_url.path.split('@', 1)
             else:
                 gitPath = parsed_wf_url.path
-            
+
             # Getting the repoRelPath (if available)
             if len(parsed_wf_url.fragment) > 0:
                 frag_qs = parse.parse_qs(parsed_wf_url.fragment)
-                subDirArr = frag_qs.get('subdirectory',[])
+                subDirArr = frag_qs.get('subdirectory', [])
                 if len(subDirArr) > 0:
                     repoRelPath = subDirArr[0]
-            
+
             # Now, reassemble the repoURL
             repoURL = parse.urlunparse((gitScheme, parsed_wf_url.netloc, gitPath, '', '', ''))
-            
+
         # TODO handling other popular cases, like bitbucket
         elif parsed_wf_url.netloc == 'github.com':
             wf_path = parsed_wf_url.path.split('/')
@@ -1983,16 +2007,16 @@ class WF:
         :type offline: bool
         :return:
         """
-        
+
         try:
-            roCK , roCrateFile , _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
+            roCK, roCrateFile, _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
         except Exception as e:
             raise WFException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e))
-        
+
         crate_hashed_id = hashlib.sha1(roCrateURL.encode('utf-8')).hexdigest()
         cachedFilename = os.path.join(self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION)
         if not os.path.exists(cachedFilename):
-            os.symlink(os.path.basename(roCrateFile),cachedFilename)
+            os.symlink(os.path.basename(roCrateFile), cachedFilename)
 
         self.cacheROCrateFilename = cachedFilename
 
@@ -2029,8 +2053,8 @@ class WF:
                 if secContext is None:
                     raise WFException(
                         'No security context {} is available, needed by {}'.format(contextName, remote_file))
-            
+
             inputKind, cachedFilename, metadata_array = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
             self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
-            
+
             return MaterializedContent(cachedFilename, remote_file, prettyFilename, inputKind, metadata_array)
