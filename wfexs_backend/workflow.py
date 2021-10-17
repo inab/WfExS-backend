@@ -197,8 +197,22 @@ class WF:
 
             comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory,
                                                             datetime.datetime.now().isoformat())
-            crypt4gh.keys.c4gh.generate(privKey, pubKey, passphrase=passphrase.encode('utf-8'),
-                                        comment=comment.encode('utf-8'))
+            
+            # This is a way to avoid encoding private keys with scrypt,
+            # which is not supported in every Python interpreter
+            orig_scrypt_supported = crypt4gh.keys.kdf.scrypt_supported
+            crypt4gh.keys.kdf.scrypt_supported = False
+            try:
+                crypt4gh.keys.c4gh.generate(
+                    privKey,
+                    pubKey,
+                    passphrase=passphrase.encode('utf-8'),
+                    comment=comment.encode('utf-8')
+                )
+            finally:
+                crypt4gh.keys.kdf.scrypt_supported = orig_scrypt_supported
+        elif not crypt4gh.keys.kdf.scrypt_supported:
+            logger.info("Python interpreter does not support scrypt, so encoded crypt4gh keys with that algorithm cannot be used")
 
         return updated, local_config
 
