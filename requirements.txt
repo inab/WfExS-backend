@@ -14,3 +14,5 @@ python-dxf
 genluhn >= 0.3.0
 rfc6920 >= 0.1.2
 git+https://github.com/inab/ro-crate-py.git#egg=rocrate
+boto3
+botocore
