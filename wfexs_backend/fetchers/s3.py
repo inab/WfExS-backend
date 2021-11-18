@@ -5,6 +5,7 @@ import botocore.exceptions
 from urllib.parse import urlparse
 from typing import Any, List, Optional, Tuple, Union
 import os
+import shutil
 import logging
 import argparse
 from ..common import *
@@ -16,8 +17,13 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
     prefix = prefix[1:]
     local_path = cachedFilename
     
-    access_key = secContext.get('access_key')
-    secret_key = secContext.get('secret_key')
+    if(isinstance(secContext, dict)):
+        access_key = secContext.get('access_key')
+        secret_key = secContext.get('secret_key')
+    else:
+        access_key = None
+        secret_key = None
+
 
     try:
         if access_key == None and secret_key == None:
@@ -62,6 +68,18 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
 
         except botocore.exceptions.ParamValidationError as error:
             logger.warn("Error downloading file " + error)
+    
+    kind = None
+    if os.path.isdir(local_path):
+        shutil.copytree(local_path, cachedFilename)
+        kind = ContentKind.Directory
+    elif os.path.isfile(local_path):
+        shutil.copy2(local_path, cachedFilename)
+        kind = ContentKind.File
+    else:
+        raise WFException("Local path {} is neither a file nor a directory".format(local_path))
+    
+    return kind, [ URIWithMetadata(remote_file, {}) ]
 
 S3_SCHEME_HANDLERS = {
     's3': downloadContentFrom_s3
