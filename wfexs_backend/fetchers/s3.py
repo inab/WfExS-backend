@@ -71,10 +71,10 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
     
     kind = None
     if os.path.isdir(local_path):
-        shutil.copytree(local_path, cachedFilename)
+        shutil.move(local_path, cachedFilename)
         kind = ContentKind.Directory
     elif os.path.isfile(local_path):
-        shutil.copy2(local_path, cachedFilename)
+        shutil.move(local_path, cachedFilename)
         kind = ContentKind.File
     else:
         raise WFException("Local path {} is neither a file nor a directory".format(local_path))
