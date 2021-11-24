@@ -1050,6 +1050,17 @@ class WF:
                             # This is to nest the directory where to place the different files
                             inputDestDir = os.path.join(inputDestDir, *linearKey.split('.'))
                             os.makedirs(inputDestDir, exist_ok=True)
+                        elif inputClass == 'File' and inputs.get('autoFill', False):
+                            # We have to autofill this with the outputs directory,
+                            # so results are properly stored (without escaping the jail)
+                            autoFilledFile = os.path.join(self.outputsDir, *linearKey.split('.'))
+                            autoFilledDir = os.path.dirname(autoFilledFile)
+                            # This is needed to assure the path exists
+                            if autoFilledDir != self.outputsDir:
+                                os.makedirs(autoFilledDir, exist_ok=True)
+
+                            theInputs.append(MaterializedInput(linearKey, [autoFilledFile]))
+                            continue
 
                         remote_files = inputs['url']
                         cacheable = not self.paranoidMode if inputs.get('cache', True) else False

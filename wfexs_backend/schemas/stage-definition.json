@@ -62,6 +62,7 @@
 									"type": "string"
 								},
 								"autoFill": {
+									"description": "When this key is true, the directory or file is considered an output one"
 									"type": "boolean",
 									"default": false
 								},
