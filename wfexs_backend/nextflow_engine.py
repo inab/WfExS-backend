@@ -955,6 +955,6 @@ wfexs_allParams()
         
         # Creating the materialized outputs
         matOuputs = []
-        matOutputs = self.identifyMaterializedOutputs(outputs, self.outputsDir)
+        matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, self.outputsDir)
 
         return  launch_retval, augmentedInputs, matOutputs

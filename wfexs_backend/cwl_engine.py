@@ -548,7 +548,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 raise WorkflowEngineException(errstr)
 
                             # Reading the output for the report
-                            matOutputs = self.identifyMaterializedOutputs(outputs, self.outputsDir, outputsMapping)
+                            matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, self.outputsDir, outputsMapping)
 
                     # FIXME: create augmentedInputs properly
                     return retVal, matInputs, matOutputs

@@ -407,13 +407,18 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         GeneratedContent.__class__.__name__: ContentKind.File,
     }
     
-    def identifyMaterializedOutputs(self, expectedOutputs:List[ExpectedOutput], outputsDir:AbsPath, outputsMapping:Mapping[SymbolicOutputName,Any]=None) -> List[MaterializedOutput]:
+    def identifyMaterializedOutputs(self, matInputs: List[MaterializedInput], expectedOutputs:List[ExpectedOutput], outputsDir:AbsPath, outputsMapping:Mapping[SymbolicOutputName,Any]=None) -> List[MaterializedOutput]:
         """
         This method is used to identify outputs by either file glob descriptions
         or matching with a mapping
         """
         if not isinstance(outputsMapping, dict):
             outputsMapping = {}
+        
+        matInputHash = {
+            matInput.name: matInput.values
+            for matInput in matInputs
+        }
         
         matOutputs = []
         # This is only applied when no outputs sections is specified
@@ -471,7 +476,36 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         for expectedOutput in expectedOutputs:
             cannotBeEmpty = expectedOutput.cardinality[0] != 0
             matValues = []
-            if expectedOutput.glob is not None:
+            if expectedOutput.fillFrom is not None:
+                matInputValues = matInputHash.get(expectedOutput.fillFrom)
+                if matInputValues is not None:
+                    for matchedPath in matInputValues:
+                        theContent = None
+                        try:
+                            if expectedOutput.kind == ContentKind.Directory:
+                                theContent = GetGeneratedDirectoryContent(
+                                    matchedPath,
+                                    uri=None,   # TODO: generate URIs when it is advised
+                                    preferredFilename=expectedOutput.preferredFilename
+                                )
+                            elif expectedOutput.kind == ContentKind.File:
+                                theContent = GeneratedContent(
+                                    local=matchedPath,
+                                    uri=None,   # TODO: generate URIs when it is advised
+                                    signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigest),
+                                    preferredFilename=expectedOutput.preferredFilename
+                                )
+                            else:
+                                # Reading the value from a file, as the glob is telling that
+                                with open(matchedPath, mode='r', encoding='utf-8', errors='ignore') as mP:
+                                    theContent = mP.read()
+                        except:
+                            self.logger.error(f"Unable to read path {matchedPath} from filled input {expectedOutput.fillFrom}")
+                        matValues.append(theContent)
+                
+                if len(matValues)==0 and cannotBeEmpty:
+                    self.logger.warning(f"Output {expectedOutput.name} got no path from filled input {expectedOutput.fillFrom}")
+            elif expectedOutput.glob is not None:
                 filterMethod = None
                 if expectedOutput.kind == ContentKind.Directory:
                     filterMethod = os.path.isdir
