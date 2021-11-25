@@ -1,4 +1,4 @@
-workflow_id: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.6#subdirectory=main.nf"
+workflow_id: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.7#subdirectory=main.nf"
 workflow_config:
   nextflow:
     profile: docker
@@ -51,6 +51,11 @@ params:
     autoFill: true
     autoPrefix: true
   # outdir = "sample_out/results"
+  augmented_assess_dir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is an output directory
+    autoFill: true
+    autoPrefix: true
   outdir:
     c-l-a-s-s: Directory
     # This hint tells that this parameter is an output directory
