@@ -1025,13 +1025,17 @@ class WF:
             lastInput += 1
 
             prettyLocal = os.path.join(workflowInputs_destdir, matContent.prettyFilename)
-            hardenPrettyLocal = False
-            if os.path.islink(prettyLocal):
-                oldLocal = os.readlink(prettyLocal)
-
-                hardenPrettyLocal = oldLocal != matContent.local
-            elif os.path.exists(prettyLocal):
-                hardenPrettyLocal = True
+            
+            # As Nextflow has some issues when two inputs of a process
+            # have the same basename, harden by default
+            hardenPrettyLocal = True
+            # hardenPrettyLocal = False
+            # if os.path.islink(prettyLocal):
+            #     oldLocal = os.readlink(prettyLocal)
+            # 
+            #     hardenPrettyLocal = oldLocal != matContent.local
+            # elif os.path.exists(prettyLocal):
+            #     hardenPrettyLocal = True
 
             if hardenPrettyLocal:
                 # Trying to avoid collisions on input naming
@@ -1128,13 +1132,17 @@ class WF:
                             lastInput += 1
 
                             prettyLocal = os.path.join(inputDestDir, matContent.prettyFilename)
-                            hardenPrettyLocal = False
-                            if os.path.islink(prettyLocal):
-                                oldLocal = os.readlink(prettyLocal)
-
-                                hardenPrettyLocal = oldLocal != matContent.local
-                            elif os.path.exists(prettyLocal):
-                                hardenPrettyLocal = True
+                            
+                            # As Nextflow has some issues when two inputs of a process
+                            # have the same basename, harden by default
+                            hardenPrettyLocal = True
+                            # hardenPrettyLocal = False
+                            # if os.path.islink(prettyLocal):
+                            #     oldLocal = os.readlink(prettyLocal)
+                            # 
+                            #     hardenPrettyLocal = oldLocal != matContent.local
+                            # elif os.path.exists(prettyLocal):
+                            #     hardenPrettyLocal = True
 
                             if hardenPrettyLocal:
                                 # Trying to avoid collisions on input naming
@@ -2027,6 +2035,7 @@ class WF:
             raise RuntimeError("Input is not a valid remote URL or CURIE source")
 
         else:
+            # Default pretty filename
             prettyFilename = parsedInputURL.path.split('/')[-1]
 
             # Assure workflow inputs directory exists before the next step
@@ -2044,5 +2053,9 @@ class WF:
 
             inputKind, cachedFilename, metadata_array = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
             self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
+            
+            # FIXME: What to do when there is more than one entry in the metadata array?
+            if len(metadata_array) > 0 and (metadata_array[0].preferredName is not None):
+                prettyFilename = metadata_array[0].preferredName
 
             return MaterializedContent(cachedFilename, remote_file, prettyFilename, inputKind, metadata_array)
