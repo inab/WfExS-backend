@@ -122,9 +122,12 @@ class URIWithMetadata(NamedTuple):
     """
     uri: The uri
     metadata: A dictionary with the metadata associated to that URI.
+    preferredName: A pretty way to name this resource. Workflow
+        execution can decide whether to honour it or not
     """
     uri: URIType
     metadata: Mapping[str,Any]
+    preferredName: RelPath = None
 
 class MaterializedContent(NamedTuple):
     """

@@ -180,8 +180,10 @@ class GitFetcher(AbstractStatefulFetcher):
         
         if repoRelPath is not None:
             cachedContentPath = os.path.join(repo_tag_destdir, repoRelPath)
+            preferredName = repoRelPath.split('/')[-1]
         else:
             cachedContentPath = repo_tag_destdir
+            preferredName = None
         
         if os.path.isdir(cachedContentPath):
             kind = ContentKind.Directory
@@ -192,7 +194,17 @@ class GitFetcher(AbstractStatefulFetcher):
         
         shutil.move(cachedContentPath, cachedFilename)
         
-        return kind, [ URIWithMetadata(remote_file, { 'repo': repoURL, 'tag': repoTag, 'relpath': repoRelPath }) ]
+        return kind, [
+            URIWithMetadata(
+                uri=remote_file,
+                metadata={
+                    'repo': repoURL,
+                    'tag': repoTag,
+                    'relpath': repoRelPath
+                },
+                preferredName=preferredName
+            )
+        ]
         
 
 # These are de-facto schemes supported by pip and git client
