@@ -51,6 +51,15 @@ DEFAULT_PODMAN_CMD = 'podman'
 DEFAULT_JAVA_CMD = 'java'
 DEFAULT_FUSERMOUNT_CMD = 'fusermount'
 
+DEFAULT_PROGS = {
+    DEFAULT_GIT_CMD: DEFAULT_GIT_CMD,
+    DEFAULT_DOCKER_CMD: DEFAULT_DOCKER_CMD,
+    DEFAULT_SINGULARITY_CMD: DEFAULT_SINGULARITY_CMD,
+    DEFAULT_PODMAN_CMD: DEFAULT_PODMAN_CMD,
+    DEFAULT_JAVA_CMD: DEFAULT_JAVA_CMD,
+    DEFAULT_FUSERMOUNT_CMD: DEFAULT_FUSERMOUNT_CMD,
+}
+
 
 class EngineMode(enum.Enum):
     Local = 'local'
@@ -167,6 +176,7 @@ class ExpectedOutput(NamedTuple):
     kind: ContentKind
     preferredFilename: RelPath
     cardinality: Tuple[int, int]
+    fillFrom: SymbolicParamName
     glob: GlobPattern
     
     def _marshall(self):
@@ -179,6 +189,8 @@ class ExpectedOutput(NamedTuple):
             mD['preferredName'] = self.preferredFilename
         if self.glob is not None:
             mD['glob'] = self.glob
+        if self.fillFrom is not None:
+            mD['fillFrom'] = self.fillFrom
         
         return mD
     
@@ -188,6 +200,7 @@ class ExpectedOutput(NamedTuple):
             name=name,
             kind=ContentKind(obj['c-l-a-s-s'])  if 'c-l-a-s-s' in obj  else  ContentKind.File,
             preferredFilename=obj.get('preferredName'),
+            fillFrom=obj.get('fillFrom'),
             glob=obj.get('glob')
         )
 
