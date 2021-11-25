@@ -34,15 +34,17 @@ from .common import *
 class SchemeHandlerCacheHandler:
     def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
         # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(self.__class__.__name__)
+        import inspect
+        
+        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
         
         # TODO: create caching database
         self.cacheDir = cacheDir
-        self.schemeHandlers = {}
+        self.schemeHandlers = dict()
         
         self.addSchemeHandlers(schemeHandlers)
     
-    def addSchemeHandlers(self, schemeHandlers:Mapping[str,ProtocolFetcher]) -> None:
+    def addSchemeHandlers(self, schemeHandlers:Mapping[str, ProtocolFetcher]) -> None:
         if isinstance(schemeHandlers, dict):
             self.schemeHandlers.update(schemeHandlers)
     
