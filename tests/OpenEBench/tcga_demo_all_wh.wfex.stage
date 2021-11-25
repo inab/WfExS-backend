@@ -1,0 +1,118 @@
+trs_endpoint: https://workflowhub.eu/ga4gh/trs/v2/tools/
+workflow_id: 244
+version: 3
+workflow_config:
+  nextflow:
+    profile: docker
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  # submitted file
+  input:
+    c-l-a-s-s: File
+    url: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.6#subdirectory=TCGA_sample_data/All_Together.txt"
+
+  # reference file dir to validate input data
+  public_ref_dir:
+    c-l-a-s-s: Directory
+    url: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.6#subdirectory=TCGA_sample_data/public_ref"
+
+  # name of the tool used for the predicitions
+  participant_id: "my gene predictor"
+
+  # directory where the 'gold standards' are found
+  goldstandard_dir:
+    c-l-a-s-s: Directory
+    url: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.6#subdirectory=TCGA_sample_data/metrics_ref_datasets"
+
+  # cancer types for which the benchmark has to be performed
+  challenges_ids: "ACC BRCA"
+
+  # directory where TCGA benchmarking data is found
+  assess_dir:
+    c-l-a-s-s: Directory
+    url: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.6#subdirectory=TCGA_sample_data/data"
+
+  # name or OEB permanent ID for the benchmarking community
+  community_id: "TCGA"
+
+  # Boolean operator: if set to CLOSED the whole workflow is executed; if OPEN, metrics are computed but aggregation/consolidation is not performed
+  # challenge_status: "CLOSED"
+
+  # directories where results will be written
+  # validation_result = "sample_out/participant_out/validated-participant-data.json"
+  validation_result:
+    c-l-a-s-s: File
+    # This hint tells that this parameter is an output file
+    autoFill: true
+    autoPrefix: true
+  # assessment_results = "sample_out/assessment_out/Assessment_datasets.json"
+  assessment_results:
+    c-l-a-s-s: File
+    # This hint tells that this parameter is an output file
+    autoFill: true
+    autoPrefix: true
+  # outdir = "sample_out/results"
+  augmented_assess_dir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is an output directory
+    autoFill: true
+    autoPrefix: true
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is an output directory
+    autoFill: true
+    autoPrefix: true
+  # statsdir = "sample_out/stats"
+  statsdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is an output directory
+    autoFill: true
+    autoPrefix: true
+  # data_model_export_dir = "sample_out/benchmarking_data_model_export/Participant_assessments.json"
+  data_model_export_dir:
+    c-l-a-s-s: File
+    # This hint tells that this parameter is an output file
+    autoFill: true
+    autoPrefix: true
+  #otherdir = "sample_out/other"
+  otherdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is an output directory
+    autoFill: true
+    autoPrefix: true
+  
+outputs:
+  # directories where results will be written
+  # validation_result = "sample_out/participant_out/validated-participant-data.json"
+  validation_result:
+    c-l-a-s-s: File
+    fillFrom: validation_result
+    # This hint tells that this parameter is an output file
+    preferredName: "validated-participant-data.json"
+  # assessment_results = "sample_out/assessment_out/Assessment_datasets.json"
+  assessment_results:
+    c-l-a-s-s: File
+    # This hint tells that this parameter is an output file
+    fillFrom: assessment_results
+    preferredName: "Assessment_datasets.json"
+  # outdir = "sample_out/results"
+  outdir:
+    c-l-a-s-s: Directory
+    fillFrom: outdir
+    preferredName: "results"
+  # statsdir = "sample_out/stats"
+  statsdir:
+    c-l-a-s-s: Directory
+    fillFrom: statsdir
+    preferredName: "stats"
+  # data_model_export_dir = "sample_out/benchmarking_data_model_export/Participant_assessments.json"
+  data_model_export_dir:
+    c-l-a-s-s: File
+    fillFrom: data_model_export_dir
+    preferredName: "Participant_assessments.json"
+  #otherdir = "sample_out/other"
+  otherdir:
+    c-l-a-s-s: Directory
+    fillFrom: otherdir
+    preferredName: "other"
