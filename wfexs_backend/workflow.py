@@ -18,6 +18,7 @@ from __future__ import absolute_import
 
 import atexit
 import http
+import inspect
 import io
 import json
 import jsonschema
@@ -32,7 +33,7 @@ import types
 import uuid
 
 from pathlib import Path
-from typing import List, Mapping, Pattern, Tuple, Union
+from typing import List, Mapping, Pattern, Tuple, Type, Union
 from urllib import request, parse
 
 from rocrate import rocrate
@@ -61,7 +62,9 @@ from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 
+from .fetchers import AbstractStatefulFetcher
 from .fetchers import DEFAULT_SCHEME_HANDLERS
+from .fetchers.git import SCHEME_HANDLERS as GIT_SCHEME_HANDLERS, GitFetcher
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX, SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 
@@ -273,7 +276,7 @@ class WF:
         :type local_config: dict
         """
         # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
 
         if not isinstance(local_config, dict):
             local_config = {}
@@ -285,9 +288,11 @@ class WF:
             sys.exit(1)
 
         self.local_config = local_config
+        self.progs = DEFAULT_PROGS.copy()
 
         toolSect = local_config.get('tools', {})
         self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
+        self.progs[DEFAULT_GIT_CMD] = self.git_cmd
 
         encfsSect = toolSect.get('encrypted_fs', {})
         encfs_type = encfsSect.get('type', DEFAULT_ENCRYPTED_FS_TYPE)
@@ -301,6 +306,7 @@ class WF:
 
         self.encfs_cmd = shutil.which(encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type]))
         self.fusermount_cmd = encfsSect.get('fusermount_command', DEFAULT_FUSERMOUNT_CMD)
+        self.progs[DEFAULT_FUSERMOUNT_CMD] = self.fusermount_cmd
         self.encfs_idleMinutes = encfsSect.get('idle', DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT)
 
         # Getting the config directory, needed for relative filenames
@@ -374,15 +380,51 @@ class WF:
         self.exportMarshalled = False
 
         # cacheHandler is created on first use
-        self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, {})
+        self._sngltn = dict()
+        self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, dict())
 
         # All the custom ones should be added here
-        self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
+        self.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
+        self.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
 
         # These ones should have prevalence over other custom ones
-        self.cacheHandler.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
-
+        self.addSchemeHandlers(GIT_SCHEME_HANDLERS)
+        self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
+    
+    def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher]) -> AbstractStatefulFetcher:
+        """
+        Method to instantiate stateful fetchers once
+        """
+        instStatefulFetcher = None
+        if inspect.isclass(statefulFetcher):
+            if issubclass(statefulFetcher, AbstractStatefulFetcher):
+                instStatefulFetcher = self._sngltn.get(statefulFetcher)
+                if instStatefulFetcher is None:
+                    instStatefulFetcher = statefulFetcher(progs=self.progs)
+                    self._sngltn[statefulFetcher] = instStatefulFetcher
+        
+        return instStatefulFetcher
+    
+    def addSchemeHandlers(self, schemeHandlers:Mapping[str, Union[ProtocolFetcher, Type[AbstractStatefulFetcher]]]) -> None:
+        """
+        This method adds scheme handlers (aka "fetchers")
+        or instantiates stateful scheme handlers (aka "stateful fetchers")
+        """
+        if isinstance(schemeHandlers, dict):
+            instSchemeHandlers = dict()
+            for scheme, schemeHandler in schemeHandlers.items():
+                instSchemeHandler = None
+                if inspect.isclass(schemeHandler):
+                    instSchemeHandler = self.instantiateStatefulFetcher(schemeHandler).fetch
+                elif callable(schemeHandler):
+                    instSchemeHandler = schemeHandler
+                
+                # Only the ones which have overcome the sanity checks
+                if instSchemeHandler is not None:
+                    instSchemeHandlers[scheme] = instSchemeHandler
+            
+            self.cacheHandler.addSchemeHandlers(instSchemeHandlers)
+    
     def newSetup(self,
                  workflow_id,
                  version_id,
@@ -1191,6 +1233,9 @@ class WF:
                 if len(patS) == 0:
                     patS = None
 
+            # Fill from this input
+            fillFrom = outputDesc.get('fillFrom')
+            
             # Parsing the cardinality
             cardS = outputDesc.get('cardinality')
             cardinality = None
@@ -1213,6 +1258,7 @@ class WF:
                 kind=self.OutputClassMapping.get(outputDesc.get('c-l-a-s-s'), ContentKind.File.name),
                 preferredFilename=outputDesc.get('preferredName'),
                 cardinality=cardinality,
+                fillFrom=fillFrom,
                 glob=patS,
             )
             expectedOutputs.append(eOutput)
@@ -1600,92 +1646,8 @@ class WF:
         :param doUpdate:
         :return:
         """
-        repo_hashed_id = hashlib.sha1(repoURL.encode('utf-8')).hexdigest()
-        repo_hashed_tag_id = hashlib.sha1(b'' if repoTag is None else repoTag.encode('utf-8')).hexdigest()
-
-        # Assure directory exists before next step
-        repo_destdir = os.path.join(self.cacheWorkflowDir, repo_hashed_id)
-        if not os.path.exists(repo_destdir):
-            try:
-                os.makedirs(repo_destdir)
-            except IOError:
-                errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(repoURL)
-                raise WFException(errstr)
-
-        repo_tag_destdir = os.path.join(repo_destdir, repo_hashed_tag_id)
-        # We are assuming that, if the directory does exist, it contains the repo
-        doRepoUpdate = True
-        if not os.path.exists(repo_tag_destdir):
-            # Try cloning the repository without initial checkout
-            if repoTag is not None:
-                gitclone_params = [
-                    self.git_cmd, 'clone', '-n', '--recurse-submodules', repoURL, repo_tag_destdir
-                ]
-
-                # Now, checkout the specific commit
-                gitcheckout_params = [
-                    self.git_cmd, 'checkout', repoTag
-                ]
-            else:
-                # We know nothing about the tag, or checkout
-                gitclone_params = [
-                    self.git_cmd, 'clone', '--recurse-submodules', repoURL, repo_tag_destdir
-                ]
-
-                gitcheckout_params = None
-        elif doUpdate:
-            gitclone_params = None
-            gitcheckout_params = [
-                self.git_cmd, 'pull', '--recurse-submodules'
-            ]
-            if repoTag is not None:
-                gitcheckout_params.extend(['origin', repoTag])
-        else:
-            doRepoUpdate = False
-
-        if doRepoUpdate:
-            with tempfile.NamedTemporaryFile() as git_stdout, tempfile.NamedTemporaryFile() as git_stderr:
-
-                # First, (bare) clone
-                retval = 0
-                if gitclone_params is not None:
-                    retval = subprocess.call(gitclone_params, stdout=git_stdout, stderr=git_stderr)
-                # Then, checkout (which can be optional)
-                if retval == 0 and (gitcheckout_params is not None):
-                    retval = subprocess.Popen(gitcheckout_params, stdout=git_stdout, stderr=git_stderr,
-                                              cwd=repo_tag_destdir).wait()
-                # Last, submodule preparation
-                if retval == 0:
-                    # Last, initialize submodules
-                    gitsubmodule_params = [
-                        self.git_cmd, 'submodule', 'update', '--init', '--recursive'
-                    ]
-
-                    retval = subprocess.Popen(gitsubmodule_params, stdout=git_stdout, stderr=git_stderr,
-                                              cwd=repo_tag_destdir).wait()
-
-                # Proper error handling
-                if retval != 0:
-                    # Reading the output and error for the report
-                    with open(git_stdout.name, "r") as c_stF:
-                        git_stdout_v = c_stF.read()
-                    with open(git_stderr.name, "r") as c_stF:
-                        git_stderr_v = c_stF.read()
-
-                    errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                        repoURL, repoTag, retval, git_stdout_v, git_stderr_v)
-                    raise WFException(errstr)
-
-        # Last, we have to obtain the effective checkout
-        gitrevparse_params = [
-            self.git_cmd, 'rev-parse', '--verify', 'HEAD'
-        ]
-
-        with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1',
-                              cwd=repo_tag_destdir) as revproc:
-            repo_effective_checkout = revproc.stdout.read().rstrip()
-
-        return repo_tag_destdir, repo_effective_checkout
+        gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
+        return gitFetcherInst.doMaterializeRepo(repoURL,repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
 
     def getWorkflowRepoFromTRS(self, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
