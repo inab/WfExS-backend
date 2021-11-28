@@ -97,27 +97,26 @@ else
 fi
 
 if [ -n "$doInstallGo" ] ; then
-		# Fetch and install go
-		GO_OS="$(python -c 'import platform; print(platform.system().lower())')"
-		GO_ARCH="$(python -c 'import platform; print(platform.machine())')"
-		case "$GO_ARCH" in
-			x86_64)
-				# Deriving the right name
-				GO_ARCH=amd64
-			;;
-		esac
-		goSoftDir="${downloadDir}/soft"
-		goBundle=go${GO_VER}.${GO_OS}-${GO_ARCH}.tar.gz
-		# Fetching go
-		( cd "${downloadDir}" && curl -L -O https://dl.google.com/go/"${goBundle}" )
-		# Installing go in the temporary directory
-		mkdir -p "${goSoftDir}"
-		tar -x -z -C "${goSoftDir}" -f "${downloadDir}/${goBundle}"
-		# Removing go bundle
-		rm "${downloadDir}/${goBundle}"
-		
-		PATH="${goSoftDir}/go/bin:${PATH}"
-	;;
+	# Fetch and install go
+	GO_OS="$(python -c 'import platform; print(platform.system().lower())')"
+	GO_ARCH="$(python -c 'import platform; print(platform.machine())')"
+	case "$GO_ARCH" in
+		x86_64)
+			# Deriving the right name
+			GO_ARCH=amd64
+		;;
+	esac
+	goSoftDir="${downloadDir}/soft"
+	goBundle=go${GO_VER}.${GO_OS}-${GO_ARCH}.tar.gz
+	# Fetching go
+	( cd "${downloadDir}" && curl -L -O https://dl.google.com/go/"${goBundle}" )
+	# Installing go in the temporary directory
+	mkdir -p "${goSoftDir}"
+	tar -x -z -C "${goSoftDir}" -f "${downloadDir}/${goBundle}"
+	# Removing go bundle
+	rm "${downloadDir}/${goBundle}"
+	
+	PATH="${goSoftDir}/go/bin:${PATH}"
 fi
 
 # Fetch and compile singularity
