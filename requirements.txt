@@ -13,4 +13,4 @@ dulwich
 python-dxf
 genluhn >= 0.3.0
 rfc6920 >= 0.1.2
-git+https://github.com/ResearchObject/ro-crate-py.git@jmf/conformsTo_can_be_a_list#egg=rocrate
+rocrate >= 0.5.2
