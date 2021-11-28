@@ -1,8 +1,8 @@
-# Easy install and setup a Workflow Execution Service backend instance
+# "Easy" install and setup a Workflow Execution Service backend instance
 
-## Easy setup of core and main software dependencies
+## "Easy" setup of core and main software dependencies
 
-There is an automated installer at [installer.bash](installer.bash), which assumes both python3 and its pip and venv counterparts are properly installed. It installs both core dependencies and it fetches and installs:
+There is an automated installer at [installer.bash](installer.bash), which assumes both essential build dependencies (package build-essential in Ubuntu), curl, python3 and its pip and venv counterparts are properly installed. The automated installer installs both core dependencies and it fetches and installs:
 
   * OpenJDK: needed by Nextflow.
   * gocryptfs: needed by secure directories feature.
@@ -14,7 +14,7 @@ If you also want to install [singularity](https://sylabs.io/singularity/) at the
 ./singularity-local-installer.bash
 ```
 
-This setup will work on Linux systems with cgroups v2 enabled. The script only installs singularity when it is not available. If you want to force the installation of singularity, then you should run:
+This setup will work on Linux systems with cgroups v2 enabled. The script only installs singularity when it is not available. If you want to force the installation of singularity in the WfExS backend environment, then you should run:
 
 ```bash
 ./singularity-local-installer.bash force
@@ -23,9 +23,10 @@ This setup will work on Linux systems with cgroups v2 enabled. The script only i
 ## Core Dependencies
 This workflow execution service backend is written for Python 3.6 and later.
 
-* In order to install the dependencies you need `pip` and `venv` modules.
+* In order to install the dependencies you need `pip` and `venv` Python modules, and the essential build dependencies.
 	- `pip` is available in many Linux distributions (Ubuntu packages `python3-pip`, CentOS EPEL package `python-pip`), and also as [pip](https://pip.pypa.io/en/stable/) Python package.
 	- `venv` is also available in many Linux distributions (Ubuntu package `python3-venv`). In some of them is integrated into the Python 3.5 (or later) installation.
+	- Essential build dependencies (gcc, make, ...) are provided in Ubuntu with `build-essential` package.
 
 * The creation of a virtual environment where to install WfExS backend dependencies is done running:
   

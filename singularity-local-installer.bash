@@ -81,13 +81,22 @@ export GOPATH
 PATH="${GOPATH}/bin:${PATH}"
 
 # Third, check whether there is an available go compiler
-goVer="$(go version)"
-case "$goVer" in
-	"go version go1"*)
-		# Go is available
-		true
-	;;
-	*)
+if type -a go >& /dev/null ; then
+	goVer="$(go version)"
+	case "$goVer" in
+		"go version go1"*)
+			# Go is available
+			true
+		;;
+		*)
+			doInstallGo=1
+		;;
+	esac
+else
+	doInstallGo=1
+fi
+
+if [ -n "$doInstallGo" ] ; then
 		# Fetch and install go
 		GO_OS="$(python -c 'import platform; print(platform.system().lower())')"
 		GO_ARCH="$(python -c 'import platform; print(platform.machine())')"
@@ -109,7 +118,7 @@ case "$goVer" in
 		
 		PATH="${goSoftDir}/go/bin:${PATH}"
 	;;
-esac
+fi
 
 # Fetch and compile singularity
 singularityBundle=singularity-ce-"${SINGULARITY_VER}".tar.gz
