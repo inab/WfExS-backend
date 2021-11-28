@@ -5,8 +5,6 @@
 SINGULARITY_VER=3.9.1
 GO_VER=1.17.3
 
-USERAGENT="User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:94.0) Gecko/20100101 Firefox/94.0"
-
 # These are placeholders
 GO_OS=linux
 GO_ARCH=amd64
@@ -17,11 +15,11 @@ case "${wfexsDir}" in
 	/*)
 		# Path is absolute
 		true
-		;;
+	;;
 	*)
 		# Path is relative
 		wfexsDir="$(readlink -f "${wfexsDir}")"
-		;;
+	;;
 esac
 
 downloadDir="$(mktemp -d --tmpdir wfexs_singularity_installer.XXXXXXXXXXX)"
@@ -35,10 +33,24 @@ trap cleanup EXIT ERR
 
 set -e
 
+if [ $# -gt 0 ]; then
+	if [ "$1" == "force" ] ; then
+		doForce=1
+		if [ $# -gt 1 ] ; then
+			SINGULARITY_VER="$2"
+			if [ $# -gt 2 ] ; then
+				GO_VER="$3"
+			fi
+		fi
+	fi
+fi
+
 # Before installing, check whether singularity is already available
-if type -a singularity >& /dev/null ; then
-	echo "Singularity $(singularity version) is already available in the system. Skipping install"
-	exit 0
+if [ -z "$doForce" ] ; then
+	if type -a singularity >& /dev/null ; then
+		echo "Singularity $(singularity version) is already available in the system. Skipping install"
+		exit 0
+	fi
 fi
 
 # First, be sure the environment is ready to be used
@@ -56,9 +68,11 @@ if [ -z "${envDir}" ] ; then
 fi
 
 # Now, it is time to check singularity binaries availability
-if [ -x "${envDir}/bin/singularity" ] ; then
-	echo "Singularity $(singularity version) is already available in the environment. Skipping install"
-	exit 0
+if [ -z "$doForce" ] ; then
+	if [ -x "${envDir}/bin/singularity" ] ; then
+		echo "Singularity $(singularity version) is already available in the environment. Skipping install"
+		exit 0
+	fi
 fi
 
 # Compilation artifacts should go to the temporary download directory
@@ -72,7 +86,7 @@ case "$goVer" in
 	"go version go1"*)
 		# Go is available
 		true
-		;;
+	;;
 	*)
 		# Fetch and install go
 		GO_OS="$(python -c 'import platform; print(platform.system().lower())')"
@@ -81,7 +95,7 @@ case "$goVer" in
 			x86_64)
 				# Deriving the right name
 				GO_ARCH=amd64
-				;;
+			;;
 		esac
 		goSoftDir="${downloadDir}/soft"
 		goBundle=go${GO_VER}.${GO_OS}-${GO_ARCH}.tar.gz
@@ -94,13 +108,15 @@ case "$goVer" in
 		rm "${downloadDir}/${goBundle}"
 		
 		PATH="${goSoftDir}/go/bin:${PATH}"
-		;;
+	;;
 esac
 
 # Fetch and compile singularity
 singularityBundle=singularity-ce-"${SINGULARITY_VER}".tar.gz
-( cd "${downloadDir}" && curl --header "${USERAGENT}" -L -O https://github.com/sylabs/singularity/releases/download/v"${SINGULARITY_VER}"/"${singularityBundle}" )
+( cd "${downloadDir}" && curl -L -O https://github.com/sylabs/singularity/releases/download/v"${SINGULARITY_VER}"/"${singularityBundle}" )
 tar -x -z -C "${downloadDir}" -f "${downloadDir}/${singularityBundle}"
+# Removing singularity bundle
+rm "${downloadDir}/${singularityBundle}"
 cd "${downloadDir}"/singularity-ce-${SINGULARITY_VER}
 
 # Now, the right moment to compile and install rootless singularity
