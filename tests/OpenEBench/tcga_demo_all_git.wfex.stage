@@ -1,4 +1,4 @@
-workflow_id: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.7#subdirectory=main.nf"
+workflow_id: "git+https://github.com/inab/TCGA_benchmarking_workflow.git@1.0.8#subdirectory=main.nf"
 workflow_config:
   nextflow:
     profile: docker
