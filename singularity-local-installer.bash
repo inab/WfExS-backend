@@ -26,6 +26,10 @@ downloadDir="$(mktemp -d --tmpdir wfexs_singularity_installer.XXXXXXXXXXX)"
 echo "$0: ${downloadDir} will be used to download third party dependencies, and later removed"
 
 cleanup() {
+	set +e
+	# This is needed in order to avoid
+	# lots of "permission denied" messages
+	chmod -R u+w "${downloadDir}"
 	rm -rf "${downloadDir}"
 }
 

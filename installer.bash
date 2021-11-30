@@ -26,6 +26,10 @@ downloadDir="$(mktemp -d --tmpdir wfexs_installer.XXXXXXXXXXX)"
 echo "${downloadDir} will be used to download third party dependencies, and later removed"
 
 cleanup() {
+	set +e
+	# This is needed in order to avoid
+	# potential "permission denied" messages
+	chmod -R u+w "${downloadDir}"
 	rm -rf "${downloadDir}"
 }
 
