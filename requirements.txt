@@ -14,3 +14,5 @@ python-dxf
 genluhn >= 0.3.0
 rfc6920 >= 0.1.2
 rocrate >= 0.5.2
+boto3
+botocore
