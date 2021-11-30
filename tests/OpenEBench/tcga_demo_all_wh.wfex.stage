@@ -1,6 +1,6 @@
 trs_endpoint: https://workflowhub.eu/ga4gh/trs/v2/tools/
 workflow_id: 244
-version: 3
+version: 4
 workflow_config:
   nextflow:
     profile: docker
