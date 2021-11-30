@@ -34,15 +34,17 @@ from .common import *
 class SchemeHandlerCacheHandler:
     def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
         # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(self.__class__.__name__)
+        import inspect
+        
+        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
         
         # TODO: create caching database
         self.cacheDir = cacheDir
-        self.schemeHandlers = {}
+        self.schemeHandlers = dict()
         
         self.addSchemeHandlers(schemeHandlers)
     
-    def addSchemeHandlers(self, schemeHandlers:Mapping[str,ProtocolFetcher]) -> None:
+    def addSchemeHandlers(self, schemeHandlers:Mapping[str, ProtocolFetcher]) -> None:
         if isinstance(schemeHandlers, dict):
             self.schemeHandlers.update(schemeHandlers)
     
@@ -95,7 +97,19 @@ class SchemeHandlerCacheHandler:
                 # We cannot remove the content as
                 # it could be referenced by other symlinks
             
-            if not registerInCache or ignoreCache or not os.path.exists(uriCachedFilename) or not os.path.exists(uriMetaCachedFilename):
+            refetch = not registerInCache or ignoreCache or not os.path.exists(uriCachedFilename) or not os.path.exists(uriMetaCachedFilename) or os.stat(uriMetaCachedFilename).st_size == 0
+            
+            metaStructure = None
+            if not refetch:
+                try:
+                    with open(uriMetaCachedFilename, mode="r", encoding="utf-8") as mIn:
+                        # Deserializing the metadata
+                        metaStructure = json.load(mIn)
+                except:
+                    # Metadata is corrupted
+                    pass
+            
+            if metaStructure is None:
                 # As this is a handler for online resources, comply with offline mode
                 if offline:
                     raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, uriCachedFilename))
@@ -129,7 +143,7 @@ class SchemeHandlerCacheHandler:
                     with open(uriMetaCachedFilename, mode="w", encoding="utf-8") as mOut:
                         # Serializing the metadata
                         metaStructure = {
-                            'metadata_array': list(map(lambda m: {'uri': m.uri, 'metadata': m.metadata}, fetched_metadata_array))
+                            'metadata_array': list(map(lambda m: {'uri': m.uri, 'metadata': m.metadata, 'preferredName': m.preferredName}, fetched_metadata_array))
                         }
                         if fingerprint is not None:
                             metaStructure['kind'] = str(inputKind.value)
@@ -161,16 +175,13 @@ class SchemeHandlerCacheHandler:
                     raise WFException("Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(the_remote_file, uriCachedFilename, remote_file, tempCachedFilename, e))
                 
             else:
-                with open(uriMetaCachedFilename, mode="r", encoding="utf-8") as mIn:
-                    # Deserializing the metadata
-                    metaStructure = json.load(mIn)
-                    inputKind = metaStructure.get('kind')
-                    if inputKind is None:
-                        inputKind = metaStructure['resolves_to']
-                    else:
-                        inputKind = ContentKind(inputKind)
-                        finalCachedFilename = os.path.normpath(os.path.join(hashDir, os.readlink(uriCachedFilename)))
-                    fetched_metadata_array = list(map(lambda m: URIWithMetadata(m['uri'],m['metadata']), metaStructure['metadata_array']))
+                inputKind = metaStructure.get('kind')
+                if inputKind is None:
+                    inputKind = metaStructure['resolves_to']
+                else:
+                    inputKind = ContentKind(inputKind)
+                    finalCachedFilename = os.path.normpath(os.path.join(hashDir, os.readlink(uriCachedFilename)))
+                fetched_metadata_array = list(map(lambda rm: URIWithMetadata(uri=rm['uri'], metadata=rm['metadata'], preferredName=rm.get('preferredName')), metaStructure['metadata_array']))
             
             # Store the metadata
             metadata_array.extend(fetched_metadata_array)

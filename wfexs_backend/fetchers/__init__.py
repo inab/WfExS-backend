@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import http.client
 import io
+import logging
 import os
 import paramiko
 import paramiko.pkey
@@ -35,6 +36,23 @@ import urllib.error
 from ..common import *
 from ..utils.ftp_downloader import FTPDownloader
 
+class AbstractStatefulFetcher(abc.ABC):
+    """
+    Abstract class to model stateful fetchers
+    """
+    def __init__(self, progs: Mapping[SymbolicName, AbsPath]):
+        import inspect
+        
+        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
+        # This is used to resolve program names
+        self.progs = progs
+    
+    @abc.abstractmethod
+    def fetch(self, remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
+        """
+        This is the method to be implemented by the stateful fetcher
+        """
+        pass
 
 def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
     """
