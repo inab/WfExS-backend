@@ -27,6 +27,9 @@ import logging
 import argparse
 from ..common import *
 
+# Logger of this module
+logger = logging.getLogger(__name__)
+
 def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
     urlParse = urlparse(remote_file)
     bucket = urlParse.netloc
