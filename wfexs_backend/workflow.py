@@ -1290,7 +1290,7 @@ class WF:
         self.logger.debug(augmentedInputs)
         self.logger.debug(matCheckOutputs)
 
-        # TODO: implement store serialized version of exitVal, augmentedInputs and matCheckOutputs
+        # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute()
 
     def exportResults(self):
