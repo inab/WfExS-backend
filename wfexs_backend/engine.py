@@ -495,6 +495,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigest),
                                     preferredFilename=expectedOutput.preferredFilename
                                 )
+                                self.logger.debug(f"Filled From {expectedOutput.preferredFilename} {matchedPath}")
                             else:
                                 # Reading the value from a file, as the glob is telling that
                                 with open(matchedPath, mode='r', encoding='utf-8', errors='ignore') as mP:
