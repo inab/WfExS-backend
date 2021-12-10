@@ -53,6 +53,7 @@ class ArgTypeMixin(enum.Enum):
 
 class WfExS_Commands(ArgTypeMixin, enum.Enum):
     Init = 'init'
+    Cache = 'cache'
     ConfigValidate = 'config-validate'
     Stage = 'stage'
     MountWorkDir = 'mount-workdir'
@@ -62,10 +63,31 @@ class WfExS_Commands(ArgTypeMixin, enum.Enum):
     ExportResults = 'export-results'
     ExportCrate = 'export-crate'
 
+class WfExS_Cache_Commands(ArgTypeMixin, enum.Enum):
+    List = 'list'
+    Inject = 'inject'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
 DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s'
+
+def genParserSub(sp, command:WfExS_Commands, help:str=None, preStageParams:bool=False, postStageParams:bool=False, crateParams:bool=False):
+    ap_ = sp.add_parser(command.value, help=help)
+    
+    if preStageParams:
+        ap_.add_argument('-W', '--workflow-config', dest="workflowConfigFilename",
+                        help="Configuration file, describing workflow and inputs")
+        ap_.add_argument('-Z', '--creds-config', dest="securityContextsConfigFilename",
+                        help="Configuration file, describing security contexts, which hold credentials and similar")
+    
+    if postStageParams:
+        ap_.add_argument('-J', '--staged-job-dir', dest='workflowWorkingDirectory',
+                        help="Already staged job directory")
+    
+    if crateParams:
+        ap_.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
+                    help="Should the RO-Crate contain a copy of the inputs (and outputs)?")
+    return ap_
 
 if __name__ == "__main__":
     
@@ -83,18 +105,105 @@ if __name__ == "__main__":
     ap.add_argument('-d', '--debug', dest='logLevel', action='store_const', const=logging.DEBUG, help='Show debug messages (use with care, as it can disclose passphrases and passwords)')
     ap.add_argument('-L', '--local-config', dest="localConfigFilename", default=defaultLocalConfigFilename, help="Local installation configuration file")
     ap.add_argument('--cache-dir', dest="cacheDir", help="Caching directory")
-    ap.add_argument('-W', '--workflow-config', dest="workflowConfigFilename",
-                    help="Configuration file, describing workflow and inputs")
-    ap.add_argument('-Z', '--creds-config', dest="securityContextsConfigFilename",
-                    help="Configuration file, describing security contexts, which hold credentials and similar")
-    ap.add_argument('-J', '--staged-job-dir', dest='workflowWorkingDirectory',
-                    help="Already staged job directory (to be used with {})".format(str(WfExS_Commands.OfflineExecute)))
-    ap.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
-                    help="Should the RO-Crate contain a copy of the inputs (and outputs)? (to be used with {})".format(' or '.join(map(lambda command: str(command), (WfExS_Commands.ExportStage, WfExS_Commands.ExportCrate)))))
-    ap.add_argument('command', help='Command to run', nargs='?', type=WfExS_Commands.argtype, choices=WfExS_Commands, default=WfExS_Commands.ConfigValidate)
+    
+    sp = ap.add_subparsers(dest='command', title='commands', description='Command to run. It must be one of these')
+    
+    ap_i = genParserSub(
+        sp,
+        WfExS_Commands.Init,
+        help='Init local setup'
+    )
+    
+    ap_c = genParserSub(
+        sp,
+        WfExS_Commands.Cache,
+        help='Cache handling subcommands'
+    )
+    ap_c.add_argument('cache_command', help='Cache command to perform', type=WfExS_Cache_Commands.argtype, choices=WfExS_Cache_Commands)
+    
+    ap_cv = genParserSub(
+        sp,
+        WfExS_Commands.ConfigValidate,
+        help='Validate the configuration files to be used for staging and execution',
+        preStageParams=True
+    )
+    
+    ap_s = genParserSub(
+        sp,
+        WfExS_Commands.Stage,
+        help='Prepare the staging (working) directory for workflow execution, fetching dependencies and contents',
+        preStageParams=True
+    )
+    
+    ap_m = genParserSub(
+        sp,
+        WfExS_Commands.MountWorkDir,
+        help='Mount the encrypted staging directory on secure staging scenarios',
+        postStageParams=True
+    )
+    
+    ap_es = genParserSub(
+        sp,
+        WfExS_Commands.ExportStage,
+        help='Export the staging directory as an RO-Crate',
+        postStageParams=True,
+        crateParams=True
+    )
+    
+    ap_oe = genParserSub(
+        sp,
+        WfExS_Commands.OfflineExecute,
+        help='Execute an already prepared workflow in the staging directory',
+        postStageParams=True
+    )
+    
+    ap_e = genParserSub(
+        sp,
+        WfExS_Commands.Execute,
+        help='Execute the stage + offline-execute + export steps',
+        preStageParams=True,
+        crateParams=True
+    )
+    
+    ap_er = genParserSub(
+        sp,
+        WfExS_Commands.ExportResults,
+        help='Export the results to a remote location, gathering their public ids',
+        postStageParams=True
+    )
+    
+    ap_ec = genParserSub(
+        sp,
+        WfExS_Commands.ExportCrate,
+        help='Export an already executed workflow in the staging directory as an RO-Crate',
+        postStageParams=True,
+        crateParams=True
+    )
+    
     ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
+    ap.add_argument('--full-help', dest='fullHelp', action='store_true', default=False, help='It returns full help')
     
     args = ap.parse_args()
+    
+    if args.fullHelp:
+        print(ap.format_help())
+
+        # retrieve subparsers from parser
+        subparsers_actions = [
+            action for action in ap._actions 
+            if isinstance(action, argparse._SubParsersAction)
+        ]
+        # there will probably only be one subparser_action,
+        # but better safe than sorry
+        for subparsers_action in subparsers_actions:
+            # get all subparsers and print help
+            for choice, subparser in subparsers_action.choices.items():
+                print("Subparser '{}'".format(choice))
+                print(subparser.format_help())
+        
+        sys.exit(0)
+    
+    command = WfExS_Commands(args.command)
     
     # Setting up the log
     logLevel = logging.INFO
@@ -135,10 +244,11 @@ if __name__ == "__main__":
     if cacheDir:
         os.makedirs(cacheDir, exist_ok=True)
     else:
-        cacheDir = tempfile.mkdtemp(prefix='wes', suffix='backend')
+        cacheDir = tempfile.mkdtemp(prefix='wfexs', suffix='tmpcache')
         local_config['cacheDir'] = cacheDir
         # Assuring this temporal directory is removed at the end
         atexit.register(shutil.rmtree, cacheDir)
+        print(f"[WARNING] Cache directory not defined. Created a temporary one at {cacheDir}", file=sys.stderr)
     
     # A filename is needed later, in order to initialize installation keys
     if not localConfigFilename:
@@ -149,7 +259,7 @@ if __name__ == "__main__":
     config_relname = os.path.basename(localConfigFilename)
     
     # Initialize (and create config file)
-    if args.command in (WfExS_Commands.Init, WfExS_Commands.Stage, WfExS_Commands.Execute):
+    if command in (WfExS_Commands.Init, WfExS_Commands.Stage, WfExS_Commands.Execute):
         updated_config, local_config = WF.bootstrap(local_config, config_directory, key_prefix=config_relname)
         
         # Last, should config be saved back?
@@ -159,43 +269,43 @@ if __name__ == "__main__":
                 yaml.dump(local_config, cf, Dumper=YAMLDumper)
         
         # We are finishing here!
-        if args.command == WfExS_Commands.Init:
+        if command == WfExS_Commands.Init:
             sys.exit(0)
 
     # Is the work already staged?
     wfInstance = WF(local_config, config_directory)
     
     # This is needed to be sure the encfs instance is unmounted
-    if args.command != WfExS_Commands.MountWorkDir:
+    if command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
     
-    if args.command in (WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
+    if command in (WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
         wfInstance.fromWorkDir(args.workflowWorkingDirectory)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
-    elif args.command == WfExS_Commands.ConfigValidate:
+    elif command == WfExS_Commands.ConfigValidate:
         retval = wfInstance.validateConfigFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
         sys.exit(retval)
     else:
         wfInstance.fromFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
     
-    print("* Command \"{}\". Working directory will be {}".format(args.command, wfInstance.workDir), file=sys.stderr)
+    print("* Command \"{}\". Working directory will be {}".format(command, wfInstance.workDir), file=sys.stderr)
     sys.stderr.flush()
     
-    if args.command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
+    if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
         instanceId = wfInstance.stageWorkDir()
         
         print("* Instance {} (to be used with -J)".format(instanceId))
     
-    if args.command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
+    if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)
     
-    if args.command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
-        wfInstance.executeWorkflow(offline=args.command == WfExS_Commands.OfflineExecute)
+    if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
+        wfInstance.executeWorkflow(offline=command == WfExS_Commands.OfflineExecute)
     
-    if args.command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
+    if command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
         wfInstance.exportResults()
     
-    if args.command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
+    if command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
         wfInstance.createResultsResearchObject(args.doMaterializedROCrate)
