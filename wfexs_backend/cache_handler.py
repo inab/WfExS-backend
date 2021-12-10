@@ -48,6 +48,75 @@ class SchemeHandlerCacheHandler:
         if isinstance(schemeHandlers, dict):
             self.schemeHandlers.update(schemeHandlers)
     
+    def _genUriMetaCachedFilename(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType]) -> Tuple[AbsPath, AbsPath]:
+        input_file = hashlib.sha1(the_remote_file.encode('utf-8')).hexdigest()
+        metadata_input_file = input_file + '_meta.json'
+        
+        return os.path.join(hashDir, metadata_input_file), os.path.join(hashDir, input_file)
+    
+    def inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:List[URIWithMetadata]=list(), finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
+        """
+        This method has been created to be able to inject a cached metadata entry
+        """
+        if isinstance(the_remote_file, urllib.parse.ParseResult):
+            the_remote_file = urllib.parse.urlunparse(the_remote_file)
+        
+        uriMetaCachedFilename , _ = self._genUriMetaCachedFilename(hashDir, the_remote_file)
+
+        if tempCachedFilename is None:
+            tempCachedFilename = finalCachedFilename
+        
+        if inputKind is None:
+            if tempCachedFilename is None:
+                raise WFException(f"No defined paths or input kinds, which would lead to an empty cache entry")
+                
+            if os.path.isdir(tempCachedFilename):
+                inputKind = ContentKind.Directory
+            elif os.path.isfile(tempCachedFilename):
+                inputKind = ContentKind.File
+            else:
+                raise WFException(f"Local path {tempCachedFilename} is neither a file nor a directory")
+        
+        fingerprint = None
+        # Are we dealing with a redirection?
+        if isinstance(inputKind, ContentKind):
+            if os.path.isfile(tempCachedFilename): # inputKind == ContentKind.File:
+                fingerprint = ComputeDigestFromFile(tempCachedFilename, repMethod=stringifyFilenameDigest)
+                putativeInputKind = ContentKind.File
+            elif os.path.isdir(tempCachedFilename): # inputKind == ContentKind.Directory:
+                fingerprint = ComputeDigestFromDirectory(tempCachedFilename, repMethod=stringifyFilenameDigest)
+                putativeInputKind = ContentKind.Directory
+            else:
+                raise WFException(f"FIXME: Cached {tempCachedFilename} from {the_remote_file} is neither file nor directory")
+            
+            if inputKind != putativeInputKind:
+                self.logger.error(f"FIXME: Mismatch at {the_remote_file} : {inputKind} vs {putativeInputKind}")
+            
+            if finalCachedFilename is None:
+                finalCachedFilename = os.path.join(destdir, fingerprint)
+        else:
+            finalCachedFilename = None
+        
+        # Saving the metadata
+        with open(uriMetaCachedFilename, mode="w", encoding="utf-8") as mOut:
+            # Serializing the metadata
+            metaStructure = {
+                'metadata_array': list(map(lambda m: {'uri': m.uri, 'metadata': m.metadata, 'preferredName': m.preferredName}, fetched_metadata_array))
+            }
+            if finalCachedFilename is not None:
+                metaStructure['kind'] = str(inputKind.value)
+                metaStructure['fingerprint'] = fingerprint
+                metaStructure['path'] = {
+                    'relative': os.path.relpath(finalCachedFilename, hashDir),
+                    'absolute': finalCachedFilename
+                }
+            else:
+                metaStructure['resolves_to'] = inputKind
+            
+            json.dump(metaStructure, mOut)
+        
+        return finalCachedFilename, fingerprint
+    
     def fetch(self, remote_file:Union[urllib.parse.ParseResult, URIType], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
         # The directory with the content, whose name is based on sha256
         if not os.path.exists(destdir):
@@ -80,10 +149,8 @@ class SchemeHandlerCacheHandler:
             else:
                 parsedInputURL = urllib.parse.urlparse(the_remote_file)
             
-            input_file = hashlib.sha1(the_remote_file.encode('utf-8')).hexdigest()
-            metadata_input_file = input_file + '_meta.json'
-            uriCachedFilename = os.path.join(hashDir, input_file)
-            uriMetaCachedFilename = os.path.join(hashDir, metadata_input_file)
+            # uriCachedFilename is going to be always a symlink
+            uriMetaCachedFilename , uriCachedFilename = self._genUriMetaCachedFilename(hashDir, the_remote_file)
             
             # TODO: check cached state in future database
             # Cleaning up
@@ -91,6 +158,7 @@ class SchemeHandlerCacheHandler:
                 # Removing the metadata
                 if os.path.exists(uriMetaCachedFilename):
                     os.unlink(uriMetaCachedFilename)
+                
                 # Removing the symlink
                 if os.path.exists(uriCachedFilename):
                     os.unlink(uriCachedFilename)
@@ -107,55 +175,65 @@ class SchemeHandlerCacheHandler:
                         metaStructure = json.load(mIn)
                 except:
                     # Metadata is corrupted
+                    self.logger.warning(f'Metadata cache {uriMetaCachedFilename} is corrupted. Ignoring.')
                     pass
             
-            if metaStructure is None:
+            if metaStructure is not None:
+                # Metadata cache hit
+                inputKind = metaStructure.get('kind')
+                if inputKind is None:
+                    inputKind = metaStructure['resolves_to']
+                else:
+                    # Additional checks
+                    inputKind = ContentKind(inputKind)
+                    relFinalCachedFilename = metaStructure.get('path', {}).get('relative', os.readlink(uriCachedFilename))
+                    finalCachedFilename = os.path.normpath(os.path.join(hashDir, relFinalCachedFilename))
+                    
+                    if not os.path.exists(finalCachedFilename):
+                        self.logger.warning(f'Relative cache path {relFinalCachedFilename} was not found')
+                        finalCachedFilename = metaStructure.get('path', {}).get('absolute')
+                        
+                        if (finalCachedFilename is None) or not os.path.exists(finalCachedFilename):
+                            self.logger.warning(f'Absolute cache path {finalCachedFilename} was not found. Cache miss!!!')
+                            
+                            # Cleaning up
+                            metaStructure = None
+                
+            if metaStructure is not None:
+                # Cache hit
+                # As the content still exists, get the metadata
+                
+                fetched_metadata_array = list(map(lambda rm: URIWithMetadata(uri=rm['uri'], metadata=rm['metadata'], preferredName=rm.get('preferredName')), metaStructure['metadata_array']))
+            else:
+                # Cache miss
                 # As this is a handler for online resources, comply with offline mode
                 if offline:
-                    raise WFException("Cannot download content in offline mode from {} to {}".format(remote_file, uriCachedFilename))
+                    raise WFException(f"Cannot download content in offline mode from {remote_file} to {uriCachedFilename}")
                 
                 # Content is fetched here
                 theScheme = parsedInputURL.scheme.lower()
                 schemeHandler = self.schemeHandlers.get(theScheme)
 
                 if schemeHandler is None:
-                    raise WFException('No {} scheme handler for {} (while processing {})'.format(theScheme, the_remote_file, remote_file))
+                    raise WFException(f'No {theScheme} scheme handler for {the_remote_file} (while processing {remote_file}). Was this data injected in the cache?')
 
                 try:
                     # Content is fetched here
                     inputKind, fetched_metadata_array = schemeHandler(the_remote_file, tempCachedFilename, secContext=secContext)
                     
-                    fingerprint = None
-                    if isinstance(inputKind, ContentKind):
-                        if os.path.isfile(tempCachedFilename): # inputKind == ContentKind.File:
-                            fingerprint = ComputeDigestFromFile(tempCachedFilename, repMethod=stringifyFilenameDigest)
-                            putativeInputKind = ContentKind.File
-                        elif os.path.isdir(tempCachedFilename): # inputKind == ContentKind.Directory:
-                            fingerprint = ComputeDigestFromDirectory(tempCachedFilename, repMethod=stringifyFilenameDigest)
-                            putativeInputKind = ContentKind.Directory
-                        else:
-                            raise WFException("Cached {} from {} is neither file nor directory".format(tempCachedFilename, remote_file))
-                        
-                        if inputKind != putativeInputKind:
-                            self.logger.error("FIXME: Mismatch at {} : {} vs {}".format(remote_file, inputKind, putativeInputKind))
-                    
-                    # Saving the metadata
-                    with open(uriMetaCachedFilename, mode="w", encoding="utf-8") as mOut:
-                        # Serializing the metadata
-                        metaStructure = {
-                            'metadata_array': list(map(lambda m: {'uri': m.uri, 'metadata': m.metadata, 'preferredName': m.preferredName}, fetched_metadata_array))
-                        }
-                        if fingerprint is not None:
-                            metaStructure['kind'] = str(inputKind.value)
-                            metaStructure['fingerprint'] = fingerprint
-                        else:
-                            metaStructure['resolves_to'] = inputKind
-                        
-                        json.dump(metaStructure, mOut)
+                    # The cache entry is injected
+                    finalCachedFilename, fingerprint = self.inject(
+                        hashDir,
+                        the_remote_file,
+                        fetched_metadata_array,
+                        tempCachedFilename=tempCachedFilename,
+                        destdir=destdir,
+                        inputKind=inputKind
+                    )
                     
                     # Now, creating the symlink
-                    if fingerprint is not None:
-                        finalCachedFilename = os.path.join(destdir, fingerprint)
+                    # (which should not be needed in the future)
+                    if finalCachedFilename is not None:
                         if os.path.isfile(finalCachedFilename):
                             os.unlink(finalCachedFilename)
                         elif os.path.isdir(finalCachedFilename):
@@ -173,15 +251,6 @@ class SchemeHandlerCacheHandler:
                     raise we
                 except Exception as e:
                     raise WFException("Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(the_remote_file, uriCachedFilename, remote_file, tempCachedFilename, e))
-                
-            else:
-                inputKind = metaStructure.get('kind')
-                if inputKind is None:
-                    inputKind = metaStructure['resolves_to']
-                else:
-                    inputKind = ContentKind(inputKind)
-                    finalCachedFilename = os.path.normpath(os.path.join(hashDir, os.readlink(uriCachedFilename)))
-                fetched_metadata_array = list(map(lambda rm: URIWithMetadata(uri=rm['uri'], metadata=rm['metadata'], preferredName=rm.get('preferredName')), metaStructure['metadata_array']))
             
             # Store the metadata
             metadata_array.extend(fetched_metadata_array)
