@@ -107,10 +107,15 @@ def processCacheCommand(wfInstance:WF, args: argparse.Namespace) -> int:
     elif args.cache_command == WfExS_Cache_Commands.Remove:
         print('\n'.join(cH.remove(cPath, *args.cache_command_args)))
     elif args.cache_command == WfExS_Cache_Commands.Inject:
-        pass
-    elif args.cache_command == WfExS_Cache_Commands.Validate:
-        contents = cH.list(*args.cache_command_args)
-        pass
+        injected_uri = args.cache_command_args[0]
+        finalCachedFilename = args.cache_command_args[1]
+        # # First, remove old occurrence
+        # cH.remove(cPath, injected_uri)
+        # Then, inject new occurrence
+        cH.inject(cPath, injected_uri, finalCachedFilename=finalCachedFilename)
+    #elif args.cache_command == WfExS_Cache_Commands.Validate:
+    #    contents = cH.list(*args.cache_command_args)
+    #    pass
     
     return retval
 

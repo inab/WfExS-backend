@@ -54,7 +54,7 @@ class SchemeHandlerCacheHandler:
         input_file = hashlib.sha1(the_remote_file.encode('utf-8')).hexdigest()
         metadata_input_file = input_file + META_JSON_POSTFIX
         
-        return os.path.join(hashDir, metadata_input_file), os.path.join(hashDir, input_file)
+        return os.path.join(hashDir, metadata_input_file), input_file, os.path.join(hashDir, input_file)
     
     @staticmethod
     def getHashDir(destdir) -> AbsPath:
@@ -146,14 +146,25 @@ class SchemeHandlerCacheHandler:
         
         return removed
     
-    def inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
+    def inject(self, destdir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
+        return self._inject(
+            self.getHashDir(destdir),
+            the_remote_file,
+            fetched_metadata_array=fetched_metadata_array,
+            finalCachedFilename=finalCachedFilename,
+            tempCachedFilename=tempCachedFilename,
+            destdir=destdir,
+            inputKind=inputKind
+        )
+    
+    def _inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
         """
         This method has been created to be able to inject a cached metadata entry
         """
         if isinstance(the_remote_file, urllib.parse.ParseResult):
             the_remote_file = urllib.parse.urlunparse(the_remote_file)
         
-        uriMetaCachedFilename , _ = self._genUriMetaCachedFilename(hashDir, the_remote_file)
+        uriMetaCachedFilename , _ , _ = self._genUriMetaCachedFilename(hashDir, the_remote_file)
 
         if tempCachedFilename is None:
             tempCachedFilename = finalCachedFilename
@@ -246,7 +257,7 @@ class SchemeHandlerCacheHandler:
                 parsedInputURL = urllib.parse.urlparse(the_remote_file)
             
             # uriCachedFilename is going to be always a symlink
-            uriMetaCachedFilename , uriCachedFilename = self._genUriMetaCachedFilename(hashDir, the_remote_file)
+            uriMetaCachedFilename , uriCachedFilename , _ = self._genUriMetaCachedFilename(hashDir, the_remote_file)
             
             # TODO: check cached state in future database
             # Cleaning up
@@ -316,7 +327,7 @@ class SchemeHandlerCacheHandler:
                     inputKind, fetched_metadata_array = schemeHandler(the_remote_file, tempCachedFilename, secContext=secContext)
                     
                     # The cache entry is injected
-                    finalCachedFilename, fingerprint = self.inject(
+                    finalCachedFilename, fingerprint = self._inject(
                         hashDir,
                         the_remote_file,
                         fetched_metadata_array,
