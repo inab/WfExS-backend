@@ -17,6 +17,7 @@
 
 import argparse
 import atexit
+import json
 import logging
 import os
 import sys
@@ -35,21 +36,7 @@ except ImportError:
 
 from wfexs_backend.workflow import WF
 from wfexs_backend import get_WfExS_version
-
-# Adapted from https://gist.github.com/ptmcg/23ba6e42d51711da44ba1216c53af4ea
-# in order to show the value instead of the class name
-class ArgTypeMixin(enum.Enum):
-    @classmethod
-    def argtype(cls, s: str) -> enum.Enum:
-        try:
-            return cls(s)
-        except:
-            raise argparse.ArgumentTypeError(
-                f"{s!r} is not a valid {cls.__name__}")
-
-    def __str__(self):
-        return str(self.value)
-
+from wfexs_backend.common import ArgTypeMixin, CacheType as WfExS_CacheType
 
 class WfExS_Commands(ArgTypeMixin, enum.Enum):
     Init = 'init'
@@ -66,28 +53,61 @@ class WfExS_Commands(ArgTypeMixin, enum.Enum):
 class WfExS_Cache_Commands(ArgTypeMixin, enum.Enum):
     List = 'list'
     Inject = 'inject'
+    Validate = 'validate'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
 DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s'
 
-def genParserSub(sp, command:WfExS_Commands, help:str=None, preStageParams:bool=False, postStageParams:bool=False, crateParams:bool=False):
+def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, help:str=None, preStageParams:bool=False, postStageParams:bool=False, crateParams:bool=False):
     ap_ = sp.add_parser(command.value, help=help)
     
     if preStageParams:
-        ap_.add_argument('-W', '--workflow-config', dest="workflowConfigFilename",
-                        help="Configuration file, describing workflow and inputs")
-        ap_.add_argument('-Z', '--creds-config', dest="securityContextsConfigFilename",
-                        help="Configuration file, describing security contexts, which hold credentials and similar")
+        ap_.add_argument(
+            '-W',
+            '--workflow-config',
+            dest="workflowConfigFilename",
+            required=True,
+            help="Configuration file, describing workflow and inputs"
+        )
+        ap_.add_argument(
+            '-Z',
+            '--creds-config',
+            dest="securityContextsConfigFilename",
+            help="Configuration file, describing security contexts, which hold credentials and similar"
+        )
     
     if postStageParams:
-        ap_.add_argument('-J', '--staged-job-dir', dest='workflowWorkingDirectory',
-                        help="Already staged job directory")
+        ap_.add_argument(
+            '-J',
+            '--staged-job-dir',
+            dest='workflowWorkingDirectory',
+            required=True,
+            help="Already staged job directory"
+        )
     
     if crateParams:
         ap_.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
                     help="Should the RO-Crate contain a copy of the inputs (and outputs)?")
     return ap_
+
+def processCacheCommand(wfInstance:WF, args: argparse.Namespace) -> int:
+    """
+    This method processes the cache subcommands, and returns the retval
+    to be used with sys.exit
+    """
+    cH , cPath = wfInstance.getCacheHandler(args.cache_type)
+    if args.cache_command == WfExS_Cache_Commands.List:
+        contents = sorted(cH.list(cPath), key=lambda x: x['stamp'])
+        for entry in contents:
+            json.dump(entry, sys.stdout, indent=4, sort_keys=True)
+            print()
+    elif args.cache_command == WfExS_Cache_Commands.Inject:
+        pass
+    elif args.cache_command == WfExS_Cache_Commands.Validate:
+        contents = cH.list(*args.cache_command_args)
+        pass
+    return 0
 
 if __name__ == "__main__":
     
@@ -120,6 +140,8 @@ if __name__ == "__main__":
         help='Cache handling subcommands'
     )
     ap_c.add_argument('cache_command', help='Cache command to perform', type=WfExS_Cache_Commands.argtype, choices=WfExS_Cache_Commands)
+    ap_c.add_argument('cache_type', help='Cache type to perform the cache command', type=WfExS_CacheType.argtype, choices=WfExS_CacheType)
+    ap_c.add_argument('cache_command_args', help='Optional cache element names', nargs='*')
     
     ap_cv = genParserSub(
         sp,
@@ -185,7 +207,11 @@ if __name__ == "__main__":
     
     args = ap.parse_args()
     
-    if args.fullHelp:
+    fullHelp = args.fullHelp
+    if args.command is None:
+        fullHelp = True
+    
+    if fullHelp:
         print(ap.format_help())
 
         # retrieve subparsers from parser
@@ -259,7 +285,7 @@ if __name__ == "__main__":
     config_relname = os.path.basename(localConfigFilename)
     
     # Initialize (and create config file)
-    if command in (WfExS_Commands.Init, WfExS_Commands.Stage, WfExS_Commands.Execute):
+    if command in (WfExS_Commands.Init, WfExS_Commands.Cache, WfExS_Commands.Stage, WfExS_Commands.Execute):
         updated_config, local_config = WF.bootstrap(local_config, config_directory, key_prefix=config_relname)
         
         # Last, should config be saved back?
@@ -274,6 +300,10 @@ if __name__ == "__main__":
 
     # Is the work already staged?
     wfInstance = WF(local_config, config_directory)
+    
+    # Cache handling commands
+    if command == WfExS_Commands.Cache:
+        sys.exit(processCacheCommand(wfInstance, args))
     
     # This is needed to be sure the encfs instance is unmounted
     if command != WfExS_Commands.MountWorkDir:
