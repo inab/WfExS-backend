@@ -345,14 +345,22 @@ class WF:
 
         # Setting up caching directories
         self.cacheDir = cacheDir
-        self.cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
-        os.makedirs(self.cacheWorkflowDir, exist_ok=True)
-        self.cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
-        os.makedirs(self.cacheROCrateDir, exist_ok=True)
-        self.cacheTRSFilesDir = os.path.join(cacheDir, 'trs-files-cache')
-        os.makedirs(self.cacheTRSFilesDir, exist_ok=True)
-        self.cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
-        os.makedirs(self.cacheWorkflowInputsDir, exist_ok=True)
+        self.cachePathMap = dict()
+        cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
+        os.makedirs(cacheWorkflowDir, exist_ok=True)
+        self.cachePathMap[CacheType.Workflow] = cacheWorkflowDir
+        
+        cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
+        os.makedirs(cacheROCrateDir, exist_ok=True)
+        self.cachePathMap[CacheType.ROCrate] = cacheROCrateDir
+        
+        cacheTRSFilesDir = os.path.join(cacheDir, 'trs-files-cache')
+        os.makedirs(cacheTRSFilesDir, exist_ok=True)
+        self.cachePathMap[CacheType.TRS] = cacheTRSFilesDir
+        
+        cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
+        os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
+        self.cachePathMap[CacheType.Input] = cacheWorkflowInputsDir
 
         # This directory will be used to store the intermediate
         # and final results before they are sent away
@@ -392,6 +400,25 @@ class WF:
         # These ones should have prevalence over other custom ones
         self.addSchemeHandlers(GIT_SCHEME_HANDLERS)
         self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
+    
+    @property
+    def cacheWorkflowDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.Workflow]
+    
+    @property
+    def cacheROCrateDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.ROCrate]
+    
+    @property
+    def cacheTRSFilesDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.TRS]
+    
+    @property
+    def cacheWorkflowInputsDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.Input]
+    
+    def getCacheHandler(self, cache_type:CacheType) -> Tuple[SchemeHandlerCacheHandler, AbsPath]:
+        return self.cacheHandler, self.cachePathMap.get(cache_type)
     
     def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher]) -> AbstractStatefulFetcher:
         """

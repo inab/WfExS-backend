@@ -346,6 +346,30 @@ class WFException(Exception):
     pass
 
 
+# Adapted from https://gist.github.com/ptmcg/23ba6e42d51711da44ba1216c53af4ea
+# in order to show the value instead of the class name
+import argparse
+class ArgTypeMixin(enum.Enum):
+    @classmethod
+    def argtype(cls, s: str) -> enum.Enum:
+        try:
+            return cls(s)
+        except:
+            raise argparse.ArgumentTypeError(
+                f"{s!r} is not a valid {cls.__name__}")
+
+    def __str__(self):
+        return str(self.value)
+
+# These cache types are needed to return the right paths
+# from an WF instance
+class CacheType(ArgTypeMixin, enum.Enum):
+    Workflow = 'workflow'
+    Input = 'input'
+    ROCrate = 'ro-crate'
+    TRS = 'ga4gh-trs'
+
+
 # Next methods have been borrowed from FlowMaps
 DEFAULT_DIGEST_ALGORITHM = 'sha256'
 DEFAULT_DIGEST_BUFFER_SIZE = 65536
