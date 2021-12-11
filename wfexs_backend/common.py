@@ -364,10 +364,10 @@ class ArgTypeMixin(enum.Enum):
 # These cache types are needed to return the right paths
 # from an WF instance
 class CacheType(ArgTypeMixin, enum.Enum):
-    Workflow = 'workflow'
     Input = 'input'
     ROCrate = 'ro-crate'
     TRS = 'ga4gh-trs'
+    Workflow = 'workflow'
 
 
 # Next methods have been borrowed from FlowMaps
