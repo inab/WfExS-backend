@@ -44,20 +44,28 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
     projectId = parsedInputURL.path
     metadata_url = parse.urljoin(PRIDE_PROJECTS_REST, projectId)
     
+    gathered_meta = {'fetched': metadata_url}
     metadata_array = [
-        URIWithMetadata(remote_file, {'fetched': metadata_url})
+        URIWithMetadata(remote_file, gathered_meta)
     ]
     metadata = None
     try:
         metaio = io.BytesIO()
         _ , metametaio = fetchClassicURL(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode('utf-8'))
+        gathered_meta['payload'] = metadata
         metadata_array.extend(metametaio)
     except urllib.error.HTTPError as he:
         raise WFException("Error fetching PRIDE metadata for {} : {} {}".format(projectId, he.code, he.reason))
     
     try:
-        pride_project_url = metadata['_links']['datasetFtpUrl']['href']
+        for addAtt in metadata['additionalAttributes']:
+            if addAtt.get('@type') == 'CvParam' and addAtt.get('accession') == 'PRIDE:0000411':
+                pride_project_url = addAtt.get('value')
+                if pride_project_url is not None:
+                    break
+        else:
+            pride_project_url = metadata['_links']['datasetFtpUrl']['href']
     except Exception as e:
         raise WFException("Error processing PRIDE project metadata for {} : {}".format(remote_file, e))
     
