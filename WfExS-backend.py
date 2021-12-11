@@ -51,8 +51,9 @@ class WfExS_Commands(ArgTypeMixin, enum.Enum):
     ExportCrate = 'export-crate'
 
 class WfExS_Cache_Commands(ArgTypeMixin, enum.Enum):
-    List = 'list'
+    List = 'ls'
     Inject = 'inject'
+    Remove = 'rm'
     Validate = 'validate'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
@@ -97,17 +98,21 @@ def processCacheCommand(wfInstance:WF, args: argparse.Namespace) -> int:
     to be used with sys.exit
     """
     cH , cPath = wfInstance.getCacheHandler(args.cache_type)
+    retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
-        contents = sorted(cH.list(cPath), key=lambda x: x['stamp'])
+        contents = sorted(cH.list(cPath, *args.cache_command_args), key=lambda x: x['stamp'])
         for entry in contents:
             json.dump(entry, sys.stdout, indent=4, sort_keys=True)
             print()
+    elif args.cache_command == WfExS_Cache_Commands.Remove:
+        print('\n'.join(cH.remove(cPath, *args.cache_command_args)))
     elif args.cache_command == WfExS_Cache_Commands.Inject:
         pass
     elif args.cache_command == WfExS_Cache_Commands.Validate:
         contents = cH.list(*args.cache_command_args)
         pass
-    return 0
+    
+    return retval
 
 if __name__ == "__main__":
     

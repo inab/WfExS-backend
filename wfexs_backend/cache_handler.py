@@ -77,35 +77,74 @@ class SchemeHandlerCacheHandler:
         if metaStructure.get('stamp') is None:
             metaStructure['stamp'] = datetime.datetime.fromtimestamp(os.path.getmtime(fMeta), tz=datetime.timezone.utc).isoformat() + 'Z'
         
+        metaStructure.setdefault('path', dict())['meta'] = fMeta
+        
         # Generating a path structure for old cases
-        if (metaStructure.get('path') is None) and (metaStructure.get('resolves_to') is None):
+        if (metaStructure.get('resolves_to') is None) and (metaStructure['path'].get('relative') is None):
             if fMeta.endswith(META_JSON_POSTFIX):
                 fname = fMeta[0:-len(META_JSON_POSTFIX)]
                 if os.path.exists(fname):
                     finalCachedFilename = os.path.realpath(fname)
                     hashDir = os.path.dirname(fMeta)
-                    metaStructure['path'] = {
+                    metaStructure['path'].update({
                         'relative': os.path.relpath(finalCachedFilename, hashDir),
                         'absolute': finalCachedFilename
-                    }
+                    })
         
         return metaStructure
         
     
-    def list(self, destdir:AbsPath) -> Iterator[Mapping[str,Any]]:
+    def list(self, destdir:AbsPath, *args) -> Iterator[Mapping[str,Any]]:
         """
         This method iterates over the list of metadata entries
         """
+        entries = set(args)
         hashDir = self.getHashDir(destdir)
         with os.scandir(hashDir) as hD:
             for entry in hD:
                 # We are avoiding to enter in loops around '.' and '..'
                 if entry.is_file(follow_symlinks=False) and entry.name.endswith(META_JSON_POSTFIX):
                     try:
-                        yield self._parseMetaStructure(entry.path)
+                        metaStructure = self._parseMetaStructure(entry.path)
+                        if not entries:
+                            yield metaStructure
+                        else:
+                            for meta in metaStructure['metadata_array']:
+                                if meta['uri'] in entries:
+                                    yield metaStructure
+                                    break
                     except:
                         pass
+    
+    def remove(self, destdir:AbsPath, *args) -> ExitVal:
+        """
+        This method iterates over the list of metadata entries
+        """
+        entries = set(args)
+        hashDir = self.getHashDir(destdir)
+        removed = list()
+        with os.scandir(hashDir) as hD:
+            for entry in hD:
+                # We are avoiding to enter in loops around '.' and '..'
+                if entry.is_file(follow_symlinks=False) and entry.name.endswith(META_JSON_POSTFIX):
+                    doRemove = False
+                    if not entries:
+                        doRemove = True
+                    else:
+                        try:
+                            metaStructure = self._parseMetaStructure(entry.path)
+                            for meta in metaStructure['metadata_array']:
+                                if meta['uri'] in entries:
+                                    doRemove = True
+                                    break
+                        except:
+                            pass
+                        
+                    if doRemove:
+                        os.unlink(entry.path)
+                        removed.append(entry.path)
         
+        return removed
     
     def inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
         """
