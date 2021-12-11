@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+import datetime
 import hashlib
 import json
 import logging
@@ -26,11 +27,12 @@ import shutil
 import urllib.parse
 import uuid
 
-from typing import List, Mapping
+from typing import Iterator, List, Mapping
 from typing import Optional, Tuple, Union
 
 from .common import *
 
+META_JSON_POSTFIX = '_meta.json'
 class SchemeHandlerCacheHandler:
     def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
         # Getting a logger focused on specific classes
@@ -50,11 +52,62 @@ class SchemeHandlerCacheHandler:
     
     def _genUriMetaCachedFilename(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType]) -> Tuple[AbsPath, AbsPath]:
         input_file = hashlib.sha1(the_remote_file.encode('utf-8')).hexdigest()
-        metadata_input_file = input_file + '_meta.json'
+        metadata_input_file = input_file + META_JSON_POSTFIX
         
         return os.path.join(hashDir, metadata_input_file), os.path.join(hashDir, input_file)
     
-    def inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:List[URIWithMetadata]=list(), finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
+    @staticmethod
+    def getHashDir(destdir) -> AbsPath:
+        hashDir = os.path.join(destdir,'uri_hashes')
+        if not os.path.exists(hashDir):
+            try:
+                os.makedirs(hashDir)
+            except IOError:
+                errstr = "ERROR: Unable to create directory for workflow URI hashes {}.".format(hashDir)
+                raise WFException(errstr)
+        
+        return hashDir
+    
+    @staticmethod
+    def _parseMetaStructure(fMeta: AbsPath) -> Mapping[str, Any]:
+        with open(fMeta, mode="r", encoding="utf-8") as eH:
+            metaStructure = json.load(eH)
+        
+        # Generating an stamp signature
+        if metaStructure.get('stamp') is None:
+            metaStructure['stamp'] = datetime.datetime.fromtimestamp(os.path.getmtime(fMeta), tz=datetime.timezone.utc).isoformat() + 'Z'
+        
+        # Generating a path structure for old cases
+        if (metaStructure.get('path') is None) and (metaStructure.get('resolves_to') is None):
+            if fMeta.endswith(META_JSON_POSTFIX):
+                fname = fMeta[0:-len(META_JSON_POSTFIX)]
+                if os.path.exists(fname):
+                    finalCachedFilename = os.path.realpath(fname)
+                    hashDir = os.path.dirname(fMeta)
+                    metaStructure['path'] = {
+                        'relative': os.path.relpath(finalCachedFilename, hashDir),
+                        'absolute': finalCachedFilename
+                    }
+        
+        return metaStructure
+        
+    
+    def list(self, destdir:AbsPath) -> Iterator[Mapping[str,Any]]:
+        """
+        This method iterates over the list of metadata entries
+        """
+        hashDir = self.getHashDir(destdir)
+        with os.scandir(hashDir) as hD:
+            for entry in hD:
+                # We are avoiding to enter in loops around '.' and '..'
+                if entry.is_file(follow_symlinks=False) and entry.name.endswith(META_JSON_POSTFIX):
+                    try:
+                        yield self._parseMetaStructure(entry.path)
+                    except:
+                        pass
+        
+    
+    def inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
         """
         This method has been created to be able to inject a cached metadata entry
         """
@@ -100,7 +153,17 @@ class SchemeHandlerCacheHandler:
         # Saving the metadata
         with open(uriMetaCachedFilename, mode="w", encoding="utf-8") as mOut:
             # Serializing the metadata
+            if fetched_metadata_array is None:
+                fetched_metadata_array = [
+                    URIWithMetadata(
+                        uri=the_remote_file,
+                        metadata={
+                            'injected': True
+                        }
+                    )
+                ]
             metaStructure = {
+                'stamp': datetime.datetime.utcnow().isoformat() + 'Z',
                 'metadata_array': list(map(lambda m: {'uri': m.uri, 'metadata': m.metadata, 'preferredName': m.preferredName}, fetched_metadata_array))
             }
             if finalCachedFilename is not None:
@@ -128,13 +191,7 @@ class SchemeHandlerCacheHandler:
         
         # The directory where the symlinks derived from SHA1 obtained from URIs
         # to the content are placed
-        hashDir = os.path.join(destdir,'uri_hashes')
-        if not os.path.exists(hashDir):
-            try:
-                os.makedirs(hashDir)
-            except IOError:
-                errstr = "ERROR: Unable to create directory for workflow URI hashes {}.".format(hashDir)
-                raise WFException(errstr)
+        hashDir = self.getHashDir(destdir)
         
         # This filename will only be used when content is being fetched
         tempCachedFilename = os.path.join(destdir, 'caching-' + str(uuid.uuid4()))
@@ -170,9 +227,7 @@ class SchemeHandlerCacheHandler:
             metaStructure = None
             if not refetch:
                 try:
-                    with open(uriMetaCachedFilename, mode="r", encoding="utf-8") as mIn:
-                        # Deserializing the metadata
-                        metaStructure = json.load(mIn)
+                    metaStructure = self._parseMetaStructure(uriMetaCachedFilename)
                 except:
                     # Metadata is corrupted
                     self.logger.warning(f'Metadata cache {uriMetaCachedFilename} is corrupted. Ignoring.')
