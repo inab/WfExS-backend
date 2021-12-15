@@ -18,17 +18,19 @@
 from __future__ import absolute_import
 
 import datetime
+import fnmatch
 import hashlib
 import json
 import logging
 import os
 import os.path
+import re
 import shutil
 import urllib.parse
 import uuid
 
 from typing import Iterator, List, Mapping
-from typing import Optional, Tuple, Union
+from typing import Optional, Pattern, Tuple, Union
 
 from .common import *
 
@@ -77,7 +79,10 @@ class SchemeHandlerCacheHandler:
         if metaStructure.get('stamp') is None:
             metaStructure['stamp'] = datetime.datetime.fromtimestamp(os.path.getmtime(fMeta), tz=datetime.timezone.utc).isoformat() + 'Z'
         
-        metaStructure.setdefault('path', dict())['meta'] = fMeta
+        metaStructure.setdefault('path', dict())['meta'] = {
+            'relative': os.path.basename(fMeta),
+            'absolute': fMeta
+        }
         
         # Generating a path structure for old cases
         if (metaStructure.get('resolves_to') is None) and (metaStructure['path'].get('relative') is None):
@@ -92,13 +97,23 @@ class SchemeHandlerCacheHandler:
                     })
         
         return metaStructure
+    
+    @staticmethod
+    def _translateArgs(args:Iterator[str]) -> List[Pattern]:
+        return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
         
     
-    def list(self, destdir:AbsPath, *args) -> Iterator[Mapping[str,Any]]:
+    def list(self, destdir:AbsPath, *args, acceptGlob:bool=False) -> Iterator[Tuple[URIType, Mapping[str,Any]]]:
         """
-        This method iterates over the list of metadata entries
+        This method iterates over the list of metadata entries,
+        using glob patterns if requested
         """
         entries = set(args)
+        if entries and acceptGlob:
+            reEntries = self._translateArgs(entries)
+        else:
+            reEntries = None
+        
         hashDir = self.getHashDir(destdir)
         with os.scandir(hashDir) as hD:
             for entry in hD:
@@ -106,45 +121,67 @@ class SchemeHandlerCacheHandler:
                 if entry.is_file(follow_symlinks=False) and entry.name.endswith(META_JSON_POSTFIX):
                     try:
                         metaStructure = self._parseMetaStructure(entry.path)
+                        meta_uri = None
                         if not entries:
-                            yield metaStructure
+                            for meta in metaStructure['metadata_array']:
+                                meta_uri = meta['uri']
+                                break
                         else:
                             for meta in metaStructure['metadata_array']:
-                                if meta['uri'] in entries:
-                                    yield metaStructure
+                                meta_uri = meta['uri']
+                                if reEntries and any(map(lambda r: r.match(meta_uri) is not None, reEntries)):
                                     break
+                                elif meta_uri in entries:
+                                    break
+                                meta_uri = None
+                        
+                        if meta_uri is not None:
+                            yield meta_uri, metaStructure
                     except:
                         pass
     
-    def remove(self, destdir:AbsPath, *args) -> ExitVal:
+    def remove(self, destdir:AbsPath, *args, doRemoveFiles:bool=False, acceptGlob:bool=False) -> Iterator[Tuple[URIType, AbsPath, Optional[AbsPath]]]:
         """
-        This method iterates over the list of metadata entries
+        This method iterates elements from metadata entries,
+        and optionally the cached value
         """
-        entries = set(args)
-        hashDir = self.getHashDir(destdir)
-        removed = list()
-        with os.scandir(hashDir) as hD:
-            for entry in hD:
-                # We are avoiding to enter in loops around '.' and '..'
-                if entry.is_file(follow_symlinks=False) and entry.name.endswith(META_JSON_POSTFIX):
-                    doRemove = False
-                    if not entries:
-                        doRemove = True
-                    else:
-                        try:
-                            metaStructure = self._parseMetaStructure(entry.path)
-                            for meta in metaStructure['metadata_array']:
-                                if meta['uri'] in entries:
-                                    doRemove = True
-                                    break
-                        except:
-                            pass
+        if len(args) > 0:
+            hashDir = self.getHashDir(destdir)
+            for meta_uri, metaStructure in self.list(destdir, *args, acceptGlob=acceptGlob):
+                removeCachedCopyPath = None
+                for meta in metaStructure['metadata_array']:
+                    if doRemoveFiles and not meta['metadata'].get('injected'):
+                        # Decide the removal path
+                        finalCachedFilename = None
+                        relFinalCachedFilename = metaStructure.get('path', {}).get('relative')
+                        if relFinalCachedFilename is not None:
+                            finalCachedFilename = os.path.normpath(os.path.join(hashDir, relFinalCachedFilename))
                         
-                    if doRemove:
-                        os.unlink(entry.path)
-                        removed.append(entry.path)
-        
-        return removed
+                            if not os.path.exists(finalCachedFilename):
+                                self.logger.warning(f'Relative cache path {relFinalCachedFilename} was not found')
+                        
+                        if finalCachedFilename is None:
+                            finalCachedFilename = metaStructure.get('path', {}).get('absolute')
+                            
+                        if (finalCachedFilename is not None) and os.path.exists(finalCachedFilename):
+                            removeCachedCopyPath = finalCachedFilename
+                        else:
+                            self.logger.warning(f'Absolute cache path {finalCachedFilename} was not found. Cache miss!!!')
+                        
+                        break
+                
+                if removeCachedCopyPath is not None:
+                    self.logger.info(f"Removing cache {metaStructure['fingerprint']} physical path {removeCachedCopyPath}")
+                    if os.path.isdir(removeCachedCopyPath):
+                        shutil.rmtree(removeCachedCopyPath, ignore_errors=True)
+                    else:
+                        os.unlink(removeCachedCopyPath)
+                
+                metaFile = metaStructure['path']['meta']['absolute']
+                self.logger.info(f"Removing cache {metaStructure.get('fingerprint')} metadata {metaFile}")
+                os.unlink(metaFile)
+                
+                yield meta_uri, metaFile, removeCachedCopyPath
     
     def inject(self, destdir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
         return self._inject(
@@ -257,7 +294,7 @@ class SchemeHandlerCacheHandler:
                 parsedInputURL = urllib.parse.urlparse(the_remote_file)
             
             # uriCachedFilename is going to be always a symlink
-            uriMetaCachedFilename , uriCachedFilename , _ = self._genUriMetaCachedFilename(hashDir, the_remote_file)
+            uriMetaCachedFilename , uriCachedFilename , absUriCachedFilename = self._genUriMetaCachedFilename(hashDir, the_remote_file)
             
             # TODO: check cached state in future database
             # Cleaning up
@@ -267,12 +304,12 @@ class SchemeHandlerCacheHandler:
                     os.unlink(uriMetaCachedFilename)
                 
                 # Removing the symlink
-                if os.path.exists(uriCachedFilename):
-                    os.unlink(uriCachedFilename)
+                if os.path.exists(absUriCachedFilename):
+                    os.unlink(absUriCachedFilename)
                 # We cannot remove the content as
                 # it could be referenced by other symlinks
             
-            refetch = not registerInCache or ignoreCache or not os.path.exists(uriCachedFilename) or not os.path.exists(uriMetaCachedFilename) or os.stat(uriMetaCachedFilename).st_size == 0
+            refetch = not registerInCache or ignoreCache or not os.path.exists(uriMetaCachedFilename) or os.stat(uriMetaCachedFilename).st_size == 0
             
             metaStructure = None
             if not refetch:
@@ -291,7 +328,7 @@ class SchemeHandlerCacheHandler:
                 else:
                     # Additional checks
                     inputKind = ContentKind(inputKind)
-                    relFinalCachedFilename = metaStructure.get('path', {}).get('relative', os.readlink(uriCachedFilename))
+                    relFinalCachedFilename = metaStructure.get('path', {}).get('relative', os.readlink(absUriCachedFilename))
                     finalCachedFilename = os.path.normpath(os.path.join(hashDir, relFinalCachedFilename))
                     
                     if not os.path.exists(finalCachedFilename):
@@ -349,9 +386,10 @@ class SchemeHandlerCacheHandler:
                     else:
                         next_input_file = hashlib.sha1(inputKind.encode('utf-8')).hexdigest()
                     
-                    if os.path.lexists(uriCachedFilename):
-                        os.unlink(uriCachedFilename)
-                    os.symlink(next_input_file, uriCachedFilename)
+                    if os.path.lexists(absUriCachedFilename):
+                        os.unlink(absUriCachedFilename)
+                    
+                    os.symlink(next_input_file, absUriCachedFilename)
                 except WFException as we:
                     raise we
                 except Exception as e:

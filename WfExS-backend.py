@@ -92,7 +92,7 @@ def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, help:str=No
                     help="Should the RO-Crate contain a copy of the inputs (and outputs)?")
     return ap_
 
-def processCacheCommand(wfInstance:WF, args: argparse.Namespace) -> int:
+def processCacheCommand(wfInstance:WF, args: argparse.Namespace, logLevel) -> int:
     """
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
@@ -100,12 +100,18 @@ def processCacheCommand(wfInstance:WF, args: argparse.Namespace) -> int:
     cH , cPath = wfInstance.getCacheHandler(args.cache_type)
     retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
-        contents = sorted(cH.list(cPath, *args.cache_command_args), key=lambda x: x['stamp'])
-        for entry in contents:
-            json.dump(entry, sys.stdout, indent=4, sort_keys=True)
-            print()
+        if logLevel <= logging.INFO:
+            contents = sorted(map(lambda l: l[1], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs)), key=lambda x: x['stamp'])
+            for entry in contents:
+                json.dump(entry, sys.stdout, indent=4, sort_keys=True)
+                print()
+        else:
+            contents = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs)))
+            for entry in contents:
+                print(entry)
+            
     elif args.cache_command == WfExS_Cache_Commands.Remove:
-        print('\n'.join(cH.remove(cPath, *args.cache_command_args)))
+        print('\n'.join(map(lambda x: '\t'.join(x), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively))))
     elif args.cache_command == WfExS_Cache_Commands.Inject:
         injected_uri = args.cache_command_args[0]
         finalCachedFilename = args.cache_command_args[1]
@@ -150,6 +156,8 @@ if __name__ == "__main__":
         help='Cache handling subcommands'
     )
     ap_c.add_argument('cache_command', help='Cache command to perform', type=WfExS_Cache_Commands.argtype, choices=WfExS_Cache_Commands)
+    ap_c.add_argument("-r", dest="doCacheRecursively", help='Try doing the operation recursively (i.e. both metadata and data)', action="store_true", default=False)
+    ap_c.add_argument("-g", dest="filesAsGlobs", help='Given cache element names are globs', action="store_true", default=False)
     ap_c.add_argument('cache_type', help='Cache type to perform the cache command', type=WfExS_CacheType.argtype, choices=WfExS_CacheType)
     ap_c.add_argument('cache_command_args', help='Optional cache element names', nargs='*')
     
@@ -313,7 +321,7 @@ if __name__ == "__main__":
     
     # Cache handling commands
     if command == WfExS_Commands.Cache:
-        sys.exit(processCacheCommand(wfInstance, args))
+        sys.exit(processCacheCommand(wfInstance, args, logLevel))
     
     # This is needed to be sure the encfs instance is unmounted
     if command != WfExS_Commands.MountWorkDir:
