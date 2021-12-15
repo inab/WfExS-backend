@@ -1684,7 +1684,29 @@ class WF:
         :return:
         """
         gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
-        return gitFetcherInst.doMaterializeRepo(repoURL,repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
+        repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(repoURL,repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
+        
+        # Now, let's register the checkout with cache structures
+        # using its public URI
+        if not repoURL.startswith('git'):
+            remote_url = 'git+' + repoURL
+        if repoTag is not None:
+            remote_url += '@' + repoTag
+        
+        self.cacheHandler.inject(
+            self.cacheWorkflowDir,
+            remote_url,
+            fetched_metadata_array=[
+                URIWithMetadata(
+                    uri=remote_url,
+                    metadata=metadata,
+                )
+            ],
+            finalCachedFilename=repoDir,
+            inputKind=ContentKind.Directory
+        )
+        
+        return repoDir, repoEffectiveCheckout
 
     def getWorkflowRepoFromTRS(self, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
