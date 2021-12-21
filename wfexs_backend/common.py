@@ -208,11 +208,10 @@ class ExpectedOutput(NamedTuple):
         )
 
 
-class AbstractGeneratedContent(NamedTuple):
+class AbstractGeneratedContent(object):
     pass
 
-#class GeneratedContent(AbstractGeneratedContent):
-class GeneratedContent(NamedTuple):
+class GeneratedContent(AbstractGeneratedContent, NamedTuple):
     """
     local: Local absolute path of the content which was generated. It
       is an absolute path in the outputs directory of the execution.
@@ -228,8 +227,7 @@ class GeneratedContent(NamedTuple):
     preferredFilename: Optional[RelPath] = None
 
 
-#class GeneratedDirectoryContent(AbstractGeneratedContent):
-class GeneratedDirectoryContent(NamedTuple):
+class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
     """
     local: Local absolute path of the content which was generated. It
       is an absolute path in the outputs directory of the execution.
