@@ -363,6 +363,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
 
         pass
+
+    def sideContainers(self) -> List[ContainerTaggedName]:
+        """
+        Containers needed by the engine to work
+        """
+        return list()
     
     @abc.abstractmethod
     def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
@@ -394,6 +400,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         matWfEng, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng, offline=offline)
 
         listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags, offline=offline)
+        
+        # Next ones are needed by the workflow engine itself
+        listOfOperationalContainers = matWfEng.instance.sideContainers()
+        if len(listOfOperationalContainers) > 0:
+            try:
+                matWfEng.instance.materializeContainers(listOfOperationalContainers, offline=offline)
+            except:
+                pass
 
         return matWfEng, listOfContainers
     

@@ -69,6 +69,11 @@ class CWLWorkflowEngine(WorkflowEngine):
     PODMAN_CWLTOOL_VERSION = '3.1.20210921111717'
     NO_WRAPPER_CWLTOOL_VERSION = '3.1.20210921111717'
     NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
+    
+    NODEJS_CONTAINER_TAG = 'docker.io/node:slim'
+    OPERATIONAL_CONTAINER_TAGS = [
+        NODEJS_CONTAINER_TAG
+    ]
 
     ENGINE_NAME = 'cwl'
 
@@ -346,6 +351,12 @@ class CWLWorkflowEngine(WorkflowEngine):
             workflow=newLocalWf
         )
         return newWfEngine, list(containerTags)
+    
+    def sideContainers(self) -> List[ContainerTaggedName]:
+        """
+        Containers needed by the engine to work
+        """
+        return self.OPERATIONAL_CONTAINER_TAGS
 
     def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
         """
