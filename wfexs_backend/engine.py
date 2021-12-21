@@ -294,7 +294,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
         
         wfType = self.workflowType
-        crate = ROCrate()
+        crate = ROCrate(gen_preview=True)
         compLang = ComputerLanguage(crate, identifier=wfType.rocrate_programming_language, properties={
             "name": wfType.name,
             "alternateName": wfType.trs_descriptor,
