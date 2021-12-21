@@ -200,8 +200,7 @@ class WF:
             else:
                 passphrase = crypt4ghSect[cls.CRYPT4GH_PASSPHRASE_KEY]
 
-            comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory,
-                                                            datetime.datetime.now().isoformat())
+            comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory, datetime.datetime.now().isoformat())
 
             # This is a way to avoid encoding private keys with scrypt,
             # which is not supported in every Python interpreter
@@ -1537,10 +1536,8 @@ class WF:
             # FIXME: What to do when workflow is in git repository different from GitHub??
             # FIXME: What to do when workflow is not in a git repository??
             wf_path = os.path.join(self.localWorkflow.dir, self.localWorkflow.relPath)
-            wfCrate, compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(
-                self.localWorkflow.langVersion)
-            wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(
-                self.localWorkflow.relPath)
+            wfCrate, compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(self.localWorkflow.langVersion)
+            wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(self.localWorkflow.relPath)
 
             # TODO create method to create wf_url
             matWf = self.materializedEngine.workflow
@@ -1598,12 +1595,12 @@ class WF:
                     # TODO: embed metadata_array in some way
                     itemInLocalSource = itemInValues.local
                     itemInURISource = itemInValues.uri
-                    if os.path.isfile(itemInLocalSource):
+                    if os.path.isfile(itemInLocalSource):   # if is a file
                         properties = {
                             'name': in_item.name
                         }
                         wfCrate.add_file(source=itemInURISource, fetch_remote=False, properties=properties)
-                    elif os.path.isdir(itemInLocalSource):
+                    elif os.path.isdir(itemInLocalSource):  # if is a directory
                         self.logger.error("FIXME: input directory / dataset handling in RO-Crate")
                     else:
                         pass  # TODO raise Exception
@@ -1619,65 +1616,56 @@ class WF:
                 properties = {
                     'name': itemOutName
                 }
-                if isinstance(itemOutValues, GeneratedDirectoryContent):    # is dir
+                if isinstance(itemOutValues, GeneratedDirectoryContent):    # if is a directory
                     if os.path.isdir(itemOutSource):
-                        outProperties = dict.fromkeys(['hasPart'])
-
-                        generatedDirectoryContentURI = ComputeDigestFromDirectory(itemOutSource, repMethod=nihDigest)
+                        generatedDirectoryContentURI = ComputeDigestFromDirectory(itemOutSource, repMethod=nihDigest)   # generate nih for the directory
+                        dirProperties = dict.fromkeys(['hasPart'])  # files in the directory
                         generatedContentList = []
-                        # generatedDirectoryContentList = []
+                        generatedDirectoryContentList = []
 
                         for item in itemOutValues.values:
-                            if isinstance(item, GeneratedContent):  # one directory with files
-                                isPartOf = dict.fromkeys(['isPartOf'])
+                            if isinstance(item, GeneratedContent):  # if is a directory that contains files
+                                fileID = item.signature
                                 fileProperties = {
-                                    'name': itemOutName + "::/" + os.path.basename(item.local),
-                                    'isPartOf': {
-                                        '@id': generatedDirectoryContentURI, 
-                                    }
+                                    'name': itemOutName + "::/" + os.path.basename(item.local),     # output name + file name
+                                    'isPartOf': {'@id': generatedDirectoryContentURI}  # reference to the directory
                                 }
-                                generatedContentList.append({'@id': item.signature})
-                                wfCrate.add_file(source=item.signature, fetch_remote=False, properties=fileProperties)
+                                generatedContentList.append({'@id': fileID})
+                                wfCrate.add_file(source=fileID, fetch_remote=False, properties=fileProperties)
 
-                            elif isinstance(item, GeneratedDirectoryContent):   # more than one directory with files
-                                # generatedDirectoryContentList.append(item.local.replace(itemOutSource, ""))
+                            elif isinstance(item, GeneratedDirectoryContent):   # if is a directory that contains directories
 
                                 # search recursively for other content inside directories
                                 def search_new_content(content_list):
                                     tempList = []
                                     for content in content_list:
-                                        if isinstance(content, GeneratedContent):
-                                            isPartOf = dict.fromkeys(['isPartOf'])
+                                        if isinstance(content, GeneratedContent):   # if is a file
+                                            fileID = content.signature  # TODO: create a method to add files to RO-crate
                                             fileProperties = {
                                                 'name': itemOutName + "::/" + os.path.basename(content.local),
-                                                'isPartOf': {
-                                                    '@id': generatedDirectoryContentURI, 
-                                                }
-
+                                                'isPartOf': {'@id': generatedDirectoryContentURI}
                                             }
-                                            tempList.append({'@id': content.signature, 'name': os.path.basename(content.local)})
-                                            wfCrate.add_file(source=content.signature, fetch_remote=False, properties=fileProperties)
+                                            tempList.append({'@id': fileID})
+                                            wfCrate.add_file(source=fileID, fetch_remote=False, properties=fileProperties)
 
-                                        if isinstance(content, GeneratedDirectoryContent):
-                                            # generatedDirectoryContentList.append(content.local.replace(itemOutSource, ""))
+                                        if isinstance(content, GeneratedDirectoryContent):  # if is a directory
                                             tempList.extend(search_new_content(content.values))
                                     
                                     return tempList
 
-                                generatedContentList.append(search_new_content(item.values))
+                                generatedDirectoryContentList.append(search_new_content(item.values))
 
                             else:
                                 pass  # TODO raise Exception
 
-                        outProperties['hasPart'] = generatedContentList
-                        # print(json.dumps(generatedContentList, indent=2))
-                        properties.update(outProperties)
-                        wfCrate.add_directory(source=generatedDirectoryContentURI, fetch_remote=False, validate_url=False, properties=properties) # FIXME: remove validation when URIs is valid
+                        dirProperties['hasPart'] = sum(generatedDirectoryContentList, []) + generatedContentList
+                        properties.update(dirProperties)
+                        wfCrate.add_directory(source=generatedDirectoryContentURI, fetch_remote=False, properties=properties)
 
                     else:
                         pass  # TODO raise Exception
 
-                elif isinstance(itemOutValues, GeneratedContent):   # is file
+                elif isinstance(itemOutValues, GeneratedContent):   # if is a file
                     if os.path.isfile(itemOutSource):
                         wfCrate.add_file(source=itemOutValues.signature, fetch_remote=False, properties=properties)
 
