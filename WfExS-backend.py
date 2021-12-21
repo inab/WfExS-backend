@@ -61,7 +61,11 @@ LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
 DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s'
 
 def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, help:str=None, preStageParams:bool=False, postStageParams:bool=False, crateParams:bool=False):
-    ap_ = sp.add_parser(command.value, help=help)
+    ap_ = sp.add_parser(
+        command.value,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        help=help
+    )
     
     if preStageParams:
         ap_.add_argument(
@@ -134,13 +138,19 @@ if __name__ == "__main__":
         verstr = "{0[0]} ({0[1]})".format(wfexs_version)
     
     defaultLocalConfigFilename = os.path.join(os.getcwd(), DEFAULT_LOCAL_CONFIG_RELNAME)
-    ap = argparse.ArgumentParser(description="WfExS (workflow execution service) backend "+verstr)
+    ap = argparse.ArgumentParser(
+        description="WfExS (workflow execution service) backend "+verstr,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
     ap.add_argument('--log-file', dest="logFilename", help='Store messages in a file instead of using standard error and standard output')
     ap.add_argument('-q', '--quiet', dest='logLevel', action='store_const', const=logging.WARNING, help='Only show engine warnings and errors')
     ap.add_argument('-v', '--verbose', dest='logLevel', action='store_const', const=logging.INFO, help='Show verbose (informational) messages')
     ap.add_argument('-d', '--debug', dest='logLevel', action='store_const', const=logging.DEBUG, help='Show debug messages (use with care, as it can disclose passphrases and passwords)')
     ap.add_argument('-L', '--local-config', dest="localConfigFilename", default=defaultLocalConfigFilename, help="Local installation configuration file")
     ap.add_argument('--cache-dir', dest="cacheDir", help="Caching directory")
+    
+    ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
+    ap.add_argument('--full-help', dest='fullHelp', action='store_true', default=False, help='It returns full help')
     
     sp = ap.add_subparsers(dest='command', title='commands', description='Command to run. It must be one of these')
     
@@ -219,9 +229,6 @@ if __name__ == "__main__":
         postStageParams=True,
         crateParams=True
     )
-    
-    ap.add_argument('-V', '--version', action='version', version='%(prog)s version ' + verstr)
-    ap.add_argument('--full-help', dest='fullHelp', action='store_true', default=False, help='It returns full help')
     
     args = ap.parse_args()
     
