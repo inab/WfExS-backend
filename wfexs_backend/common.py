@@ -385,7 +385,26 @@ def nullProcessDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes
 
 from rfc6920.methods import generate_nih_from_digest
 
+# As of https://datatracker.ietf.org/doc/html/rfc6920#page-17
+# rewrite the names of the algorithms
+VALID_NI_ALGOS = {
+       'sha256': 'sha-256',
+       'sha256-128': 'sha-256-128',
+       'sha256_128': 'sha-256-128',
+       'sha256-120': 'sha-256-120',
+       'sha256_120': 'sha-256-120',
+       'sha256-96': 'sha-256-96',
+       'sha256_96': 'sha-256-96',
+       'sha256-64': 'sha-256-64',
+       'sha256_64': 'sha-256-64',
+       'sha256-32': 'sha-256-32',
+       'sha256_32': 'sha-256-32',
+}
+
 def nihDigest(digestAlgorithm, digest: bytes) -> Union[Fingerprint, bytes]:
+    # Added fallback, in case it cannot translate the algorithm
+    digestAlgorithm = VALID_NI_ALGOS.get(digestAlgorithm, digestAlgorithm)
+    
     return generate_nih_from_digest(digest, algo=digestAlgorithm)
 
 def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
