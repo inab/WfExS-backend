@@ -22,6 +22,7 @@ import atexit
 import shutil
 import abc
 import logging
+import inspect
 
 from typing import Dict, List, Tuple
 from collections import namedtuple
@@ -47,7 +48,7 @@ class ContainerFactory(abc.ABC):
         self.local_config = local_config
         
         # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(self.__class__.__name__)
+        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
         
         # cacheDir 
         if cacheDir is None:
