@@ -486,7 +486,7 @@ def ComputeDigestFromDirectory(dirname: Union[AbsPath, RelPath], digestAlgorithm
     
     return repMethod(digestAlgorithm, h.digest())
 
-def ComputeDigestFromGeneratedContent(
+def ComputeDigestFromGeneratedContentList(
     dirname: Union[AbsPath, RelPath],
     theValues: List[AbstractGeneratedContent],
     digestAlgorithm=DEFAULT_DIGEST_ALGORITHM,
@@ -575,7 +575,7 @@ def GetGeneratedDirectoryContentFromList(
     
     # As this is a heavy operation, do it only when it is requested
     if callable(signatureMethod):
-        signature = ComputeDigestFromGeneratedContent(thePath, theValues, repMethod=signatureMethod)
+        signature = ComputeDigestFromGeneratedContentList(thePath, theValues, repMethod=signatureMethod)
     else:
         signature = None
     
