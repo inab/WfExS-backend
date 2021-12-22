@@ -539,10 +539,10 @@ def GetGeneratedDirectoryContent(
                     theValue = GeneratedContent(
                         local=entry.path,
                         # uri=None, 
-                        signature=None
+                        signature=ComputeDigestFromFile(entry.path, repMethod=signatureMethod)
                     )
                 elif entry.is_dir():
-                    theValue = GetGeneratedDirectoryContent(entry.path)
+                    theValue = GetGeneratedDirectoryContent(entry.path, repMethod=signatureMethod)
 
                 if theValue is not None:
                     theValues.append(theValue)
@@ -620,7 +620,7 @@ def CWLDesc2Content(
         
         matValue = None
         if foundKind == ContentKind.Directory:
-            theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger)
+            theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger, doGenerateSignatures=doGenerateSignatures)
             matValue = GetGeneratedDirectoryContentFromList(
                 cwlDesc['path'],
                 theValues,
