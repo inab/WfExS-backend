@@ -1626,6 +1626,8 @@ class WF:
                         for item in itemOutValues.values:
                             if isinstance(item, GeneratedContent):  # if is a directory that contains files
                                 fileID = item.signature
+                                if fileID is None:
+                                    fileID = ComputeDigestFromFile(item.local, repMethod=nihDigest)
                                 fileProperties = {
                                     'name': itemOutName + "::/" + os.path.basename(item.local),     # output name + file name
                                     'isPartOf': {'@id': generatedDirectoryContentURI}  # reference to the directory
@@ -1641,6 +1643,8 @@ class WF:
                                     for content in content_list:
                                         if isinstance(content, GeneratedContent):   # if is a file
                                             fileID = content.signature  # TODO: create a method to add files to RO-crate
+                                            if fileID is None:
+                                                fileID = ComputeDigestFromFile(content.local, repMethod=nihDigest)
                                             fileProperties = {
                                                 'name': itemOutName + "::/" + os.path.basename(content.local),
                                                 'isPartOf': {'@id': generatedDirectoryContentURI}
@@ -1667,7 +1671,10 @@ class WF:
 
                 elif isinstance(itemOutValues, GeneratedContent):   # if is a file
                     if os.path.isfile(itemOutSource):
-                        wfCrate.add_file(source=itemOutValues.signature, fetch_remote=False, properties=properties)
+                        fileID = itemOutValues.signature
+                        if fileID is None:
+                            fileID = ComputeDigestFromFile(itemOutSource, repMethod=nihDigest)
+                        wfCrate.add_file(source=fileID, fetch_remote=False, properties=properties)
 
                     else:
                         pass  # TODO raise Exception
