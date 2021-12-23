@@ -1599,7 +1599,7 @@ class WF:
                         properties = {
                             'name': in_item.name
                         }
-                        wfCrate.add_file(source=itemInURISource, fetch_remote=False, properties=properties)
+                        wfCrate.add_file(source=itemInURISource, fetch_remote=False, validate_url=False, properties=properties)
                     elif os.path.isdir(itemInLocalSource):  # if is a directory
                         self.logger.error("FIXME: input directory / dataset handling in RO-Crate")
                     else:
