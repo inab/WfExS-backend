@@ -64,7 +64,7 @@ def downloadContentFrom_gs(remote_file:URIType, cachedFilename:AbsPath, secConte
         try:
             blob.download_to_filename(path)
         except Exception as e:
-            logging.warning("Error downloading file")
+            logging.exception("Error downloading file")
 
     elif total_bobs > 1:
         try:
@@ -83,7 +83,7 @@ def downloadContentFrom_gs(remote_file:URIType, cachedFilename:AbsPath, secConte
                     os.makedirs(os.path.dirname(path))
                 blob.download_to_filename(path)
         except Exception as e:
-            logging.warning("Error downloading files")
+            logging.exception("Error downloading files")
 
     kind = None
     if os.path.isdir(local_path):
