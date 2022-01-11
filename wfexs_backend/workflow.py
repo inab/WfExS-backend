@@ -48,7 +48,8 @@ except ImportError:
 import yaml
 
 import crypt4gh.lib
-import crypt4gh.keys
+import crypt4gh.keys.kdf
+import crypt4gh.keys.c4gh
 
 from .common import *
 from .encrypted_fs import *
@@ -67,6 +68,7 @@ from .fetchers.git import SCHEME_HANDLERS as GIT_SCHEME_HANDLERS, GitFetcher
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX, SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
+from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
 
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
@@ -201,8 +203,22 @@ class WF:
 
             comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory,
                                                             datetime.datetime.now().isoformat())
-            crypt4gh.keys.c4gh.generate(privKey, pubKey, passphrase=passphrase.encode('utf-8'),
-                                        comment=comment.encode('utf-8'))
+
+            # This is a way to avoid encoding private keys with scrypt,
+            # which is not supported in every Python interpreter
+            orig_scrypt_supported = crypt4gh.keys.c4gh.scrypt_supported
+            crypt4gh.keys.c4gh.scrypt_supported = False
+            try:
+                crypt4gh.keys.c4gh.generate(
+                    privKey,
+                    pubKey,
+                    passphrase=passphrase.encode('utf-8'),
+                    comment=comment.encode('utf-8')
+                )
+            finally:
+                crypt4gh.keys.c4gh.scrypt_supported = orig_scrypt_supported
+        elif not crypt4gh.keys.c4gh.scrypt_supported:
+            logger.info("Python interpreter does not support scrypt, so encoded crypt4gh keys with that algorithm cannot be used")
 
         return updated, local_config
 
@@ -373,6 +389,7 @@ class WF:
         self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
         self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
         self.cacheHandler.addSchemeHandlers(S3_SCHEME_HANDLERS)
+        self.cacheHandler.addSchemeHandlers(GS_SCHEME_HANDLERS)
 
         # These ones should have prevalence over other custom ones
         self.addSchemeHandlers(GIT_SCHEME_HANDLERS)
