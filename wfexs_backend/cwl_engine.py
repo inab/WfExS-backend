@@ -328,7 +328,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         with open(packedLocalWorkflowFile, encoding='utf-8') as pLWH:
             wf_yaml = yaml.safe_load(pLWH)  # parse packed CWL
             cwlVersion = wf_yaml.get('cwlVersion', 'v1.0')
-            dockerExprParser = jsonpath_ng.ext.parse('$."$graph"..requirements[?class = "DockerRequirement"][*]')
+            dockerExprParser = jsonpath_ng.ext.parse('$."$graph" .. hints | requirements [?class = "DockerRequirement"][*]')
             for match in dockerExprParser.find(wf_yaml):
                 dockerPullId = match.value.get('dockerPull')
 
