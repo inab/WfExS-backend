@@ -1,0 +1,18 @@
+workflow_id: https://raw.githubusercontent.com/inab/ipc_workflows/multiaffinity-20220112/multiAffinity/multiaffinity-workflow.cwl
+workflow_config:
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  counts:
+    c-l-a-s-s: File
+    url:
+      - https://raw.githubusercontent.com/marbatlle/multiAffinity/main/sample_data/sample1_data.csv
+  metadata:
+    c-l-a-s-s: File
+    url:
+      - https://raw.githubusercontent.com/marbatlle/multiAffinity/main/sample_data/sample1_metadata.csv
+  layers:
+    c-l-a-s-s: File
+    url:
+      - https://raw.githubusercontent.com/marbatlle/multiAffinity/main/sample_data/sample1_layer.csv
+  output_dir: "result"
