@@ -54,15 +54,8 @@ def downloadContentFrom_gs(remote_file:URIType, cachedFilename:AbsPath, secConte
     for blob in blobs:
         total_bobs+=1
     if total_bobs == 1:
-        if(local_path[-1] == '/'): 
-            path = local_path + blob.name.split('/')[-1]
-        elif(local_path == './'):
-            path = local_path + blob.name.split('/')[-1]
-        elif(local_path[-1] != '/'):
-            path = local_path + '/' + blob.name.split('/')[-1]
-
         try:
-            blob.download_to_filename(path)
+            blob.download_to_filename(local_path)
         except Exception as e:
             logging.exception("Error downloading file")
 
