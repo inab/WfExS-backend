@@ -201,12 +201,7 @@ class WF:
             else:
                 passphrase = crypt4ghSect[cls.CRYPT4GH_PASSPHRASE_KEY]
 
-<<<<<<< HEAD
-            comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory,
-                                                            datetime.datetime.now().isoformat())
-=======
             comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory, datetime.datetime.now().isoformat())
->>>>>>> 02fadee6d919d30433de3a739b8f0bd8f0490d0e
 
             # This is a way to avoid encoding private keys with scrypt,
             # which is not supported in every Python interpreter
