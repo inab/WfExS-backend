@@ -208,7 +208,10 @@ class ExpectedOutput(NamedTuple):
         )
 
 
-class GeneratedContent(NamedTuple):
+class AbstractGeneratedContent(object):
+    pass
+
+class GeneratedContent(AbstractGeneratedContent, NamedTuple):
     """
     local: Local absolute path of the content which was generated. It
       is an absolute path in the outputs directory of the execution.
@@ -220,24 +223,27 @@ class GeneratedContent(NamedTuple):
     """
     local: AbsPath
     signature: Fingerprint
-    uri: URIType = None
-    preferredFilename: RelPath = None
+    uri: Optional[URIType] = None
+    preferredFilename: Optional[RelPath] = None
 
 
-class GeneratedDirectoryContent(NamedTuple):
+class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
     """
     local: Local absolute path of the content which was generated. It
       is an absolute path in the outputs directory of the execution.
     uri: A putative URL or a CURIE of the content which was generated,
       needed for the provenance and upload matters.
-    signature: Computed checksum from the file
+    values: The list of contents of the directory, which are either
+      GeneratedContent or GeneratedDirectoryContent
+    signature: Optional computed checksum from the directory
     preferredFilename: The preferred relative filename to use when it is
       uploaded from the computational environment
     """
     local: AbsPath
-    values: List[Any]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
-    uri: URIType = None
-    preferredFilename: RelPath = None
+    values: List[AbstractGeneratedContent]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
+    uri: Optional[URIType] = None
+    preferredFilename: Optional[RelPath] = None
+    signature: Optional[Fingerprint] = None
 
 
 class MaterializedOutput(NamedTuple):
@@ -346,6 +352,30 @@ class WFException(Exception):
     pass
 
 
+# Adapted from https://gist.github.com/ptmcg/23ba6e42d51711da44ba1216c53af4ea
+# in order to show the value instead of the class name
+import argparse
+class ArgTypeMixin(enum.Enum):
+    @classmethod
+    def argtype(cls, s: str) -> enum.Enum:
+        try:
+            return cls(s)
+        except:
+            raise argparse.ArgumentTypeError(
+                f"{s!r} is not a valid {cls.__name__}")
+
+    def __str__(self):
+        return str(self.value)
+
+# These cache types are needed to return the right paths
+# from an WF instance
+class CacheType(ArgTypeMixin, enum.Enum):
+    Input = 'input'
+    ROCrate = 'ro-crate'
+    TRS = 'ga4gh-trs'
+    Workflow = 'workflow'
+
+
 # Next methods have been borrowed from FlowMaps
 DEFAULT_DIGEST_ALGORITHM = 'sha256'
 DEFAULT_DIGEST_BUFFER_SIZE = 65536
@@ -361,7 +391,26 @@ def nullProcessDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes
 
 from rfc6920.methods import generate_nih_from_digest
 
+# As of https://datatracker.ietf.org/doc/html/rfc6920#page-17
+# rewrite the names of the algorithms
+VALID_NI_ALGOS = {
+       'sha256': 'sha-256',
+       'sha256-128': 'sha-256-128',
+       'sha256_128': 'sha-256-128',
+       'sha256-120': 'sha-256-120',
+       'sha256_120': 'sha-256-120',
+       'sha256-96': 'sha-256-96',
+       'sha256_96': 'sha-256-96',
+       'sha256-64': 'sha-256-64',
+       'sha256_64': 'sha-256-64',
+       'sha256-32': 'sha-256-32',
+       'sha256_32': 'sha-256-32',
+}
+
 def nihDigest(digestAlgorithm, digest: bytes) -> Union[Fingerprint, bytes]:
+    # Added fallback, in case it cannot translate the algorithm
+    digestAlgorithm = VALID_NI_ALGOS.get(digestAlgorithm, digestAlgorithm)
+    
     return generate_nih_from_digest(digest, algo=digestAlgorithm)
 
 def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
@@ -382,6 +431,11 @@ def ComputeDigestFromFile(filename: Union[AbsPath, RelPath], digestAlgorithm=DEF
     """
     Accessory method used to compute the digest of an input file
     """
+    
+    # "Fast" compute: no report, no digest
+    if repMethod is None:
+        return None
+    
     with open(filename, mode='rb') as f:
         return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize, repMethod)
 
@@ -432,8 +486,48 @@ def ComputeDigestFromDirectory(dirname: Union[AbsPath, RelPath], digestAlgorithm
     
     return repMethod(digestAlgorithm, h.digest())
 
-def GetGeneratedDirectoryContent(thePath: AbsPath, uri: URIType = None, preferredFilename: RelPath = None) -> GeneratedDirectoryContent:
+def ComputeDigestFromGeneratedContentList(
+    dirname: Union[AbsPath, RelPath],
+    theValues: List[AbstractGeneratedContent],
+    digestAlgorithm=DEFAULT_DIGEST_ALGORITHM,
+    bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE,
+    repMethod=stringifyDigest
+) -> Fingerprint:
     """
+    Accessory method used to compute the digest of an input directory,
+    based on the names and digest of the files in the directory
+    """
+    cEntries = [ ]
+    # First, gather and compute all the files
+    for theValue in theValues:
+        if isinstance(theValue, GeneratedContent):
+            cEntries.append(
+                (
+                    os.path.relpath(theValue.local, dirname).encode('utf-8'),
+                    ComputeDigestFromFile(theValue.local, repMethod=nullProcessDigest)
+                )
+            )
+    
+    # Second, sort by the relative path, bytes encoded in utf-8
+    cEntries.sort(key=lambda e: e[0])
+    
+    # Third, digest compute
+    h = hashlib.new(digestAlgorithm)
+    for cRelPathB , cDigest in cEntries:
+        h.update(cRelPathB)
+        h.update(cDigest)
+    
+    return repMethod(digestAlgorithm, h.digest())
+
+def GetGeneratedDirectoryContent(
+    thePath: AbsPath,
+    uri: Optional[URIType] = None,
+    preferredFilename: Optional[RelPath] = None,
+    signatureMethod = None
+) -> GeneratedDirectoryContent:
+    """
+    The signatureMethod tells whether to generate a signature and fill-in
+    the new signature element from GeneratedDirectoryContent tuple
     """
     theValues = []
     with os.scandir(thePath) as itEntries:
@@ -445,19 +539,52 @@ def GetGeneratedDirectoryContent(thePath: AbsPath, uri: URIType = None, preferre
                     theValue = GeneratedContent(
                         local=entry.path,
                         # uri=None, 
-                        signature=ComputeDigestFromFile(entry.path, repMethod=nihDigest)
+                        signature=ComputeDigestFromFile(entry.path, repMethod=signatureMethod)
                     )
                 elif entry.is_dir():
-                    theValue = GetGeneratedDirectoryContent(entry.path)
+                    theValue = GetGeneratedDirectoryContent(entry.path, repMethod=signatureMethod)
 
                 if theValue is not None:
                     theValues.append(theValue)
-
+    
+    # As this is a heavy operation, do it only when it is requested
+    if callable(signatureMethod):
+        signature = ComputeDigestFromDirectory(thePath, repMethod=signatureMethod)
+    else:
+        signature = None
+    
     return GeneratedDirectoryContent(
         local=thePath,
         uri=uri,
         preferredFilename=preferredFilename,
-        values=theValues
+        values=theValues,
+        signature=signature
+    )
+
+def GetGeneratedDirectoryContentFromList(
+    thePath: AbsPath,
+    theValues: List[AbstractGeneratedContent],
+    uri: Optional[URIType] = None,
+    preferredFilename: Optional[RelPath] = None,
+    signatureMethod = None
+) -> GeneratedDirectoryContent:
+    """
+    The signatureMethod tells whether to generate a signature and fill-in
+    the new signature element from GeneratedDirectoryContent tuple
+    """
+    
+    # As this is a heavy operation, do it only when it is requested
+    if callable(signatureMethod):
+        signature = ComputeDigestFromGeneratedContentList(thePath, theValues, repMethod=signatureMethod)
+    else:
+        signature = None
+    
+    return GeneratedDirectoryContent(
+        local=thePath,
+        uri=uri,
+        preferredFilename=preferredFilename,
+        values=theValues,
+        signature=signature
     )
 
 
@@ -468,13 +595,23 @@ CWLClass2WfExS = {
 }
 
 
-def CWLDesc2Content(cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]], logger, expectedOutput: ExpectedOutput = None) -> List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]:
+def CWLDesc2Content(
+    cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]],
+    logger,
+    expectedOutput: Optional[ExpectedOutput] = None,
+    doGenerateSignatures: bool = False
+) -> List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]:
     """
     """
     matValues = []
 
     if not isinstance(cwlDescs, list):
         cwlDescs = [cwlDescs]
+    
+    if doGenerateSignatures:
+        repMethod = nihDigest
+    else:
+        repMethod = None
     
     for cwlDesc in cwlDescs:
         foundKind = CWLClass2WfExS.get(cwlDesc['class'])
@@ -483,18 +620,19 @@ def CWLDesc2Content(cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]],
         
         matValue = None
         if foundKind == ContentKind.Directory:
-            theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger)
-            matValue = GeneratedDirectoryContent(
-                local=cwlDesc['path'],
+            theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger, doGenerateSignatures=doGenerateSignatures)
+            matValue = GetGeneratedDirectoryContentFromList(
+                cwlDesc['path'],
+                theValues,
                 # TODO: Generate URIs when it is advised
-                # uri=None
+                # uri=None,
                 preferredFilename=None if expectedOutput is None else expectedOutput.preferredFilename,
-                values=theValues
+                signatureMethod=repMethod
             )
         elif foundKind == ContentKind.File:
             matValue = GeneratedContent(
                 local=cwlDesc['path'],
-                signature=ComputeDigestFromFile(cwlDesc['path'], repMethod=nihDigest)
+                signature=ComputeDigestFromFile(cwlDesc['path'], repMethod=repMethod)
             )
         
         if matValue is not None:
@@ -503,6 +641,6 @@ def CWLDesc2Content(cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]],
             # What to do with auxiliary/secondary files?
             secondaryFiles = cwlDesc.get('secondaryFiles', [])
             if len(secondaryFiles) > 0:
-                matValues.extend(CWLDesc2Content(secondaryFiles, logger))
+                matValues.extend(CWLDesc2Content(secondaryFiles, logger, doGenerateSignatures=doGenerateSignatures))
 
     return matValues

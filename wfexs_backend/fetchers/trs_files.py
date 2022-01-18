@@ -54,6 +54,7 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
     
     topMeta = {
         'fetched': metadata_url,
+        'payload': None,
         'workflow_entrypoint': None,
         'remote_workflow_entrypoint': None
     }
@@ -65,6 +66,7 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
         metaio = io.BytesIO()
         _ , metametaio = fetchClassicURL(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode('utf-8'))
+        topMeta['payload'] = metadata
         metadata_array.extend(metametaio)
         
         metaio = None

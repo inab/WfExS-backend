@@ -294,7 +294,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
         
         wfType = self.workflowType
-        crate = ROCrate()
+        crate = ROCrate(gen_preview=True)
         compLang = ComputerLanguage(crate, identifier=wfType.rocrate_programming_language, properties={
             "name": wfType.name,
             "alternateName": wfType.trs_descriptor,
@@ -363,6 +363,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
 
         pass
+
+    def sideContainers(self) -> List[ContainerTaggedName]:
+        """
+        Containers needed by the engine to work
+        """
+        return list()
     
     @abc.abstractmethod
     def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
@@ -394,6 +400,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         matWfEng, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng, offline=offline)
 
         listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags, offline=offline)
+        
+        # Next ones are needed by the workflow engine itself
+        listOfOperationalContainers = matWfEng.instance.sideContainers()
+        if len(listOfOperationalContainers) > 0:
+            try:
+                matWfEng.instance.materializeContainers(listOfOperationalContainers, offline=offline)
+            except:
+                pass
 
         return matWfEng, listOfContainers
     
@@ -438,7 +452,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         ]
                         guessedOutputKind = ContentKind.File
                     elif entry.is_dir(follow_symlinks=False):
-                        matValues = [ GetGeneratedDirectoryContent(entry.path) ]
+                        matValues = [ GetGeneratedDirectoryContent(entry.path, signatureMethod=nihDigest) ]
                         guessedOutputKind = ContentKind.Directory
                     
                     if matValues is not None:
@@ -455,7 +469,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             else:
                 # Engines like CWL
                 for outputName, outputVal in outputsMapping.items():
-                    matValues = CWLDesc2Content(outputVal, self.logger)
+                    matValues = CWLDesc2Content(outputVal, self.logger, doGenerateSignatures=True)
                     
                     matValueClassName = matValues[0].__class__.__name__
                     guessedOutputKind = self.GuessedOutputKindMapping.get(matValueClassName)
@@ -486,7 +500,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                 theContent = GetGeneratedDirectoryContent(
                                     matchedPath,
                                     uri=None,   # TODO: generate URIs when it is advised
-                                    preferredFilename=expectedOutput.preferredFilename
+                                    preferredFilename=expectedOutput.preferredFilename,
+                                    signatureMethod=nihDigest
                                 )
                             elif expectedOutput.kind == ContentKind.File:
                                 theContent = GeneratedContent(
@@ -495,6 +510,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigest),
                                     preferredFilename=expectedOutput.preferredFilename
                                 )
+                                self.logger.debug(f"Filled From {expectedOutput.preferredFilename} {matchedPath}")
                             else:
                                 # Reading the value from a file, as the glob is telling that
                                 with open(matchedPath, mode='r', encoding='utf-8', errors='ignore') as mP:
@@ -527,7 +543,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         theContent = GetGeneratedDirectoryContent(
                             matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised
-                            preferredFilename=expectedOutput.preferredFilename
+                            preferredFilename=expectedOutput.preferredFilename,
+                            signatureMethod=nihDigest
                         )
                     elif expectedOutput.kind == ContentKind.File:
                         theContent = GeneratedContent(
@@ -548,7 +565,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 if (outputVal is None) and cannotBeEmpty:
                     self.logger.warning("Output {} got no match from the outputs mapping".format(expectedOutput.name))
                 
-                matValues = CWLDesc2Content(outputVal, self.logger, expectedOutput)
+                matValues = CWLDesc2Content(outputVal, self.logger, expectedOutput, doGenerateSignatures=True)
             
             matOutput = MaterializedOutput(
                 name=expectedOutput.name,

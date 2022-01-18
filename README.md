@@ -26,6 +26,8 @@ and [cwltool](https://github.com/common-workflow-language/cwltool)).
 
 * [README_REPLICATOR.md](README_REPLICATOR.md): It briefly describes `WfExS-config-replicator.py` usage.
 
+Additional present and future documentation is hosted at [docs](docs/index.md) subfolder, until it is migrated to a proper documentation service.
+
 ### Presentations and outreach
 
 Laura Rodríguez-Navas (2021): 
@@ -54,22 +56,17 @@ EOSC-Life deliverable D8.1, _Zenodo_
 ## WfExS-backend Usage
 
 ```bash
-python WfExS-backend.py -h
+python WfExS-backend.py --full-help
 ```
 ```
 usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
-                        [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR]
-                        [-W WORKFLOWCONFIGFILENAME]
-                        [-Z SECURITYCONTEXTSCONFIGFILENAME]
-                        [-J WORKFLOWWORKINGDIRECTORY] [--full] [-V]
-                        [{init,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}]
+                        [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
+                        [--full-help]
+                        {init,cache,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+                        ...
 
-WfExS (workflow execution service) backend 0.4.5-3-gbe1139a
-(be1139ae6f2cca8f1f66c05eb6c91e9b85631d46)
-
-positional arguments:
-  {init,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
-                        Command to run
+WfExS (workflow execution service) backend 0.4.10-23-ge039d1f
+(e039d1f9b4333367353a1c78936fff7de511f835)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -83,18 +80,137 @@ optional arguments:
   -L LOCALCONFIGFILENAME, --local-config LOCALCONFIGFILENAME
                         Local installation configuration file
   --cache-dir CACHEDIR  Caching directory
+  -V, --version         show program's version number and exit
+  --full-help           It returns full help
+
+commands:
+  Command to run. It must be one of these
+
+  {init,cache,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+    init                Init local setup
+    cache               Cache handling subcommands
+    config-validate     Validate the configuration files to be used for
+                        staging and execution
+    stage               Prepare the staging (working) directory for workflow
+                        execution, fetching dependencies and contents
+    mount-workdir       Mount the encrypted staging directory on secure
+                        staging scenarios
+    export-stage        Export the staging directory as an RO-Crate
+    offline-execute     Execute an already prepared workflow in the staging
+                        directory
+    execute             Execute the stage + offline-execute + export steps
+    export-results      Export the results to a remote location, gathering
+                        their public ids
+    export-crate        Export an already executed workflow in the staging
+                        directory as an RO-Crate
+
+Subparser 'init'
+usage: WfExS-backend.py init [-h]
+
+optional arguments:
+  -h, --help  show this help message and exit
+
+Subparser 'cache'
+usage: WfExS-backend.py cache [-h] [-r] [-g]
+                              {ls,inject,rm,validate}
+                              {input,ro-crate,ga4gh-trs,workflow}
+                              [cache_command_args [cache_command_args ...]]
+
+positional arguments:
+  {ls,inject,rm,validate}
+                        Cache command to perform
+  {input,ro-crate,ga4gh-trs,workflow}
+                        Cache type to perform the cache command
+  cache_command_args    Optional cache element names
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -r                    Try doing the operation recursively (i.e. both
+                        metadata and data)
+  -g                    Given cache element names are globs
+
+Subparser 'config-validate'
+usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME
+                                        [-Z SECURITYCONTEXTSCONFIGFILENAME]
+
+optional arguments:
+  -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
                         Configuration file, describing workflow and inputs
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
                         Configuration file, describing security contexts,
                         which hold credentials and similar
+
+Subparser 'stage'
+usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME
+                              [-Z SECURITYCONTEXTSCONFIGFILENAME]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
+                        Configuration file, describing workflow and inputs
+  -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar
+
+Subparser 'mount-workdir'
+usage: WfExS-backend.py mount-workdir [-h] -J WORKFLOWWORKINGDIRECTORY
+
+optional arguments:
+  -h, --help            show this help message and exit
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
-                        Already staged job directory (to be used with offline-
-                        execute)
+                        Already staged job directory
+
+Subparser 'export-stage'
+usage: WfExS-backend.py export-stage [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
+                        Already staged job directory
   --full                Should the RO-Crate contain a copy of the inputs (and
-                        outputs)? (to be used with export-stage or export-
-                        crate)
-  -V, --version         show program's version number and exit
+                        outputs)?
+
+Subparser 'offline-execute'
+usage: WfExS-backend.py offline-execute [-h] -J WORKFLOWWORKINGDIRECTORY
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
+                        Already staged job directory
+
+Subparser 'execute'
+usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME
+                                [-Z SECURITYCONTEXTSCONFIGFILENAME] [--full]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
+                        Configuration file, describing workflow and inputs
+  -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar
+  --full                Should the RO-Crate contain a copy of the inputs (and
+                        outputs)?
+
+Subparser 'export-results'
+usage: WfExS-backend.py export-results [-h] -J WORKFLOWWORKINGDIRECTORY
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
+                        Already staged job directory
+
+Subparser 'export-crate'
+usage: WfExS-backend.py export-crate [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
+                        Already staged job directory
+  --full                Should the RO-Crate contain a copy of the inputs (and
+                        outputs)?
+
 ```
 
 WfExS commands are:

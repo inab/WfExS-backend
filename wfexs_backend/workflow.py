@@ -201,8 +201,12 @@ class WF:
             else:
                 passphrase = crypt4ghSect[cls.CRYPT4GH_PASSPHRASE_KEY]
 
+<<<<<<< HEAD
             comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory,
                                                             datetime.datetime.now().isoformat())
+=======
+            comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory, datetime.datetime.now().isoformat())
+>>>>>>> 02fadee6d919d30433de3a739b8f0bd8f0490d0e
 
             # This is a way to avoid encoding private keys with scrypt,
             # which is not supported in every Python interpreter
@@ -346,14 +350,22 @@ class WF:
 
         # Setting up caching directories
         self.cacheDir = cacheDir
-        self.cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
-        os.makedirs(self.cacheWorkflowDir, exist_ok=True)
-        self.cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
-        os.makedirs(self.cacheROCrateDir, exist_ok=True)
-        self.cacheTRSFilesDir = os.path.join(cacheDir, 'trs-files-cache')
-        os.makedirs(self.cacheTRSFilesDir, exist_ok=True)
-        self.cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
-        os.makedirs(self.cacheWorkflowInputsDir, exist_ok=True)
+        self.cachePathMap = dict()
+        cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
+        os.makedirs(cacheWorkflowDir, exist_ok=True)
+        self.cachePathMap[CacheType.Workflow] = cacheWorkflowDir
+
+        cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
+        os.makedirs(cacheROCrateDir, exist_ok=True)
+        self.cachePathMap[CacheType.ROCrate] = cacheROCrateDir
+
+        cacheTRSFilesDir = os.path.join(cacheDir, 'trs-files-cache')
+        os.makedirs(cacheTRSFilesDir, exist_ok=True)
+        self.cachePathMap[CacheType.TRS] = cacheTRSFilesDir
+
+        cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
+        os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
+        self.cachePathMap[CacheType.Input] = cacheWorkflowInputsDir
 
         # This directory will be used to store the intermediate
         # and final results before they are sent away
@@ -394,7 +406,26 @@ class WF:
         # These ones should have prevalence over other custom ones
         self.addSchemeHandlers(GIT_SCHEME_HANDLERS)
         self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
-    
+
+    @property
+    def cacheWorkflowDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.Workflow]
+
+    @property
+    def cacheROCrateDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.ROCrate]
+
+    @property
+    def cacheTRSFilesDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.TRS]
+
+    @property
+    def cacheWorkflowInputsDir(self) -> AbsPath:
+        return self.cachePathMap[CacheType.Input]
+
+    def getCacheHandler(self, cache_type:CacheType) -> Tuple[SchemeHandlerCacheHandler, AbsPath]:
+        return self.cacheHandler, self.cachePathMap.get(cache_type)
+
     def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher]) -> AbstractStatefulFetcher:
         """
         Method to instantiate stateful fetchers once
@@ -406,9 +437,9 @@ class WF:
                 if instStatefulFetcher is None:
                     instStatefulFetcher = statefulFetcher(progs=self.progs)
                     self._sngltn[statefulFetcher] = instStatefulFetcher
-        
+
         return instStatefulFetcher
-    
+
     def addSchemeHandlers(self, schemeHandlers:Mapping[str, Union[ProtocolFetcher, Type[AbstractStatefulFetcher]]]) -> None:
         """
         This method adds scheme handlers (aka "fetchers")
@@ -422,13 +453,13 @@ class WF:
                     instSchemeHandler = self.instantiateStatefulFetcher(schemeHandler).fetch
                 elif callable(schemeHandler):
                     instSchemeHandler = schemeHandler
-                
+
                 # Only the ones which have overcome the sanity checks
                 if instSchemeHandler is not None:
                     instSchemeHandlers[scheme] = instSchemeHandler
-            
+
             self.cacheHandler.addSchemeHandlers(instSchemeHandlers)
-    
+
     def newSetup(self,
                  workflow_id,
                  version_id,
@@ -663,7 +694,7 @@ class WF:
                                                                uniqueWorkDir, uniqueRawWorkDir, securePassphrase,
                                                                allowOther)
 
-                # and start the thread which keeps the mount working 
+                # and start the thread which keeps the mount working
                 self.encfsThread = threading.Thread(target=self._wakeupEncDir, daemon=True)
                 self.encfsThread.start()
 
@@ -872,7 +903,7 @@ class WF:
         """
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
-        
+
         If the workflow id is an URL, it is supposed to be a git repository,
         and the version will represent either the branch, tag or specific commit.
         So, the whole TRS fetching machinery is bypassed.
@@ -1029,14 +1060,14 @@ class WF:
             lastInput += 1
 
             prettyLocal = os.path.join(workflowInputs_destdir, matContent.prettyFilename)
-            
+
             # As Nextflow has some issues when two inputs of a process
             # have the same basename, harden by default
             hardenPrettyLocal = True
             # hardenPrettyLocal = False
             # if os.path.islink(prettyLocal):
             #     oldLocal = os.readlink(prettyLocal)
-            # 
+            #
             #     hardenPrettyLocal = oldLocal != matContent.local
             # elif os.path.exists(prettyLocal):
             #     hardenPrettyLocal = True
@@ -1075,7 +1106,7 @@ class WF:
 
         paramsIter = params.items() if isinstance(params, dict) else enumerate(params)
         for key, inputs in paramsIter:
-            # We are here for the 
+            # We are here for the
             linearKey = prefix + key
             if isinstance(inputs, dict):
                 inputClass = inputs.get('c-l-a-s-s')
@@ -1136,14 +1167,14 @@ class WF:
                             lastInput += 1
 
                             prettyLocal = os.path.join(inputDestDir, matContent.prettyFilename)
-                            
+
                             # As Nextflow has some issues when two inputs of a process
                             # have the same basename, harden by default
                             hardenPrettyLocal = True
                             # hardenPrettyLocal = False
                             # if os.path.islink(prettyLocal):
                             #     oldLocal = os.readlink(prettyLocal)
-                            # 
+                            #
                             #     hardenPrettyLocal = oldLocal != matContent.local
                             # elif os.path.exists(prettyLocal):
                             #     hardenPrettyLocal = True
@@ -1247,7 +1278,7 @@ class WF:
 
             # Fill from this input
             fillFrom = outputDesc.get('fillFrom')
-            
+
             # Parsing the cardinality
             cardS = outputDesc.get('cardinality')
             cardinality = None
@@ -1292,7 +1323,7 @@ class WF:
         self.logger.debug(augmentedInputs)
         self.logger.debug(matCheckOutputs)
 
-        # TODO: implement store serialized version of exitVal, augmentedInputs and matCheckOutputs
+        # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute()
 
     def exportResults(self):
@@ -1504,7 +1535,7 @@ class WF:
 
         # Create RO-crate using crate.zip downloaded from WorkflowHub
         if os.path.isfile(str(self.cacheROCrateFilename)):
-            wfCrate = rocrate.ROCrate(self.cacheROCrateFilename)
+            wfCrate = rocrate.ROCrate(self.cacheROCrateFilename, gen_preview=True)
 
         # Create RO-Crate using rocrate class
         # TODO no exists the version implemented for Nextflow in rocrate_api
@@ -1512,10 +1543,8 @@ class WF:
             # FIXME: What to do when workflow is in git repository different from GitHub??
             # FIXME: What to do when workflow is not in a git repository??
             wf_path = os.path.join(self.localWorkflow.dir, self.localWorkflow.relPath)
-            wfCrate, compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(
-                self.localWorkflow.langVersion)
-            wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(
-                self.localWorkflow.relPath)
+            wfCrate, compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(self.localWorkflow.langVersion)
+            wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(self.localWorkflow.relPath)
 
             # TODO create method to create wf_url
             matWf = self.materializedEngine.workflow
@@ -1571,14 +1600,14 @@ class WF:
                 itemInValues = in_item.values[0]
                 if isinstance(itemInValues, MaterializedContent):
                     # TODO: embed metadata_array in some way
-                    itemInSource = itemInValues.local
-                    if os.path.isfile(itemInSource):
+                    itemInLocalSource = itemInValues.local
+                    itemInURISource = itemInValues.uri
+                    if os.path.isfile(itemInLocalSource):   # if is a file
                         properties = {
-                            'name': in_item.name,
-                            'url': itemInValues.uri
+                            'name': in_item.name
                         }
-                        wfCrate.add_file(source=itemInSource, properties=properties)
-                    elif os.path.isdir(itemInSource):
+                        wfCrate.add_file(source=itemInURISource, fetch_remote=False, validate_url=False, properties=properties)
+                    elif os.path.isdir(itemInLocalSource):  # if is a directory
                         self.logger.error("FIXME: input directory / dataset handling in RO-Crate")
                     else:
                         pass  # TODO raise Exception
@@ -1589,33 +1618,50 @@ class WF:
         for out_item in self.matCheckOutputs:
             if isinstance(out_item, MaterializedOutput):
                 itemOutValues = out_item.values[0]
-                itemOutSource = itemOutValues.local                
+                itemOutSource = itemOutValues.local
+                itemOutName = out_item.name
                 properties = {
-                    'name': out_item.name,
-                    'local': itemOutSource
+                    'name': itemOutName
                 }
-                if isinstance(itemOutValues, GeneratedDirectoryContent):    # is dir
+                if isinstance(itemOutValues, GeneratedDirectoryContent):    # if is a directory
                     if os.path.isdir(itemOutSource):
-                        dirProperties = dict.fromkeys(['values'])
-
+                        generatedDirectoryContentURI = ComputeDigestFromDirectory(itemOutSource, repMethod=nihDigest)   # generate nih for the directory
+                        dirProperties = dict.fromkeys(['hasPart'])  # files in the directory
                         generatedContentList = []
                         generatedDirectoryContentList = []
 
                         for item in itemOutValues.values:
-                            if isinstance(item, GeneratedContent):
-                                generatedContentList.append(item.local)     # save output file path
-                            elif isinstance(item, GeneratedDirectoryContent):
-                                generatedDirectoryContentList.append(item.local)    # save output dir path
+                            if isinstance(item, GeneratedContent):  # if is a directory that contains files
+                                fileID = item.signature
+                                if fileID is None:
+                                    fileID = ComputeDigestFromFile(item.local, repMethod=nihDigest)
+                                fileProperties = {
+                                    'name': itemOutName + "::/" + os.path.basename(item.local),     # output name + file name
+                                    'isPartOf': {'@id': generatedDirectoryContentURI}  # reference to the directory
+                                }
+                                generatedContentList.append({'@id': fileID})
+                                wfCrate.add_file(source=fileID, fetch_remote=False, properties=fileProperties)
 
-                                # search recursively for other content inside dir path
+                            elif isinstance(item, GeneratedDirectoryContent):   # if is a directory that contains directories
+
+                                # search recursively for other content inside directories
                                 def search_new_content(content_list):
                                     tempList = []
                                     for content in content_list:
-                                        if isinstance(content, GeneratedContent):
-                                            tempList.append(content.local)  # save output file path
-                                        if isinstance(content, GeneratedDirectoryContent):
-                                            generatedDirectoryContentList.append(content.local)  # save output dir path
+                                        if isinstance(content, GeneratedContent):   # if is a file
+                                            fileID = content.signature  # TODO: create a method to add files to RO-crate
+                                            if fileID is None:
+                                                fileID = ComputeDigestFromFile(content.local, repMethod=nihDigest)
+                                            fileProperties = {
+                                                'name': itemOutName + "::/" + os.path.basename(content.local),
+                                                'isPartOf': {'@id': generatedDirectoryContentURI}
+                                            }
+                                            tempList.append({'@id': fileID})
+                                            wfCrate.add_file(source=fileID, fetch_remote=False, properties=fileProperties)
+
+                                        if isinstance(content, GeneratedDirectoryContent):  # if is a directory
                                             tempList.extend(search_new_content(content.values))
+                                    
                                     return tempList
 
                                 generatedDirectoryContentList.append(search_new_content(item.values))
@@ -1623,20 +1669,19 @@ class WF:
                             else:
                                 pass  # TODO raise Exception
 
-                        dirProperties['values'] = generatedDirectoryContentList + generatedContentList
+                        dirProperties['hasPart'] = sum(generatedDirectoryContentList, []) + generatedContentList
                         properties.update(dirProperties)
-                        wfCrate.add_directory(source=itemOutSource, properties=properties)
+                        wfCrate.add_directory(source=generatedDirectoryContentURI, fetch_remote=False, properties=properties)
 
                     else:
-                        pass  # TODO raise Exception  
+                        pass  # TODO raise Exception
 
-                elif isinstance(itemOutValues, GeneratedContent):   # is file
+                elif isinstance(itemOutValues, GeneratedContent):   # if is a file
                     if os.path.isfile(itemOutSource):
-                        fileProperties = {
-                            'local': itemOutValues.local
-                        }
-                        properties.update(fileProperties)
-                        wfCrate.add_file(source=itemOutSource, properties=properties)
+                        fileID = itemOutValues.signature
+                        if fileID is None:
+                            fileID = ComputeDigestFromFile(itemOutSource, repMethod=nihDigest)
+                        wfCrate.add_file(source=fileID, fetch_remote=False, properties=properties)
 
                     else:
                         pass  # TODO raise Exception
@@ -1645,7 +1690,7 @@ class WF:
                     pass  # TODO raise Exception
 
         # Save RO-crate as execution.crate.zip
-        wfCrate.writeZip(os.path.join(self.outputsDir, "execution.crate"))
+        wfCrate.write_zip(os.path.join(self.outputsDir, "execution.crate"))
         self.logger.info("RO-Crate created: {}".format(self.outputsDir))
 
         # TODO error handling
@@ -1659,7 +1704,29 @@ class WF:
         :return:
         """
         gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
-        return gitFetcherInst.doMaterializeRepo(repoURL,repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
+        repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(repoURL,repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
+
+        # Now, let's register the checkout with cache structures
+        # using its public URI
+        if not repoURL.startswith('git'):
+            remote_url = 'git+' + repoURL
+        if repoTag is not None:
+            remote_url += '@' + repoTag
+
+        self.cacheHandler.inject(
+            self.cacheWorkflowDir,
+            remote_url,
+            fetched_metadata_array=[
+                URIWithMetadata(
+                    uri=remote_url,
+                    metadata=metadata,
+                )
+            ],
+            finalCachedFilename=repoDir,
+            inputKind=ContentKind.Directory
+        )
+
+        return repoDir, repoEffectiveCheckout
 
     def getWorkflowRepoFromTRS(self, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
@@ -2057,7 +2124,7 @@ class WF:
 
             inputKind, cachedFilename, metadata_array = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
             self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
-            
+
             # FIXME: What to do when there is more than one entry in the metadata array?
             if len(metadata_array) > 0 and (metadata_array[0].preferredName is not None):
                 prettyFilename = metadata_array[0].preferredName

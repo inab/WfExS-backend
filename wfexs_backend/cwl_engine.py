@@ -55,7 +55,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
     
-    DEFAULT_CWLTOOL_VERSION = '3.1.20211014180718'
+    DEFAULT_CWLTOOL_VERSION = '3.1.20211107152837'
 
     DEVEL_CWLTOOL_PACKAGE = f'git+{CWLTOOL_REPO}.git'
     # Set this constant to something meaningful only when a hotfix
@@ -64,11 +64,16 @@ class CWLWorkflowEngine(WorkflowEngine):
     DEVEL_CWLTOOL_VERSION = None
 
     #DEFAULT_CWL_UTILS_VERSION = 'v0.10'
-    DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20210918131710'
+    DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20211116214159'
 
     PODMAN_CWLTOOL_VERSION = '3.1.20210921111717'
     NO_WRAPPER_CWLTOOL_VERSION = '3.1.20210921111717'
     NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
+    
+    NODEJS_CONTAINER_TAG = 'docker.io/node:slim'
+    OPERATIONAL_CONTAINER_TAGS = [
+        NODEJS_CONTAINER_TAG
+    ]
 
     ENGINE_NAME = 'cwl'
 
@@ -323,7 +328,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         with open(packedLocalWorkflowFile, encoding='utf-8') as pLWH:
             wf_yaml = yaml.safe_load(pLWH)  # parse packed CWL
             cwlVersion = wf_yaml.get('cwlVersion', 'v1.0')
-            dockerExprParser = jsonpath_ng.ext.parse('$."$graph"..requirements[?class = "DockerRequirement"][*]')
+            dockerExprParser = jsonpath_ng.ext.parse('$."$graph" .. hints | requirements [?class = "DockerRequirement"][*]')
             for match in dockerExprParser.find(wf_yaml):
                 dockerPullId = match.value.get('dockerPull')
 
@@ -346,6 +351,12 @@ class CWLWorkflowEngine(WorkflowEngine):
             workflow=newLocalWf
         )
         return newWfEngine, list(containerTags)
+    
+    def sideContainers(self) -> List[ContainerTaggedName]:
+        """
+        Containers needed by the engine to work
+        """
+        return self.OPERATIONAL_CONTAINER_TAGS
 
     def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
         """

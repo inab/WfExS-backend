@@ -1,6 +1,6 @@
-trs_endpoint: https://dev.workflowhub.eu/ga4gh/trs/v2/tools/
-workflow_id: 34
-version: 4
+trs_endpoint: https://workflowhub.eu/ga4gh/trs/v2/tools/
+workflow_id: 107
+version: 1
 workflow_config:
   secure: true
 # All the inputs must be URLs or CURIEs from identifiers.org

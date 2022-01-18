@@ -33,7 +33,7 @@ class GitFetcher(AbstractStatefulFetcher):
         
         self.git_cmd = self.progs.get(DEFAULT_GIT_CMD, DEFAULT_GIT_CMD)
 
-    def doMaterializeRepo(self, repoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag]:
+    def doMaterializeRepo(self, repoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, Mapping[str, str]]:
         """
 
         :param repoURL:
@@ -139,8 +139,14 @@ class GitFetcher(AbstractStatefulFetcher):
         with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1',
                               cwd=repo_tag_destdir) as revproc:
             repo_effective_checkout = revproc.stdout.read().rstrip()
+            
+        metadata = {
+            'repo': repoURL,
+            'tag': repoTag,
+            'checkout': repo_effective_checkout,
+        }
 
-        return repo_tag_destdir, repo_effective_checkout
+        return repo_tag_destdir, repo_effective_checkout, metadata
 
 
     def fetch(self, remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
@@ -176,7 +182,8 @@ class GitFetcher(AbstractStatefulFetcher):
         # Now, reassemble the repoURL, to be used by git client
         repoURL = parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, '', '', ''))
         
-        repo_tag_destdir , repo_effective_checkout = self.doMaterializeRepo(repoURL, repoTag=repoTag)
+        repo_tag_destdir , repo_effective_checkout, metadata = self.doMaterializeRepo(repoURL, repoTag=repoTag)
+        metadata['relpath'] = repoRelPath
         
         if repoRelPath is not None:
             cachedContentPath = os.path.join(repo_tag_destdir, repoRelPath)
@@ -197,11 +204,7 @@ class GitFetcher(AbstractStatefulFetcher):
         return kind, [
             URIWithMetadata(
                 uri=remote_file,
-                metadata={
-                    'repo': repoURL,
-                    'tag': repoTag,
-                    'relpath': repoRelPath
-                },
+                metadata=metadata,
                 preferredName=preferredName
             )
         ]

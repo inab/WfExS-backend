@@ -28,6 +28,23 @@
 				},
 				{
 					"properties": {
+						"access_key": {
+							"type": "string",
+							"minLength": 1
+						},
+						"secret_key": {
+							"type": "string",
+							"minLength": 1
+						}
+					},
+					"additionalProperties": false,
+					"required": [
+						"access_key",
+						"secret_key"
+					]
+				},
+				{
+					"properties": {
 						"token": {
 							"type": "string",
 							"minLength": 1
