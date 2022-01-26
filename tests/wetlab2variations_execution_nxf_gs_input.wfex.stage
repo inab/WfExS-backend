@@ -9,8 +9,8 @@ params:
     rawreads:
       c-l-a-s-s: File
       url:
-        - gs://genomics-public-data/ftp-trace.ncbi.nih.gov/1000genomes/ftp/data/150140/sequence_read/SRR642626_1.filt.fastq.gz
-        - gs://genomics-public-data/ftp-trace.ncbi.nih.gov/1000genomes/ftp/data/150140/sequence_read/SRR642626_2.filt.fastq.gz
+        - s3://giab/data/NA12878/NIST_NA12878_HG001_HiSeq_300x/140407_D00360_0017_BH947YADXX/Project_RM8398/Sample_U5c/U5c_CCGTCC_L001_R1_001.fastq.gz
+        - s3://giab/data/NA12878/NIST_NA12878_HG001_HiSeq_300x/140407_D00360_0017_BH947YADXX/Project_RM8398/Sample_U5c/U5c_CCGTCC_L001_R2_001.fastq.gz
     referencegenome:
       c-l-a-s-s: File
       url: gs://genomics-public-data/references/hs37d5/hs37d5.fa.gz
