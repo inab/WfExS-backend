@@ -98,19 +98,20 @@ def describeGitRepo(repo):
         # Return plain commit if no parent tag can be found
         return "g{}".format(latest_commit_id_decode[:7]), latest_commit_id_decode
 
-import os
-import sys
-
 # It returns something similar to 'git describe --tags'
 def get_WfExS_version():
+    import os
+    import sys
+
+    vertuple = __version__ , None
     executable = os.path.basename(sys.argv[0])
     #try:
-        
+    
     if executable.startswith('WfExS-'):
         wfexs_dirname = os.path.dirname(os.path.abspath(sys.argv[0]))
         
-        return describeGitRepo(wfexs_dirname)
+        vertuple = describeGitRepo(wfexs_dirname)
     #except:
     #    pass
     
-    return __version__ , None
+    return vertuple
