@@ -22,6 +22,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import venv
 
@@ -55,7 +56,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
     
-    DEFAULT_CWLTOOL_VERSION = '3.1.20211107152837'
+    DEFAULT_CWLTOOL_VERSION = '3.1.20220124184855'
 
     DEVEL_CWLTOOL_PACKAGE = f'git+{CWLTOOL_REPO}.git'
     # Set this constant to something meaningful only when a hotfix
@@ -64,10 +65,16 @@ class CWLWorkflowEngine(WorkflowEngine):
     DEVEL_CWLTOOL_VERSION = None
 
     #DEFAULT_CWL_UTILS_VERSION = 'v0.10'
-    DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20211116214159'
+    #DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20211116214159'
 
     PODMAN_CWLTOOL_VERSION = '3.1.20210921111717'
     NO_WRAPPER_CWLTOOL_VERSION = '3.1.20210921111717'
+    CWLTOOL_MAX_PYVER = [
+        (3, None, NO_WRAPPER_CWLTOOL_VERSION),
+        (3, 6, '3.1.20220116183622'),
+        (None, None, DEFAULT_CWLTOOL_VERSION)
+    ]
+    
     NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
     
     NODEJS_CONTAINER_TAG = 'docker.io/node:slim'
@@ -118,10 +125,35 @@ class CWLWorkflowEngine(WorkflowEngine):
         toolsSect = local_config.get('tools', {})
         engineConf = toolsSect.get(self.ENGINE_NAME, {})
         workflowEngineConf = workflow_config.get(self.ENGINE_NAME, {})
+        
+        default_cwl_version = self.DEFAULT_CWLTOOL_VERSION
+        pymatched = False
+        for pyver_maj, pyver_min, matched_cwl_version in self.CWLTOOL_MAX_PYVER:
+            if pyver_maj == sys.version_info.major:
+                if pyver_min is None:
+                    # This one is temporary, until it finds something better
+                    default_cwl_version = matched_cwl_version
+                elif pyver_min == sys.version_info.minor:
+                    # If perfect match, use it!
+                    default_cwl_version = matched_cwl_version
+                    pymatched = True
+                    break
+            else:
+                default_cwl_version = matched_cwl_version
+                break
 
-        cwl_version = workflowEngineConf.get('version')
-        if cwl_version is None:
-            cwl_version = engineConf.get('version', self.DEFAULT_CWLTOOL_VERSION)
+        # These are the requested versions
+        requested_cwl_version = workflowEngineConf.get('version')
+        if requested_cwl_version is None:
+            requested_cwl_version = engineConf.get('version')
+
+        if (requested_cwl_version is None) or (pymatched and requested_cwl_version > default_cwl_version):
+            cwl_version = default_cwl_version
+        else:
+            cwl_version = requested_cwl_version
+
+        self.logger.debug(f'cwltool version: requested {requested_cwl_version} used {cwl_version}')
+
         self.cwl_version = cwl_version
 
         # Setting up packed directory
@@ -231,11 +263,11 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwl_install_stdout:
             with tempfile.NamedTemporaryFile() as cwl_install_stderr:
                 retVal = subprocess.Popen(
-                    ". '{0}'/bin/activate && pip install --upgrade pip wheel ; pip install {1}=={2}  {3}{4}{5}".format(
+                    ". '{0}'/bin/activate && pip install --upgrade pip wheel ; pip install {3}{4}{5}".format(
                         cwl_install_dir,
-                        self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                         cwltoolPackage, cwltoolMatchOp, engineVersion,
                     # Commented out, as WfExS is not currently using cwl-utils
+                    #    self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
                     #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
                     ),
                     stdout=cwl_install_stdout,
