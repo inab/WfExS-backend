@@ -542,7 +542,7 @@ def GetGeneratedDirectoryContent(
                         signature=ComputeDigestFromFile(entry.path, repMethod=signatureMethod)
                     )
                 elif entry.is_dir():
-                    theValue = GetGeneratedDirectoryContent(entry.path, repMethod=signatureMethod)
+                    theValue = GetGeneratedDirectoryContent(entry.path, signatureMethod=signatureMethod)
 
                 if theValue is not None:
                     theValues.append(theValue)
