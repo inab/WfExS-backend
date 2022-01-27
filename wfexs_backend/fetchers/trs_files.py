@@ -34,7 +34,7 @@ INTERNAL_TRS_SCHEME_PREFIX = 'wfexs.trs.files'
 TRS_FILES_SUFFIX = '/files'
 TRS_DESCRIPTOR_INFIX = '/descriptor/'
 
-def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
+def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
     """
     Method to download contents from TRS files related to a tool
 

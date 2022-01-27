@@ -103,7 +103,7 @@ class SchemeHandlerCacheHandler:
         return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
         
     
-    def list(self, destdir:AbsPath, *args, acceptGlob:bool=False) -> Iterator[Tuple[URIType, Mapping[str,Any]]]:
+    def list(self, destdir:AbsPath, *args, acceptGlob:bool=False) -> Iterator[Tuple[AnyURI, Mapping[str,Any]]]:
         """
         This method iterates over the list of metadata entries,
         using glob patterns if requested
@@ -129,9 +129,10 @@ class SchemeHandlerCacheHandler:
                         else:
                             for meta in metaStructure['metadata_array']:
                                 meta_uri = meta['uri']
-                                if reEntries and any(map(lambda r: r.match(meta_uri) is not None, reEntries)):
+                                meta_uri_str = meta_uri['uri']  if isinstance(meta_uri, dict)  else  meta_uri
+                                if reEntries and any(map(lambda r: r.match(meta_uri_str) is not None, reEntries)):
                                     break
-                                elif meta_uri in entries:
+                                elif meta_uri_str in entries:
                                     break
                                 meta_uri = None
                         
@@ -140,7 +141,7 @@ class SchemeHandlerCacheHandler:
                     except:
                         pass
     
-    def remove(self, destdir:AbsPath, *args, doRemoveFiles:bool=False, acceptGlob:bool=False) -> Iterator[Tuple[URIType, AbsPath, Optional[AbsPath]]]:
+    def remove(self, destdir:AbsPath, *args, doRemoveFiles:bool=False, acceptGlob:bool=False) -> Iterator[Tuple[AnyURI, AbsPath, Optional[AbsPath]]]:
         """
         This method iterates elements from metadata entries,
         and optionally the cached value

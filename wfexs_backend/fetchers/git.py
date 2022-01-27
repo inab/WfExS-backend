@@ -149,7 +149,7 @@ class GitFetcher(AbstractStatefulFetcher):
         return repo_tag_destdir, repo_effective_checkout, metadata
 
 
-    def fetch(self, remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
+    def fetch(self, remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
         parsedInputURL = parse.urlparse(remote_file)
         
         # These are the usual URIs which can be understood by pip

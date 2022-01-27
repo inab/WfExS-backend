@@ -117,15 +117,59 @@ class ContentKind(enum.Enum):
     Directory = 'dir'
     Value = 'val'
 
+class AttributionRole(enum.Enum):
+    """
+    The valid roles come from CASRAI CRediT, and can be visited through
+    http://credit.niso.org/contributor-roles/{term}/
+    """
+    Conceptualization = 'conceptualization'
+    DataCuration = 'data-curation'
+    FormalAnalysis = 'formal-analysis'
+    FundingAcquisition = 'funding-acquisition'
+    Investigation = 'investigation'
+    Methodology = 'methodology'
+    ProjectAdministration = 'project-administration'
+    Resources = 'resources'
+    Software = 'software'
+    Supervision = 'supervision'
+    Validation = 'validation'
+    Visualization = 'visualization'
+    WritingOriginalDraft = 'writing-original-draft'
+    WritingReviewEditing = 'writing-review-editing'
+
+class Attribution(NamedTuple):
+    # Author
+    name: str
+    # A unique way to represent this author, either through her/his
+    # ORCID or another permanent, representative link
+    pid: URIType
+    roles: List[AttributionRole] = []
+
+NoPermissionLicence = 'https://choosealicense.com/no-permission/'
+
+class LicensedURI(NamedTuple):
+    """
+    uri: The uri
+    licence: The licence associated to the dataset behind this URI
+    attributions: The attributions associated to the dataset pointed
+    out by this URI
+    """
+    uri: URIType
+    # A licence URL, either from a repository, or a site like
+    # choosealicense.com or spdx.org/licenses/
+    licence: URIType = NoPermissionLicence
+    attributions: List[Attribution] = []
+
+AnyURI = Union[URIType,LicensedURI]
 
 class URIWithMetadata(NamedTuple):
     """
-    uri: The uri
+    uri: The uri, which can be either a raw or an annotated one
     metadata: A dictionary with the metadata associated to that URI.
     preferredName: A pretty way to name this resource. Workflow
         execution can decide whether to honour it or not
     """
-    uri: URIType
+    uri: AnyURI
     metadata: Mapping[str,Any]
     preferredName: RelPath = None
 
@@ -140,12 +184,12 @@ class MaterializedContent(NamedTuple):
       of the execution environment
     """
     local: AbsPath
-    uri: URIType
+    uri: AnyURI
     prettyFilename: RelPath
     kind: ContentKind = ContentKind.File
     metadata_array: Optional[List[URIWithMetadata]] = None
 
-ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]]
+ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]]
 
 
 class MaterializedInput(NamedTuple):
@@ -223,7 +267,7 @@ class GeneratedContent(AbstractGeneratedContent, NamedTuple):
     """
     local: AbsPath
     signature: Fingerprint
-    uri: Optional[URIType] = None
+    uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
 
 
@@ -241,7 +285,7 @@ class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
     """
     local: AbsPath
     values: List[AbstractGeneratedContent]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
-    uri: Optional[URIType] = None
+    uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
     signature: Optional[Fingerprint] = None
 
@@ -521,7 +565,7 @@ def ComputeDigestFromGeneratedContentList(
 
 def GetGeneratedDirectoryContent(
     thePath: AbsPath,
-    uri: Optional[URIType] = None,
+    uri: Optional[LicensedURI] = None,
     preferredFilename: Optional[RelPath] = None,
     signatureMethod = None
 ) -> GeneratedDirectoryContent:
@@ -564,7 +608,7 @@ def GetGeneratedDirectoryContent(
 def GetGeneratedDirectoryContentFromList(
     thePath: AbsPath,
     theValues: List[AbstractGeneratedContent],
-    uri: Optional[URIType] = None,
+    uri: Optional[LicensedURI] = None,
     preferredFilename: Optional[RelPath] = None,
     signatureMethod = None
 ) -> GeneratedDirectoryContent:
