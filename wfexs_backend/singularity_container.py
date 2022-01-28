@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,6 +29,8 @@ import uuid
 from typing import Dict, List, Tuple
 from .common import *
 from .container import ContainerFactory, ContainerFactoryException
+
+from .utils.digests import ComputeDigestFromFile, nihDigester
 from .utils.docker import DockerHelper
 
 class SingularityContainerFactory(ContainerFactory):
@@ -223,7 +225,7 @@ STDERR
             
             # Then, compute the signature
             if imageSignature is None:
-                imageSignature = ComputeDigestFromFile(localContainerPath, repMethod=nihDigest)
+                imageSignature = ComputeDigestFromFile(localContainerPath, repMethod=nihDigester)
             
             containersList.append(
                 Container(

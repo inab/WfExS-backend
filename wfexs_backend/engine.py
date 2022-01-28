@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,6 +35,9 @@ from .container import Container, ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 from .docker_container import DockerContainerFactory
 from .podman_container import PodmanContainerFactory
+
+from .utils.contents import CWLDesc2Content, GetGeneratedDirectoryContent
+from .utils.digests import ComputeDigestFromFile, nihDigester
 
 from rocrate.rocrate import ROCrate
 from rocrate.model.computerlanguage import ComputerLanguage
@@ -447,12 +450,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         matValues = [
                             GeneratedContent(
                                 local=entry.path,
-                                signature=ComputeDigestFromFile(entry.path, repMethod=nihDigest)
+                                signature=ComputeDigestFromFile(entry.path, repMethod=nihDigester)
                             )
                         ]
                         guessedOutputKind = ContentKind.File
                     elif entry.is_dir(follow_symlinks=False):
-                        matValues = [ GetGeneratedDirectoryContent(entry.path, signatureMethod=nihDigest) ]
+                        matValues = [ GetGeneratedDirectoryContent(entry.path, signatureMethod=nihDigester) ]
                         guessedOutputKind = ContentKind.Directory
                     
                     if matValues is not None:
@@ -501,13 +504,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     matchedPath,
                                     uri=None,   # TODO: generate URIs when it is advised
                                     preferredFilename=expectedOutput.preferredFilename,
-                                    signatureMethod=nihDigest
+                                    signatureMethod=nihDigester
                                 )
                             elif expectedOutput.kind == ContentKind.File:
                                 theContent = GeneratedContent(
                                     local=matchedPath,
                                     uri=None,   # TODO: generate URIs when it is advised
-                                    signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigest),
+                                    signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigester),
                                     preferredFilename=expectedOutput.preferredFilename
                                 )
                                 self.logger.debug(f"Filled From {expectedOutput.preferredFilename} {matchedPath}")
@@ -544,13 +547,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                             matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised
                             preferredFilename=expectedOutput.preferredFilename,
-                            signatureMethod=nihDigest
+                            signatureMethod=nihDigester
                         )
                     elif expectedOutput.kind == ContentKind.File:
                         theContent = GeneratedContent(
                             local=matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised
-                            signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigest),
+                            signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigester),
                             preferredFilename=expectedOutput.preferredFilename
                         )
                     else:

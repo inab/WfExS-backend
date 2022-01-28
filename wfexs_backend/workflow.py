@@ -17,7 +17,7 @@
 from __future__ import absolute_import
 
 import atexit
-import http
+import hashlib
 import inspect
 import io
 import json
@@ -60,6 +60,7 @@ from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_
     WORKDIR_ENGINE_TWEAKS_RELDIR
 from .cache_handler import SchemeHandlerCacheHandler
 
+from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 
 from .fetchers import AbstractStatefulFetcher
@@ -1618,7 +1619,7 @@ class WF:
                 }
                 if isinstance(itemOutValues, GeneratedDirectoryContent):    # if is a directory
                     if os.path.isdir(itemOutSource):
-                        generatedDirectoryContentURI = ComputeDigestFromDirectory(itemOutSource, repMethod=nihDigest)   # generate nih for the directory
+                        generatedDirectoryContentURI = ComputeDigestFromDirectory(itemOutSource, repMethod=nihDigester)   # generate nih for the directory
                         dirProperties = dict.fromkeys(['hasPart'])  # files in the directory
                         generatedContentList = []
                         generatedDirectoryContentList = []
@@ -1627,7 +1628,7 @@ class WF:
                             if isinstance(item, GeneratedContent):  # if is a directory that contains files
                                 fileID = item.signature
                                 if fileID is None:
-                                    fileID = ComputeDigestFromFile(item.local, repMethod=nihDigest)
+                                    fileID = ComputeDigestFromFile(item.local, repMethod=nihDigester)
                                 fileProperties = {
                                     'name': itemOutName + "::/" + os.path.basename(item.local),     # output name + file name
                                     'isPartOf': {'@id': generatedDirectoryContentURI}  # reference to the directory
@@ -1644,7 +1645,7 @@ class WF:
                                         if isinstance(content, GeneratedContent):   # if is a file
                                             fileID = content.signature  # TODO: create a method to add files to RO-crate
                                             if fileID is None:
-                                                fileID = ComputeDigestFromFile(content.local, repMethod=nihDigest)
+                                                fileID = ComputeDigestFromFile(content.local, repMethod=nihDigester)
                                             fileProperties = {
                                                 'name': itemOutName + "::/" + os.path.basename(content.local),
                                                 'isPartOf': {'@id': generatedDirectoryContentURI}
@@ -1673,7 +1674,7 @@ class WF:
                     if os.path.isfile(itemOutSource):
                         fileID = itemOutValues.signature
                         if fileID is None:
-                            fileID = ComputeDigestFromFile(itemOutSource, repMethod=nihDigest)
+                            fileID = ComputeDigestFromFile(itemOutSource, repMethod=nihDigester)
                         wfCrate.add_file(source=fileID, fetch_remote=False, properties=properties)
 
                     else:
