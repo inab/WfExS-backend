@@ -31,7 +31,7 @@ from ..common import *
 
 PRIDE_PROJECTS_REST='https://www.ebi.ac.uk/pride/ws/archive/v2/projects/'
 
-def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
+def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
     """
     Method to resolve contents from PRIDE project ids
 

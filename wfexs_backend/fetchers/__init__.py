@@ -48,13 +48,13 @@ class AbstractStatefulFetcher(abc.ABC):
         self.progs = progs
     
     @abc.abstractmethod
-    def fetch(self, remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
+    def fetch(self, remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
         """
         This is the method to be implemented by the stateful fetcher
         """
         pass
 
-def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
+def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
     """
     Method to fetch contents from http, https and ftp
 
@@ -119,7 +119,7 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
     
     return ContentKind.File, [ uri_with_metadata ]
 
-def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
+def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
     """
     Method to fetch contents from ftp
 
@@ -192,7 +192,7 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None) -> Tupl
     return numCopied, kind
 
 # TODO: test this codepath
-def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
+def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
     """
     Method to fetch contents from ssh / sftp servers
 
@@ -245,7 +245,7 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
         if t is not None:
             t.close()
 
-def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
+def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
     """
     Method to fetch contents from local contents
 
