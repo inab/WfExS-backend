@@ -185,7 +185,7 @@ class MaterializedContent(NamedTuple):
     kind: ContentKind = ContentKind.File
     metadata_array: Optional[List[URIWithMetadata]] = None
 
-ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]]
+ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]]
 
 
 class MaterializedInput(NamedTuple):
