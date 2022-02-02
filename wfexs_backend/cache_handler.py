@@ -185,7 +185,7 @@ class SchemeHandlerCacheHandler:
                 
                 yield meta_uri, metaFile, removeCachedCopyPath
     
-    def inject(self, destdir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
+    def inject(self, destdir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath, List[AbsPath]]]=None) -> Tuple[AbsPath, Fingerprint]:
         return self._inject(
             self.getHashDir(destdir),
             the_remote_file,
@@ -196,7 +196,7 @@ class SchemeHandlerCacheHandler:
             inputKind=inputKind
         )
     
-    def _inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath]]=None) -> Tuple[AbsPath, Fingerprint]:
+    def _inject(self, hashDir:AbsPath, the_remote_file:Union[urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, destdir:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath, List[AbsPath]]]=None) -> Tuple[AbsPath, Fingerprint]:
         """
         This method has been created to be able to inject a cached metadata entry
         """
@@ -269,7 +269,7 @@ class SchemeHandlerCacheHandler:
         
         return finalCachedFilename, fingerprint
     
-    def fetch(self, remote_file:Union[urllib.parse.ParseResult, URIType], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
+    def fetch(self, remote_file:Union[urllib.parse.ParseResult, URIType, List[Union[urllib.parse.ParseResult, URIType]]], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
         # The directory with the content, whose name is based on sha256
         if not os.path.exists(destdir):
             try:
@@ -288,114 +288,144 @@ class SchemeHandlerCacheHandler:
         inputKind = remote_file
         metadata_array = []
         while not isinstance(inputKind, ContentKind):
-            the_remote_file = inputKind
-            if isinstance(the_remote_file, urllib.parse.ParseResult):
-                parsedInputURL = the_remote_file
-                the_remote_file = urllib.parse.urlunparse(the_remote_file)
-            else:
-                parsedInputURL = urllib.parse.urlparse(the_remote_file)
-            
-            # uriCachedFilename is going to be always a symlink
-            uriMetaCachedFilename , uriCachedFilename , absUriCachedFilename = self._genUriMetaCachedFilename(hashDir, the_remote_file)
-            
-            # TODO: check cached state in future database
-            # Cleaning up
-            if registerInCache and ignoreCache:
-                # Removing the metadata
-                if os.path.exists(uriMetaCachedFilename):
-                    os.unlink(uriMetaCachedFilename)
-                
-                # Removing the symlink
-                if os.path.exists(absUriCachedFilename):
-                    os.unlink(absUriCachedFilename)
-                # We cannot remove the content as
-                # it could be referenced by other symlinks
-            
-            refetch = not registerInCache or ignoreCache or not os.path.exists(uriMetaCachedFilename) or os.stat(uriMetaCachedFilename).st_size == 0
-            
-            metaStructure = None
-            if not refetch:
-                try:
-                    metaStructure = self._parseMetaStructure(uriMetaCachedFilename)
-                except:
-                    # Metadata is corrupted
-                    self.logger.warning(f'Metadata cache {uriMetaCachedFilename} is corrupted. Ignoring.')
-                    pass
-            
-            if metaStructure is not None:
-                # Metadata cache hit
-                inputKind = metaStructure.get('kind')
-                if inputKind is None:
-                    inputKind = metaStructure['resolves_to']
+            # These elements are alternative URIs. Any of them should
+            # provide the very same content
+            altInputs = inputKind  if isinstance(inputKind, list)  else  [ inputKind ]
+            uncachedInputs = list()
+            for the_remote_file in altInputs:
+                if isinstance(the_remote_file, urllib.parse.ParseResult):
+                    parsedInputURL = the_remote_file
+                    the_remote_file = urllib.parse.urlunparse(the_remote_file)
                 else:
-                    # Additional checks
-                    inputKind = ContentKind(inputKind)
-                    relFinalCachedFilename = metaStructure.get('path', {}).get('relative', os.readlink(absUriCachedFilename))
-                    finalCachedFilename = os.path.normpath(os.path.join(hashDir, relFinalCachedFilename))
+                    parsedInputURL = urllib.parse.urlparse(the_remote_file)
+                
+                # uriCachedFilename is going to be always a symlink
+                uriMetaCachedFilename , uriCachedFilename , absUriCachedFilename = self._genUriMetaCachedFilename(hashDir, the_remote_file)
+                
+                # TODO: check cached state in future database
+                # Cleaning up
+                if registerInCache and ignoreCache:
+                    # Removing the metadata
+                    if os.path.exists(uriMetaCachedFilename):
+                        os.unlink(uriMetaCachedFilename)
                     
-                    if not os.path.exists(finalCachedFilename):
-                        self.logger.warning(f'Relative cache path {relFinalCachedFilename} was not found')
-                        finalCachedFilename = metaStructure.get('path', {}).get('absolute')
+                    # Removing the symlink
+                    if os.path.exists(absUriCachedFilename):
+                        os.unlink(absUriCachedFilename)
+                    # We cannot remove the content as
+                    # it could be referenced by other symlinks
+                
+                refetch = not registerInCache or ignoreCache or not os.path.exists(uriMetaCachedFilename) or os.stat(uriMetaCachedFilename).st_size == 0
+                
+                metaStructure = None
+                if not refetch:
+                    try:
+                        metaStructure = self._parseMetaStructure(uriMetaCachedFilename)
+                    except:
+                        # Metadata is corrupted
+                        self.logger.warning(f'Metadata cache {uriMetaCachedFilename} is corrupted. Ignoring.')
+                        pass
+                
+                if metaStructure is not None:
+                    # Metadata cache hit
+                    inputKind = metaStructure.get('kind')
+                    if inputKind is None:
+                        inputKind = metaStructure['resolves_to']
+                    else:
+                        # Additional checks
+                        inputKind = ContentKind(inputKind)
+                        relFinalCachedFilename = metaStructure.get('path', {}).get('relative', os.readlink(absUriCachedFilename))
+                        finalCachedFilename = os.path.normpath(os.path.join(hashDir, relFinalCachedFilename))
                         
-                        if (finalCachedFilename is None) or not os.path.exists(finalCachedFilename):
-                            self.logger.warning(f'Absolute cache path {finalCachedFilename} was not found. Cache miss!!!')
+                        if not os.path.exists(finalCachedFilename):
+                            self.logger.warning(f'Relative cache path {relFinalCachedFilename} was not found')
+                            finalCachedFilename = metaStructure.get('path', {}).get('absolute')
                             
-                            # Cleaning up
-                            metaStructure = None
-                
+                            if (finalCachedFilename is None) or not os.path.exists(finalCachedFilename):
+                                self.logger.warning(f'Absolute cache path {finalCachedFilename} was not found. Cache miss!!!')
+                                
+                                # Cleaning up
+                                metaStructure = None
+                    
+                if metaStructure is not None:
+                    # Cache hit
+                    # As the content still exists, get the metadata
+                    break
+                else:
+                    uncachedInputs.append((the_remote_file, parsedInputURL))
+            
             if metaStructure is not None:
-                # Cache hit
-                # As the content still exists, get the metadata
-                
                 fetched_metadata_array = list(map(lambda rm: URIWithMetadata(uri=rm['uri'], metadata=rm['metadata'], preferredName=rm.get('preferredName')), metaStructure['metadata_array']))
+            elif offline:
+                # As this is a handler for online resources, comply with offline mode
+                raise WFException(f"Cannot download content in offline mode from {remote_file} to {uriCachedFilename}")
             else:
                 # Cache miss
                 # As this is a handler for online resources, comply with offline mode
-                if offline:
-                    raise WFException(f"Cannot download content in offline mode from {remote_file} to {uriCachedFilename}")
-                
-                # Content is fetched here
-                theScheme = parsedInputURL.scheme.lower()
-                schemeHandler = self.schemeHandlers.get(theScheme)
-
-                if schemeHandler is None:
-                    raise WFException(f'No {theScheme} scheme handler for {the_remote_file} (while processing {remote_file}). Was this data injected in the cache?')
-
-                try:
+                nested_exception = None
+                failed = True
+                for the_remote_file, parsedInputURL in uncachedInputs:
                     # Content is fetched here
-                    inputKind, fetched_metadata_array = schemeHandler(the_remote_file, tempCachedFilename, secContext=secContext)
+                    theScheme = parsedInputURL.scheme.lower()
+                    schemeHandler = self.schemeHandlers.get(theScheme)
                     
-                    # The cache entry is injected
-                    finalCachedFilename, fingerprint = self._inject(
-                        hashDir,
-                        the_remote_file,
-                        fetched_metadata_array,
-                        tempCachedFilename=tempCachedFilename,
-                        destdir=destdir,
-                        inputKind=inputKind
-                    )
-                    
-                    # Now, creating the symlink
-                    # (which should not be needed in the future)
-                    if finalCachedFilename is not None:
-                        if os.path.isfile(finalCachedFilename):
-                            os.unlink(finalCachedFilename)
-                        elif os.path.isdir(finalCachedFilename):
-                            shutil.rmtree(finalCachedFilename)
-                        os.rename(tempCachedFilename, finalCachedFilename)
-                        
-                        next_input_file = os.path.relpath(finalCachedFilename, hashDir)
+                    try:
+                        if schemeHandler is None:
+                            errmsg = f'No {theScheme} scheme handler for {the_remote_file} (while processing {remote_file}). Was this data injected in the cache?'
+                            self.logger.error(errmsg)
+                            raise WFException(errmsg) from nested_exception
+
+                        try:
+                            # Content is fetched here
+                            inputKind, fetched_metadata_array = schemeHandler(the_remote_file, tempCachedFilename, secContext=secContext)
+                            
+                            # The cache entry is injected
+                            finalCachedFilename, fingerprint = self._inject(
+                                hashDir,
+                                the_remote_file,
+                                fetched_metadata_array,
+                                tempCachedFilename=tempCachedFilename,
+                                destdir=destdir,
+                                inputKind=inputKind
+                            )
+                            
+                            # Now, creating the symlink
+                            # (which should not be needed in the future)
+                            if finalCachedFilename is not None:
+                                if os.path.isfile(finalCachedFilename):
+                                    os.unlink(finalCachedFilename)
+                                elif os.path.isdir(finalCachedFilename):
+                                    shutil.rmtree(finalCachedFilename)
+                                os.rename(tempCachedFilename, finalCachedFilename)
+                                
+                                next_input_file = os.path.relpath(finalCachedFilename, hashDir)
+                            else:
+                                next_input_file = hashlib.sha1(inputKind.encode('utf-8')).hexdigest()
+                            
+                            if os.path.lexists(absUriCachedFilename):
+                                os.unlink(absUriCachedFilename)
+                            
+                            os.symlink(next_input_file, absUriCachedFilename)
+                        except WFException as we:
+                            raise we from nested_exception
+                        except Exception as e:
+                            errmsg = "Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(the_remote_file, uriCachedFilename, remote_file, tempCachedFilename, e)
+                            self.logger.error(errmsg)
+                            raise WFException(errmsg) from nested_exception
+                    except WFException as wfe:
+                        # Keeping the newest element of the chain
+                        nested_exception = wfe
                     else:
-                        next_input_file = hashlib.sha1(inputKind.encode('utf-8')).hexdigest()
+                        # This URI could be resolved (implement alternative URLs)
+                        failed = False
+                        break
                     
-                    if os.path.lexists(absUriCachedFilename):
-                        os.unlink(absUriCachedFilename)
-                    
-                    os.symlink(next_input_file, absUriCachedFilename)
-                except WFException as we:
-                    raise we
-                except Exception as e:
-                    raise WFException("Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(the_remote_file, uriCachedFilename, remote_file, tempCachedFilename, e))
+                # No one of the URIs could be fetched or resolved
+                if failed:
+                    if len(uncachedInputs) > 1:
+                        raise WFException(f"{len(uncachedInputs)} alternate URIs have failed (see nested reasons)") from nested_exception
+                    else:
+                        raise nested_exception
             
             # Store the metadata
             metadata_array.extend(fetched_metadata_array)
