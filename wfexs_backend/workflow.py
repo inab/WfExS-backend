@@ -67,6 +67,7 @@ from .fetchers import AbstractStatefulFetcher
 from .fetchers import DEFAULT_SCHEME_HANDLERS
 from .fetchers.git import SCHEME_HANDLERS as GIT_SCHEME_HANDLERS, GitFetcher
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
+from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX, SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
 
@@ -394,6 +395,7 @@ class WF:
 
         # All the custom ones should be added here
         self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
+        self.cacheHandler.addSchemeHandlers(DRS_SCHEME_HANDLERS)
         self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
         self.cacheHandler.addSchemeHandlers(S3_SCHEME_HANDLERS)
 
