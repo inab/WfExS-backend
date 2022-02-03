@@ -70,6 +70,7 @@ from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX, SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
+from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
 
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
@@ -398,6 +399,7 @@ class WF:
         self.cacheHandler.addSchemeHandlers(DRS_SCHEME_HANDLERS)
         self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
         self.cacheHandler.addSchemeHandlers(S3_SCHEME_HANDLERS)
+        self.cacheHandler.addSchemeHandlers(GS_SCHEME_HANDLERS)
 
         # These ones should have prevalence over other custom ones
         self.addSchemeHandlers(GIT_SCHEME_HANDLERS)
