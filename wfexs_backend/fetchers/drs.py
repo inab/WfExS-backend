@@ -87,15 +87,17 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
     object_metadata_url = drs_service_prefix + 'objects/' + object_id
     
     gathered_meta = {'fetched': object_metadata_url}
-    metadata_array = [
-        URIWithMetadata(remote_file, gathered_meta)
-    ]
+    metadata_array = [ ]
     metadata = None
     try:
         metaio = io.BytesIO()
         _ , metametaio = fetchClassicURL(object_metadata_url, metaio, secContext=upperSecContext)
         object_metadata = json.loads(metaio.getvalue().decode('utf-8'))
+        # Gathering the preferred name
+        preferredName = object_metadata.get('name')
+        
         gathered_meta['payload'] = object_metadata
+        metadata_array.append(URIWithMetadata(remote_file, gathered_meta, preferredName))
         metadata_array.extend(metametaio)
     except urllib.error.HTTPError as he:
         raise WFException("Error fetching DRS metadata for {} : {} {}".format(remote_file, he.code, he.reason))
