@@ -104,7 +104,7 @@ class SchemeHandlerCacheHandler:
         return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
         
     
-    def list(self, destdir:AbsPath, *args, acceptGlob:bool=False) -> Iterator[Tuple[AnyURI, Mapping[str,Any]]]:
+    def list(self, destdir:AbsPath, *args, acceptGlob:bool=False, cascade:bool=False) -> Iterator[Tuple[AnyURI, Mapping[str,Any]]]:
         """
         This method iterates over the list of metadata entries,
         using glob patterns if requested
@@ -114,6 +114,10 @@ class SchemeHandlerCacheHandler:
             reEntries = self._translateArgs(entries)
         else:
             reEntries = None
+        
+        cascadeEntries = set()
+        unmatchedEntries = dict()
+        returnEntries = []
         
         hashDir = self.getHashDir(destdir)
         with os.scandir(hashDir) as hD:
@@ -135,21 +139,52 @@ class SchemeHandlerCacheHandler:
                                     break
                                 elif meta_uri_str in entries:
                                     break
+                                elif cascade:
+                                    # Only when something was specified
+                                    unmatchedEntries[meta_uri_str] = metaStructure
                                 meta_uri = None
                         
                         if meta_uri is not None:
                             yield meta_uri, metaStructure
+                            if cascade and len(entries) > 0:
+                                # Only when something was specified
+                                resolves_to = metaStructure.get('resolves_to')
+                                if resolves_to is not None:
+                                    if not isinstance(resolves_to, list):
+                                        resolves_to = [ resolves_to ]
+                                    
+                                    cascadeEntries.add(*resolves_to)
                     except:
                         pass
+        
+        # Now, the cascade passes
+        while len(cascadeEntries) > 0:
+            newCascadeEntries = set()
+            for meta_uri in cascadeEntries:
+                if meta_uri in unmatchedEntries:
+                    metaStructure = unmatchedEntries.pop(meta_uri)
+                    
+                    resolves_to = metaStructure.get('resolves_to')
+                    if resolves_to is not None:
+                        # Only when something was specified
+                        if not isinstance(resolves_to, list):
+                            resolves_to = [ resolves_to ]
+                        
+                        newCascadeEntries.add(*resolves_to)
+                    
+                    # Yielding what it was gathered
+                    yield meta_uri, metaStructure
+            
+            cascadeEntries = newCascadeEntries
     
-    def remove(self, destdir:AbsPath, *args, doRemoveFiles:bool=False, acceptGlob:bool=False) -> Iterator[Tuple[AnyURI, AbsPath, Optional[AbsPath]]]:
+    def remove(self, destdir:AbsPath, *args, doRemoveFiles:bool=False, acceptGlob:bool=False, cascade:bool=False) -> Iterator[Tuple[AnyURI, AbsPath, Optional[AbsPath]]]:
         """
         This method iterates elements from metadata entries,
         and optionally the cached value
         """
         if len(args) > 0:
             hashDir = self.getHashDir(destdir)
-            for meta_uri, metaStructure in self.list(destdir, *args, acceptGlob=acceptGlob):
+            for meta_uri, metaStructure in self.list(destdir, *args, acceptGlob=acceptGlob, cascade=cascade):
                 removeCachedCopyPath = None
                 for meta in metaStructure['metadata_array']:
                     if doRemoveFiles and not meta['metadata'].get('injected'):
@@ -268,6 +303,46 @@ class SchemeHandlerCacheHandler:
             json.dump(metaStructure, mOut)
         
         return finalCachedFilename, fingerprint
+    
+    def validate(self, destdir:AbsPath, *args, acceptGlob:bool=False, cascade:bool=False) -> Tuple[int, int]:
+        hashDir = self.getHashDir(destdir)
+        
+        for meta_uri, metaStructure in self.list(destdir, *args, acceptGlob=acceptGlob, cascade=cascade):
+            inputKind = metaStructure.get('kind')
+            validated = False
+            if inputKind is None:
+                inputKind = metaStructure['resolves_to']
+                
+                # Blindly accept it
+                validated = True
+            else:
+                # Additional checks
+                stored_fingerprint = metaStructure.get('fingerprint')
+                if stored_fingerprint is not None:
+                    inputKind = ContentKind(inputKind)
+                    relFinalCachedFilename = metaStructure.get('path', {}).get('relative')
+                    finalCachedFilename = os.path.normpath(os.path.join(hashDir, relFinalCachedFilename))
+                    
+                    if not os.path.exists(finalCachedFilename):
+                        self.logger.warning(f'Relative cache path {relFinalCachedFilename} was not found')
+                        finalCachedFilename = metaStructure.get('path', {}).get('absolute')
+                        
+                        if (finalCachedFilename is None) or not os.path.exists(finalCachedFilename):
+                            self.logger.warning(f'Absolute cache path {finalCachedFilename} was not found. Cache miss!!!')
+                            
+                            # Cleaning up
+                            metaStructure = None
+                    
+                    computed_fingerprint = None
+                    if metaStructure is not None:
+                        if inputKind == ContentKind.Directory:
+                            computed_fingerprint = ComputeDigestFromDirectory(finalCachedFilename, repMethod=stringifyFilenameDigest)
+                        elif inputKind == ContentKind.File:
+                            computed_fingerprint = ComputeDigestFromFile(finalCachedFilename, repMethod=stringifyFilenameDigest)
+                    
+                    validated = computed_fingerprint == stored_fingerprint
+            
+            yield meta_uri, validated, metaStructure
     
     def fetch(self, remote_file:Union[urllib.parse.ParseResult, URIType, List[Union[urllib.parse.ParseResult, URIType]]], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
         # The directory with the content, whose name is based on sha256

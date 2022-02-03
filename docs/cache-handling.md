@@ -7,7 +7,7 @@ python WfExS-backend.py cache --help
 ```
 
 ```
-usage: WfExS-backend.py cache [-h] [-r] [-g]
+usage: WfExS-backend.py cache [-h] [-r] [--cascade] [-g]
                               {ls,inject,rm,validate}
                               {input,ro-crate,ga4gh-trs,workflow}
                               [cache_command_args [cache_command_args ...]]
@@ -17,13 +17,15 @@ positional arguments:
                         Cache command to perform
   {input,ro-crate,ga4gh-trs,workflow}
                         Cache type to perform the cache command
-  cache_command_args    Optional cache element names
+  cache_command_args    Optional cache element names (default: None)
 
 optional arguments:
   -h, --help            show this help message and exit
   -r                    Try doing the operation recursively (i.e. both
-                        metadata and data)
-  -g                    Given cache element names are globs
+                        metadata and data) (default: False)
+  --cascade             Try doing the operation in cascade (including the URIs
+                        which resolve to other URIs) (default: False)
+  -g, --glob            Given cache element names are globs (default: False)
 ```
 
 Currently managed caches are:
@@ -37,15 +39,21 @@ Currently implemented operations over these caches are:
 
 * `ls`: List all the elements of the cache, or a part of them specified through the positional arguments, matching the URI
   of the resource. If `-g` argument is used, positional arguments are treated as
-  [glob patterns](https://en.wikipedia.org/wiki/Glob_(programming)).
+  [glob patterns](https://en.wikipedia.org/wiki/Glob_(programming)). If '--cascade' argument is used,
+  those entries which resolve to other URIs are inspected in order to include these last ones.
   
 * `rm`: Removes metadata elements from the cache, and optionally removes the fetched contents when
   `-r` argument is used. As in `ls` operation, if `-g` argument is used, positional arguments are
-  treated as [glob patterns](https://en.wikipedia.org/wiki/Glob_(programming)).
+  treated as [glob patterns](https://en.wikipedia.org/wiki/Glob_(programming)). The same happens
+  to '--cascade' argument, those entries which resolve to other URIs are inspected in order to
+  also remove these last ones.
   
 * `inject`: This operation allows injecting a new entry in the cache. This operation is needed to
   symbolically represent contents (hopefully with a valid public identifier) which cannot be
   automatically fetched by WfExS-backend, due implementation or legal limitations.
+  
+* `validate`: This operation checks that the recorded fingerprint on download matches the local contents.
+  It accepts the very same arguments as `ls`
 
 ## Examples
 

@@ -105,17 +105,17 @@ def processCacheCommand(wfInstance:WF, args: argparse.Namespace, logLevel) -> in
     retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
         if logLevel <= logging.INFO:
-            contents = sorted(map(lambda l: l[1], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs)), key=lambda x: x['stamp'])
+            contents = sorted(map(lambda l: l[1], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x['stamp'])
             for entry in contents:
                 json.dump(entry, sys.stdout, indent=4, sort_keys=True)
                 print()
         else:
-            contents = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs)))
+            contents = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)))
             for entry in contents:
                 print(entry)
             
     elif args.cache_command == WfExS_Cache_Commands.Remove:
-        print('\n'.join(map(lambda x: '\t'.join(x), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively))))
+        print('\n'.join(map(lambda x: '\t'.join(x), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
     elif args.cache_command == WfExS_Cache_Commands.Inject:
         injected_uri = args.cache_command_args[0]
         finalCachedFilename = args.cache_command_args[1]
@@ -123,8 +123,9 @@ def processCacheCommand(wfInstance:WF, args: argparse.Namespace, logLevel) -> in
         # cH.remove(cPath, injected_uri)
         # Then, inject new occurrence
         cH.inject(cPath, injected_uri, finalCachedFilename=finalCachedFilename)
-    #elif args.cache_command == WfExS_Cache_Commands.Validate:
-    #    contents = cH.list(*args.cache_command_args)
+    elif args.cache_command == WfExS_Cache_Commands.Validate:
+        for metaUri, validated, metaStructure in cH.validate(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade):
+            print(f"\t- {metaUri} {validated}")
     #    pass
     
     return retval
@@ -167,7 +168,8 @@ if __name__ == "__main__":
     )
     ap_c.add_argument('cache_command', help='Cache command to perform', type=WfExS_Cache_Commands.argtype, choices=WfExS_Cache_Commands)
     ap_c.add_argument("-r", dest="doCacheRecursively", help='Try doing the operation recursively (i.e. both metadata and data)', action="store_true", default=False)
-    ap_c.add_argument("-g", dest="filesAsGlobs", help='Given cache element names are globs', action="store_true", default=False)
+    ap_c.add_argument("--cascade", dest="doCacheCascade", help='Try doing the operation in cascade (including the URIs which resolve to other URIs)', action="store_true", default=False)
+    ap_c.add_argument("-g", "--glob", dest="filesAsGlobs", help='Given cache element names are globs', action="store_true", default=False)
     ap_c.add_argument('cache_type', help='Cache type to perform the cache command', type=WfExS_CacheType.argtype, choices=WfExS_CacheType)
     ap_c.add_argument('cache_command_args', help='Optional cache element names', nargs='*')
     
