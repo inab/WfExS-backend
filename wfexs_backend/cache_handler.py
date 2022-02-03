@@ -400,7 +400,7 @@ class SchemeHandlerCacheHandler:
                                 
                                 next_input_file = os.path.relpath(finalCachedFilename, hashDir)
                             else:
-                                next_input_file = hashlib.sha1(inputKind.encode('utf-8')).hexdigest()
+                                next_input_file = hashlib.sha1(the_remote_file.encode('utf-8')).hexdigest()
                             
                             if os.path.lexists(absUriCachedFilename):
                                 os.unlink(absUriCachedFilename)
