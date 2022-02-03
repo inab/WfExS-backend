@@ -67,9 +67,18 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
     method = None
     orig_remote_file = remote_file
     if isinstance(secContext, dict):
+        headers = secContext.get('headers', {}).copy()
+        token = secContext.get('token')
+        token_header = secContext.get('token_header')
         username = secContext.get('username')
         password = secContext.get('password')
-        if username is not None:
+        
+        if token is not None:
+            if token_header is not None:
+                headers[token_header] = token
+            else:
+                headers['Authorization'] = f'Bearer {token}'
+        elif username is not None:
             if password is None:
                 password = ''
 
@@ -85,7 +94,6 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
             remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
                                             parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
         method = secContext.get('method')
-        headers = secContext.get('headers', {})
     
     # Preparing where it is going to be written
     if isinstance(cachedFilename, (io.TextIOBase, io.BufferedIOBase, io.RawIOBase, io.IOBase)):

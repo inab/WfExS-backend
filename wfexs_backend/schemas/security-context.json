@@ -12,15 +12,16 @@
 				{
 					"properties": {
 						"username": {
+							"description": "The user name",
 							"type": "string",
 							"minLength": 1
 						},
 						"password": {
+							"description": "The user password associated to the username",
 							"type": "string",
 							"minLength": 0
 						}
 					},
-					"additionalProperties": false,
 					"required": [
 						"username",
 						"password"
@@ -37,7 +38,6 @@
 							"minLength": 1
 						}
 					},
-					"additionalProperties": false,
 					"required": [
 						"access_key",
 						"secret_key"
@@ -46,16 +46,32 @@
 				{
 					"properties": {
 						"token": {
+							"description": "The authentication token",
+							"type": "string",
+							"minLength": 1
+						},
+						"token_header": {
+							"description": "On HTTP, the authentication token is used to fill-in an 'Authentication: Bearer ' header. Sometimes authentication through tokens require using custom headers, like it happens with SevenBridges",
 							"type": "string",
 							"minLength": 1
 						}
 					},
-					"additionalProperties": false,
 					"required": [
 						"token"
 					]
 				}
 			],
+			"properties": {
+				"method": {
+					"type": "string",
+					"enum": [ "GET", "POST" ],
+					"default": "GET"
+				},
+				"headers": {
+					"description": "Custom headers to be used on the request",
+					"type": "object"
+				}
+			},
 			"minProperties": 1
 		}
 	},
