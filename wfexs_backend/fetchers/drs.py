@@ -30,7 +30,7 @@ from ..common import *
 
 DRS_SCHEME = 'drs'
 
-def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind], List[URIWithMetadata]]:
+def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
     upperSecContext = dict()
     
     parsedInputURL = parse.urlparse(remote_file)
