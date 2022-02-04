@@ -106,8 +106,9 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
     # (which could not be cached)
     retURL = []
     for access_method in object_metadata.get('access_methods', []):
+        object_url = access_method.get('access_url')
         access_id = access_method.get('access_id')
-        if access_id is not None:
+        if (object_url is None) and (access_id is not None):
             object_access_metadata_url = object_metadata_url + '/access/' + parse.quote(access_id, safe='')
             
             try:
@@ -118,8 +119,9 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
                 raise WFException("Error fetching DRS access link {} for {} : {} {}".format(access_id, remote_file, he.code, he.reason))
 
             object_url = object_access_metadata.get('url')
-            if object_url is not None:
-                retURL.append(object_url)
+        
+        if object_url is not None:
+            retURL.append(object_url)
     
     return retURL, metadata_array
 
