@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,13 +18,15 @@
 from google.cloud import storage
 from urllib.parse import urlparse
 import logging
-import shutil
+import os
 
 from ..common import *
 from typing import List, Optional, Tuple, Union
 
 
-def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secContext: Optional[SecurityContextConfig] = None) -> Tuple[Union[URIType, ContentKind], List[URIWithMetadata]]:
+logger = logging.getLogger()
+
+def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secContext: Optional[SecurityContextConfig] = None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
     """
         Method to download contents from Google Storage.
 
@@ -32,68 +34,85 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
         :param cachedFilename:
         :param secContext:
     """
-    url = urlparse(remote_file)
-    bucket = url.netloc
-    prefix = url.path[1:]
+    parsedInputURL = urlparse(remote_file)
+    bucket_name = parsedInputURL.netloc
+    prefix = parsedInputURL.path[1:]
     local_path = cachedFilename
-
+    
+    # Does the security context contain credentials
     if isinstance(secContext, dict):
         credentials = secContext.get('gs_credentials')
     else:
         credentials = None
-
+    
+    # Based on fetched credentials, create the Client instance
     try:
         if credentials is None:
             gs = storage.Client.create_anonymous_client()
         else:
             gs = storage.Client.from_service_account_json(credentials)
-    except Exception:
-        logging.warning("Authentication error")
-
-    bucket = gs.bucket(bucket)
-    blob = bucket.blob(prefix)
-    blobs = bucket.list_blobs(prefix=prefix)
-    listBlobs = bucket.list_blobs(prefix=prefix)
-    total_bobs = 0
-
-    for blob in blobs:
-        total_bobs += 1
-    if total_bobs == 1:
+    except Exception as e:
+        errmsg = f'GS authentication error on {remote_file}'
+        logger.exception(errmsg)
+        raise WFException(errmsg) from e
+    
+    # Obtain the instance of the bucket
+    try:
+        bucket = gs.bucket(bucket_name)
+    except Exception as e:
+        errmsg = f'Invalid bucket name {bucket_name} on {remote_file}'
+        logger.exception(errmsg)
+        raise WFException(errmsg)
+    
+    # Build the blob
+    try:
+        blob = bucket.blob(prefix)
+    except Exception as e:
+        errmsg = f'Unable to create blob {prefix} for {remote_file}'
+        logger.exception(errmsg)
+        raise WFException(errmsg)
+        
+    # Does the blob exist?
+    metadata_payload = []
+    metadata = {
+        'fetched': remote_file,
+        'payload': metadata_payload
+    }
+    if blob.exists():
         try:
-            blob.download_to_filename(local_path)
-        except Exception:
-            logging.exception("Error downloading file")
-
-    elif total_bobs > 1:
-        try:
-            for blob in listBlobs:
-                if blob.name.endswith("/"):
-                    continue
-
-                if local_path[-1] == '/':
-                    path = local_path + blob.name
-                elif local_path == './':
-                    path = local_path + blob.name
-                elif local_path[-1] != '/':
-                    path = local_path + '/' + blob.name
-
-                if not os.path.exists(os.path.dirname(path)):
-                    os.makedirs(os.path.dirname(path))
-                blob.download_to_filename(path)
-        except Exception:
-            logging.exception("Error downloading files")
-
-    if os.path.isdir(local_path):
-        shutil.move(local_path, cachedFilename)
-        kind = ContentKind.Directory
-    elif os.path.isfile(local_path):
-        shutil.move(local_path, cachedFilename)
-        kind = ContentKind.File
+             blob.download_to_filename(local_path)
+             metadata_payload.append(blob.metadata)
+             kind = ContentKind.File
+        except Exception as e:
+            errmsg = f'Error downloading {remote_file} to {local_path}'
+            logger.exception(errmsg)
+            raise WFException(errmsg) from e
     else:
-        raise WFException(
-            "Local path {} is neither a file nor a directory".format(local_path))
-
-    return kind, [URIWithMetadata(remote_file, {})]
+        # Let's assume this is a prefix, so use the slash delimiter
+        blob_prefix = prefix
+        if prefix[-1] != '/':
+            blob_prefix += '/'
+        
+        blobs = list(gs.list_blobs(bucket, prefix=blob_prefix))
+        if len(blobs) == 0:
+            errmsg = f'Path prefix {blob_prefix} from {remote_file} matches no blob'
+            logger.error(errmsg)
+            raise WFException(errmsg)
+        
+        for blob in blobs:
+            local_blob_filename = os.path.join(local_path, blob.name[len(blob_prefix):])
+            try:
+                os.makedirs(os.path.dirname(local_blob_filename), exist_ok=True)
+                blob.download_to_filename(local_blob_filename)
+                metadata_payload.append(blob.metadata)
+            except Exception as e:
+                errmsg = f'Error downloading {blob.name} from {remote_file} to {local_blob_filename}'
+                logger.exception(errmsg)
+                raise WFException(errmsg) from e
+        
+        kind = ContentKind.Directory
+    
+    return kind, [URIWithMetadata(remote_file, metadata)]
 
 
 GS_SCHEME_HANDLERS = {
