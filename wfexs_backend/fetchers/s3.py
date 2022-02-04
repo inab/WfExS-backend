@@ -44,62 +44,70 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
         access_key = None
         secret_key = None
 
-
+    s3 = boto3.resource('s3')
     try:
         if access_key == None and secret_key == None:
-                s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-                response = s3.list_objects_v2(Bucket=bucket,Prefix=prefix)
+            s3cli = boto3.client('s3', config=Config(signature_version=UNSIGNED))
         else:
-                s3 = boto3.client('s3',access_key,secret_key)
-                response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)
+            s3cli = boto3.client('s3', access_key, secret_key)
     except botocore.exceptions.ClientError as error:
-        logger.warn('Error in the connection with s3 ' + error)
-
-    if response["KeyCount"] == 1:
-        file_name = urlParse.path.split('/')
-        file_name = file_name[len(file_name) - 1]
-
-        if(local_path[:1] == '/'):
-            local_path = local_path + file_name
-        elif(local_path == './'):
-            local_path = local_path + file_name
-        elif(local_path[:1] != '/'):
-            local_path = local_path + '/' + file_name
+        errmsg = f'S3 client authentication error on {remote_file}'
+        logger.exception(errmsg)
+        raise WFException(errmsg) from error
+    
+    metadata_payload = []
+    metadata = {
+        'fetched': remote_file,
+        'payload': metadata_payload
+    }
+    try:
+        s3_obj = s3cli.get_object(Bucket=bucket, Key=prefix)
+        with open(cachedFilename, mode='wb') as dH:
+            shutil.copyfileobj(s3_obj['Body'], dH)
+        s3_obj.pop('Body')
+        metadata_payload.append(s3_obj)
+        kind = ContentKind.File
+    except botocore.exceptions.ClientError as error:
+        if error.response['Error']['Code'] != 'NoSuchKey':
+            raise error
         
-        try:
-            s3.download_file(bucket, prefix, local_path)
+        # This happens when the object is not a file
+        blob_prefix = prefix
+        if blob_prefix[-1] != '/':
+            blob_prefix += '/'
         
-        except botocore.exceptions.ParamValidationError as error:
-            logger.warn("Error downloading file" + error)
-
-    elif response["KeyCount"] > 1:
+        # Check whether there is something
+        response = s3cli.list_objects_v2(Bucket=bucket, Prefix=blob_prefix, MaxKeys=1)
+        
+        # Nothing leads to an exception
+        if response["KeyCount"] == 0:
+            errmsg = f'Path prefix {blob_prefix} from {remote_file} matches no blob'
+            logger.error(errmsg)
+            raise WFException(errmsg)
+        
+        # Let's use the paginator
         try:
-
-            paginator = s3.get_paginator('list_objects_v2')
+            paginator = s3cli.get_paginator('list_objects_v2')
             for result in paginator.paginate(Bucket=bucket, Prefix=prefix):
                 for key in result['Contents']:
-                    rel_path = key['Key'][len(prefix):]
-                    if not key['Key'].endswith('/'):
-                        local_file_path = os.path.join(local_path, rel_path)
-                        local_file_dir = os.path.dirname(local_file_path)
-                        if not os.path.exists(local_file_dir):
-                            os.makedirs(local_file_dir)
-                        s3.download_file(bucket, key['Key'],local_file_path)
-
-        except botocore.exceptions.ParamValidationError as error:
-            logger.warn("Error downloading file " + error)
-    
-    kind = None
-    if os.path.isdir(local_path):
-        shutil.move(local_path, cachedFilename)
+                    local_blob_filename = os.path.join(local_path, key['Key'][len(blob_prefix):])
+                    try:
+                        os.makedirs(os.path.dirname(local_blob_filename), exist_ok=True)
+                        s3cli.download_file(bucket, key['Key'], local_blob_filename)
+                        metadata_payload.append(key)
+                    except Exception as e:
+                        errmsg = f'Error downloading {key["Key"]} from {remote_file} to {local_blob_filename}'
+                        logger.exception(errmsg)
+                        raise WFException(errmsg) from e
+        except WFException as wfe:
+            raise wfe
+        except Exception as e:
+            errmsg = f'Error paginating {prefix} from {remote_file} to {local_path}'
+            logger.exception(errmsg)
+            raise WFException(errmsg) from e
         kind = ContentKind.Directory
-    elif os.path.isfile(local_path):
-        shutil.move(local_path, cachedFilename)
-        kind = ContentKind.File
-    else:
-        raise WFException("Local path {} is neither a file nor a directory".format(local_path))
     
-    return kind, [ URIWithMetadata(remote_file, {}) ]
+    return kind, [ URIWithMetadata(remote_file, metadata) ]
 
 S3_SCHEME_HANDLERS = {
     's3': downloadContentFrom_s3
