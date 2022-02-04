@@ -35,6 +35,13 @@ from typing import Optional, Pattern, Tuple, Union
 from .common import *
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, stringifyFilenameDigest
 
+class DatetimeEncoder(json.JSONEncoder):
+        def default(self, obj):
+                if isinstance(obj, datetime.datetime):
+                        return obj.isoformat()
+                # Let the base class default method raise the TypeError
+                return super().default(obj)
+
 META_JSON_POSTFIX = '_meta.json'
 class SchemeHandlerCacheHandler:
     def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
@@ -300,7 +307,7 @@ class SchemeHandlerCacheHandler:
             else:
                 metaStructure['resolves_to'] = inputKind
             
-            json.dump(metaStructure, mOut)
+            json.dump(metaStructure, mOut, cls=DatetimeEncoder)
         
         return finalCachedFilename, fingerprint
     
