@@ -56,7 +56,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
     
-    DEFAULT_CWLTOOL_VERSION = '3.1.20220124184855'
+    DEFAULT_CWLTOOL_VERSION = '3.1.20220204090313'
 
     DEVEL_CWLTOOL_PACKAGE = f'git+{CWLTOOL_REPO}.git'
     # Set this constant to something meaningful only when a hotfix
@@ -75,7 +75,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         (None, None, DEFAULT_CWLTOOL_VERSION)
     ]
     
-    NODEJS_SINGULARITY_WRAPPER = 'nodejs_singularity_wrapper.bash'
+    NODEJS_WRAPPER = 'nodejs_wrapper.bash'
     
     NODEJS_CONTAINER_TAG = 'docker.io/node:slim'
     OPERATIONAL_CONTAINER_TAGS = [
@@ -242,8 +242,14 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         # Let's be sure the nodejs wrapper, needed by cwltool versions
         # prior to 3.1.20210921111717 is in place
+        # installWrapper = engineVersion < self.NO_WRAPPER_CWLTOOL_VERSION
+        
+        # But there are still some issues in Computerome, so we are
+        # installing the wrapper in any case, meanwhile the issue is
+        # triaged and fixed.
+        installWrapper = True
         if engineVersion < self.NO_WRAPPER_CWLTOOL_VERSION:
-            node_wrapper_source_path = os.path.join(self.payloadsDir, self.NODEJS_SINGULARITY_WRAPPER)
+            node_wrapper_source_path = os.path.join(self.payloadsDir, self.NODEJS_WRAPPER)
             node_wrapper_inst_path = os.path.join(cwl_install_dir, 'bin', 'node')
             if not os.path.isfile(node_wrapper_inst_path):
                 shutil.copy2(node_wrapper_source_path, node_wrapper_inst_path)
