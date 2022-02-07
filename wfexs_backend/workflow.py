@@ -62,6 +62,7 @@ from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
+from .utils.passphrase_wrapper import generate_passphrase
 
 from .fetchers import AbstractStatefulFetcher
 from .fetchers import DEFAULT_SCHEME_HANDLERS
@@ -115,16 +116,7 @@ class WF:
 
     @classmethod
     def generate_passphrase(cls) -> str:
-        import random
-        from pwgen_passphrase.__main__ import generate_passphrase, list_wordlists, read_wordlist
-
-        wordlists_filenames = list_wordlists()
-        wordlists_tags = [*wordlists_filenames.keys()]
-        wordlist_filename = wordlists_filenames[wordlists_tags[random.randrange(len(wordlists_tags))]]
-
-        wordlist = read_wordlist(wordlist_filename).splitlines()
-
-        return generate_passphrase(wordlist, cls.DEFAULT_PASSPHRASE_LENGTH)
+        return generate_passphrase(cls.DEFAULT_PASSPHRASE_LENGTH)
 
     @classmethod
     def bootstrap(cls, local_config, config_directory=None, key_prefix=None):
