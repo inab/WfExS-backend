@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -62,7 +62,6 @@ from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
-from .utils.passphrase_wrapper import generate_passphrase
 
 from .fetchers import AbstractStatefulFetcher
 from .fetchers import DEFAULT_SCHEME_HANDLERS
@@ -114,355 +113,25 @@ class WF:
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
 
-    @classmethod
-    def generate_passphrase(cls) -> str:
-        return generate_passphrase(cls.DEFAULT_PASSPHRASE_LENGTH)
 
-    @classmethod
-    def bootstrap(cls, local_config, config_directory=None, key_prefix=None):
-        """
-        :param local_config: Relevant local configuration, like the cache directory.
-        :param config_directory: The filename to be used to resolve relative paths
-        :param key_prefix:
-        :type local_config: dict
-        """
-
-        import datetime
-        import socket
-
-        logger = logging.getLogger(cls.__name__)
-
-        updated = False
-
-        # Getting the config directory
-        if config_directory is None:
-            config_directory = os.getcwd()
-        if not os.path.isabs(config_directory):
-            config_directory = os.path.abspath(config_directory)
-
-        if key_prefix is None:
-            key_prefix = ''
-
-        # This one is to assure the working directory is created
-        workDir = local_config.get('workDir')
-        if workDir:
-            if not os.path.isabs(workDir):
-                workDir = os.path.normpath(os.path.join(config_directory, workDir))
-            os.makedirs(workDir, exist_ok=True)
-
-        # Now, checking whether public and private key pairs exist
-        numExist = 0
-        crypt4ghSect = local_config.get(cls.CRYPT4GH_SECTION)
-        if crypt4ghSect is None:
-            local_config[cls.CRYPT4GH_SECTION] = {}
-            crypt4ghSect = local_config[cls.CRYPT4GH_SECTION]
-
-        for elem in (cls.CRYPT4GH_PRIVKEY_KEY, cls.CRYPT4GH_PUBKEY_KEY):
-            fname = crypt4ghSect.get(elem)
-            # The default when no filename exist is creating hidden files in the config directory
-            if fname is None:
-                fname = key_prefix + '.' + elem
-                crypt4ghSect[elem] = fname
-                updated = True
-
-            if not os.path.isabs(fname):
-                fname = os.path.normpath(os.path.join(config_directory, fname))
-
-            if os.path.exists(fname):
-                if os.path.getsize(fname) == 0:
-                    logger.warning("[WARNING] Installation {} file {} is empty".format(elem, fname))
-                else:
-                    numExist += 1
-            else:
-                logger.warning("[WARNING] Installation {} file {} does not exist".format(elem, fname))
-
-        if numExist == 1:
-            raise WFException("Inconsistent {} section, as one of the keys is missing".format(cls.CRYPT4GH_SECTION))
-
-        # Time to generate the pairs needed to work with crypt4gh
-        if numExist == 0:
-            privKey = crypt4ghSect[cls.CRYPT4GH_PRIVKEY_KEY]
-            if not os.path.isabs(privKey):
-                privKey = os.path.normpath(os.path.join(config_directory, privKey))
-            pubKey = crypt4ghSect[cls.CRYPT4GH_PUBKEY_KEY]
-            if not os.path.isabs(pubKey):
-                pubKey = os.path.normpath(os.path.join(config_directory, pubKey))
-
-            if cls.CRYPT4GH_PASSPHRASE_KEY not in crypt4ghSect:
-                passphrase = cls.generate_passphrase()
-                crypt4ghSect[cls.CRYPT4GH_PASSPHRASE_KEY] = passphrase
-                updated = True
-            else:
-                passphrase = crypt4ghSect[cls.CRYPT4GH_PASSPHRASE_KEY]
-
-            comment = 'WfExS crypt4gh keys {} {} {}'.format(socket.gethostname(), config_directory, datetime.datetime.now().isoformat())
-
-            # This is a way to avoid encoding private keys with scrypt,
-            # which is not supported in every Python interpreter
-            orig_scrypt_supported = crypt4gh.keys.c4gh.scrypt_supported
-            crypt4gh.keys.c4gh.scrypt_supported = False
-            try:
-                crypt4gh.keys.c4gh.generate(
-                    privKey,
-                    pubKey,
-                    passphrase=passphrase.encode('utf-8'),
-                    comment=comment.encode('utf-8')
-                )
-            finally:
-                crypt4gh.keys.c4gh.scrypt_supported = orig_scrypt_supported
-        elif not crypt4gh.keys.c4gh.scrypt_supported:
-            logger.info("Python interpreter does not support scrypt, so encoded crypt4gh keys with that algorithm cannot be used")
-
-        return updated, local_config
-
-    @classmethod
-    def FromDescription(cls, workflow_meta, local_config, creds_config=None, config_directory=None):
-        """
-
-        :param workflow_meta: The configuration describing both the workflow
-        and the inputs to use when it is being instantiated.
-        :param local_config: Relevant local configuration, like the cache directory.
-        :param creds_config: Dictionary with the different credential contexts (to be implemented)
-        :param config_directory:
-        :type workflow_meta: dict
-        :type local_config: dict
-        :type creds_config: dict
-        :type config_directory:
-        :return: Workflow configuration
-        """
-        if creds_config is None:
-            creds_config = {}
-
-        _, updated_local_config = cls.bootstrap(local_config, config_directory=config_directory)
-
-        return cls(
-            local_config,
-            config_directory=config_directory
-        ).newSetup(
-            workflow_meta['workflow_id'],
-            workflow_meta.get('version'),
-            descriptor_type=workflow_meta.get('workflow_type'),
-            trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
-            params=workflow_meta.get('params', {}),
-            outputs=workflow_meta.get('outputs', {}),
-            workflow_config=workflow_meta.get('workflow_config'),
-            creds_config=creds_config
-        )
-
-    @classmethod
-    def ConfigValidate(cls, configToValidate, relSchemaFile):
-        # Locating the schemas directory, where all the schemas should be placed
-        schemaFile = os.path.join(os.path.dirname(__file__), cls.SCHEMAS_REL_DIR, relSchemaFile)
-
-        try:
-            with open(schemaFile, mode="r", encoding="utf-8") as sF:
-                schema = json.load(sF)
-
-            jv = jsonschema.validators.validator_for(schema)(schema)
-            return list(jv.iter_errors(instance=configToValidate))
-        except Exception as e:
-            raise WFException(f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}")
-
-    def __init__(self, local_config=None, config_directory=None):
-        """
-        Init function
-
-        :param local_config: Local setup configuration, telling where caching directories live
-        :type local_config: dict
-        """
-        # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
-
-        if not isinstance(local_config, dict):
-            local_config = {}
-
-        # validate the local configuration object
-        valErrors = self.ConfigValidate(local_config, self.CONFIG_SCHEMA)
-        if len(valErrors) > 0:
-            self.logger.error(f'ERROR in local configuration block: {valErrors}')
-            sys.exit(1)
-
-        self.local_config = local_config
-        self.progs = DEFAULT_PROGS.copy()
-
-        toolSect = local_config.get('tools', {})
-        self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
-        self.progs[DEFAULT_GIT_CMD] = self.git_cmd
-
-        encfsSect = toolSect.get('encrypted_fs', {})
-        encfs_type = encfsSect.get('type', DEFAULT_ENCRYPTED_FS_TYPE)
-        try:
-            encfs_type = EncryptedFSType(encfs_type)
-        except:
-            raise WFException('Invalid default encryption filesystem {}'.format(encfs_type))
-        if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-            raise WFException('FIXME: Default encryption filesystem {} mount procedure is not implemented')
-        self.encfs_type = encfs_type
-
-        self.encfs_cmd = shutil.which(encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type]))
-        self.fusermount_cmd = encfsSect.get('fusermount_command', DEFAULT_FUSERMOUNT_CMD)
-        self.progs[DEFAULT_FUSERMOUNT_CMD] = self.fusermount_cmd
-        self.encfs_idleMinutes = encfsSect.get('idle', DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT)
-
-        # Getting the config directory, needed for relative filenames
-        if config_directory is None:
-            config_directory = os.getcwd()
-        if not os.path.isabs(config_directory):
-            config_directory = os.path.abspath(config_directory)
-
-        self.config_directory = config_directory
-
-        # Getting the private and public keys, needed from this point
-        crypt4ghSect = local_config.get(self.CRYPT4GH_SECTION, {})
-        privKeyFilename = crypt4ghSect[self.CRYPT4GH_PRIVKEY_KEY]
-        if not os.path.isabs(privKeyFilename):
-            privKeyFilename = os.path.normpath(os.path.join(config_directory, privKeyFilename))
-        pubKeyFilename = crypt4ghSect[self.CRYPT4GH_PUBKEY_KEY]
-        if not os.path.isabs(pubKeyFilename):
-            pubKeyFilename = os.path.normpath(os.path.join(config_directory, pubKeyFilename))
-        passphrase = crypt4ghSect[self.CRYPT4GH_PASSPHRASE_KEY]
-
-        # These are the keys to be used
-        self.pubKey = crypt4gh.keys.get_public_key(pubKeyFilename)
-        self.privKey = crypt4gh.keys.get_private_key(privKeyFilename, lambda: passphrase)
-
-        # This directory will be used to cache repositories and distributable inputs
-        cacheDir = local_config.get('cacheDir')
-        if cacheDir:
-            if not os.path.isabs(cacheDir):
-                cacheDir = os.path.normpath(os.path.join(config_directory, cacheDir))
-            os.makedirs(cacheDir, exist_ok=True)
-        else:
-            cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
-            # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, cacheDir)
-
-        # Setting up caching directories
-        self.cacheDir = cacheDir
-        self.cachePathMap = dict()
-        cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
-        os.makedirs(cacheWorkflowDir, exist_ok=True)
-        self.cachePathMap[CacheType.Workflow] = cacheWorkflowDir
-
-        cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
-        os.makedirs(cacheROCrateDir, exist_ok=True)
-        self.cachePathMap[CacheType.ROCrate] = cacheROCrateDir
-
-        cacheTRSFilesDir = os.path.join(cacheDir, 'trs-files-cache')
-        os.makedirs(cacheTRSFilesDir, exist_ok=True)
-        self.cachePathMap[CacheType.TRS] = cacheTRSFilesDir
-
-        cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
-        os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
-        self.cachePathMap[CacheType.Input] = cacheWorkflowInputsDir
-
-        # This directory will be used to store the intermediate
-        # and final results before they are sent away
-        workDir = local_config.get('workDir')
-        if workDir:
-            if not os.path.isabs(workDir):
-                workDir = os.path.normpath(os.path.join(config_directory, workDir))
-            os.makedirs(workDir, exist_ok=True)
-        else:
-            workDir = tempfile.mkdtemp(prefix='WfExS-workdir', suffix='backend')
-            # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, workDir)
-
-        self.baseWorkDir = workDir
-        self.rawWorkDir = None
-        self.workDir = None
-        self.encWorkDir = None
-        self.tempDir = None
-        self.encfsThread = None
-        self.doUnmount = False
-        self.paranoidMode = False
-        self.bag = None
-
-        self.stageMarshalled = False
-        self.executionMarshalled = False
-        self.exportMarshalled = False
-
-        # cacheHandler is created on first use
-        self._sngltn = dict()
-        self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, dict())
-
-        # All the custom ones should be added here
-        self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(DRS_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(S3_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(GS_SCHEME_HANDLERS)
-
-        # These ones should have prevalence over other custom ones
-        self.addSchemeHandlers(GIT_SCHEME_HANDLERS)
-        self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
-
-    @property
-    def cacheWorkflowDir(self) -> AbsPath:
-        return self.cachePathMap[CacheType.Workflow]
-
-    @property
-    def cacheROCrateDir(self) -> AbsPath:
-        return self.cachePathMap[CacheType.ROCrate]
-
-    @property
-    def cacheTRSFilesDir(self) -> AbsPath:
-        return self.cachePathMap[CacheType.TRS]
-
-    @property
-    def cacheWorkflowInputsDir(self) -> AbsPath:
-        return self.cachePathMap[CacheType.Input]
-
-    def getCacheHandler(self, cache_type:CacheType) -> Tuple[SchemeHandlerCacheHandler, AbsPath]:
-        return self.cacheHandler, self.cachePathMap.get(cache_type)
-
-    def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher]) -> AbstractStatefulFetcher:
-        """
-        Method to instantiate stateful fetchers once
-        """
-        instStatefulFetcher = None
-        if inspect.isclass(statefulFetcher):
-            if issubclass(statefulFetcher, AbstractStatefulFetcher):
-                instStatefulFetcher = self._sngltn.get(statefulFetcher)
-                if instStatefulFetcher is None:
-                    instStatefulFetcher = statefulFetcher(progs=self.progs)
-                    self._sngltn[statefulFetcher] = instStatefulFetcher
-
-        return instStatefulFetcher
-
-    def addSchemeHandlers(self, schemeHandlers:Mapping[str, Union[ProtocolFetcher, Type[AbstractStatefulFetcher]]]) -> None:
-        """
-        This method adds scheme handlers (aka "fetchers")
-        or instantiates stateful scheme handlers (aka "stateful fetchers")
-        """
-        if isinstance(schemeHandlers, dict):
-            instSchemeHandlers = dict()
-            for scheme, schemeHandler in schemeHandlers.items():
-                instSchemeHandler = None
-                if inspect.isclass(schemeHandler):
-                    instSchemeHandler = self.instantiateStatefulFetcher(schemeHandler).fetch
-                elif callable(schemeHandler):
-                    instSchemeHandler = schemeHandler
-
-                # Only the ones which have overcome the sanity checks
-                if instSchemeHandler is not None:
-                    instSchemeHandlers[scheme] = instSchemeHandler
-
-            self.cacheHandler.addSchemeHandlers(instSchemeHandlers)
-
-    def newSetup(self,
-                 workflow_id,
-                 version_id,
+    def __init__(self,
+                 wfexs,
+                 workflow_id=None,
+                 version_id=None,
                  descriptor_type=None,
                  trs_endpoint=DEFAULT_TRS_ENDPOINT,
                  params=None,
                  outputs=None,
                  workflow_config=None,
-                 creds_config=None
+                 creds_config=None,
+                 instanceId: Optional[str] = None,
+                 rawWorkDir: Optional[Union[RelPath, AbsPath]] = None,
+                 paranoid_mode: Optional[bool] = None
                  ):
         """
         Init function
-
+        
+        :param wfexs: A WfExSBackend instance
         :param workflow_id: A unique identifier of the workflow. Although it is an integer in WorkflowHub,
         we cannot assume it is so in all the GA4GH TRS implementations which are exposing workflows.
         :param version_id: An identifier of the workflow version. Although it is an integer in
@@ -475,6 +144,10 @@ class WF:
         :param outputs:
         :param workflow_config: Tweaks for workflow enactment, like some overrides
         :param creds_config: Dictionary with the different credential contexts
+        :param instanceId: The instance id of this working directory
+        :param rawWorkDir: Raw working directory
+        :param paranoid_mode: Should we enable paranoid mode for this workflow?
+        :type wfexs: WfExSBackend
         :type workflow_id: str
         :type version_id: str
         :type descriptor_type: str
@@ -483,84 +156,117 @@ class WF:
         :type outputs: dict
         :type workflow_config: dict
         :type creds_config: dict
+        :type instanceId: str
+        :type rawWorkDir: str
+        :type paranoid_mode: bool
         """
+        if wfexs is None:
+            raise WFException('Unable to initialize, no WfExSBackend instance provided')
+        
+        # Getting a logger focused on specific classes
+        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
+        
+        self.wfexs = wfexs
+        
+        if isinstance(paranoid_mode, bool):
+            self.paranoidMode = paranoid_mode
+        else:
+            self.paranoidMode = self.wfexs.getDefaultParanoidMode()
+        
         if not isinstance(workflow_config, dict):
             workflow_config = {}
 
-        workflow_meta = {
-            'workflow_id': workflow_id
-        }
-        if version_id is not None:
-            workflow_meta['version'] = version_id
-        if descriptor_type is not None:
-            workflow_meta['workflow_type'] = descriptor_type
-        if trs_endpoint is not None:
-            workflow_meta['trs_endpoint'] = trs_endpoint
-        if workflow_config is not None:
-            workflow_meta['workflow_config'] = workflow_config
-        if params is not None:
-            workflow_meta['params'] = params
-        if outputs is not None:
-            workflow_meta['outputs'] = outputs
+        if workflow_id is not None:
+            workflow_meta = {
+                'workflow_id': workflow_id
+            }
+            if version_id is not None:
+                workflow_meta['version'] = version_id
+            if descriptor_type is not None:
+                workflow_meta['workflow_type'] = descriptor_type
+            if trs_endpoint is not None:
+                workflow_meta['trs_endpoint'] = trs_endpoint
+            if workflow_config is not None:
+                workflow_meta['workflow_config'] = workflow_config
+            if params is not None:
+                workflow_meta['params'] = params
+            if outputs is not None:
+                workflow_meta['outputs'] = outputs
+            
+            valErrors = self.wfexs.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
+            if len(valErrors) > 0:
+                errstr = f'ERROR in workflow staging definition block: {valErrors}'
+                self.logger.error(errstr)
+                raise WFException(errstr)
 
-        valErrors = self.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
-        if len(valErrors) > 0:
-            self.logger.error(f'ERROR in workflow staging definition block: {valErrors}')
-            raise WFException(f'ERROR in workflow staging definition block: {valErrors}')
+            if not isinstance(creds_config, dict):
+                creds_config = {}
 
-        if not isinstance(creds_config, dict):
-            creds_config = {}
+            valErrors = self.wfexs.ConfigValidate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
+            if len(valErrors) > 0:
+                errstr = f'ERROR in security context block: {valErrors}'
+                self.logger.error(errstr)
+                raise WFException(errstr)
 
-        valErrors = self.ConfigValidate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
-        if len(valErrors) > 0:
-            self.logger.error(f'ERROR in security context block: {valErrors}')
-            raise WFException(f'ERROR in security context block: {valErrors}')
+            if not isinstance(params, dict):
+                params = {}
 
-        if not isinstance(params, dict):
-            params = {}
+            if not isinstance(outputs, dict):
+                outputs = {}
 
-        if not isinstance(outputs, dict):
-            outputs = {}
+            # Workflow-specific
+            self.workflow_config = workflow_config
+            self.creds_config = creds_config
 
-        # Workflow-specific
-        self.workflow_config = workflow_config
-        self.creds_config = creds_config
+            self.id = str(workflow_id)
+            self.version_id = str(version_id)
+            self.descriptor_type = descriptor_type
+            self.params = params
+            self.outputs = self.parseExpectedOutputs(outputs)
 
-        self.id = str(workflow_id)
-        self.version_id = str(version_id)
-        self.descriptor_type = descriptor_type
-        self.params = params
-        self.outputs = self.parseExpectedOutputs(outputs)
+            # The endpoint should always end with a slash
+            if isinstance(trs_endpoint, str):
+                if trs_endpoint[-1] != '/':
+                    trs_endpoint += '/'
 
-        # The endpoint should always end with a slash
-        if isinstance(trs_endpoint, str):
-            if trs_endpoint[-1] != '/':
-                trs_endpoint += '/'
+                # Removing the tools suffix, which appeared in first WfExS iterations
+                if trs_endpoint.endswith('/' + self.TRS_TOOLS_PATH):
+                    trs_endpoint = trs_endpoint[0:-len(self.TRS_TOOLS_PATH)]
 
-            # Removing the tools suffix, which appeared in first WfExS iterations
-            if trs_endpoint.endswith('/' + self.TRS_TOOLS_PATH):
-                trs_endpoint = trs_endpoint[0:-len(self.TRS_TOOLS_PATH)]
-
-        self.trs_endpoint = trs_endpoint
-
-        if self.rawWorkDir is None:
-            self.instanceId = str(uuid.uuid4())
-            # This directory is the raw working directory
-            # If the intermediate results should be hold in an encrypted
-            # temporary directory, this directory will hold it
-            uniqueRawWorkDir = os.path.join(self.baseWorkDir, self.instanceId)
-            os.makedirs(uniqueRawWorkDir, exist_ok=True)
-            self.rawWorkDir = uniqueRawWorkDir
+            self.trs_endpoint = trs_endpoint
+        
+        if instanceId is not None:
+            self.instanceId = instanceId
+        
+        self.fusermount_cmd = None
+        self.encfs_idleMinutes = None
+        self.doUnmount = False
+        
+        checkSecure = True
+        if rawWorkDir is None:
+            if instanceId is None:
+                self.instanceId , self.rawWorkDir = self.wfexs.createRawWorkDir()
+                checkSecure = False
+            else:
+                self.rawWorkDir = self.wfexs.getRawWorkDir(instanceId)
+        else:
+            self.rawWorkDir = rawWorkDir
+            if instanceId is None:
+                self.instanceId = self.wfexs.getInstanceIdFromRawWorkDir(rawWorkDir)
 
         # TODO: enforce restrictive permissions on each raw working directory
         self.allowOther = False
+        
+        if checkSecure:
+            passphraseFile = os.path.join(self.rawWorkDir, WORKDIR_PASSPHRASE_FILE)
+            self.secure = os.path.exists(passphraseFile)
+        else:
+            self.secure = workflow_config.get('secure', True)
+        
+        doSecureWorkDir = self.secure or self.paranoidMode
 
-        self.secure = workflow_config.get('secure', True)
-        if self.workDir is None:
-            doSecureWorkDir = self.secure or self.paranoidMode
-
-            self.setupWorkdir(doSecureWorkDir)
-
+        self.setupWorkdir(doSecureWorkDir)
+        
         # This directory will hold either symbolic links to the cached
         # inputs, or the inputs properly post-processed (decompressed,
         # decrypted, etc....)
@@ -580,10 +286,31 @@ class WF:
         os.makedirs(self.engineTweaksDir, exist_ok=True)
         # This directory will hold metadata related to the execution
         self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
-        os.makedirs(self.metaDir, exist_ok=True)
+        
+        self.configMarshalled = False
+        # This is true when the working directory already exists
+        if checkSecure:
+            if not os.path.isdir(self.metaDir):
+                raise WFException("Staged working directory {} is incomplete".format(self.workDir))
+            # In order to be able to build next paths to call
+            self.unmarshallConfig()
+        else:
+            os.makedirs(self.metaDir, exist_ok=True)
+            self.marshallConfig(overwrite=True)
 
-        self.marshallConfig(overwrite=False)
-
+        self.stagedSetup = StagedSetup(
+            workflow_config=self.workflow_config,
+            work_dir=self.workDir,
+            inputs_dir=self.inputsDir,
+            outputs_dir=self.outputsDir,
+            intermediate_dir=self.intermediateDir,
+            engine_tweaks_dir=self.engineTweaksDir,
+            meta_dir=self.metaDir,
+            temp_dir=self.tempDir,
+            secure_exec=self.secure or self.paranoidMode,
+            allow_other=self.allowOther
+        )
+        
         self.repoURL = None
         self.repoTag = None
         self.repoRelPath = None
@@ -602,8 +329,10 @@ class WF:
         self.augmentedInputs = None
         self.matCheckOutputs = None
         self.cacheROCrateFilename = None
-
-        return self
+        
+        self.stageMarshalled = False
+        self.executionMarshalled = False
+        self.exportMarshalled = False
 
     FUSE_SYSTEM_CONF = '/etc/fuse.conf'
 
@@ -631,49 +360,15 @@ class WF:
 
             # This is the passphrase needed to decrypt the filesystem
             passphraseFile = os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
-            encfs_cmd = self.encfs_cmd
+            
             if os.path.exists(passphraseFile):
-                clearF = io.BytesIO()
-                with open(passphraseFile, mode="rb") as encF:
-                    crypt4gh.lib.decrypt(
-                        [(0, self.privKey, None)],
-                        encF,
-                        clearF,
-                        offset=0,
-                        span=None,
-                        sender_pubkey=None
-                    )
-
-                encfs_type, _, securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
-                self.logger.debug(encfs_type + ' ' + securePassphrase)
-                try:
-                    encfs_type = EncryptedFSType(encfs_type)
-                except:
-                    raise WFException('Invalid encryption filesystem {} in working directory'.format(encfs_type))
-                if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-                    raise WFException('FIXME: Encryption filesystem {} mount procedure is not implemented')
-
-                # If the working directory encrypted filesystem does not
-                # match the configured one, use its default executable
-                if encfs_type != self.encfs_type:
-                    encfs_cmd = DEFAULT_ENCRYPTED_FS_CMD[encfs_type]
-
-                if securePassphrase == '':
-                    raise WFException('Encryption filesystem key does not follow the right format')
+                encfs_type, encfs_cmd, securePassphrase = self.wfexs.readSecuredPassphrase(passphraseFile)
             else:
-                securePassphrase = self.generate_passphrase()
-                encfs_type = self.encfs_type
-                clearF = io.BytesIO((encfs_type.value + '=' + securePassphrase).encode('utf-8'))
-                with open(passphraseFile, mode="wb") as encF:
-                    crypt4gh.lib.encrypt(
-                        [(0, self.privKey, self.pubKey)],
-                        clearF,
-                        encF,
-                        offset=0,
-                        span=None
-                    )
-            del clearF
+                encfs_type, encfs_cmd, securePassphrase = self.wfexs.generateSecuredPassphrase(passphraseFile)
+            
+            self.encfs_type = encfs_type
 
+            self.fusermount_cmd , self.encfs_idleMinutes = self.wfexs.getFusermountParams()
             # Warn/fail earlier
             if os.path.ismount(uniqueWorkDir):
                 # raise WFException("Destination mount point {} is already in use")
@@ -753,41 +448,40 @@ class WF:
 
     def cleanup(self):
         self.unmountWorkdir()
-
-    def fromWorkDir(self, workflowWorkingDirectory):
-        if workflowWorkingDirectory is None:
-            raise WFException('Unable to initialize, no directory provided')
-
-        # Obtaining the absolute path to the working directory
-        if not os.path.isabs(workflowWorkingDirectory):
-            workflowWorkingDirectory = os.path.normpath(os.path.join(self.baseWorkDir, workflowWorkingDirectory))
-
-        if not os.path.isdir(workflowWorkingDirectory):
-            raise WFException('Unable to initialize, {} is not a directory'.format(workflowWorkingDirectory))
-
-        self.rawWorkDir = workflowWorkingDirectory
-        self.instanceId = os.path.basename(workflowWorkingDirectory)
-
-        # This is needed to parse
-        passphraseFile = os.path.join(self.rawWorkDir, WORKDIR_PASSPHRASE_FILE)
-
-        # Setting up the directory
-        self.setupWorkdir(os.path.exists(passphraseFile))
-
-        metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
-        if not os.path.isdir(metaDir):
-            raise WFException("Staged working directory {} is incomplete".format(self.workDir))
-
-        # In order to be able to build next paths to call
-        workflowMetaFilename = os.path.join(metaDir, WORKDIR_WORKFLOW_META_FILE)
-        securityContextFilename = os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-
-        return self.fromFiles(workflowMetaFilename, securityContextFilename)
-
-    def enableParanoidMode(self):
+    
+    def enableParanoidMode(self) -> None:
         self.paranoidMode = True
 
-    def fromFiles(self, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode=False):
+    # DEPRECATED
+    @staticmethod
+    def ReadConfigFromMeta(metaDir: AbsPath) -> Tuple[Mapping, Mapping]:
+        # In order to be able to build next paths to call
+        workflowMetaFilename = os.path.join(metaDir, WORKDIR_WORKFLOW_META_FILE)
+        securityContextsConfigFilename = os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
+        
+        with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
+            workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+
+        # Last, try loading the security contexts credentials file
+        if os.path.exists(securityContextsConfigFilename):
+            with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
+                creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+        else:
+            creds_config = {}
+        
+        return workflow_meta, creds_config
+
+    @classmethod
+    def FromWorkDir(cls, wfexs, workflowWorkingDirectory: Union[RelPath, AbsPath]):
+        if wfexs is None:
+            raise WFException('Unable to initialize, no WfExSBackend instance provided')
+        
+        instanceId, rawWorkDir = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
+        
+        return cls(wfexs, instanceId=instanceId, rawWorkDir=rawWorkDir)
+    
+    @classmethod
+    def FromFiles(cls, wfexs, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode: bool = False):
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
 
@@ -798,78 +492,46 @@ class WF:
         else:
             creds_config = {}
 
-        return self.fromDescription(workflow_meta, creds_config, paranoidMode=paranoidMode)
-
-    def validateConfigFiles(self, workflowMetaFilename, securityContextsConfigFilename=None):
-        numErrors = 0
-        self.logger.info(f'Validating {workflowMetaFilename}')
-
-        with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
-
-        if not isinstance(workflow_meta, dict):
-            workflow_meta = {}
-
-        valErrors = self.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
-        if len(valErrors) == 0:
-            self.logger.info('No validation errors in staging definition block')
-        else:
-            for iErr, valError in enumerate(valErrors):
-                self.logger.error(f'ERROR {iErr} in staging definition block: {valError}')
-                numErrors += 1
-
-        # Last, try loading the security contexts credentials file
-        if securityContextsConfigFilename and os.path.exists(securityContextsConfigFilename):
-            self.logger.info(f'Validating {securityContextsConfigFilename}')
-
-            with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
-                creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
-
-            valErrors = self.ConfigValidate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
-            if len(valErrors) == 0:
-                self.logger.info('No validation errors in security block')
-            else:
-                for iErr, valError in enumerate(valErrors):
-                    self.logger.error(f'ERROR {iErr} in security context block: {valError}')
-                    numErrors += 1
-
-        return 1 if numErrors > 0 else 0
-
-    def fromDescription(self, workflow_meta, creds_config=None, paranoidMode=False):
+        return cls.FromDescription(wfexs, workflow_meta, creds_config, paranoidMode=paranoidMode)
+    
+    @classmethod
+    def FromDescription(cls, wfexs, workflow_meta, creds_config=None, paranoidMode: bool = False):
         """
-
+        :param wfexs: WfExSBackend instance
         :param workflow_meta: The configuration describing both the workflow
         and the inputs to use when it is being instantiated.
         :param creds_config: Dictionary with the different credential contexts (to be implemented)
         :param paranoidMode:
+        :type wfexs: WfExSBackend
         :type workflow_meta: dict
         :type creds_config: dict
-        :type paranoidMode:
+        :type paranoidMode: bool
         :return: Workflow configuration
         """
-
+        
         # The preserved paranoid mode must be honoured
         preserved_paranoid_mode = workflow_meta.get('paranoid_mode')
         if preserved_paranoid_mode is not None:
             paranoidMode = preserved_paranoid_mode
 
-        if paranoidMode:
-            self.enableParanoidMode()
-
-        return self.newSetup(
+        return cls(
+            wfexs,
             workflow_meta['workflow_id'],
             workflow_meta.get('version'),
             descriptor_type=workflow_meta.get('workflow_type'),
-            trs_endpoint=workflow_meta.get('trs_endpoint', self.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
             outputs=workflow_meta.get('outputs', {}),
             workflow_config=workflow_meta.get('workflow_config'),
-            creds_config=creds_config
+            creds_config=creds_config,
+            paranoid_mode=paranoidMode
         )
-
-    def fromForm(self, workflow_meta, paranoidMode=False):  # VRE
+    
+    @classmethod
+    def FromForm(cls, wfexs, workflow_meta, paranoidMode:bool = False):  # VRE
         """
 
+        :param wfexs: WfExSBackend instance
         :param workflow_meta: The configuration describing both the workflow
         and the inputs to use when it is being instantiated.
         :param paranoidMode:
@@ -877,16 +539,16 @@ class WF:
         :type paranoidMode:
         :return: Workflow configuration
         """
-        if paranoidMode:
-            self.enableParanoidMode()
-
-        return self.newSetup(
+        
+        return cls(
+            wfexs,
             workflow_meta['workflow_id'],
             workflow_meta.get('version'),
             descriptor_type=workflow_meta.get('workflow_type'),
-            trs_endpoint=workflow_meta.get('trs_endpoint', self.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
-            workflow_config=workflow_meta.get('workflow_config')
+            workflow_config=workflow_meta.get('workflow_config'),
+            paranoid_mode=paranoidMode
         )
 
     def fetchWorkflow(self, offline=False):
@@ -910,7 +572,7 @@ class WF:
             engineDesc = None
 
             # Trying to be smarter
-            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.guessRepoParams(parsedRepoURL, fail_ok=False)
+            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.wfexs.guessRepoParams(parsedRepoURL, fail_ok=False)
 
             if guessedRepoURL is not None:
                 repoURL = guessedRepoURL
@@ -938,7 +600,7 @@ class WF:
                     repoRelPath = None
                 self.repoRelPath = repoRelPath
 
-                repoDir, repoEffectiveCheckout = self.doMaterializeRepo(repoURL, repoTag)
+                repoDir, repoEffectiveCheckout = self.wfexs.doMaterializeRepo(repoURL, repoTag)
 
         # For the cases of pure TRS repos, like Dockstore
         if repoDir is None:
@@ -958,14 +620,8 @@ class WF:
         if engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 self.logger.debug("Testing engine " + engineDesc.trs_descriptor)
-                engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
-                                          local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
-                                          cacheWorkflowDir=self.cacheWorkflowDir,
-                                          cacheWorkflowInputsDir=self.cacheWorkflowInputsDir,
-                                          workDir=self.workDir,
-                                          outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
-                                          tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
-                                          allowOther=self.allowOther, config_directory=self.config_directory)
+                engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
+                    
                 try:
                     engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
                     self.logger.debug("Tested engine {} {}".format(engineDesc.trs_descriptor, engineVer))
@@ -978,14 +634,7 @@ class WF:
                 raise WFException('No engine recognized a workflow at {}'.format(repoURL))
         else:
             self.logger.debug("Fixed engine " + engineDesc.trs_descriptor)
-            engine = engineDesc.clazz(cacheDir=self.cacheDir, workflow_config=self.workflow_config,
-                                      local_config=self.local_config, engineTweaksDir=self.engineTweaksDir,
-                                      cacheWorkflowDir=self.cacheWorkflowDir,
-                                      cacheWorkflowInputsDir=self.cacheWorkflowInputsDir,
-                                      workDir=self.workDir,
-                                      outputsDir=self.outputsDir, intermediateDir=self.intermediateDir,
-                                      tempDir=self.tempDir, secure_exec=self.secure or self.paranoidMode,
-                                      allowOther=self.allowOther, config_directory=self.config_directory)
+            engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException(
@@ -1018,24 +667,11 @@ class WF:
         if self.listOfContainers is None:
             self.materializedEngine, self.listOfContainers = WorkflowEngine.MaterializeWorkflow(self.materializedEngine, offline=offline)
 
-    def addSchemeHandler(self, scheme, handler):
-        """
-
-        :param scheme:
-        :param handler:
-        """
-        if not isinstance(handler, (
-                types.FunctionType, types.LambdaType, types.MethodType, types.BuiltinFunctionType,
-                types.BuiltinMethodType)):
-            raise WFException('Trying to set for scheme {} a invalid handler'.format(scheme))
-
-        self.cacheHandler.addSchemeHandlers({scheme.lower(): handler})
-
     def injectInputs(self, paths, workflowInputs_destdir=None, workflowInputs_cacheDir=None, lastInput=0):
         if workflowInputs_destdir is None:
             workflowInputs_destdir = self.inputsDir
         if workflowInputs_cacheDir is None:
-            workflowInputs_cacheDir = self.cacheWorkflowInputsDir
+            workflowInputs_cacheDir = CacheType.Input
 
         cacheable = not self.paranoidMode
         # The storage dir depends on whether it can be cached or not
@@ -1044,7 +680,12 @@ class WF:
             # We are sending the context name thinking in the future,
             # as it could contain potential hints for authenticated access
             fileuri = parse.urlunparse(('file', '', os.path.abspath(path), '', '', ''))
-            matContent = self.downloadInputFile(fileuri, workflowInputs_destdir=storeDir, ignoreCache=not cacheable, registerInCache=cacheable)
+            matContent = self.wfexs.downloadContent(
+                fileuri,
+                dest=storeDir,
+                ignoreCache=not cacheable,
+                registerInCache=cacheable
+            )
 
             # Now, time to create the symbolic link
             lastInput += 1
@@ -1071,14 +712,27 @@ class WF:
 
         return lastInput
 
-    def materializeInputs(self, offline: bool = False, lastInput=0):
-        theParams, numInputs = self.fetchInputs(self.params, workflowInputs_destdir=self.inputsDir,
-                                                workflowInputs_cacheDir=self.cacheWorkflowInputsDir, offline=offline,
-                                                lastInput=lastInput)
+    def materializeInputs(self, offline: bool = False, lastInput:int=0):
+        theParams, numInputs = self.fetchInputs(
+            self.params,
+            workflowInputs_destdir=self.inputsDir,
+            offline=offline,
+            lastInput=lastInput
+        )
         self.materializedParams = theParams
-
-    def fetchInputs(self, params, workflowInputs_destdir: AbsPath = None, workflowInputs_cacheDir: AbsPath = None,
-                    prefix='', lastInput=0, offline: bool = False) -> Tuple[List[MaterializedInput], int]:
+    
+    def getContext(self, remote_file, contextName: Optional[str]):
+        secContext = None
+        if contextName is not None:
+            secContext = self.creds_config.get(contextName)
+            if secContext is None:
+                raise WFException(
+                    'No security context {} is available, needed by {}'.format(contextName, remote_file))
+        
+        return secContext
+    
+    def fetchInputs(self, params, workflowInputs_destdir: AbsPath,
+                    prefix:str='', lastInput:int=0, offline: bool = False) -> Tuple[List[MaterializedInput], int]:
         """
         Fetch the input files for the workflow execution.
         All the inputs must be URLs or CURIEs from identifiers.org / n2t.net.
@@ -1086,7 +740,6 @@ class WF:
         :param params: Optional params for the workflow execution.
         :param workflowInputs_destdir:
         :param prefix:
-        :param workflowInputs_cacheDir:
         :param lastInput:
         :param offline:
         :type params: dict
@@ -1140,18 +793,20 @@ class WF:
 
                         remote_pairs = []
                         # The storage dir depends on whether it can be cached or not
-                        storeDir = workflowInputs_cacheDir if cacheable else inputDestDir
+                        storeDir = CacheType.Input if cacheable else workflowInputs_destdir
                         for remote_file in remote_files:
                             # We are sending the context name thinking in the future,
                             # as it could contain potential hints for authenticated access
                             contextName = inputs.get('security-context')
-                            matContent = self.downloadInputFile(remote_file,
-                                                                workflowInputs_destdir=storeDir,
-                                                                contextName=contextName,
-                                                                offline=offline,
-                                                                ignoreCache=not cacheable,
-                                                                registerInCache=cacheable,
-                                                                )
+                            secContext = self.getContext(remote_file, contextName)
+                            matContent = self.wfexs.downloadContent(
+                                remote_file,
+                                dest=storeDir,
+                                secContext=secContext,
+                                offline=offline,
+                                ignoreCache=not cacheable,
+                                registerInCache=cacheable
+                            )
 
                             # Now, time to create the symbolic link
                             lastInput += 1
@@ -1210,7 +865,6 @@ class WF:
                     # possible nested files
                     newInputsAndParams, lastInput = self.fetchInputs(inputs,
                                                                      workflowInputs_destdir=workflowInputs_destdir,
-                                                                     workflowInputs_cacheDir=workflowInputs_cacheDir,
                                                                      prefix=linearKey + '.', lastInput=lastInput,
                                                                      offline=offline)
                     theInputs.extend(newInputsAndParams)
@@ -1346,12 +1000,56 @@ class WF:
                     workflow_meta['outputs'] = outputs
 
                 yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
-
+                
         creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
         if overwrite or not os.path.exists(creds_file):
             with open(creds_file, mode='w', encoding='utf-8') as crF:
                 yaml.dump(marshall_namedtuple(self.creds_config), crF, Dumper=YAMLDumper)
+        
+        self.configMarshalled = True
+    
+    def unmarshallConfig(self):
+        if not self.configMarshalled:
+            workflow_meta_filename = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
+            with open(workflow_meta_filename, mode="r", encoding="utf-8") as wcf:
+                workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+                
+                self.id = workflow_meta['workflow_id']
+                self.paranoidMode = workflow_meta['paranoid_mode']
+                self.version_id = workflow_meta.get('version')
+                self.descriptor_type = workflow_meta.get('workflow_type')
+                self.trs_endpoint = workflow_meta.get('trs_endpoint')
+                self.workflow_config = workflow_meta.get('workflow_config')
+                self.params = workflow_meta.get('params')
+                outputsM = workflow_meta.get('outputs')
+                if isinstance(outputsM, dict):
+                    outputs = list(outputsM.values())
+                    self.outputs = self.parseExpectedOutputs(outputsM)
+                else:
+                    self.outputs = None
+            
+            valErrors = self.wfexs.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
+            if len(valErrors) > 0:
+                errstr = f'ERROR in workflow staging definition block: {valErrors}'
+                self.logger.error(errstr)
+                raise WFException(errstr)
 
+            creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
+            if os.path.exists(creds_file):
+                with open(creds_file, mode="r", encoding="utf-8") as scf:
+                    self.creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+            else:
+                self.creds_config = {}
+            
+            valErrors = self.wfexs.ConfigValidate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
+            if len(valErrors) > 0:
+                errstr = f'ERROR in security context block: {valErrors}'
+                self.logger.error(errstr)
+                raise WFException(errstr)
+                
+            self.configMarshalled = True
+
+    
     def marshallStage(self, exist_ok: bool = True):
         if not self.stageMarshalled:
             self.marshallConfig(overwrite=False)
@@ -1685,59 +1383,27 @@ class WF:
 
         # TODO error handling
 
-    def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
-        """
-
-        :param repoURL:
-        :param repoTag:
-        :param doUpdate:
-        :return:
-        """
-        gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
-        repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(repoURL,repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
-
-        # Now, let's register the checkout with cache structures
-        # using its public URI
-        if not repoURL.startswith('git'):
-            remote_url = 'git+' + repoURL
-        if repoTag is not None:
-            remote_url += '@' + repoTag
-
-        self.cacheHandler.inject(
-            self.cacheWorkflowDir,
-            remote_url,
-            fetched_metadata_array=[
-                URIWithMetadata(
-                    uri=remote_url,
-                    metadata=metadata,
-                )
-            ],
-            finalCachedFilename=repoDir,
-            inputKind=ContentKind.Directory
-        )
-
-        return repoDir, repoEffectiveCheckout
-
     def getWorkflowRepoFromTRS(self, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
         :return:
         """
+        cacheHandler = self.wfexs.cacheHandler
         # Now, time to check whether it is a TRSv2
-        trs_endpoint_v2_meta = self.trs_endpoint + 'service-info'
-        trs_endpoint_v2_beta2_meta = self.trs_endpoint + 'metadata'
-        trs_endpoint_meta = None
+        trs_endpoint_v2_meta_url = self.trs_endpoint + 'service-info'
+        trs_endpoint_v2_beta2_meta_url = self.trs_endpoint + 'metadata'
+        trs_endpoint_meta_url = None
 
         # Needed to store this metadata
         trsMetadataCache = os.path.join(self.metaDir, self.TRS_METADATA_FILE)
 
         try:
-            metaContentKind, cachedTRSMetaFile, trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_meta, self.metaDir, offline)
-            trs_endpoint_meta = trs_endpoint_v2_meta
+            metaContentKind, cachedTRSMetaFile, trsMetaMeta = cacheHandler.fetch(trs_endpoint_v2_meta_url, self.metaDir, offline)
+            trs_endpoint_meta_url = trs_endpoint_v2_meta_url
         except WFException as wfe:
             try:
-                metaContentKind, cachedTRSMetaFile, trsMetaMeta = self.cacheHandler.fetch(trs_endpoint_v2_beta2_meta, self.metaDir, offline)
-                trs_endpoint_meta = trs_endpoint_v2_beta2_meta
+                metaContentKind, cachedTRSMetaFile, trsMetaMeta = cacheHandler.fetch(trs_endpoint_v2_beta2_meta_url, self.metaDir, offline)
+                trs_endpoint_meta_url = trs_endpoint_v2_beta2_meta_url
             except WFException as wfebeta:
                 raise WFException("Unable to fetch metadata from {} in order to identify whether it is a working GA4GH TRSv2 endpoint. Exceptions:\n{}\n{}".format(self.trs_endpoint, wfe, wfebeta))
 
@@ -1754,13 +1420,13 @@ class WF:
             trs_version = self.trs_endpoint_meta.get('type', {}).get('version')
 
         if trs_version is None:
-            raise WFException("Unable to identify TRS version from {}".format(trs_endpoint_meta))
+            raise WFException("Unable to identify TRS version from {}".format(trs_endpoint_meta_url))
 
         # Now, check the tool does exist in the TRS, and the version
         trs_tools_url = parse.urljoin(self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe=''))
 
         trsQueryCache = os.path.join(self.metaDir, self.TRS_QUERY_CACHE_FILE)
-        _, cachedTRSQueryFile, _ = self.cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
+        _, cachedTRSQueryFile, _ = cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
         # Giving a friendly name
         if not os.path.exists(trsQueryCache):
             os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
@@ -1854,13 +1520,13 @@ class WF:
             self.logger.debug("TRS workflow")
             # Learning the available files and maybe
             # which is the entrypoint to the workflow
-            _, trsFilesDir, trsFilesMeta = self.cacheHandler.fetch(INTERNAL_TRS_SCHEME_PREFIX + ':' + toolFilesURL, self.cacheTRSFilesDir, offline)
+            _, trsFilesDir, trsFilesMeta = self.wfexs.cacheFetch(INTERNAL_TRS_SCHEME_PREFIX + ':' + toolFilesURL, CacheType.TRS, offline)
 
             expectedEngineDesc = self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
             remote_workflow_entrypoint = trsFilesMeta[0].metadata.get('remote_workflow_entrypoint')
             if remote_workflow_entrypoint is not None:
                 # Give it a chance to identify the original repo of the workflow
-                repoURL, repoTag, repoRelPath = self.guessRepoParams(remote_workflow_entrypoint, fail_ok=False)
+                repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(remote_workflow_entrypoint, fail_ok=False)
 
                 if repoURL is not None:
                     self.logger.debug("Derived repository {} ({} , rel {}) from {}".format(repoURL, repoTag, repoRelPath, trs_tools_url))
@@ -1882,7 +1548,7 @@ class WF:
         :param expectedEngineDesc: If defined, an instance of WorkflowType
         :return:
         """
-        roCrateFile = self.downloadROcrate(roCrateURL, offline=offline)
+        roCrateFile = self.wfexs.downloadROcrate(roCrateURL, offline=offline)
         self.logger.info("downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile))
 
         return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
@@ -1963,10 +1629,10 @@ class WF:
 
         # Some RO-Crates might have this value missing or ill-built
         if workflowUploadURL is not None:
-            repoURL, repoTag, repoRelPath = self.guessRepoParams(workflowUploadURL, fail_ok=False)
+            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(workflowUploadURL, fail_ok=False)
 
         if repoURL is None:
-            repoURL, repoTag, repoRelPath = self.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=False)
+            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=False)
 
         if repoURL is None:
             raise WFException('Unable to guess repository from RO-Crate manifest')
@@ -1974,149 +1640,3 @@ class WF:
         # It must return four elements:
         return engineDesc, repoURL, repoTag, repoRelPath
 
-    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = True) -> Tuple[RepoURL, RepoTag, RelPath]:
-        repoURL = None
-        repoTag = None
-        repoRelPath = None
-
-        # Deciding which is the input
-        if isinstance(wf_url, parse.ParseResult):
-            parsed_wf_url = wf_url
-        else:
-            parsed_wf_url = parse.urlparse(wf_url)
-
-        # These are the usual URIs which can be understood by pip
-        # See https://pip.pypa.io/en/stable/cli/pip_install/#git
-        if parsed_wf_url.scheme.startswith('git+') or parsed_wf_url.scheme == 'git':
-            # Getting the scheme git is going to understand
-            if len(parsed_wf_url.scheme) > 3:
-                gitScheme = parsed_wf_url.scheme[4:]
-            else:
-                gitScheme = parsed_wf_url.scheme
-
-            # Getting the tag or branch
-            if '@' in parsed_wf_url.path:
-                gitPath, repoTag = parsed_wf_url.path.split('@', 1)
-            else:
-                gitPath = parsed_wf_url.path
-
-            # Getting the repoRelPath (if available)
-            if len(parsed_wf_url.fragment) > 0:
-                frag_qs = parse.parse_qs(parsed_wf_url.fragment)
-                subDirArr = frag_qs.get('subdirectory', [])
-                if len(subDirArr) > 0:
-                    repoRelPath = subDirArr[0]
-
-            # Now, reassemble the repoURL
-            repoURL = parse.urlunparse((gitScheme, parsed_wf_url.netloc, gitPath, '', '', ''))
-
-        # TODO handling other popular cases, like bitbucket
-        elif parsed_wf_url.netloc == 'github.com':
-            wf_path = parsed_wf_url.path.split('/')
-
-            if len(wf_path) >= 3:
-                repoGitPath = wf_path[:3]
-                if not repoGitPath[-1].endswith('.git'):
-                    repoGitPath[-1] += '.git'
-
-                # Rebuilding repo git path
-                repoURL = parse.urlunparse(
-                    (parsed_wf_url.scheme, parsed_wf_url.netloc, '/'.join(repoGitPath), '', '', ''))
-
-                # And now, guessing the tag and the relative path
-                if len(wf_path) >= 5 and (wf_path[3] in ('blob', 'tree')):
-                    repoTag = wf_path[4]
-
-                    if len(wf_path) >= 6:
-                        repoRelPath = '/'.join(wf_path[5:])
-        elif parsed_wf_url.netloc == 'raw.githubusercontent.com':
-            wf_path = parsed_wf_url.path.split('/')
-            if len(wf_path) >= 3:
-                # Rebuilding it
-                repoGitPath = wf_path[:3]
-                repoGitPath[-1] += '.git'
-
-                # Rebuilding repo git path
-                repoURL = parse.urlunparse(
-                    ('https', 'github.com', '/'.join(repoGitPath), '', '', ''))
-
-                # And now, guessing the tag/checkout and the relative path
-                if len(wf_path) >= 4:
-                    repoTag = wf_path[3]
-
-                    if len(wf_path) >= 5:
-                        repoRelPath = '/'.join(wf_path[4:])
-        elif fail_ok:
-            raise WFException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
-
-        self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
-
-        return repoURL, repoTag, repoRelPath
-
-    def downloadROcrate(self, roCrateURL, offline: bool = False) -> AbsPath:
-        """
-        Download RO-crate from WorkflowHub (https://dev.workflowhub.eu/)
-        using GA4GH TRS API and save RO-Crate in path.
-
-        :param roCrateURL: location path to save RO-Crate
-        :param offline: Are we in offline mode?
-        :type roCrateURL: str
-        :type offline: bool
-        :return:
-        """
-
-        try:
-            roCK, roCrateFile, _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
-        except Exception as e:
-            raise WFException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e))
-
-        crate_hashed_id = hashlib.sha1(roCrateURL.encode('utf-8')).hexdigest()
-        cachedFilename = os.path.join(self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION)
-        if not os.path.exists(cachedFilename):
-            os.symlink(os.path.basename(roCrateFile), cachedFilename)
-
-        self.cacheROCrateFilename = cachedFilename
-
-        return cachedFilename
-
-    def downloadInputFile(self, remote_file, workflowInputs_destdir: AbsPath = None,
-                          contextName=None, offline: bool = False, ignoreCache:bool=False, registerInCache:bool=True) -> MaterializedContent:
-        """
-        Download remote file or directory / dataset.
-
-        :param remote_file: URL or CURIE to download remote file
-        :param contextName:
-        :param workflowInputs_destdir:
-        :param offline:
-        :type remote_file: str
-        """
-        parsedInputURL = parse.urlparse(remote_file)
-
-        if not all([parsedInputURL.scheme, parsedInputURL.path]):
-            raise RuntimeError("Input is not a valid remote URL or CURIE source")
-
-        else:
-            # Default pretty filename
-            prettyFilename = parsedInputURL.path.split('/')[-1]
-
-            # Assure workflow inputs directory exists before the next step
-            if workflowInputs_destdir is None:
-                workflowInputs_destdir = self.cacheWorkflowInputsDir
-
-            self.logger.info("downloading workflow input: {}".format(remote_file))
-            # Security context is obtained here
-            secContext = None
-            if contextName is not None:
-                secContext = self.creds_config.get(contextName)
-                if secContext is None:
-                    raise WFException(
-                        'No security context {} is available, needed by {}'.format(contextName, remote_file))
-
-            inputKind, cachedFilename, metadata_array = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
-            self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
-
-            # FIXME: What to do when there is more than one entry in the metadata array?
-            if len(metadata_array) > 0 and (metadata_array[0].preferredName is not None):
-                prettyFilename = metadata_array[0].preferredName
-
-            return MaterializedContent(cachedFilename, remote_file, prettyFilename, inputKind, metadata_array)

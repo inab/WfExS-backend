@@ -34,7 +34,7 @@ try:
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
-from wfexs_backend.workflow import WF
+from wfexs_backend.wfexs_backend import WfExSBackend
 from wfexs_backend import get_WfExS_version
 from wfexs_backend.common import ArgTypeMixin, CacheType as WfExS_CacheType
 
@@ -44,6 +44,7 @@ class WfExS_Commands(ArgTypeMixin, enum.Enum):
     ConfigValidate = 'config-validate'
     Stage = 'stage'
     MountWorkDir = 'mount-workdir'
+    StagedWorkDir = 'staged-workdir'
     ExportStage = 'export-stage'
     OfflineExecute = 'offline-execute'
     Execute = 'execute'
@@ -55,6 +56,13 @@ class WfExS_Cache_Commands(ArgTypeMixin, enum.Enum):
     Inject = 'inject'
     Remove = 'rm'
     Validate = 'validate'
+
+class WfExS_Staged_WorkDir_Commands(ArgTypeMixin, enum.Enum):
+    Execute = 'exec'
+    List = 'ls'
+    Mount = 'mount'
+    Remove = 'rm'
+#    Validate = 'validate'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
@@ -96,12 +104,12 @@ def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, help:str=No
                     help="Should the RO-Crate contain a copy of the inputs (and outputs)?")
     return ap_
 
-def processCacheCommand(wfInstance:WF, args: argparse.Namespace, logLevel) -> int:
+def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLevel) -> int:
     """
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
     """
-    cH , cPath = wfInstance.getCacheHandler(args.cache_type)
+    cH , cPath = wfBackend.getCacheHandler(args.cache_type)
     retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
         if logLevel <= logging.INFO:
@@ -128,6 +136,27 @@ def processCacheCommand(wfInstance:WF, args: argparse.Namespace, logLevel) -> in
             print(f"\t- {metaUri} {validated}")
     #    pass
     
+    return retval
+
+def processStagedWorkdirCommand(wfBackend:WfExSBackend, args: argparse.Namespace, loglevel) -> int:
+    """
+    This method processes the cache subcommands, and returns the retval
+    to be used with sys.exit
+    """
+    
+    retval = 0
+    # This is needed to be sure the encfs instance is unmounted
+    if args.staged_workdir_command != WfExS_Staged_WorkDir_Commands.Mount:
+        atexit.register(wfInstance.cleanup)
+    
+    if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
+        if len(args.staged_workdir_command_args) > 0:
+            # FIXME: This operation could not work for more than one call
+            for stagedWorkDir in args.staged_workdir_command_args:
+                wfInstance.fromWorkDir(args.staged_workdir_command_args[0])
+    
+    
+    # Thi
     return retval
 
 if __name__ == "__main__":
@@ -172,6 +201,14 @@ if __name__ == "__main__":
     ap_c.add_argument("-g", "--glob", dest="filesAsGlobs", help='Given cache element names are globs', action="store_true", default=False)
     ap_c.add_argument('cache_type', help='Cache type to perform the cache command', type=WfExS_CacheType.argtype, choices=WfExS_CacheType)
     ap_c.add_argument('cache_command_args', help='Optional cache element names', nargs='*')
+    
+    ap_w = genParserSub(
+        sp,
+        WfExS_Commands.StagedWorkDir,
+        help='Staged working directories handling subcommands'
+    )
+    ap_w.add_argument('staged_workdir_command', help='Staged working directory command to perform', type=WfExS_Staged_WorkDir_Commands.argtype, choices=WfExS_Staged_WorkDir_Commands)
+    ap_w.add_argument('staged_workdir_command_args', help='Optional staged working directory element names', nargs='*')
     
     ap_cv = genParserSub(
         sp,
@@ -313,7 +350,7 @@ if __name__ == "__main__":
     
     # Initialize (and create config file)
     if command in (WfExS_Commands.Init, WfExS_Commands.Cache, WfExS_Commands.Stage, WfExS_Commands.Execute):
-        updated_config, local_config = WF.bootstrap(local_config, config_directory, key_prefix=config_relname)
+        updated_config, local_config = WfExSBackend.bootstrap(local_config, config_directory, key_prefix=config_relname)
         
         # Last, should config be saved back?
         if updated_config or not os.path.exists(localConfigFilename):
@@ -326,26 +363,31 @@ if __name__ == "__main__":
             sys.exit(0)
 
     # Is the work already staged?
-    wfInstance = WF(local_config, config_directory)
+    wfBackend = WfExSBackend(local_config, config_directory)
     
     # Cache handling commands
     if command == WfExS_Commands.Cache:
-        sys.exit(processCacheCommand(wfInstance, args, logLevel))
+        sys.exit(processCacheCommand(wfBackend, args, logLevel))
     
-    # This is needed to be sure the encfs instance is unmounted
-    if command != WfExS_Commands.MountWorkDir:
-        atexit.register(wfInstance.cleanup)
+    # Staged working directory handling commands
+    if command == WfExS_Commands.StagedWorkDir:
+        sys.exit(processStagedWorkdirCommand(wfBackend, args, logLevel))
     
+    wfInstance = None
     if command in (WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
-        wfInstance.fromWorkDir(args.workflowWorkingDirectory)
+        wfInstance = wfBackend.fromWorkDir(args.workflowWorkingDirectory)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
     elif command == WfExS_Commands.ConfigValidate:
-        retval = wfInstance.validateConfigFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
+        retval = wfBackend.validateConfigFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
         sys.exit(retval)
     else:
-        wfInstance.fromFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
+        wfInstance = wfBackend.fromFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
+    
+    # This is needed to be sure the encfs instance is unmounted
+    if command != WfExS_Commands.MountWorkDir:
+        atexit.register(wfInstance.cleanup)
     
     print("* Command \"{}\". Working directory will be {}".format(command, wfInstance.workDir), file=sys.stderr)
     sys.stderr.flush()
