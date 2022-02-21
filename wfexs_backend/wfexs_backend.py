@@ -23,21 +23,16 @@ import io
 import json
 import jsonschema
 import logging
-import pathlib
 import platform
 import shutil
 import sys
-import threading
+import tempfile
 import time
 import types
 import uuid
 
-from pathlib import Path
 from typing import Any, List, Mapping, Optional, Pattern, Tuple, Type, Union
-from urllib import request, parse
-
-from rocrate import rocrate
-import bagit
+from urllib import parse
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
@@ -52,12 +47,12 @@ import crypt4gh.keys.kdf
 import crypt4gh.keys.c4gh
 
 from .common import *
-from .encrypted_fs import *
-from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
-from .engine import WORKDIR_MARSHALLED_STAGE_FILE, WORKDIR_MARSHALLED_EXECUTE_FILE, WORKDIR_MARSHALLED_EXPORT_FILE
-from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, \
-    WORKDIR_ENGINE_TWEAKS_RELDIR
+from .encrypted_fs import DEFAULT_ENCRYPTED_FS_TYPE, \
+  DEFAULT_ENCRYPTED_FS_CMD, DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT, \
+  ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS, EncryptedFSType
+#from .encrypted_fs import *
+from .engine import WorkflowEngine
+
 from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
@@ -69,24 +64,11 @@ from .fetchers import DEFAULT_SCHEME_HANDLERS
 from .fetchers.git import SCHEME_HANDLERS as GIT_SCHEME_HANDLERS, GitFetcher
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
-from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX, SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
+from .fetchers.trs_files import SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
 from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
 
-from .nextflow_engine import NextflowWorkflowEngine
-from .cwl_engine import CWLWorkflowEngine
-
 from .workflow import WF
-
-# The list of classes to be taken into account
-# CWL detection is before, as Nextflow one is
-# a bit lax (only detects a couple of too common
-# keywords)
-WORKFLOW_ENGINE_CLASSES = [
-    CWLWorkflowEngine,
-    NextflowWorkflowEngine,
-]
-
 
 class WfExSBackend:
     """
@@ -100,19 +82,8 @@ class WfExSBackend:
     CRYPT4GH_PUBKEY_KEY = 'pub'
     CRYPT4GH_PASSPHRASE_KEY = 'passphrase'
 
-    TRS_METADATA_FILE = 'trs_metadata.json'
-    TRS_QUERY_CACHE_FILE = 'trs_result.json'
-    TRS_TOOL_FILES_FILE = 'trs_tool_files.json'
-
     SCHEMAS_REL_DIR = 'schemas'
     CONFIG_SCHEMA = 'config.json'
-
-    DEFAULT_RO_EXTENSION = ".crate.zip"
-    DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
-    TRS_TOOLS_PATH = 'tools/'
-    WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
-
-    RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
 
     @classmethod
     def generate_passphrase(cls) -> str:
@@ -242,7 +213,7 @@ class WfExSBackend:
             workflow_meta['workflow_id'],
             workflow_meta.get('version'),
             descriptor_type=workflow_meta.get('workflow_type'),
-            trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=workflow_meta.get('trs_endpoint', WF.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
             outputs=workflow_meta.get('outputs', {}),
             workflow_config=workflow_meta.get('workflow_config'),
@@ -443,7 +414,7 @@ class WfExSBackend:
                  workflow_id,
                  version_id,
                  descriptor_type=None,
-                 trs_endpoint=DEFAULT_TRS_ENDPOINT,
+                 trs_endpoint=WF.DEFAULT_TRS_ENDPOINT,
                  params=None,
                  outputs=None,
                  workflow_config=None,
@@ -800,7 +771,7 @@ class WfExSBackend:
             raise WFException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e))
 
         crate_hashed_id = hashlib.sha1(roCrateURL.encode('utf-8')).hexdigest()
-        cachedFilename = os.path.join(self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION)
+        cachedFilename = os.path.join(self.cacheROCrateDir, crate_hashed_id + WF.DEFAULT_RO_EXTENSION)
         if not os.path.exists(cachedFilename):
             os.symlink(os.path.basename(roCrateFile), cachedFilename)
 
