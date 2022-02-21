@@ -149,12 +149,16 @@ class LicensedURI(NamedTuple):
     licence: The licence associated to the dataset behind this URI
     attributions: The attributions associated to the dataset pointed
     out by this URI
+    secContext: The optional, security context to use when the uri
+    has to be accessed. This is useful for use cases like DRS, where
+    it can provide the authentication metadata
     """
     uri: URIType
     # A licence URL, either from a repository, or a site like
     # choosealicense.com or spdx.org/licenses/
     licence: URIType = NoPermissionLicence
     attributions: List[Attribution] = []
+    secContext: Optional[SecurityContextConfig] = None
 
 AnyURI = Union[URIType,LicensedURI]
 
@@ -244,7 +248,8 @@ class ExpectedOutput(NamedTuple):
             kind=ContentKind(obj['c-l-a-s-s'])  if 'c-l-a-s-s' in obj  else  ContentKind.File,
             preferredFilename=obj.get('preferredName'),
             fillFrom=obj.get('fillFrom'),
-            glob=obj.get('glob')
+            glob=obj.get('glob'),
+            cardinality=tuple(obj['cardinality'])
         )
 
 
@@ -341,6 +346,18 @@ class WorkflowType(NamedTuple):
     trs_descriptor: TRS_Workflow_Descriptor
     rocrate_programming_language: str
 
+
+class StagedSetup(NamedTuple):
+    workflow_config: Mapping
+    engine_tweaks_dir: AbsPath
+    work_dir: AbsPath
+    inputs_dir: AbsPath
+    outputs_dir: AbsPath
+    intermediate_dir: AbsPath
+    meta_dir: AbsPath
+    temp_dir: AbsPath
+    secure_exec:bool
+    allow_other:bool
 
 class MaterializedWorkflowEngine(NamedTuple):
     """
