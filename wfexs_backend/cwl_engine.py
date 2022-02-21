@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -523,7 +523,12 @@ class CWLWorkflowEngine(WorkflowEngine):
                     # Execute workflow
                     stdoutFilename = os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
                     stderrFilename = os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)
-                    with open(stdoutFilename, mode="ab+") as cwl_yaml_stdout:
+                    
+                    # As the stdout contains the description of the outputs
+                    # which is parsed to identify them
+                    # we have to overwrite it every time we are running
+                    # the workflow
+                    with open(stdoutFilename, mode="wb+") as cwl_yaml_stdout:
                         with open(stderrFilename, mode="ab+") as cwl_yaml_stderr:
                             intermediateDir = self.intermediateDir + "/"
                             outputDir = self.outputsDir + "/"
