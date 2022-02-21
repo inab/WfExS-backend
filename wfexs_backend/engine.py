@@ -264,6 +264,43 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         
         self.secure_exec = secure_exec
 
+    
+    @classmethod
+    def FromStagedSetup(cls,
+            staged_setup:StagedSetup,
+            cache_dir=None,
+            cache_workflow_dir=None,
+            cache_workflow_inputs_dir=None,
+            local_config=None,
+            config_directory=None
+    ):
+        """
+        Init method from staged setup instance
+
+        :param staged_setup:
+        :param cache_dir:
+        :param cache_workflow_dir:
+        :param cache_workflow_inputs_dir:
+        :param local_config:
+        :param config_directory:
+        """
+        
+        return cls(
+            workflow_config=staged_setup.workflow_config,
+            engineTweaksDir=staged_setup.engine_tweaks_dir,
+            workDir=staged_setup.work_dir,
+            outputsDir=staged_setup.outputs_dir,
+            intermediateDir=staged_setup.intermediate_dir,
+            tempDir=staged_setup.temp_dir,
+            secure_exec=staged_setup.secure_exec,
+            allowOther=staged_setup.allow_other,
+            cacheDir=cache_dir,
+            cacheWorkflowDir=cache_workflow_dir,
+            cacheWorkflowInputsDir=cache_workflow_inputs_dir,
+            local_config=local_config,
+            config_directory=config_directory
+        )
+    
     @classmethod
     @abc.abstractmethod
     def WorkflowType(cls) -> WorkflowType:
@@ -490,6 +527,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     matOutputs.append(matOutput)
         
         # This is only applied when the expected outputs is specified
+        import pprint
+        pprint.pprint("EXPECTED")
+        pprint.pprint(expectedOutputs)
         for expectedOutput in expectedOutputs:
             cannotBeEmpty = expectedOutput.cardinality[0] != 0
             matValues = []
@@ -568,6 +608,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 if (outputVal is None) and cannotBeEmpty:
                     self.logger.warning("Output {} got no match from the outputs mapping".format(expectedOutput.name))
                 
+                import pprint
+                pprint.pprint(outputVal)
+                pprint.pprint(outputsMapping)
+                pprint.pprint(expectedOutput)
                 matValues = CWLDesc2Content(outputVal, self.logger, expectedOutput, doGenerateSignatures=True)
             
             matOutput = MaterializedOutput(
