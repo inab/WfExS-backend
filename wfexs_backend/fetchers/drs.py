@@ -108,6 +108,7 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
     for access_method in object_metadata.get('access_methods', []):
         object_url = access_method.get('access_url')
         access_id = access_method.get('access_id')
+        customSecContext = None
         if (object_url is None) and (access_id is not None):
             object_access_metadata_url = object_metadata_url + '/access/' + parse.quote(access_id, safe='')
             
@@ -119,9 +120,19 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
                 raise WFException("Error fetching DRS access link {} for {} : {} {}".format(access_id, remote_file, he.code, he.reason))
 
             object_url = object_access_metadata.get('url')
+            object_headers = object_access_metadata.get('headers')
+            
+            if isinstance(object_headers, dict):
+                customSecContext = {
+                    'headers': object_headers
+                }
         
         if object_url is not None:
-            retURL.append(object_url)
+            lic_uri = LicensedURI(
+                uri=object_url,
+                secContext=customSecContext
+            )
+            retURL.append(lic_uri)
     
     return retURL, metadata_array
 

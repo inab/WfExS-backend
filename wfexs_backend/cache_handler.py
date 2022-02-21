@@ -369,16 +369,25 @@ class SchemeHandlerCacheHandler:
         # This is an iterative process, where the URI is resolved and peeled until a basic fetching protocol is reached
         inputKind = remote_file
         metadata_array = []
+        # The security context could be augmented, so avoid side effects
+        currentSecContext = dict()  if secContext is None  else  secContext.copy()
         while not isinstance(inputKind, ContentKind):
             # These elements are alternative URIs. Any of them should
             # provide the very same content
             altInputs = inputKind  if isinstance(inputKind, list)  else  [ inputKind ]
             uncachedInputs = list()
-            for the_remote_file in altInputs:
-                if isinstance(the_remote_file, urllib.parse.ParseResult):
+            
+            for a_remote_file in altInputs:
+                attachedSecContext = None
+                if isinstance(a_remote_file, urllib.parse.ParseResult):
                     parsedInputURL = the_remote_file
-                    the_remote_file = urllib.parse.urlunparse(the_remote_file)
+                    the_remote_file = urllib.parse.urlunparse(a_remote_file)
                 else:
+                    if isinstance(a_remote_file, LicensedURI):
+                        the_remote_file = a_remote_file.uri
+                        attachedSecContext = a_remote_file.secContext
+                    else:
+                        the_remote_file = a_remote_file
                     parsedInputURL = urllib.parse.urlparse(the_remote_file)
                 
                 # uriCachedFilename is going to be always a symlink
@@ -434,7 +443,12 @@ class SchemeHandlerCacheHandler:
                     # As the content still exists, get the metadata
                     break
                 else:
-                    uncachedInputs.append((the_remote_file, parsedInputURL))
+                    # Prepare the attachedSecContext
+                    usableSecContext = currentSecContext.copy()
+                    if attachedSecContext is not None:
+                        usableSecContext.update(attachedSecContext)
+                    
+                    uncachedInputs.append((the_remote_file, parsedInputURL, usableSecContext))
             
             if metaStructure is not None:
                 fetched_metadata_array = list(map(lambda rm: URIWithMetadata(uri=rm['uri'], metadata=rm['metadata'], preferredName=rm.get('preferredName')), metaStructure['metadata_array']))
@@ -446,7 +460,7 @@ class SchemeHandlerCacheHandler:
                 # As this is a handler for online resources, comply with offline mode
                 nested_exception = None
                 failed = True
-                for the_remote_file, parsedInputURL in uncachedInputs:
+                for the_remote_file, parsedInputURL, usableSecContext in uncachedInputs:
                     # Content is fetched here
                     theScheme = parsedInputURL.scheme.lower()
                     schemeHandler = self.schemeHandlers.get(theScheme)
@@ -459,7 +473,7 @@ class SchemeHandlerCacheHandler:
 
                         try:
                             # Content is fetched here
-                            inputKind, fetched_metadata_array = schemeHandler(the_remote_file, tempCachedFilename, secContext=secContext)
+                            inputKind, fetched_metadata_array = schemeHandler(the_remote_file, tempCachedFilename, secContext=usableSecContext)
                             
                             # The cache entry is injected
                             finalCachedFilename, fingerprint = self._inject(
@@ -500,6 +514,7 @@ class SchemeHandlerCacheHandler:
                     else:
                         # This URI could be resolved (implement alternative URLs)
                         failed = False
+                        currentSecContext = usableSecContext
                         break
                     
                 # No one of the URIs could be fetched or resolved
