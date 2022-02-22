@@ -64,6 +64,8 @@ class EngineMode(enum.Enum):
 
 DEFAULT_ENGINE_MODE = EngineMode.Local
 
+WfExSInstanceId = NewType('WfExSInstanceId', str)
+
 # Abstraction of input params and output names
 SymbolicName = NewType('SymbolicName', str)
 SymbolicParamName = NewType('SymbolicParamName', SymbolicName)
@@ -223,8 +225,8 @@ class ExpectedOutput(NamedTuple):
     kind: ContentKind
     preferredFilename: RelPath
     cardinality: Tuple[int, int]
-    fillFrom: SymbolicParamName
-    glob: GlobPattern
+    fillFrom: Optional[SymbolicParamName] = None
+    glob: Optional[GlobPattern] = None
     
     def _marshall(self):
         mD = {
@@ -242,9 +244,9 @@ class ExpectedOutput(NamedTuple):
         return mD
     
     @classmethod
-    def _unmarshall(cls, name, obj):
+    def _unmarshall(cls, **obj):
         return cls(
-            name=name,
+            name=obj['name'],
             kind=ContentKind(obj['c-l-a-s-s'])  if 'c-l-a-s-s' in obj  else  ContentKind.File,
             preferredFilename=obj.get('preferredName'),
             fillFrom=obj.get('fillFrom'),
@@ -329,6 +331,8 @@ TRS_Workflow_Descriptor = str
 class WorkflowType(NamedTuple):
     """
     engineName: symbolic name of the engine
+    shortname: short name used in the WfExS-backend configuration files
+    for the workflow language
     name: Textual representation of the workflow language
     clazz: Class implementing the engine invocation
     uriMatch: The URI patterns used in RO-Crate to identify the workflow type
@@ -338,6 +342,7 @@ class WorkflowType(NamedTuple):
     rocrate_programming_language: Traditional internal id in RO-Crate implementations used for this workflow type (to be deprecated)
     """
     engineName: str
+    shortname: str
     name: str
     clazz: Type[AbstractWorkflowEngineType]
     uriMatch: List[Union[Pattern, URIType]]
@@ -348,6 +353,8 @@ class WorkflowType(NamedTuple):
 
 
 class StagedSetup(NamedTuple):
+    instance_id: WfExSInstanceId
+    nickname: str
     workflow_config: Mapping
     engine_tweaks_dir: AbsPath
     work_dir: AbsPath
