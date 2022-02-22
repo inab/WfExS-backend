@@ -81,6 +81,13 @@ def unmarshall_namedtuple(obj, myglobals = None):
         
         fields = dict(zip(objn.keys(), recurse(objn.values(), myglobals)))
         #print("{} {} {}".format(clazz, theTypeName, fields))
+        
+        # Deactivated for now, as the code is not ready for this magic
+        #if hasattr(clazz, '_unmarshall'):
+        #    return clazz._unmarshall(**fields)
+        #else:
+        #    return clazz(**fields)
+        
         return clazz(**fields)
     elif obj_is(collections.abc.Iterable) and not obj_is(str):
         #print(type(obj))
