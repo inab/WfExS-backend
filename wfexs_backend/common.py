@@ -355,6 +355,7 @@ class WorkflowType(NamedTuple):
 class StagedSetup(NamedTuple):
     instance_id: WfExSInstanceId
     nickname: str
+    creation: str
     workflow_config: Mapping
     engine_tweaks_dir: AbsPath
     work_dir: AbsPath
