@@ -125,10 +125,14 @@
 	},
 	"properties": {
 		"trs_endpoint": {
+			"title": "The optional TRS endpoing",
+			"description": "If this key is set, it will tell the GA4GH TRS service where to look for the workflow_id (and optional version)",
 			"type": "string",
 			"format": "uri"
 		},
 		"version": {
+			"title": "Workflow version",
+			"description": "If trs_enpoint key is set, it will tell the version of the workflow_id to look for at GA4GH TRS",
 			"type": [
 				"string",
 				"integer"
@@ -145,11 +149,17 @@
 				}
 			]
 		},
+		"nickname": {
+			"title": "A friendly nickname (prefix) for the instances",
+			"type": "string"
+		},
 		"paranoid_mode": {
 			"type": "boolean",
 			"default": false
 		},
 		"workflow_type": {
+			"title": "The optional, forced workflow type",
+			"description": "When this key is set, it is forcing the workflow type. WfExS-backend is usually able to identify the workflow type, unless there are two intertwined workflows in the same location",
 			"type": "string",
 			"enum": [
 				"nextflow",
