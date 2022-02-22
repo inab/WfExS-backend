@@ -19,7 +19,7 @@ from __future__ import absolute_import
 import functools
 import random
 import subprocess
-from typing import List
+from typing import List, Optional
 
 DEFAULT_PASSPHRASE_LENGTH = 6
 
@@ -40,14 +40,23 @@ def _get_wordlist_tags() -> List[str]:
 	
 	return wordlists_tags
 
-def generate_passphrase(passphrase_length:int = DEFAULT_PASSPHRASE_LENGTH) -> str:
+def generate_passphrase(chosen_wordlist:Optional[str] = None, passphrase_length:int = DEFAULT_PASSPHRASE_LENGTH) -> str:
 	"""
 	This method is needed to avoid future legal issues using a GPL-3.0
 	library from within an Apache 2.0 licenced code
 	"""
 	wordlists_tags = _get_wordlist_tags()
-	chosen_wordlist = wordlists_tags[random.randrange(len(wordlists_tags))]
+	if chosen_wordlist not in wordlists_tags:
+		chosen_wordlist = wordlists_tags[random.randrange(len(wordlists_tags))]
 
 	with subprocess.Popen(['pwgen-passphrase', '-w', chosen_wordlist, '-l', str(passphrase_length)], encoding='utf-8', stdout=subprocess.PIPE) as pg:
 		for line in pg.stdout:
 			return line.rstrip()
+
+def generate_nickname() -> str:
+	"""
+	This method generates random nicknames using two specific
+	wordlists (if available)
+	"""
+	return generate_passphrase('eff-long', 1) + ' ' + generate_passphrase('diceware', 1) 
+	
