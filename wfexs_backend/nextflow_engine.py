@@ -137,6 +137,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     def WorkflowType(cls) -> WorkflowType:
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
+            shortname='nextflow',
             name='Nextflow',
             clazz=cls,
             uriMatch=[ 'https://www.nextflow.io/' ],

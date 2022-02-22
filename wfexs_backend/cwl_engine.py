@@ -164,6 +164,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     def WorkflowType(cls) -> WorkflowType:
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
+            shortname='cwl',
             name='Common Workflow Language',
             clazz=cls,
             uriMatch=[re.compile(r'^https://w3id\.org/cwl/')],
