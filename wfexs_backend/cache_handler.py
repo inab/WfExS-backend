@@ -18,7 +18,6 @@
 from __future__ import absolute_import
 
 import datetime
-import fnmatch
 import hashlib
 import json
 import logging
@@ -34,6 +33,7 @@ from typing import Optional, Pattern, Tuple, Union
 
 from .common import *
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, stringifyFilenameDigest
+from .utils.misc import translate_glob_args
 
 class DatetimeEncoder(json.JSONEncoder):
         def default(self, obj):
@@ -106,11 +106,6 @@ class SchemeHandlerCacheHandler:
         
         return metaStructure
     
-    @staticmethod
-    def _translateArgs(args:Iterator[str]) -> List[Pattern]:
-        return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
-        
-    
     def list(self, destdir:AbsPath, *args, acceptGlob:bool=False, cascade:bool=False) -> Iterator[Tuple[AnyURI, Mapping[str,Any]]]:
         """
         This method iterates over the list of metadata entries,
@@ -118,7 +113,7 @@ class SchemeHandlerCacheHandler:
         """
         entries = set(args)
         if entries and acceptGlob:
-            reEntries = self._translateArgs(entries)
+            reEntries = translate_glob_args(entries)
         else:
             reEntries = None
         
