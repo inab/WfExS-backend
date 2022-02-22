@@ -608,10 +608,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 if (outputVal is None) and cannotBeEmpty:
                     self.logger.warning("Output {} got no match from the outputs mapping".format(expectedOutput.name))
                 
-                import pprint
-                pprint.pprint(outputVal)
-                pprint.pprint(outputsMapping)
-                pprint.pprint(expectedOutput)
                 matValues = CWLDesc2Content(outputVal, self.logger, expectedOutput, doGenerateSignatures=True)
             
             matOutput = MaterializedOutput(
