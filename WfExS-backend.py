@@ -146,15 +146,15 @@ def processStagedWorkdirCommand(wfBackend:WfExSBackend, args: argparse.Namespace
     
     retval = 0
     # This is needed to be sure the encfs instance is unmounted
-    if args.staged_workdir_command != WfExS_Staged_WorkDir_Commands.Mount:
-        atexit.register(wfInstance.cleanup)
+    #if args.staged_workdir_command != WfExS_Staged_WorkDir_Commands.Mount:
+    #    atexit.register(wfInstance.cleanup)
     
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
-            # FIXME: This operation could not work for more than one call
             for stagedWorkDir in args.staged_workdir_command_args:
-                wfInstance.fromWorkDir(args.staged_workdir_command_args[0])
-    
+                wfInstance = wfBackend.fromWorkDir(stagedWorkDir, fail_ok=False)
+    elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.List:
+        wfBackend.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs)
     
     # Thi
     return retval
@@ -208,6 +208,7 @@ if __name__ == "__main__":
         help='Staged working directories handling subcommands'
     )
     ap_w.add_argument('staged_workdir_command', help='Staged working directory command to perform', type=WfExS_Staged_WorkDir_Commands.argtype, choices=WfExS_Staged_WorkDir_Commands)
+    ap_w.add_argument("-g", "--glob", dest="filesAsGlobs", help='Given staged workflow names are globs', action="store_true", default=False)
     ap_w.add_argument('staged_workdir_command_args', help='Optional staged working directory element names', nargs='*')
     
     ap_cv = genParserSub(
@@ -315,6 +316,8 @@ if __name__ == "__main__":
     #    loggingConf['encoding'] = 'utf-8'
     
     logging.basicConfig(**loggingConf)
+    if logLevel >= logging.INFO:
+        logging.getLogger("crypt4gh").setLevel(logLevel if  logLevel > logging.WARNING  else  logging.WARNING)
     
     # First, try loading the configuration file
     localConfigFilename = args.localConfigFilename
@@ -375,7 +378,7 @@ if __name__ == "__main__":
     
     wfInstance = None
     if command in (WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
-        wfInstance = wfBackend.fromWorkDir(args.workflowWorkingDirectory)
+        wfInstance = wfBackend.fromWorkDir(args.workflowWorkingDirectory, fail_ok= command!=WfExS_Commands.MountWorkDir )
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)

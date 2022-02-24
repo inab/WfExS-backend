@@ -16,6 +16,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import datetime
 import inspect
 import json
 import logging
@@ -69,6 +70,18 @@ WORKFLOW_ENGINE_CLASSES = [
     NextflowWorkflowEngine,
 ]
 
+def _wakeupEncDir(cond, workDir, logger):
+    """
+    This method periodically checks whether the directory is still available
+    """
+    cond.acquire()
+    try:
+        while not cond.wait(60):
+            os.path.isdir(workDir)
+    except:
+        logger.exception('Wakeup thread failed!')
+    finally:
+        cond.release()
 
 class WF:
     """
@@ -101,9 +114,12 @@ class WF:
                  outputs=None,
                  workflow_config=None,
                  creds_config=None,
-                 instanceId: Optional[str] = None,
+                 instanceId: Optional[WfExSInstanceId] = None,
+                 nickname: Optional[str] = None,
+                 creation: Optional[str] = None,
                  rawWorkDir: Optional[Union[RelPath, AbsPath]] = None,
-                 paranoid_mode: Optional[bool] = None
+                 paranoid_mode: Optional[bool] = None,
+                 fail_ok: bool = True
                  ):
         """
         Init function
@@ -122,6 +138,8 @@ class WF:
         :param workflow_config: Tweaks for workflow enactment, like some overrides
         :param creds_config: Dictionary with the different credential contexts
         :param instanceId: The instance id of this working directory
+        :param nickname: The nickname of this working directory
+        :param creation: The creation timestamp in ISO8601
         :param rawWorkDir: Raw working directory
         :param paranoid_mode: Should we enable paranoid mode for this workflow?
         :type wfexs: WfExSBackend
@@ -134,8 +152,10 @@ class WF:
         :type workflow_config: dict
         :type creds_config: dict
         :type instanceId: str
+        :type creation str
         :type rawWorkDir: str
         :type paranoid_mode: bool
+        :type fail_ok: bool
         """
         if wfexs is None:
             raise WFException('Unable to initialize, no WfExSBackend instance provided')
@@ -159,8 +179,14 @@ class WF:
             }
             if version_id is not None:
                 workflow_meta['version'] = version_id
+            if nickname is not None:
+                workflow_meta['nickname'] = nickname
             if descriptor_type is not None:
-                workflow_meta['workflow_type'] = descriptor_type
+                descriptor = self.RECOGNIZED_TRS_DESCRIPTORS.get(descriptor_type)
+                if descriptor is not None:
+                    workflow_meta['workflow_type'] = descriptor.shortname
+                else:
+                    workflow_meta['workflow_type'] = descriptor_type
             if trs_endpoint is not None:
                 workflow_meta['trs_endpoint'] = trs_endpoint
             if workflow_config is not None:
@@ -215,6 +241,15 @@ class WF:
         if instanceId is not None:
             self.instanceId = instanceId
         
+        if creation is None:
+            self.workdir_creation = datetime.datetime.utcnow().isoformat() + 'Z'
+        else:
+            self.workdir_creation = creation
+        self.nickname = nickname
+        
+        self.encfs_type = None
+        self.encfsCond = None
+        self.encfsThread = None
         self.fusermount_cmd = None
         self.encfs_idleMinutes = None
         self.doUnmount = False
@@ -222,14 +257,14 @@ class WF:
         checkSecure = True
         if rawWorkDir is None:
             if instanceId is None:
-                self.instanceId , self.rawWorkDir = self.wfexs.createRawWorkDir()
+                self.instanceId , self.nickname, self.workdir_creation , self.rawWorkDir = self.wfexs.createRawWorkDir(self.nickname)
                 checkSecure = False
             else:
-                self.rawWorkDir = self.wfexs.getRawWorkDir(instanceId)
+                self.instanceId , self.nickname, self.workdir_creation , self.rawWorkDir = self.wfexs.getOrCreateRawWorkDirFromInstanceId(instanceId, self.nickname, create_ok=False)
         else:
             self.rawWorkDir = rawWorkDir
             if instanceId is None:
-                self.instanceId = self.wfexs.getInstanceIdFromRawWorkDir(rawWorkDir)
+                self.instanceId , self.nickname, self.workdir_creation, _ = self.wfexs.parseOrCreateRawWorkDir(rawWorkDir, create_ok=False)
 
         # TODO: enforce restrictive permissions on each raw working directory
         self.allowOther = False
@@ -268,14 +303,22 @@ class WF:
         # This is true when the working directory already exists
         if checkSecure:
             if not os.path.isdir(self.metaDir):
-                raise WFException("Staged working directory {} is incomplete".format(self.workDir))
-            # In order to be able to build next paths to call
-            self.unmarshallConfig()
+                errstr = "Staged working directory {} is incomplete".format(self.workDir)
+                self.logger.exception(errstr)
+                if fail_ok:
+                    raise WFException(errstr)
+                self.workflow_config = None
+            else:
+                # In order to be able to build next paths to call
+                self.unmarshallConfig(fail_ok=fail_ok)
         else:
             os.makedirs(self.metaDir, exist_ok=True)
             self.marshallConfig(overwrite=True)
 
         self.stagedSetup = StagedSetup(
+            instance_id=self.instanceId,
+            nickname=self.nickname,
+            creation=self.workdir_creation,
             workflow_config=self.workflow_config,
             work_dir=self.workDir,
             inputs_dir=self.inputsDir,
@@ -351,17 +394,18 @@ class WF:
                 # raise WFException("Destination mount point {} is already in use")
                 self.logger.warning("Destination mount point {} is already in use".format(uniqueWorkDir))
             else:
+                # We are going to unmount what we have mounted
+                self.doUnmount = True
+
                 # Now, time to mount the encrypted FS
                 ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir,
                                                                uniqueWorkDir, uniqueRawWorkDir, securePassphrase,
                                                                allowOther)
 
                 # and start the thread which keeps the mount working
-                self.encfsThread = threading.Thread(target=self._wakeupEncDir, daemon=True)
+                self.encfsCond = threading.Condition()
+                self.encfsThread = threading.Thread(target=_wakeupEncDir, args=(self.encfsCond, uniqueWorkDir, self.logger), daemon=True)
                 self.encfsThread.start()
-
-                # We are going to unmount what we have mounted
-                self.doUnmount = True
 
             # self.encfsPassphrase = securePassphrase
             del securePassphrase
@@ -381,16 +425,13 @@ class WF:
         self.tempDir = uniqueTempDir
         self.allowOther = allowOther
 
-    def _wakeupEncDir(self):
-        """
-        This method periodically checks whether the directory is still available
-        """
-        while True:
-            time.sleep(60)
-            os.path.isdir(self.workDir)
-
     def unmountWorkdir(self):
         if self.doUnmount and (self.encWorkDir is not None):
+            if self.encfsCond is not None:
+                self.encfsCond.acquire()
+                self.encfsCond.notify()
+                self.encfsThread = None
+                self.encfsCond = None
             # Only unmount if it is needed
             if os.path.ismount(self.workDir):
                 with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
@@ -426,6 +467,9 @@ class WF:
     def cleanup(self):
         self.unmountWorkdir()
     
+    def getStagedSetup(self) -> StagedSetup:
+        return self.stagedSetup
+    
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
 
@@ -449,13 +493,13 @@ class WF:
         return workflow_meta, creds_config
 
     @classmethod
-    def FromWorkDir(cls, wfexs, workflowWorkingDirectory: Union[RelPath, AbsPath]):
+    def FromWorkDir(cls, wfexs, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = True):
         if wfexs is None:
             raise WFException('Unable to initialize, no WfExSBackend instance provided')
         
-        instanceId, rawWorkDir = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
+        instanceId, nickname, creation, rawWorkDir = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
         
-        return cls(wfexs, instanceId=instanceId, rawWorkDir=rawWorkDir)
+        return cls(wfexs, instanceId=instanceId, nickname=nickname, rawWorkDir=rawWorkDir, creation=creation, fail_ok=fail_ok)
     
     @classmethod
     def FromFiles(cls, wfexs, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode: bool = False):
@@ -500,6 +544,7 @@ class WF:
             params=workflow_meta.get('params', {}),
             outputs=workflow_meta.get('outputs', {}),
             workflow_config=workflow_meta.get('workflow_config'),
+            nickname=workflow_meta.get('nickname'),
             creds_config=creds_config,
             paranoid_mode=paranoidMode
         )
@@ -525,6 +570,7 @@ class WF:
             trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
             workflow_config=workflow_meta.get('workflow_config'),
+            nickname=workflow_meta.get('nickname'),
             paranoid_mode=paranoidMode
         )
 
@@ -955,6 +1001,9 @@ class WF:
 
 
     def marshallConfig(self, overwrite: bool = False):
+        # The seed should have be already written
+        
+        # Now, the config itself
         workflow_meta_file = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
         if overwrite or not os.path.exists(workflow_meta_file):
             with open(workflow_meta_file, mode='w', encoding='utf-8') as wmF:
@@ -962,6 +1011,8 @@ class WF:
                     'workflow_id': self.id,
                     'paranoid_mode': self.paranoidMode
                 }
+                if self.nickname is not None:
+                    workflow_meta['nickname'] = self.nickname
                 if self.version_id is not None:
                     workflow_meta['version'] = self.version_id
                 if self.descriptor_type is not None:
@@ -985,47 +1036,75 @@ class WF:
         
         self.configMarshalled = True
     
-    def unmarshallConfig(self):
+    def unmarshallConfig(self, fail_ok: bool = True) -> bool:
+        config_unmarshalled = True
         if not self.configMarshalled:
             workflow_meta_filename = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
-            with open(workflow_meta_filename, mode="r", encoding="utf-8") as wcf:
-                workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
-                
-                self.id = workflow_meta['workflow_id']
-                self.paranoidMode = workflow_meta['paranoid_mode']
-                self.version_id = workflow_meta.get('version')
-                self.descriptor_type = workflow_meta.get('workflow_type')
-                self.trs_endpoint = workflow_meta.get('trs_endpoint')
-                self.workflow_config = workflow_meta.get('workflow_config')
-                self.params = workflow_meta.get('params')
-                outputsM = workflow_meta.get('outputs')
-                if isinstance(outputsM, dict):
-                    outputs = list(outputsM.values())
-                    self.outputs = self.parseExpectedOutputs(outputsM)
+            workflow_meta = None
+            try:
+                with open(workflow_meta_filename, mode="r", encoding="utf-8") as wcf:
+                    workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+                    
+                    self.id = workflow_meta['workflow_id']
+                    self.paranoidMode = workflow_meta['paranoid_mode']
+                    self.nickname = workflow_meta.get('nickname', self.instanceId)
+                    self.version_id = workflow_meta.get('version')
+                    self.descriptor_type = workflow_meta.get('workflow_type')
+                    self.trs_endpoint = workflow_meta.get('trs_endpoint')
+                    self.workflow_config = workflow_meta.get('workflow_config')
+                    self.params = workflow_meta.get('params')
+                    outputsM = workflow_meta.get('outputs')
+                    if isinstance(outputsM, dict):
+                        outputs = list(outputsM.values())
+                        if len(outputs) == 0 or isinstance(outputs[0], ExpectedOutput):
+                            self.outputs = outputs
+                        else:
+                            self.outputs = self.parseExpectedOutputs(outputsM)
+                    else:
+                        self.outputs = None
+            except IOError as ioe:
+                config_unmarshalled = False
+                self.logger.exception("Marshalled config file {} I/O errors".format(workflow_meta_filename))
+                if fail_ok:
+                    raise WFException("ERROR opening/reading config file") from ioe
+            except TypeError as te:
+                config_unmarshalled = False
+                self.logger.exception("Marshalled config file {} unmarshalling errors".format(workflow_meta_filename))
+                if fail_ok:
+                    raise WFException("ERROR unmarshalling config file") from te
+            except Exception as e:
+                config_unmarshalled = False
+                self.logger.exception("Marshalled config file {} misc errors".format(workflow_meta_filename))
+                if fail_ok:
+                    raise WFException("ERROR processing config file") from e
+            
+            if workflow_meta is not None:
+                valErrors = self.wfexs.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
+                if len(valErrors) > 0:
+                    config_unmarshalled = False
+                    errstr = f'ERROR in workflow staging definition block: {valErrors}'
+                    self.logger.error(errstr)
+                    if fail_ok:
+                        raise WFException(errstr)
+
+                creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
+                if os.path.exists(creds_file):
+                    with open(creds_file, mode="r", encoding="utf-8") as scf:
+                        self.creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
                 else:
-                    self.outputs = None
-            
-            valErrors = self.wfexs.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
-            if len(valErrors) > 0:
-                errstr = f'ERROR in workflow staging definition block: {valErrors}'
-                self.logger.error(errstr)
-                raise WFException(errstr)
-
-            creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-            if os.path.exists(creds_file):
-                with open(creds_file, mode="r", encoding="utf-8") as scf:
-                    self.creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
-            else:
-                self.creds_config = {}
-            
-            valErrors = self.wfexs.ConfigValidate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
-            if len(valErrors) > 0:
-                errstr = f'ERROR in security context block: {valErrors}'
-                self.logger.error(errstr)
-                raise WFException(errstr)
+                    self.creds_config = {}
                 
-            self.configMarshalled = True
-
+                valErrors = self.wfexs.ConfigValidate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
+                if len(valErrors) > 0:
+                    config_unmarshalled = False
+                    errstr = f'ERROR in security context block: {valErrors}'
+                    self.logger.error(errstr)
+                    if fail_ok:
+                        raise WFException(errstr)
+                    
+                self.configMarshalled = config_unmarshalled
+        
+        return config_unmarshalled
     
     def marshallStage(self, exist_ok: bool = True):
         if not self.stageMarshalled:

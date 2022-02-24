@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 import atexit
+import datetime
 import hashlib
 import inspect
 import io
@@ -51,13 +52,15 @@ from .encrypted_fs import DEFAULT_ENCRYPTED_FS_TYPE, \
   DEFAULT_ENCRYPTED_FS_CMD, DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT, \
   ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS, EncryptedFSType
 #from .encrypted_fs import *
-from .engine import WorkflowEngine
+from .engine import WorkflowEngine, WORKDIR_PASSPHRASE_FILE
+
 
 from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
-from .utils.passphrase_wrapper import generate_passphrase
+from .utils.misc import translate_glob_args
+from .utils.passphrase_wrapper import generate_nickname, generate_passphrase
 
 from .fetchers import AbstractStatefulFetcher
 from .fetchers import DEFAULT_SCHEME_HANDLERS
@@ -82,12 +85,14 @@ class WfExSBackend:
     CRYPT4GH_PUBKEY_KEY = 'pub'
     CRYPT4GH_PASSPHRASE_KEY = 'passphrase'
 
+    ID_JSON_FILENAME = '.id.json'
+
     SCHEMAS_REL_DIR = 'schemas'
     CONFIG_SCHEMA = 'config.json'
-
+    
     @classmethod
     def generate_passphrase(cls) -> str:
-        return generate_passphrase(cls.DEFAULT_PASSPHRASE_LENGTH)
+        return generate_passphrase(passphrase_length=cls.DEFAULT_PASSPHRASE_LENGTH)
 
     @classmethod
     def bootstrap(cls, local_config: Mapping[str, Any], config_directory: Optional[Union[RelPath,AbsPath]] = None, key_prefix: Optional[str] = None) -> Tuple[bool, Mapping[str, Any]]:
@@ -98,7 +103,6 @@ class WfExSBackend:
         :type local_config: dict
         """
 
-        import datetime
         import socket
 
         logger = logging.getLogger(cls.__name__)
@@ -426,33 +430,73 @@ class WfExSBackend:
         """
         return WF(self, workflow_id, version_id, descriptor_type, trs_endpoint, params, outputs, workflow_config, creds_config)
     
-    def createRawWorkDir(self) -> Tuple[str, AbsPath]:
+    def createRawWorkDir(self, nickname: Optional[str] = None) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
         """
         This method creates a new, empty, raw working directory
         """
         instanceId = str(uuid.uuid4())
+        if nickname is None:
+            nickname = generate_nickname()
+        else:
+            nickname += ' ' + generate_nickname()
         
-        return instanceId, self.getRawWorkDir(instanceId)
+        return self.getOrCreateRawWorkDirFromInstanceId(instanceId, nickname, create_ok=True)
     
-    def getRawWorkDir(self, instanceId) -> AbsPath:
+    def getOrCreateRawWorkDirFromInstanceId(self, instanceId: WfExSInstanceId, nickname: Optional[str] = None, create_ok: bool = False) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
         """
         This method returns the absolute path to the raw working directory
         """
         # TODO: Add some validation about the working directory
         uniqueRawWorkDir = os.path.join(self.baseWorkDir, instanceId)
-        os.makedirs(uniqueRawWorkDir, exist_ok=True)
         
-        return uniqueRawWorkDir
+        return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, instanceId, nickname, create_ok=create_ok)
     
-    def getInstanceIdFromRawWorkDir(self, uniqueRawWorkDir: AbsPath) -> str:
+    def parseOrCreateRawWorkDir(self, uniqueRawWorkDir: AbsPath, instanceId: Optional[WfExSInstanceId] = None, nickname: Optional[str] = None, create_ok: bool = False) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
         """
-        This method returns the id of a working directory
+        This method returns the absolute path to the raw working directory
         """
-        
         # TODO: Add some validation about the working directory
-        return os.path.basename(uniqueRawWorkDir)
-
-    def normalizeRawWorkingDirectory(self, uniqueRawWorkDir: Union[RelPath, AbsPath]) -> Tuple[str, AbsPath]:
+        id_json_path = os.path.join(uniqueRawWorkDir, self.ID_JSON_FILENAME)
+        if not os.path.exists(uniqueRawWorkDir):
+            if not create_ok:
+                raise WFException(f"Creation of {uniqueRawWorkDir} is not allowed by parameter")
+                
+            os.makedirs(uniqueRawWorkDir, exist_ok=True)
+            if nickname is None:
+                nickname = generate_nickname()
+            creation = datetime.datetime.utcnow().isoformat() + 'Z'
+            with open(id_json_path, mode='w', encoding='utf-8') as idF:
+                idNick = {
+                    'instance_id': instanceId,
+                    'nickname': nickname,
+                    'creation': creation
+                }
+                json.dump(idNick, idF)
+        elif os.path.exists(id_json_path):
+            with open(id_json_path, mode='r', encoding='utf-8') as iH:
+                idNick = json.load(iH)
+                instanceId = idNick['instance_id']
+                nickname = idNick.get('nickname', instanceId)
+                creation = idNick.get('creation')
+            
+            # This file should not change
+            if creation is None:
+                creation = datetime.datetime.utcfromtimestamp(os.path.getctime(id_json_path)).isoformat() + 'Z'
+        else:
+            instanceId = os.path.basename(uniqueRawWorkDir)
+            nickname = instanceId
+            creation = None
+        
+        if creation is None:
+            creation = datetime.datetime.utcfromtimestamp(os.path.getctime(uniqueRawWorkDir)).isoformat() + 'Z'
+        
+        return instanceId, nickname, creation, uniqueRawWorkDir
+    
+    def normalizeRawWorkingDirectory(self, uniqueRawWorkDir: Union[RelPath, AbsPath]) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
+        """
+        This method returns the id of a working directory,
+        as well as the nickname
+        """
         if uniqueRawWorkDir is None:
             raise WFException('Unable to initialize, no directory provided')
         
@@ -463,12 +507,10 @@ class WfExSBackend:
         if not os.path.isdir(uniqueRawWorkDir):
             raise WFException('Unable to initialize, {} is not a directory'.format(uniqueRawWorkDir))
         
-        instanceId = os.path.basename(uniqueRawWorkDir)
-        
-        return instanceId, uniqueRawWorkDir
+        return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, create_ok=False)
 
-    def fromWorkDir(self, workflowWorkingDirectory):
-        return WF.FromWorkDir(self, workflowWorkingDirectory)
+    def fromWorkDir(self, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = True) -> WF:
+        return WF.FromWorkDir(self, workflowWorkingDirectory, fail_ok=fail_ok)
     
     def getDefaultParanoidMode(self) -> bool:
         return self.defaultParanoidMode
@@ -476,10 +518,10 @@ class WfExSBackend:
     def enableDefaultParanoidMode(self):
         self.defaultParanoidMode = True
 
-    def fromFiles(self, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode=False) -> WF:
+    def fromFiles(self, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] = None, paranoidMode: bool = False) -> WF:
         return WF.FromFiles(self, workflowMetaFilename, securityContextsConfigFilename, paranoidMode)
 
-    def validateConfigFiles(self, workflowMetaFilename, securityContextsConfigFilename=None):
+    def validateConfigFiles(self, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] = None) -> ExitVal:
         numErrors = 0
         self.logger.info(f'Validating {workflowMetaFilename}')
 
@@ -514,7 +556,7 @@ class WfExSBackend:
 
         return 1 if numErrors > 0 else 0
 
-    def fromDescription(self, workflow_meta, creds_config=None, paranoidMode=False) -> WF:
+    def fromDescription(self, workflow_meta, creds_config=None, paranoidMode: bool = False) -> WF:
         """
 
         :param workflow_meta: The configuration describing both the workflow
@@ -529,7 +571,7 @@ class WfExSBackend:
 
         return WF.FromDescription(self, workflow_meta, creds_config, paranoidMode)
 
-    def fromForm(self, workflow_meta, paranoidMode=False) -> WF:  # VRE
+    def fromForm(self, workflow_meta, paranoidMode: bool = False) -> WF:  # VRE
         """
 
         :param workflow_meta: The configuration describing both the workflow
@@ -593,6 +635,54 @@ class WfExSBackend:
         
         return self.encfs_type, self.encfs_cmd, securePassphrase
     
+    def listStagedWorkflows(self, *args, acceptGlob:bool=False):
+        entries = set(args)
+        if entries and acceptGlob:
+            reEntries = translate_glob_args(entries)
+        else:
+            reEntries = None
+        
+        with os.scandir(self.baseWorkDir) as swD:
+            for entry in swD:
+                # Avoiding loops
+                if entry.is_dir(follow_symlinks=False) and not entry.name.startswith('.'):
+                    instanceId, nickname, creation, _ = self.parseOrCreateRawWorkDir(entry.path, create_ok=False)
+                    
+                    if entries:
+                        if reEntries:
+                            if all(map(lambda r: (r.match(instanceId) is None) and (r.match(nickname) is None), reEntries)):
+                                continue
+                        elif (instanceId not in entries) and (nickname not in entries):
+                            continue
+                    
+                    self.logger.debug(f'{instanceId} {nickname}')
+                    isDamaged = False
+                    isEncrypted = False
+                    wfSetup = None
+                    try:
+                        wfInstance = self.fromWorkDir(instanceId, fail_ok=False)
+                        try:
+                            wfSetup = wfInstance.getStagedSetup()
+                            isEncrypted = wfInstance.encfs_type is not None
+                            isDamaged = wfInstance.configMarshalled
+                        except Exception as e:
+                            raise e
+                        finally:
+                            wfInstance.cleanup()
+                    except:
+                        import traceback
+                        traceback.print_exc()
+                        isDamaged = True
+
+                    print(f'{instanceId}\t{nickname}\t{creation}\t{isEncrypted}\t{isDamaged}')
+                    #print(f'{instanceId}\t{nickname}\t{creation}\t{isEncrypted}\t{isDamaged}\t{wfSetup}')
+                    
+                    if reEntries and any(map(lambda r: (r.match(instanceId) is not None) or (r.match(nickname) is not None), reEntries)):
+                        break
+                    elif (instanceId in entries) or (nickname in entries):
+                        break
+
+
     def cacheFetch(self, remote_file:Union[parse.ParseResult, URIType, List[Union[parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
