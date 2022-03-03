@@ -1,10 +1,10 @@
-Welcome to Lumache's documentation!
+Welcome to WfExS-backend's documentation!
 ===================================
 
-**Lumache** (/lu'make/) is a Python library for cooks and food lovers
-that creates recipes mixing random ingredients.
-It pulls data from the `Open Food Facts database <https://world.openfoodfacts.org/>`_
-and offers a *simple* and *intuitive* API.
+**WfExS-backend** (/why'fixes/) is a Python application and set of libraries
+which acts as an high-level majordomo in the execution of publically available
+workflows which use containers, feeding the inputs with reachable inputs
+(either public or under controlled access), in a secure way.
 
 Check out the :doc:`usage` section for further information, including
 how to :ref:`installation` the project.

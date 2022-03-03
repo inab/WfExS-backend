@@ -2,9 +2,9 @@
 
 # -- Project information
 
-project = 'Lumache'
-copyright = '2021, Graziella'
-author = 'Graziella'
+project = 'WfExS-backend'
+copyright = '2022, Barcelona Supercomputing Center'
+author = 'José Mª Fernández, Laura Rodríguez-Navas'
 
 release = '0.1'
 version = '0.1.0'
