@@ -7,7 +7,7 @@ workflows which use containers, feeding the inputs with reachable inputs
 (either public or under controlled access), in a secure way.
 
 Check out the :doc:`usage` section for further information, including
-how to :ref:`installation` the project.
+how to :doc:`installation` the project.
 
 .. note::
 
@@ -18,5 +18,6 @@ Contents
 
 .. toctree::
 
+   installation
    usage
    api
