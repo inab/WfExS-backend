@@ -2,6 +2,7 @@ Installation
 ============
 
 In order to install WfExs on there are several dependencies necessary:
+
 * Singularity, with this package: squashfs-tools, which should contain the mksquashfs command
 * Ubuntu build-essential package which should contain (gcc,make…).
 * Python 3
@@ -35,15 +36,25 @@ The first step for this installation is to clone the git repository:
 Assuming you are in the location where the software needs to be installed, type the following command.
 "git clone https://github.com/inab/WfExS-backend.git " 
 After this, there are some dependencies which need to be installed.
+
 This can be done by going into the installed software folder and run the installer.bash script like this: 
-cd WfExS-backend
-bash installer.bash
+
+.. code-block:: bash
+
+   cd WfExS-backend
+   bash installer.bash
+
 When the dependencies are installed without any problems, the installation procedure is done!
+
 However we still need to make new Local configuration files: 
+
 For this you just need to touch these files:
-touch ./tests/local_config_${USER}.yaml
-touch ./tests/local_config_${USER}.yaml.pub
-touch ./tests/local_config_${USER}.yaml.key
+
+.. code-block:: bash
+
+   touch ./tests/local_config_${USER}.yaml
+   touch ./tests/local_config_${USER}.yaml.pub
+   touch ./tests/local_config_${USER}.yaml.key
 
 
 The first time you run the WfExS software the new encryption keys will be made in those files.
@@ -54,7 +65,10 @@ The shell prompt should now start with: (.pyWEenv),
 
 To test if the installation procedure went well you can try to run this command.
 
-python WfExS-backend.py -h
+.. code-block:: bash
+
+   python WfExS-backend.py -h
+
 If you get the help of the software you know it works!
 
 .. index::
@@ -68,23 +82,25 @@ In order for the software to be installed on gearshift you will first have to lo
 These modules are also necessary for running the software each time. So the first step of the installation procedure is to make a file with this name "enable-WfExS-env.bash"  so you can just source this file each time you want to work with the software
 This file needs to have the following content:
 
-#!/bin/bash
+.. code-block:: bash
 
-module load Python/3.7.4-GCCcore-7.3.0-bare GCC/7.3.0-2.30 GCCcore/7.3.0 OpenSSL/1.1.1i-GCCcore-7.3.0
-
-basedir="$(dirname "${BASH_SOURCE[0]}")"
-case "$basedir" in
-    /*)
-        true
-        ;;
-    .)
-        basedir="$PWD"
-        ;;
-    *)
-        basedir="${PWD}/$basedir"
-esac
-
-source "$basedir"/WfExS-backend/.pyWEenv/bin/activate
+   #!/bin/bash
+   
+   module load Python/3.7.4-GCCcore-7.3.0-bare GCC/7.3.0-2.30 GCCcore/7.3.0 OpenSSL/1.1.1i-GCCcore-7.3.0
+   
+   basedir="$(dirname "${BASH_SOURCE[0]}")"
+   case "$basedir" in
+       /*)
+           true
+           ;;
+       .)
+           basedir="$PWD"
+           ;;
+       *)
+           basedir="${PWD}/$basedir"
+   esac
+   
+   source "$basedir"/WfExS-backend/.pyWEenv/bin/activate
 
 For the installation procedure, make sure you comment out the last line, starting with " source "$basedir … " by putting a # at the start of the line.
 This folder/files will be there after the installation so when you try to source it, you will produce an error. Make sure your file is executable and then source the enable-WfExS-env.bash file.
