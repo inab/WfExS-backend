@@ -1,4 +1,4 @@
-How to work with WfExS
+Usage
 =====
 
 WfExS (which can be pronounced like "why-fex", "why-fix" or "why-fixes" is used to import and execute workflows. It currently supports only workflows which are written in either Nextflow or CWL.
