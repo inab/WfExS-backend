@@ -97,7 +97,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         toolsSect = local_config.get('tools', {})
         # Obtaining the full path to Java
-        self.java_cmd = shutil.which(toolsSect.get('javaCommand', DEFAULT_JAVA_CMD))
+        self.java_cmd = toolsSect.get('javaCommand', DEFAULT_JAVA_CMD)
+        abs_java_cmd = shutil.which(self.java_cmd)
+        if abs_java_cmd is None:
+            self.logger.critical(f'Java command {self.java_cmd}, needed by Nextflow, was not found')
+        else:
+            self.java_cmd = abs_java_cmd
         
         # Obtaining the full path to static bash
         self.static_bash_cmd = shutil.which(toolsSect.get('staticBashCommand', DEFAULT_STATIC_BASH_CMD))

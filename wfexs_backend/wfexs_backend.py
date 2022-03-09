@@ -274,8 +274,20 @@ class WfExSBackend:
             raise WFException('FIXME: Default encryption filesystem {} mount procedure is not implemented')
         self.encfs_type = encfs_type
 
-        self.encfs_cmd = shutil.which(encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type]))
+        self.encfs_cmd = encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type])
+        abs_encfs_cmd = shutil.which(self.encfs_cmd)
+        if abs_encfs_cmd is None:
+            self.logger.error(f'FUSE filesystem command {self.encfs_cmd} not found. Please install it if you are going to use a secured staged workdir')
+        else:
+            self.encfs_cmd = abs_encfs_cmd
+        
         self.fusermount_cmd = encfsSect.get('fusermount_command', DEFAULT_FUSERMOUNT_CMD)
+        abs_fusermount_cmd = shutil.which(self.fusermount_cmd)
+        if abs_fusermount_cmd is None:
+            self.logger.error(f'FUSE fusermount command {self.fusermount_cmd} not found')
+        else:
+            self.fusermount_cmd = abs_fusermount_cmd
+        
         self.progs[DEFAULT_FUSERMOUNT_CMD] = self.fusermount_cmd
         self.encfs_idleMinutes = encfsSect.get('idle', DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT)
 
