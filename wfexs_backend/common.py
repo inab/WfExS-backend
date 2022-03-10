@@ -364,8 +364,10 @@ class StagedSetup(NamedTuple):
     intermediate_dir: AbsPath
     meta_dir: AbsPath
     temp_dir: AbsPath
-    secure_exec:bool
-    allow_other:bool
+    secure_exec: bool
+    allow_other: bool
+    is_encrypted: bool
+    is_damaged: bool
 
 class MaterializedWorkflowEngine(NamedTuple):
     """

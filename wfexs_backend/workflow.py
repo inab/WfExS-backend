@@ -22,6 +22,7 @@ import json
 import logging
 import pathlib
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -119,7 +120,7 @@ class WF:
                  creation: Optional[str] = None,
                  rawWorkDir: Optional[Union[RelPath, AbsPath]] = None,
                  paranoid_mode: Optional[bool] = None,
-                 fail_ok: bool = True
+                 fail_ok: bool = False
                  ):
         """
         Init function
@@ -277,43 +278,58 @@ class WF:
         
         doSecureWorkDir = self.secure or self.paranoidMode
 
-        self.setupWorkdir(doSecureWorkDir)
+        was_setup = self.setupWorkdir(doSecureWorkDir, fail_ok=fail_ok)
         
-        # This directory will hold either symbolic links to the cached
-        # inputs, or the inputs properly post-processed (decompressed,
-        # decrypted, etc....)
-        self.inputsDir = os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
-        os.makedirs(self.inputsDir, exist_ok=True)
-        # This directory should hold intermediate workflow steps results
-        self.intermediateDir = os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
-        os.makedirs(self.intermediateDir, exist_ok=True)
-        # This directory will hold the final workflow results, which could
-        # be either symbolic links to the intermediate results directory
-        # or newly generated content
-        self.outputsDir = os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR)
-        os.makedirs(self.outputsDir, exist_ok=True)
-        # This directory is here for those files which are created in order
-        # to tweak or patch workflow executions
-        self.engineTweaksDir = os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
-        os.makedirs(self.engineTweaksDir, exist_ok=True)
-        # This directory will hold metadata related to the execution
-        self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
-        
-        self.configMarshalled = False
-        # This is true when the working directory already exists
-        if checkSecure:
-            if not os.path.isdir(self.metaDir):
-                errstr = "Staged working directory {} is incomplete".format(self.workDir)
-                self.logger.exception(errstr)
-                if fail_ok:
-                    raise WFException(errstr)
-                self.workflow_config = None
+        if was_setup:
+            # This directory will hold either symbolic links to the cached
+            # inputs, or the inputs properly post-processed (decompressed,
+            # decrypted, etc....)
+            self.inputsDir = os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
+            os.makedirs(self.inputsDir, exist_ok=True)
+            # This directory should hold intermediate workflow steps results
+            self.intermediateDir = os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
+            os.makedirs(self.intermediateDir, exist_ok=True)
+            # This directory will hold the final workflow results, which could
+            # be either symbolic links to the intermediate results directory
+            # or newly generated content
+            self.outputsDir = os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR)
+            os.makedirs(self.outputsDir, exist_ok=True)
+            # This directory is here for those files which are created in order
+            # to tweak or patch workflow executions
+            self.engineTweaksDir = os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
+            os.makedirs(self.engineTweaksDir, exist_ok=True)
+            # This directory will hold metadata related to the execution
+            self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
+            
+            self.configMarshalled = False
+            # This is true when the working directory already exists
+            if checkSecure:
+                if not os.path.isdir(self.metaDir):
+                    errstr = "Staged working directory {} is incomplete".format(self.workDir)
+                    self.logger.exception(errstr)
+                    if not fail_ok:
+                        raise WFException(errstr)
+                    self.workflow_config = None
+                    is_damaged = True
+                else:
+                    # In order to be able to build next paths to call
+                    unmarshalled = self.unmarshallConfig(fail_ok=fail_ok)
+                    # One of the worst scenarios
+                    is_damaged = not unmarshalled
+                    if is_damaged:
+                        self.workflow_config = None
+                        #self.marshallConfig(overwrite=False)
             else:
-                # In order to be able to build next paths to call
-                self.unmarshallConfig(fail_ok=fail_ok)
+                os.makedirs(self.metaDir, exist_ok=True)
+                self.marshallConfig(overwrite=True)
+                is_damaged = False
         else:
-            os.makedirs(self.metaDir, exist_ok=True)
-            self.marshallConfig(overwrite=True)
+            is_damaged = True
+            self.inputsDir = None
+            self.intermediateDir = None
+            self.outputsDir = None
+            self.engineTweaksDir = None
+            self.metaDir = None
 
         self.stagedSetup = StagedSetup(
             instance_id=self.instanceId,
@@ -328,7 +344,9 @@ class WF:
             meta_dir=self.metaDir,
             temp_dir=self.tempDir,
             secure_exec=self.secure or self.paranoidMode,
-            allow_other=self.allowOther
+            allow_other=self.allowOther,
+            is_encrypted=doSecureWorkDir,
+            is_damaged=is_damaged
         )
         
         self.repoURL = None
@@ -356,7 +374,7 @@ class WF:
 
     FUSE_SYSTEM_CONF = '/etc/fuse.conf'
 
-    def setupWorkdir(self, doSecureWorkDir):
+    def setupWorkdir(self, doSecureWorkDir: bool, fail_ok: bool = False) -> bool:
         uniqueRawWorkDir = self.rawWorkDir
 
         allowOther = False
@@ -393,25 +411,35 @@ class WF:
             if os.path.ismount(uniqueWorkDir):
                 # raise WFException("Destination mount point {} is already in use")
                 self.logger.warning("Destination mount point {} is already in use".format(uniqueWorkDir))
+                was_setup = True
             else:
                 # We are going to unmount what we have mounted
                 self.doUnmount = True
 
                 # Now, time to mount the encrypted FS
-                ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir,
-                                                               uniqueWorkDir, uniqueRawWorkDir, securePassphrase,
-                                                               allowOther)
-
-                # and start the thread which keeps the mount working
-                self.encfsCond = threading.Condition()
-                self.encfsThread = threading.Thread(target=_wakeupEncDir, args=(self.encfsCond, uniqueWorkDir, self.logger), daemon=True)
-                self.encfsThread.start()
+                try:
+                    ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](encfs_cmd, self.encfs_idleMinutes, uniqueEncWorkDir,
+                                                                   uniqueWorkDir, uniqueRawWorkDir, securePassphrase,
+                                                                   allowOther)
+                except Exception as e:
+                    errmsg = f'Cannot FUSE mount {uniqueWorkDir} with {encfs_cmd}'
+                    self.logger.exception(errmsg)
+                    if not fail_ok:
+                        raise WFException(errmsg) from e
+                    was_setup = False
+                else:
+                    was_setup = True
+                    # and start the thread which keeps the mount working
+                    self.encfsCond = threading.Condition()
+                    self.encfsThread = threading.Thread(target=_wakeupEncDir, args=(self.encfsCond, uniqueWorkDir, self.logger), daemon=True)
+                    self.encfsThread.start()
 
             # self.encfsPassphrase = securePassphrase
             del securePassphrase
         else:
             uniqueEncWorkDir = None
             uniqueWorkDir = uniqueRawWorkDir
+            was_setup = True
 
         # The temporary directory is in the raw working directory as
         # some container engine could fail
@@ -424,6 +452,8 @@ class WF:
         self.workDir = uniqueWorkDir
         self.tempDir = uniqueTempDir
         self.allowOther = allowOther
+        
+        return was_setup
 
     def unmountWorkdir(self):
         if self.doUnmount and (self.encWorkDir is not None):
@@ -493,7 +523,7 @@ class WF:
         return workflow_meta, creds_config
 
     @classmethod
-    def FromWorkDir(cls, wfexs, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = True):
+    def FromWorkDir(cls, wfexs, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False):
         if wfexs is None:
             raise WFException('Unable to initialize, no WfExSBackend instance provided')
         
@@ -595,7 +625,7 @@ class WF:
             engineDesc = None
 
             # Trying to be smarter
-            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.wfexs.guessRepoParams(parsedRepoURL, fail_ok=False)
+            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.wfexs.guessRepoParams(parsedRepoURL, fail_ok=True)
 
             if guessedRepoURL is not None:
                 repoURL = guessedRepoURL
@@ -1005,7 +1035,7 @@ class WF:
         
         # Now, the config itself
         workflow_meta_file = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
-        if overwrite or not os.path.exists(workflow_meta_file):
+        if overwrite or not os.path.exists(workflow_meta_file) or os.path.getsize(workflow_meta_file) == 0:
             with open(workflow_meta_file, mode='w', encoding='utf-8') as wmF:
                 workflow_meta = {
                     'workflow_id': self.id,
@@ -1036,14 +1066,28 @@ class WF:
         
         self.configMarshalled = True
     
-    def unmarshallConfig(self, fail_ok: bool = True) -> bool:
+    def unmarshallConfig(self, fail_ok: bool = False) -> bool:
         config_unmarshalled = True
         if not self.configMarshalled:
             workflow_meta_filename = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
+            # If the file does not exist, fail fast
+            if not os.path.isfile(workflow_meta_filename):
+                self.logger.error(f'Marshalled config file {workflow_meta_filename} does not exist')
+                return False
+            
             workflow_meta = None
             try:
                 with open(workflow_meta_filename, mode="r", encoding="utf-8") as wcf:
                     workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+                    
+                    # If the file decodes to None, fail fast
+                    if workflow_meta is None:
+                        self.logger.error(f'Marshalled config file {workflow_meta_filename} is empty')
+                        return False
+                    
+                    # Fixes
+                    if ('workflow_type' in workflow_meta) and workflow_meta['workflow_type'] is None:
+                        del workflow_meta['workflow_type']
                     
                     self.id = workflow_meta['workflow_id']
                     self.paranoidMode = workflow_meta['paranoid_mode']
@@ -1065,26 +1109,26 @@ class WF:
             except IOError as ioe:
                 config_unmarshalled = False
                 self.logger.exception("Marshalled config file {} I/O errors".format(workflow_meta_filename))
-                if fail_ok:
+                if not fail_ok:
                     raise WFException("ERROR opening/reading config file") from ioe
             except TypeError as te:
                 config_unmarshalled = False
                 self.logger.exception("Marshalled config file {} unmarshalling errors".format(workflow_meta_filename))
-                if fail_ok:
+                if not fail_ok:
                     raise WFException("ERROR unmarshalling config file") from te
             except Exception as e:
                 config_unmarshalled = False
                 self.logger.exception("Marshalled config file {} misc errors".format(workflow_meta_filename))
-                if fail_ok:
+                if not fail_ok:
                     raise WFException("ERROR processing config file") from e
             
             if workflow_meta is not None:
                 valErrors = self.wfexs.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
                 if len(valErrors) > 0:
                     config_unmarshalled = False
-                    errstr = f'ERROR in workflow staging definition block: {valErrors}'
+                    errstr = f'ERROR in workflow staging definition block {workflow_meta_filename}: {valErrors}'
                     self.logger.error(errstr)
-                    if fail_ok:
+                    if not fail_ok:
                         raise WFException(errstr)
 
                 creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
@@ -1097,9 +1141,9 @@ class WF:
                 valErrors = self.wfexs.ConfigValidate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
                 if len(valErrors) > 0:
                     config_unmarshalled = False
-                    errstr = f'ERROR in security context block: {valErrors}'
+                    errstr = f'ERROR in security context block {creds_file}: {valErrors}'
                     self.logger.error(errstr)
-                    if fail_ok:
+                    if not fail_ok:
                         raise WFException(errstr)
                     
                 self.configMarshalled = config_unmarshalled
@@ -1582,7 +1626,7 @@ class WF:
             remote_workflow_entrypoint = trsFilesMeta[0].metadata.get('remote_workflow_entrypoint')
             if remote_workflow_entrypoint is not None:
                 # Give it a chance to identify the original repo of the workflow
-                repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(remote_workflow_entrypoint, fail_ok=False)
+                repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(remote_workflow_entrypoint, fail_ok=True)
 
                 if repoURL is not None:
                     self.logger.debug("Derived repository {} ({} , rel {}) from {}".format(repoURL, repoTag, repoRelPath, trs_tools_url))
@@ -1685,10 +1729,10 @@ class WF:
 
         # Some RO-Crates might have this value missing or ill-built
         if workflowUploadURL is not None:
-            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(workflowUploadURL, fail_ok=False)
+            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(workflowUploadURL, fail_ok=True)
 
         if repoURL is None:
-            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=False)
+            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=True)
 
         if repoURL is None:
             raise WFException('Unable to guess repository from RO-Crate manifest')
