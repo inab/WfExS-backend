@@ -553,7 +553,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             
                             if self.container_factory.containerType == ContainerType.Singularity:
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
-                                instEnv['CWL_SINGULARITY_CACHE'] = self.container_factory.cacheDir
+                                instEnv['CWL_SINGULARITY_CACHE'] = matWfEng.containers_path
                                 instEnv['SINGULARITY_CONTAIN'] = '1'
                                 if self.writable_containers:
                                     instEnv['SINGULARITY_WRITABLE'] = '1'

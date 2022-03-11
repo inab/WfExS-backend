@@ -50,6 +50,7 @@ WORKDIR_STATS_RELDIR = 'stats'
 WORKDIR_OUTPUTS_RELDIR = 'outputs'
 WORKDIR_ENGINE_TWEAKS_RELDIR = 'engineTweaks'
 WORKDIR_WORKFLOW_RELDIR = 'workflow'
+WORKDIR_CONTAINERS_RELDIR = 'containers'
 
 WORKDIR_STDOUT_FILE = 'stdout.txt'
 WORKDIR_STDERR_FILE = 'stderr.txt'
@@ -420,8 +421,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
         pass
     
-    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName], offline: bool = False) -> List[Container]:
-        return self.container_factory.materializeContainers(listOfContainerTags, self.simpleContainerFileName, offline=offline)
+    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName], containersDir: Union[RelPath, AbsPath], offline: bool = False) -> List[Container]:
+        return self.container_factory.materializeContainers(listOfContainerTags, self.simpleContainerFileName, containers_dir=containersDir, offline=offline)
 
     @abc.abstractmethod
     def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput],
@@ -437,20 +438,34 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         return exitVal, augmentedInputs, matOutputs
 
     @classmethod
-    def MaterializeWorkflow(cls, matWfEng: MaterializedWorkflowEngine, offline: bool = False) -> Tuple[MaterializedWorkflowEngine, List[Container]]:
-        matWfEng, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng, offline=offline)
+    def MaterializeWorkflowAndContainers(cls, matWfEng: MaterializedWorkflowEngine, containersDir: Union[RelPath, AbsPath], offline: bool = False) -> MaterializedWorkflowEngine:
+        matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng, offline=offline)
 
-        listOfContainers = matWfEng.instance.materializeContainers(listOfContainerTags, offline=offline)
+        listOfContainers = matWfEngV2.instance.materializeContainers(listOfContainerTags, containersDir, offline=offline)
         
         # Next ones are needed by the workflow engine itself
-        listOfOperationalContainers = matWfEng.instance.sideContainers()
-        if len(listOfOperationalContainers) > 0:
+        listOfOperationalContainerTags = matWfEng.instance.sideContainers()
+        if len(listOfOperationalContainerTags) > 0:
             try:
-                matWfEng.instance.materializeContainers(listOfOperationalContainers, offline=offline)
+                listOfOperationalContainers = matWfEngV2.instance.materializeContainers(listOfOperationalContainerTags, containersDir, offline=offline)
             except:
-                pass
+                logging.debug('FIXME materializing containers')
+                listOfOperationalContainers = []
+        else:
+            listOfOperationalContainers = []
+        
+        matWfEngV3 = MaterializedWorkflowEngine(
+            instance=matWfEngV2.instance,
+            version=matWfEngV2.version,
+            fingerprint=matWfEngV2.fingerprint,
+            engine_path=matWfEngV2.engine_path,
+            workflow=matWfEngV2.workflow,
+            containers_path=containersDir,
+            containers=listOfContainers,
+            operational_containers=listOfOperationalContainers
+        )
 
-        return matWfEng, listOfContainers
+        return matWfEngV3
     
     GuessedCardinalityMapping = {
         False: (0, 1),

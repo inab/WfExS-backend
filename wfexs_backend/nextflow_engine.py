@@ -264,18 +264,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return engineVersion, nextflow_install_dir, engineFingerprint
     
-    def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_path:Optional[EnginePath]=None, containers_path:Optional[Union[RelPath, AbsPath]]=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[ExitVal,str,str]:
         self.logger.debug('Command => nextflow '+' '.join(commandLine))
         if self.engine_mode == EngineMode.Docker:
-            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename, runEnv=runEnv)
+            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runNextflowCommandInDocker(nextflow_version, commandLine, workdir, containers_path=containers_path, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename, runEnv=runEnv)
         elif self.engine_mode == EngineMode.Local:
-            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir, nextflow_install_dir=nextflow_path, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename, runEnv=runEnv)
+            retval , nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(nextflow_version, commandLine, workdir, containers_path=containers_path, nextflow_install_dir=nextflow_path, stdoutFilename=stdoutFilename, stderrFilename=stderrFilename, runEnv=runEnv)
         else:
             raise WorkflowEngineException('Unsupported engine mode {} for {} engine'.format(self.engine_mode, self.ENGINE_NAME))
         
         return retval , nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runLocalNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[int,str,str]:
+    def runLocalNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir=None, nextflow_install_dir:EnginePath=None, containers_path:Optional[Union[RelPath, AbsPath]]=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[int,str,str]:
         if nextflow_install_dir is None:
             nextflow_install_dir = os.path.join(self.weCacheDir,nextflow_version)
         cachedScript = os.path.join(nextflow_install_dir, 'nextflow')
@@ -311,8 +311,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # FIXME: Should we set NXF_TEMP???
         
         # This is needed to have Nextflow using the cached contents
+        if containers_path is None:
+            containers_path = self.container_factory.cacheDir
         if self.container_factory.containerType == ContainerType.Singularity:
-            instEnv['NXF_SINGULARITY_CACHEDIR'] = self.container_factory.cacheDir
+            instEnv['NXF_SINGULARITY_CACHEDIR'] = containers_path
         
         # This is done only once
         retval = 0
@@ -382,7 +384,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         return retval, nxf_run_stdout_v, nxf_run_stderr_v
     
-    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[ExitVal,str,str]:
+    def runNextflowCommandInDocker(self,nextflow_version: EngineVersion, commandLine: List[str], workdir=None, containers_path:Optional[Union[RelPath, AbsPath]]=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[ExitVal,str,str]:
         # Now, we have to assure the nextflow image is already here
         docker_tag = self.nxf_image + ':' + nextflow_version
         checkimage_params = [
@@ -938,6 +940,7 @@ wfexs_allParams()
             nxf_params,
             workdir=self.outputsDir,
             nextflow_path=matWfEng.engine_path,
+            containers_path=matWfEng.containers_path,
             stdoutFilename=stdoutFilename,
             stderrFilename=stderrFilename,
             runEnv=runEnv
