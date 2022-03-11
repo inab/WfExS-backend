@@ -358,7 +358,9 @@ class StagedSetup(NamedTuple):
     creation: str
     workflow_config: Mapping
     engine_tweaks_dir: AbsPath
+    raw_work_dir: AbsPath
     work_dir: AbsPath
+    workflow_dir: AbsPath
     inputs_dir: AbsPath
     outputs_dir: AbsPath
     intermediate_dir: AbsPath
@@ -430,17 +432,46 @@ class ArgTypeMixin(enum.Enum):
         except:
             raise argparse.ArgumentTypeError(
                 f"{s!r} is not a valid {cls.__name__}")
-
+    
     def __str__(self):
         return str(self.value)
 
+class StrDocEnum(str, ArgTypeMixin, enum.Enum):
+    # Learnt from https://docs.python.org/3.11/howto/enum.html#when-to-use-new-vs-init
+    def __new__(cls, value, description:str = ''):
+        obj = str.__new__(cls, value)
+        obj._value_ = value
+        obj.description = description
+        
+        return obj
+    
+    def __str__(self):
+        return str(self.value)
+
+class ArgsDefaultWithRawHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
+    # Conditionally treat descriptions as raw
+    def _split_lines(self, text, width):
+        """
+        Formats the given text by splitting the lines at '\n'.
+        Overrides argparse.HelpFormatter._split_lines function.
+
+        :param text: help text passed by ArgumentParser.HelpFormatter
+        :param width: console width passed by argparse.HelpFormatter
+        :return: argparse.HelpFormatter._split_lines function
+        with new split text argument.
+        """
+        if text.startswith('raw|'):
+            return text[4:].splitlines()
+        return super()._split_lines(text, width)
+
+
 # These cache types are needed to return the right paths
 # from an WF instance
-class CacheType(ArgTypeMixin, enum.Enum):
-    Input = 'input'
-    ROCrate = 'ro-crate'
-    TRS = 'ga4gh-trs'
-    Workflow = 'workflow'
+class CacheType(StrDocEnum):
+    Input = ('input', 'Cached or injected inputs')
+    ROCrate = ('ro-crate', 'Cached RO-Crates (usually from WorkflowHub)')
+    TRS = ('ga4gh-trs', 'Cached files from tools described at GA4GH TRS repositories')
+    Workflow = ('workflow', 'Cached workflows, which come from a git repository')
 
 
 # Next method has been borrowed from FlowMaps

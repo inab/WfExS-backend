@@ -52,8 +52,9 @@ from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
 from .engine import WORKDIR_MARSHALLED_STAGE_FILE, WORKDIR_MARSHALLED_EXECUTE_FILE, WORKDIR_MARSHALLED_EXPORT_FILE
 from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, \
-    WORKDIR_ENGINE_TWEAKS_RELDIR
+    WORKDIR_ENGINE_TWEAKS_RELDIR, WORKDIR_WORKFLOW_RELDIR
 
+from .utils.contents import link_or_copy
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 
@@ -300,6 +301,9 @@ class WF:
             os.makedirs(self.engineTweaksDir, exist_ok=True)
             # This directory will hold metadata related to the execution
             self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
+            # This directory will hold either a hardlink or a copy of the workflow
+            self.workflowDir = os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR)
+
             
             self.configMarshalled = False
             # This is true when the working directory already exists
@@ -336,7 +340,9 @@ class WF:
             nickname=self.nickname,
             creation=self.workdir_creation,
             workflow_config=self.workflow_config,
+            raw_work_dir=self.rawWorkDir,
             work_dir=self.workDir,
+            workflow_dir=self.workflowDir,
             inputs_dir=self.inputsDir,
             outputs_dir=self.outputsDir,
             intermediate_dir=self.intermediateDir,
@@ -660,14 +666,18 @@ class WF:
             repoDir = repoURL
 
         # Workflow Language version cannot be assumed here yet
-        localWorkflow = LocalWorkflow(dir=repoDir, relPath=repoRelPath, effectiveCheckout=repoEffectiveCheckout)
-        self.logger.info("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, repoDir))
+        # A copy of the workflows is kept
+        if os.path.isdir(self.workflowDir):
+            shutil.rmtree(self.workflowDir)
+        link_or_copy(repoDir, self.workflowDir)
+        localWorkflow = LocalWorkflow(dir=self.workflowDir, relPath=repoRelPath, effectiveCheckout=repoEffectiveCheckout)
+        self.logger.info("materialized workflow repository (checkout {}): {}".format(repoEffectiveCheckout, self.workflowDir))
 
         if repoRelPath is not None:
-            if not os.path.exists(os.path.join(repoDir, repoRelPath)):
+            if not os.path.exists(os.path.join(self.workflowDir, repoRelPath)):
                 raise WFException(
                     "Relative path {} cannot be found in materialized workflow repository {}".format(repoRelPath,
-                                                                                                     repoDir))
+                                                                                                     self.workflowDir))
         # A valid engine must be identified from the fetched content
         # TODO: decide whether to force some specific version
         if engineDesc is None:
@@ -883,7 +893,8 @@ class WF:
                                                            str(lastInput) + '_' + matContent.prettyFilename)
 
                             if not os.path.exists(prettyLocal):
-                                os.symlink(matContent.local, prettyLocal)
+                                # We are either hardlinking or copying here
+                                link_or_copy(matContent.local, prettyLocal)
 
                             if globExplode is not None:
                                 prettyLocalPath = pathlib.Path(prettyLocal)
@@ -928,7 +939,7 @@ class WF:
 
         return theInputs, lastInput
 
-    def stageWorkDir(self):
+    def stageWorkDir(self) -> StagedSetup:
         """
         This method is here to simplify the understanding of the needed steps
         """
@@ -938,7 +949,7 @@ class WF:
         self.materializeInputs()
         self.marshallStage()
 
-        return self.instanceId
+        return self.getStagedSetup()
 
     def workdirToBagit(self):
         """
