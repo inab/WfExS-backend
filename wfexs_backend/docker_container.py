@@ -82,7 +82,7 @@ class DockerContainerFactory(ContainerFactory):
             
             return d_retval , d_out_v , d_err_v
     
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, offline: bool = False) -> List[Container]:
+    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Union[RelPath, AbsPath] = None, offline: bool = False) -> List[Container]:
         """
         It is assured the containers are materialized
         """

@@ -30,6 +30,7 @@ from typing import Dict, List, Tuple
 from .common import *
 from .container import ContainerFactory, ContainerFactoryException
 
+from .utils.contents import link_or_copy
 from .utils.digests import ComputeDigestFromFile, nihDigester
 from .utils.docker import DockerHelper
 
@@ -81,7 +82,7 @@ class SingularityContainerFactory(ContainerFactory):
     def ContainerType(cls) -> ContainerType:
         return ContainerType.Singularity
     
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, offline: bool = False) -> List[Container]:
+    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Union[RelPath, AbsPath] = None, offline: bool = False) -> List[Container]:
         """
         It is assured the containers are materialized
         """
@@ -96,8 +97,9 @@ class SingularityContainerFactory(ContainerFactory):
             singTag = 'docker://' + tag  if parsedTag.scheme == ''  else tag
             
             containerFilename = simpleFileNameMethod(tag)
-            localContainerPath = os.path.join(self.engineContainersSymlinkDir,containerFilename)
-            localContainerPathMeta = localContainerPath + self.META_JSON_POSTFIX
+            containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
+            localContainerPath = os.path.join(self.engineContainersSymlinkDir, containerFilename)
+            localContainerPathMeta = os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta)
             
             self.logger.info("downloading container: {} => {}".format(tag, localContainerPath))
             # First, let's materialize the container image
@@ -226,6 +228,17 @@ STDERR
             # Then, compute the signature
             if imageSignature is None:
                 imageSignature = ComputeDigestFromFile(localContainerPath, repMethod=nihDigester)
+            
+            # Hardlink or copy the container and its metadata
+            if containers_dir is not None:
+                containerPath = os.path.join(containers_dir, containerFilename)
+                containerPathMeta = os.path.join(containers_dir, containerFilenameMeta)
+                
+                # Do not allow overwriting in offline mode
+                if not offline or not os.path.exists(containerPath):
+                    link_or_copy(localContainerPath, containerPath)
+                if not offline or not os.path.exists(containerPathMeta):
+                    link_or_copy(localContainerPathMeta, containerPathMeta)
             
             containersList.append(
                 Container(
