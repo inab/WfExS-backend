@@ -49,6 +49,7 @@ WORKDIR_META_RELDIR = 'meta'
 WORKDIR_STATS_RELDIR = 'stats'
 WORKDIR_OUTPUTS_RELDIR = 'outputs'
 WORKDIR_ENGINE_TWEAKS_RELDIR = 'engineTweaks'
+WORKDIR_WORKFLOW_RELDIR = 'workflow'
 
 WORKDIR_STDOUT_FILE = 'stdout.txt'
 WORKDIR_STDERR_FILE = 'stderr.txt'
@@ -527,9 +528,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     matOutputs.append(matOutput)
         
         # This is only applied when the expected outputs is specified
-        import pprint
-        pprint.pprint("EXPECTED")
-        pprint.pprint(expectedOutputs)
         for expectedOutput in expectedOutputs:
             cannotBeEmpty = expectedOutput.cardinality[0] != 0
             matValues = []
