@@ -52,7 +52,7 @@ from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
 from .engine import WORKDIR_MARSHALLED_STAGE_FILE, WORKDIR_MARSHALLED_EXECUTE_FILE, WORKDIR_MARSHALLED_EXPORT_FILE
 from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, \
-    WORKDIR_ENGINE_TWEAKS_RELDIR, WORKDIR_WORKFLOW_RELDIR
+    WORKDIR_ENGINE_TWEAKS_RELDIR, WORKDIR_WORKFLOW_RELDIR, WORKDIR_CONTAINERS_RELDIR
 
 from .utils.contents import link_or_copy
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
@@ -303,6 +303,8 @@ class WF:
             self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
             # This directory will hold either a hardlink or a copy of the workflow
             self.workflowDir = os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR)
+            # This directory will hold either a hardlink or a copy of the containers
+            self.containersDir = os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR)
 
             
             self.configMarshalled = False
@@ -334,6 +336,8 @@ class WF:
             self.outputsDir = None
             self.engineTweaksDir = None
             self.metaDir = None
+            self.workflowDir = None
+            self.containersDir = None
 
         self.stagedSetup = StagedSetup(
             instance_id=self.instanceId,
@@ -367,7 +371,6 @@ class WF:
         self.materializedParams = None
         self.localWorkflow = None
         self.materializedEngine = None
-        self.listOfContainers = None
 
         self.exitVal = None
         self.augmentedInputs = None
@@ -720,15 +723,31 @@ class WF:
         else:
             localWorkflow = self.materializedEngine.workflow
 
-        self.materializedEngine = self.engine.materializeEngine(localWorkflow, self.engineVer)
+        matWfEngV2 = self.engine.materializeEngine(localWorkflow, self.engineVer)
+        
+        # At this point, there can be uninitialized elements
+        if self.materializedEngine is not None:
+            matWfEngV2 = MaterializedWorkflowEngine(
+                instance=matWfEngV2.instance,
+                version=matWfEngV2.version,
+                fingerprint=matWfEngV2.fingerprint,
+                engine_path=matWfEngV2.engine_path,
+                workflow=matWfEngV2.workflow,
+                containers_path=self.materializedEngine.containers_path,
+                containers=self.materializedEngine.containers,
+                operational_containers=self.materializedEngine.operational_containers
+            )
+        self.materializedEngine = matWfEngV2
 
     def materializeWorkflow(self, offline=False):
         if self.materializedEngine is None:
             self.setupEngine(offline=offline)
 
         # This information is badly needed for provenance
-        if self.listOfContainers is None:
-            self.materializedEngine, self.listOfContainers = WorkflowEngine.MaterializeWorkflow(self.materializedEngine, offline=offline)
+        if self.materializedEngine.containers is None:
+            if not offline:
+                os.makedirs(self.containersDir, exist_ok=True)
+            self.materializedEngine = WorkflowEngine.MaterializeWorkflowAndContainers(self.materializedEngine, self.containersDir, offline=offline)
 
     def injectInputs(self, paths, workflowInputs_destdir=None, workflowInputs_cacheDir=None, lastInput=0):
         if workflowInputs_destdir is None:
@@ -1179,7 +1198,7 @@ class WF:
                     'engineDesc': self.engineDesc,
                     'engineVer': self.engineVer,
                     'materializedEngine': self.materializedEngine,
-                    'containers': self.listOfContainers,
+                    'containers': self.materializedEngine.containers,
                     'materializedParams': self.materializedParams
                     # TODO: check nothing essential was left
                 }
@@ -1211,7 +1230,6 @@ class WF:
                     self.engineDesc = stage['engineDesc']
                     self.engineVer = stage['engineVer']
                     self.materializedEngine = stage['materializedEngine']
-                    self.listOfContainers = stage['containers']
                     self.materializedParams = stage['materializedParams']
 
                     # This is needed to properly set up the materializedEngine
