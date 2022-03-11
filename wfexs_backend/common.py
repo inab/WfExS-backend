@@ -371,20 +371,6 @@ class StagedSetup(NamedTuple):
     is_encrypted: bool
     is_damaged: bool
 
-class MaterializedWorkflowEngine(NamedTuple):
-    """
-    instance: Instance of the workflow engine
-    version: Version of the engine to be used
-    fingerprint: Fingerprint of the engine to be used (it could be the version)
-    engine_path: Absolute path to the fetched engine
-    workflow: Instance of LocalWorkflow
-    """
-    instance: AbstractWorkflowEngineType
-    version: str
-    fingerprint: Union[Fingerprint, str]
-    engine_path: EnginePath
-    workflow: LocalWorkflow
-
 
 class ContainerType(enum.Enum):
     Singularity = 'singularity'
@@ -415,6 +401,27 @@ class Container(NamedTuple):
     localPath: AbsPath = None
     signature: Fingerprint = None
     fingerprint: Fingerprint = None
+
+
+class MaterializedWorkflowEngine(NamedTuple):
+    """
+    instance: Instance of the workflow engine
+    version: Version of the engine to be used
+    fingerprint: Fingerprint of the engine to be used (it could be the version)
+    engine_path: Absolute path to the fetched engine
+    workflow: Instance of LocalWorkflow
+    containers_path: Where the containers are going to be available for offline-execute
+    containers: List of Container instances (needed by workflow)
+    operational_containers: List of Container instances (needed by engine)
+    """
+    instance: AbstractWorkflowEngineType
+    version: str
+    fingerprint: Union[Fingerprint, str]
+    engine_path: EnginePath
+    workflow: LocalWorkflow
+    containers_path: Optional[AbsPath] = None
+    containers: Optional[List[Container]] = None
+    operational_containers: Optional[List[Container]] = None
 
 
 class WFException(Exception):
