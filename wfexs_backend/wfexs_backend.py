@@ -703,9 +703,10 @@ class WfExSBackend:
                 shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
                 yield instance_id, nickname
     
-    def shellFirstStagedWorkflow(self, *args, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, acceptGlob:bool=False) -> ExitVal:
+    def shellFirstStagedWorkflow(self, *args, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, acceptGlob:bool=False, firstMatch:bool=True) -> ExitVal:
         retval = -1
         if len(args) > 0:
+            theEnv = dict(os.environ)
             if len(args) > 1:
                 command = args[1:]
             else:
@@ -713,10 +714,14 @@ class WfExSBackend:
             for instance_id, nickname, creation, wfSetup, wfInstance in self.listStagedWorkflows(args[0], acceptGlob=acceptGlob, doCleanup=False):
                 # We are doing it only for the first match
                 self.logger.info(f'Running {command} at {instance_id} ({nickname})')
-                cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=stdin, stdout=stdout, stderr=stderr)
+                # Setting a custom symbol
+                theEnv['PROMPT_COMMAND'] = f"echo \"(WfExS '{nickname}')\""
+
+                cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=stdin, stdout=stdout, stderr=stderr, env=theEnv)
                 retval = cp.returncode
                 wfInstance.cleanup()
-                break
+                if firstMatch:
+                    break
         return retval
 
     def cacheFetch(self, remote_file:Union[parse.ParseResult, URIType, List[Union[parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
