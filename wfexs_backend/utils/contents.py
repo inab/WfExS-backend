@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import os
+import shutil
 from typing import Any, List, Mapping, Optional, Union
 
 from ..common import AbsPath, AbstractGeneratedContent, ContentKind
@@ -152,3 +153,33 @@ def CWLDesc2Content(
                 matValues.extend(CWLDesc2Content(secondaryFiles, logger, doGenerateSignatures=doGenerateSignatures))
 
     return matValues
+
+def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
+    # First, check whether inputs and content
+    # are in the same filesystem
+    # as of https://unix.stackexchange.com/a/44250
+    dest_exists = os.path.exists(dest)
+    if dest_exists:
+        dest_st_dev = os.lstat(dest).st_dev
+    else:
+        dest_st_dev = os.lstat(os.path.dirname(dest)).st_dev
+    if os.lstat(src).st_dev == dest_st_dev:
+        if os.path.isfile(src):
+            if dest_exists:
+                os.unlink(dest)
+            os.link(src, dest)
+        else:
+            # Recursively hardlinking
+            # as of https://stackoverflow.com/a/10778930
+            shutil.copytree(src, dest, copy_function=os.link, dirs_exist_ok=True)
+    elif os.path.isfile(src):
+        # Copying the content
+        # as it is in a separated filesystem
+        if dest_exists:
+            os.unlink(dest)
+        shutil.copy2(src, dest)
+    else:
+        # Recursively copying the content
+        # as it is in a separated filesystem
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+        
