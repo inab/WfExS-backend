@@ -171,7 +171,9 @@ def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
         else:
             # Recursively hardlinking
             # as of https://stackoverflow.com/a/10778930
-            shutil.copytree(src, dest, copy_function=os.link, dirs_exist_ok=True)
+            if dest_exists:
+                shutil.rmtree(dest)
+            shutil.copytree(src, dest, copy_function=os.link)
     elif os.path.isfile(src):
         # Copying the content
         # as it is in a separated filesystem
@@ -181,5 +183,7 @@ def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
     else:
         # Recursively copying the content
         # as it is in a separated filesystem
-        shutil.copytree(src, dest, dirs_exist_ok=True)
+        if dest_exists:
+            shutil.rmtree(dest)
+        shutil.copytree(src, dest)
         
