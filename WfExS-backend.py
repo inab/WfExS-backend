@@ -17,6 +17,7 @@
 
 import argparse
 import atexit
+import datetime
 import json
 import logging
 import os
@@ -36,43 +37,45 @@ except ImportError:
 
 from wfexs_backend.wfexs_backend import WfExSBackend
 from wfexs_backend import get_WfExS_version
-from wfexs_backend.common import ArgTypeMixin, CacheType as WfExS_CacheType
+from wfexs_backend.common import StrDocEnum, ArgsDefaultWithRawHelpFormatter
+from wfexs_backend.common import CacheType as WfExS_CacheType
 
-class WfExS_Commands(ArgTypeMixin, enum.Enum):
-    Init = 'init'
-    Cache = 'cache'
-    ConfigValidate = 'config-validate'
-    Stage = 'stage'
-    MountWorkDir = 'mount-workdir'
-    StagedWorkDir = 'staged-workdir'
-    ExportStage = 'export-stage'
-    OfflineExecute = 'offline-execute'
-    Execute = 'execute'
-    ExportResults = 'export-results'
-    ExportCrate = 'export-crate'
+class WfExS_Commands(StrDocEnum):
+    Init = ('init', 'Init local setup')
+    Cache = ('cache', 'Cache handling subcommands')
+    ConfigValidate = ('config-validate', 'Validate the configuration files to be used for staging and execution')
+    Stage = ('stage', 'Prepare the staging (working) directory for workflow execution, fetching dependencies and contents')
+    MountWorkDir = ('mount-workdir', 'Mount the encrypted staging directory on secure staging scenarios')
+    StagedWorkDir = ('staged-workdir', 'Staged working directories handling subcommands')
+    ExportStage = ('export-stage', 'Export the staging directory as an RO-Crate')
+    OfflineExecute = ('offline-execute', 'Execute an already prepared workflow in the staging directory')
+    Execute = ('execute', 'Execute the stage + offline-execute + export steps')
+    ExportResults = ('export-results', 'Export the results to a remote location, gathering their public ids')
+    ExportCrate = ('export-crate', 'Export an already executed workflow in the staging directory as an RO-Crate')
 
-class WfExS_Cache_Commands(ArgTypeMixin, enum.Enum):
-    List = 'ls'
-    Inject = 'inject'
-    Remove = 'rm'
-    Validate = 'validate'
+class WfExS_Cache_Commands(StrDocEnum):
+    List = ('ls', 'List the cache entries')
+    Inject = ('inject', 'Inject a new entry in the cache')
+    Remove = ('rm', 'Remove an entry from the cache')
+    Validate = ('validate', 'Validate the consistency of the cache')
 
-class WfExS_Staged_WorkDir_Commands(ArgTypeMixin, enum.Enum):
-    Execute = 'exec'
-    List = 'ls'
-    Mount = 'mount'
-    Remove = 'rm'
+class WfExS_Staged_WorkDir_Commands(StrDocEnum):
+    OfflineExecute = ('offline-exec', 'Offline execute the staged instances which match the input pattern')
+    List = ('ls', 'List the staged instances\n\tIt shows the instance id, nickname,\n\tencryption and whether they are damaged')
+    Mount = ('mount', 'Mount the staged instances which match the input pattern')
+    Remove = ('rm', 'Removes the staged instances which match the input pattern')
+    Shell = ('shell', 'Launches a command in the workdir\n\tFirst parameter is either the staged instance id or the nickname.\n\tIt launches the command specified after the id.\n\tIf there is no additional parameters, it launches a shell\n\tin the mounted working directory of the instance')
 #    Validate = 'validate'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
 DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s'
 
-def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, help:str=None, preStageParams:bool=False, postStageParams:bool=False, crateParams:bool=False):
+def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, preStageParams:bool=False, postStageParams:bool=False, crateParams:bool=False):
     ap_ = sp.add_parser(
         command.value,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-        help=help
+        formatter_class=ArgsDefaultWithRawHelpFormatter,
+        help=command.description
     )
     
     if preStageParams:
@@ -109,6 +112,8 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
     """
+    print(f"\t- Subcommand {args.cache_command} {args.cache_type}")
+    
     cH , cPath = wfBackend.getCacheHandler(args.cache_type)
     retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
@@ -138,11 +143,12 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
     
     return retval
 
-def processStagedWorkdirCommand(wfBackend:WfExSBackend, args: argparse.Namespace, loglevel) -> int:
+def processStagedWorkdirCommand(wB:WfExSBackend, args: argparse.Namespace, loglevel) -> int:
     """
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
     """
+    print(f"\t- Subcommand {args.staged_workdir_command}")
     
     retval = 0
     # This is needed to be sure the encfs instance is unmounted
@@ -151,10 +157,32 @@ def processStagedWorkdirCommand(wfBackend:WfExSBackend, args: argparse.Namespace
     
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
-            for stagedWorkDir in args.staged_workdir_command_args:
-                wfInstance = wfBackend.fromWorkDir(stagedWorkDir, fail_ok=False)
+            for instance_id, nickname, creation, wfSetup, wfInstance in wB.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs, doCleanup=False):
+                print(f'Mounted {instance_id} ({nickname}) at {wfSetup.work_dir}')
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.List:
-        wfBackend.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs)
+        contents = sorted(
+            wB.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs),
+            key=lambda x: x[2]
+        )
+        for instance_id, nickname, creation, wfSetup, _ in contents:
+            is_damaged = True  if wfSetup is None  else  wfSetup.is_damaged
+            print(f'{instance_id}\t{nickname}\t{creation}\t{wfSetup.is_encrypted}\t{is_damaged}')
+    
+    elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Remove:
+        print('\n'.join(map(lambda x: 'Removed: ' + '\t'.join(x), wB.removeStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs))))
+        
+    elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Shell:
+        retval = wB.shellFirstStagedWorkflow(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs)
+    elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineExecute:
+        if len(args.staged_workdir_command_args) > 0:
+            for instance_id, nickname, creation, wfSetup, wfInstance in wB.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs, doCleanup=False):
+                if not wfSetup.is_damaged and (wfInstance is not None):
+                    try:
+                        wfInstance.executeWorkflow(offline=True)
+                    except Exception as e:
+                        logging.exception(f'Error while executing {instance_id} ({nickname})')
+                    finally:
+                        wfInstance.cleanup()
     
     # Thi
     return retval
@@ -186,56 +214,49 @@ if __name__ == "__main__":
     
     ap_i = genParserSub(
         sp,
-        WfExS_Commands.Init,
-        help='Init local setup'
+        WfExS_Commands.Init
     )
     
     ap_c = genParserSub(
         sp,
-        WfExS_Commands.Cache,
-        help='Cache handling subcommands'
+        WfExS_Commands.Cache
     )
-    ap_c.add_argument('cache_command', help='Cache command to perform', type=WfExS_Cache_Commands.argtype, choices=WfExS_Cache_Commands)
+    ap_c.add_argument('cache_command', help='raw|Cache command to perform\n\n'+'\n'.join(map(lambda c: f'{c.value:<12}{c.description}', WfExS_Cache_Commands)), type=WfExS_Cache_Commands.argtype, choices=WfExS_Cache_Commands)
     ap_c.add_argument("-r", dest="doCacheRecursively", help='Try doing the operation recursively (i.e. both metadata and data)', action="store_true", default=False)
     ap_c.add_argument("--cascade", dest="doCacheCascade", help='Try doing the operation in cascade (including the URIs which resolve to other URIs)', action="store_true", default=False)
     ap_c.add_argument("-g", "--glob", dest="filesAsGlobs", help='Given cache element names are globs', action="store_true", default=False)
-    ap_c.add_argument('cache_type', help='Cache type to perform the cache command', type=WfExS_CacheType.argtype, choices=WfExS_CacheType)
+    ap_c.add_argument('cache_type', help='raw|Cache type to perform the cache command\n\n'+'\n'.join(map(lambda c: f'{c.value:<12}{c.description}', WfExS_CacheType)), type=WfExS_CacheType.argtype, choices=WfExS_CacheType)
     ap_c.add_argument('cache_command_args', help='Optional cache element names', nargs='*')
     
     ap_w = genParserSub(
         sp,
-        WfExS_Commands.StagedWorkDir,
-        help='Staged working directories handling subcommands'
+        WfExS_Commands.StagedWorkDir
     )
-    ap_w.add_argument('staged_workdir_command', help='Staged working directory command to perform', type=WfExS_Staged_WorkDir_Commands.argtype, choices=WfExS_Staged_WorkDir_Commands)
-    ap_w.add_argument("-g", "--glob", dest="filesAsGlobs", help='Given staged workflow names are globs', action="store_true", default=False)
+    ap_w.add_argument('staged_workdir_command', help='raw|Staged working directory command to perform\n\n'+'\n'.join(map(lambda c: f'{c.value:<16}{c.description}', WfExS_Staged_WorkDir_Commands)), type=WfExS_Staged_WorkDir_Commands.argtype, choices=WfExS_Staged_WorkDir_Commands)
     ap_w.add_argument('staged_workdir_command_args', help='Optional staged working directory element names', nargs='*')
+    ap_w.add_argument("-g", "--glob", dest="filesAsGlobs", help='Given staged workflow names are globs', action="store_true", default=False)
     
     ap_cv = genParserSub(
         sp,
         WfExS_Commands.ConfigValidate,
-        help='Validate the configuration files to be used for staging and execution',
         preStageParams=True
     )
     
     ap_s = genParserSub(
         sp,
         WfExS_Commands.Stage,
-        help='Prepare the staging (working) directory for workflow execution, fetching dependencies and contents',
         preStageParams=True
     )
     
     ap_m = genParserSub(
         sp,
         WfExS_Commands.MountWorkDir,
-        help='Mount the encrypted staging directory on secure staging scenarios',
         postStageParams=True
     )
     
     ap_es = genParserSub(
         sp,
         WfExS_Commands.ExportStage,
-        help='Export the staging directory as an RO-Crate',
         postStageParams=True,
         crateParams=True
     )
@@ -243,14 +264,12 @@ if __name__ == "__main__":
     ap_oe = genParserSub(
         sp,
         WfExS_Commands.OfflineExecute,
-        help='Execute an already prepared workflow in the staging directory',
         postStageParams=True
     )
     
     ap_e = genParserSub(
         sp,
         WfExS_Commands.Execute,
-        help='Execute the stage + offline-execute + export steps',
         preStageParams=True,
         crateParams=True
     )
@@ -258,14 +277,12 @@ if __name__ == "__main__":
     ap_er = genParserSub(
         sp,
         WfExS_Commands.ExportResults,
-        help='Export the results to a remote location, gathering their public ids',
         postStageParams=True
     )
     
     ap_ec = genParserSub(
         sp,
         WfExS_Commands.ExportCrate,
-        help='Export an already executed workflow in the staging directory as an RO-Crate',
         postStageParams=True,
         crateParams=True
     )
@@ -369,6 +386,7 @@ if __name__ == "__main__":
     wfBackend = WfExSBackend(local_config, config_directory)
     
     # Cache handling commands
+    print("* Command \"{}\".".format(command), file=sys.stderr)
     if command == WfExS_Commands.Cache:
         sys.exit(processCacheCommand(wfBackend, args, logLevel))
     
@@ -378,7 +396,7 @@ if __name__ == "__main__":
     
     wfInstance = None
     if command in (WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
-        wfInstance = wfBackend.fromWorkDir(args.workflowWorkingDirectory, fail_ok= command!=WfExS_Commands.MountWorkDir )
+        wfInstance = wfBackend.fromWorkDir(args.workflowWorkingDirectory, fail_ok= command!=WfExS_Commands.MountWorkDir)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
@@ -392,13 +410,13 @@ if __name__ == "__main__":
     if command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
     
-    print("* Command \"{}\". Working directory will be {}".format(command, wfInstance.workDir), file=sys.stderr)
+    print("\t- Working directory will be {}".format(wfInstance.workDir), file=sys.stderr)
     sys.stderr.flush()
     
     if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
-        instanceId = wfInstance.stageWorkDir()
+        wfSetup = wfInstance.stageWorkDir()
         
-        print("* Instance {} (to be used with -J)".format(instanceId))
+        print("\t- Instance {} (nickname '{}') (to be used with -J)".format(wfSetup.instance_id, wfSetup.nickname))
     
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)

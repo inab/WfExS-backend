@@ -24,15 +24,18 @@ import io
 import json
 import jsonschema
 import logging
+import os
 import platform
 import shutil
+import stat
+import subprocess
 import sys
 import tempfile
 import time
 import types
 import uuid
 
-from typing import Any, List, Mapping, Optional, Pattern, Tuple, Type, Union
+from typing import Any, Iterator, List, Mapping, Optional, Pattern, Tuple, Type, Union
 from urllib import parse
 
 # We have preference for the C based loader and dumper, but the code
@@ -484,6 +487,7 @@ class WfExSBackend:
                     'creation': creation
                 }
                 json.dump(idNick, idF)
+            os.chmod(id_json_path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
         elif os.path.exists(id_json_path):
             with open(id_json_path, mode='r', encoding='utf-8') as iH:
                 idNick = json.load(iH)
@@ -521,7 +525,7 @@ class WfExSBackend:
         
         return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, create_ok=False)
 
-    def fromWorkDir(self, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = True) -> WF:
+    def fromWorkDir(self, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False) -> WF:
         return WF.FromWorkDir(self, workflowWorkingDirectory, fail_ok=fail_ok)
     
     def getDefaultParanoidMode(self) -> bool:
@@ -647,7 +651,7 @@ class WfExSBackend:
         
         return self.encfs_type, self.encfs_cmd, securePassphrase
     
-    def listStagedWorkflows(self, *args, acceptGlob:bool=False):
+    def listStagedWorkflows(self, *args, acceptGlob:bool=False, doCleanup:bool=True) -> Iterator[Tuple[WfExSInstanceId, str, str, StagedSetup, Optional[WF]]]:
         entries = set(args)
         if entries and acceptGlob:
             reEntries = translate_glob_args(entries)
@@ -658,7 +662,11 @@ class WfExSBackend:
             for entry in swD:
                 # Avoiding loops
                 if entry.is_dir(follow_symlinks=False) and not entry.name.startswith('.'):
-                    instanceId, nickname, creation, _ = self.parseOrCreateRawWorkDir(entry.path, create_ok=False)
+                    try:
+                        instanceId, nickname, creation, _ = self.parseOrCreateRawWorkDir(entry.path, create_ok=False)
+                    except:
+                        self.logger.warning(f'Skipped {entry.name} on listing')
+                        continue
                     
                     if entries:
                         if reEntries:
@@ -672,28 +680,44 @@ class WfExSBackend:
                     isEncrypted = False
                     wfSetup = None
                     try:
-                        wfInstance = self.fromWorkDir(instanceId, fail_ok=False)
+                        wfInstance = self.fromWorkDir(instanceId, fail_ok=True)
                         try:
                             wfSetup = wfInstance.getStagedSetup()
-                            isEncrypted = wfInstance.encfs_type is not None
-                            isDamaged = wfInstance.configMarshalled
                         except Exception as e:
                             raise e
                         finally:
-                            wfInstance.cleanup()
+                            # Should we force an unmount?
+                            if doCleanup:
+                                wfInstance.cleanup()
+                                wfInstance = None
                     except:
                         import traceback
                         traceback.print_exc()
-                        isDamaged = True
-
-                    print(f'{instanceId}\t{nickname}\t{creation}\t{isEncrypted}\t{isDamaged}')
-                    #print(f'{instanceId}\t{nickname}\t{creation}\t{isEncrypted}\t{isDamaged}\t{wfSetup}')
                     
-                    if reEntries and any(map(lambda r: (r.match(instanceId) is not None) or (r.match(nickname) is not None), reEntries)):
-                        break
-                    elif (instanceId in entries) or (nickname in entries):
-                        break
-
+                    yield instanceId, nickname, creation, wfSetup, wfInstance
+    
+    def removeStagedWorkflows(self, *args, acceptGlob:bool=False) -> Iterator[Tuple[WfExSInstanceId, str]]:
+        if len(args) > 0:
+            for instance_id, nickname, creation, wfSetup, _ in self.listStagedWorkflows(*args, acceptGlob=acceptGlob, doCleanup=True):
+                self.logger.debug(f"Removing {instance_id} {nickname}")
+                shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
+                yield instance_id, nickname
+    
+    def shellFirstStagedWorkflow(self, *args, acceptGlob:bool=False) -> ExitVal:
+        retval = -1
+        if len(args) > 0:
+            if len(args) > 1:
+                command = args[1:]
+            else:
+                command = [ os.environ.get('SHELL', '/bin/sh') ]
+            for instance_id, nickname, creation, wfSetup, wfInstance in self.listStagedWorkflows(args[0], acceptGlob=acceptGlob, doCleanup=False):
+                # We are doing it only for the first match
+                self.logger.info(f'Running {command} at {instance_id} ({nickname})')
+                cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+                retval = cp.returncode
+                wfInstance.cleanup()
+                break
+        return retval
 
     def cacheFetch(self, remote_file:Union[parse.ParseResult, URIType, List[Union[parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
         """
@@ -776,7 +800,7 @@ class WfExSBackend:
         return repoDir, repoEffectiveCheckout
 
 
-    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = True) -> Tuple[RepoURL, RepoTag, RelPath]:
+    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = False) -> Tuple[RepoURL, RepoTag, RelPath]:
         repoURL = None
         repoTag = None
         repoRelPath = None
@@ -848,7 +872,7 @@ class WfExSBackend:
 
                     if len(wf_path) >= 5:
                         repoRelPath = '/'.join(wf_path[4:])
-        elif fail_ok:
+        elif not fail_ok:
             raise WFException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
 
         self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
