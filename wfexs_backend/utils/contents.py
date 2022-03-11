@@ -155,6 +155,9 @@ def CWLDesc2Content(
     return matValues
 
 def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
+    # We should not deal with symlinks
+    src = os.path.realpath(src)
+    
     # First, check whether inputs and content
     # are in the same filesystem
     # as of https://unix.stackexchange.com/a/44250
