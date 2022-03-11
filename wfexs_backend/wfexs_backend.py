@@ -703,7 +703,7 @@ class WfExSBackend:
                 shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
                 yield instance_id, nickname
     
-    def shellFirstStagedWorkflow(self, *args, acceptGlob:bool=False) -> ExitVal:
+    def shellFirstStagedWorkflow(self, *args, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, acceptGlob:bool=False) -> ExitVal:
         retval = -1
         if len(args) > 0:
             if len(args) > 1:
@@ -713,7 +713,7 @@ class WfExSBackend:
             for instance_id, nickname, creation, wfSetup, wfInstance in self.listStagedWorkflows(args[0], acceptGlob=acceptGlob, doCleanup=False):
                 # We are doing it only for the first match
                 self.logger.info(f'Running {command} at {instance_id} ({nickname})')
-                cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr)
+                cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=stdin, stdout=stdout, stderr=stderr)
                 retval = cp.returncode
                 wfInstance.cleanup()
                 break
