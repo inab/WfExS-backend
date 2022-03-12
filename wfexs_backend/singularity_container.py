@@ -23,10 +23,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+from typing import Dict, List, Tuple
 from urllib import parse
 import uuid
 
-from typing import Dict, List, Tuple
 from .common import *
 from .container import ContainerFactory, ContainerFactoryException
 
@@ -35,7 +35,6 @@ from .utils.digests import ComputeDigestFromFile, nihDigester
 from .utils.docker import DockerHelper
 
 class SingularityContainerFactory(ContainerFactory):
-    META_JSON_POSTFIX = '_meta.json'
     def __init__(self, cacheDir=None, local_config=None, engine_name='unset', tempDir=None):
         super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name, tempDir=tempDir)
         self.runtime_cmd = local_config.get('tools', {}).get('singularityCommand', DEFAULT_SINGULARITY_CMD)
@@ -101,7 +100,7 @@ class SingularityContainerFactory(ContainerFactory):
             localContainerPath = os.path.join(self.engineContainersSymlinkDir, containerFilename)
             localContainerPathMeta = os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta)
             
-            self.logger.info("downloading container: {} => {}".format(tag, localContainerPath))
+            self.logger.info("downloading singularity container: {} => {}".format(tag, localContainerPath))
             # First, let's materialize the container image
             imageSignature = None
             
@@ -239,6 +238,8 @@ STDERR
                     link_or_copy(localContainerPath, containerPath)
                 if not offline or not os.path.exists(containerPathMeta):
                     link_or_copy(localContainerPathMeta, containerPathMeta)
+            else:
+                containerPath = localContainerPath
             
             containersList.append(
                 Container(
@@ -247,7 +248,7 @@ STDERR
                     signature=imageSignature,
                     fingerprint=repo + '@' + partial_fingerprint,
                     type=self.containerType,
-                    localPath=localContainerPath
+                    localPath=containerPath
                 )
             )
         

@@ -16,14 +16,19 @@
 # limitations under the License.
 from __future__ import absolute_import
 
-import os
 import json
+import lzma
+import os
+import shutil
 import subprocess
 import tempfile
+from typing import Dict, List, Mapping, Tuple
+import uuid
 
-from typing import Dict, List, Tuple
 from .common import *
 from .container import ContainerFactory, ContainerFactoryException
+from .utils.contents import link_or_copy
+from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject, nihDigester
 
 DOCKER_PROTO = 'docker://'
 
@@ -49,7 +54,7 @@ class PodmanContainerFactory(ContainerFactory):
     def ContainerType(cls) -> ContainerType:
         return ContainerType.Podman
     
-    def _inspect(self, dockerTag : ContainerTaggedName, matEnv) -> Tuple[int, bytes, str]:
+    def _inspect(self, dockerTag : ContainerTaggedName, matEnv: Mapping) -> Tuple[int, bytes, str]:
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying podman container {dockerTag}")
             d_retval = subprocess.Popen(
@@ -72,7 +77,7 @@ class PodmanContainerFactory(ContainerFactory):
             
             return d_retval , d_out_v , d_err_v
     
-    def _pull(self, dockerTag : ContainerTaggedName, matEnv) -> Tuple[int, str, str]:
+    def _pull(self, dockerTag : ContainerTaggedName, matEnv: Mapping) -> Tuple[int, str, str]:
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"pulling podman container {dockerTag}")
             d_retval = subprocess.Popen(
@@ -94,6 +99,27 @@ class PodmanContainerFactory(ContainerFactory):
             self.logger.debug(f"podman pull stderr: {d_err_v}")
             
             return d_retval , d_out_v , d_err_v
+    
+    def _save(self, dockerTag: ContainerTaggedName, destfile: AbsPath, matEnv: Mapping) -> Tuple[int, str]:
+        with lzma.open(destfile, mode='wb') as d_out, tempfile.NamedTemporaryFile() as d_err:
+            self.logger.debug(f"saving podman container {dockerTag}")
+            with subprocess.Popen(
+                [self.runtime_cmd, 'save', dockerTag],
+                env=matEnv,
+                stdout=subprocess.PIPE,
+                stderr=d_err
+            ) as sp:
+                shutil.copyfileobj(sp.stdout, d_out)
+                d_retval = sp.wait()
+            
+            self.logger.debug(f"podman save {dockerTag} retval: {d_retval}")
+            
+            with open(d_err.name, "r") as c_stF:
+                d_err_v = c_stF.read()
+            
+            self.logger.debug(f"podman save stderr: {d_err_v}")
+            
+            return d_retval , d_err_v
     
     def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Union[RelPath, AbsPath] = None, offline: bool = False) -> List[Container]:
         """
@@ -136,7 +162,7 @@ STDERR
 {}""".format(podmanPullTag, d_retval, d_out_v, d_err_v)
                 raise ContainerFactoryException(errstr)
                 
-            # Parsing the output from docker inspect
+            # Parsing the output from podman inspect
             try:
                 manifests = json.loads(d_out_v)
                 manifest = manifests[0]
@@ -149,13 +175,119 @@ STDERR
             if len(manifest['RepoDigests']) > 0:
                 fingerprint = manifest['RepoDigests'][0]
             
+            # Last but one, let's save a copy of the container locally
+            containerFilename = simpleFileNameMethod(tag)
+            containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
+            localContainerPath = os.path.join(self.engineContainersSymlinkDir, containerFilename)
+            localContainerPathMeta = os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta)
+            
+            self.logger.info("saving docker container (for reproducibility matters): {} => {}".format(tag, localContainerPath))
+            # First, let's materialize the container image
+            manifestsImageSignature = ComputeDigestFromObject(manifests)
+            canonicalContainerPath = os.path.join(self.containersCacheDir, manifestsImageSignature.replace('=','~').replace('/','-').replace('+','_'))
+            canonicalContainerPathMeta = canonicalContainerPath + self.META_JSON_POSTFIX
+            
+            # Defining the destinations
+            if os.path.isfile(canonicalContainerPathMeta):
+                with open(canonicalContainerPathMeta, mode="r", encoding="utf-8") as tcpm:
+                    metadataLocal = json.load(tcpm)
+                
+                manifestsImageSignatureLocal = metadataLocal.get('manifests_signature')
+                manifestsImageSignatureLocalRead = ComputeDigestFromObject(metadataLocal.get('manifests', []))
+                if manifestsImageSignature != manifestsImageSignatureLocal or manifestsImageSignature != manifestsImageSignatureLocalRead:
+                    self.logger.warning("Corrupted canonical container metadata {tag}. Re-saving")
+                    saveContainerPathMeta = True
+                    imageSignatureLocal = None
+                else:
+                    saveContainerPathMeta = False
+                    imageSignatureLocal = metadataLocal.get('image_signature')
+            else:
+                saveContainerPathMeta = True
+                imageSignature = None
+                imageSignatureLocal = None
+            
+            # Only trust when they match
+            tmpContainerPath = os.path.join(self.containersCacheDir,str(uuid.uuid4()))
+            if os.path.isfile(canonicalContainerPath) and (imageSignatureLocal is not None):
+                imageSignatureLocalRead = ComputeDigestFromFile(canonicalContainerPath)
+                if imageSignatureLocalRead != imageSignatureLocal:
+                    self.logger.warning("Corrupted canonical container {tag}. Re-saving")
+                else:
+                    imageSignature = imageSignatureLocal
+                    tmpContainerPath = None
+            
+            if tmpContainerPath is not None:
+                saveContainerPathMeta = True
+                d_retval, d_err_ev = self._save(dockerTag, tmpContainerPath, matEnv)
+                self.logger.debug("podman save retval: {}".format(d_retval))
+                self.logger.debug("podman save stderr: {}".format(d_err_v))
+                
+                if d_retval != 0:
+                    errstr = """Could not save podman image {}. Retval {}
+======
+STDERR
+======
+{}""".format(dockerTag, d_retval, d_err_v)
+                    if os.path.exists(tmpContainerPath):
+                        try:
+                            os.unlink(tmpContainerPath)
+                        except:
+                            pass
+                    raise ContainerFactoryException(errstr)
+                
+                shutil.move(tmpContainerPath, canonicalContainerPath)
+                imageSignature = ComputeDigestFromFile(canonicalContainerPath)
+            
+            if saveContainerPathMeta:
+                with open(canonicalContainerPathMeta, mode="w", encoding='utf-8') as tcpM:
+                    json.dump({
+                        "image_signature": imageSignature,
+                        "manifests_signature": manifestsImageSignature,
+                        "manifests": manifests
+                    }, tcpM)
+            
+            # Now, check the relative symbolic link of image
+            createSymlink = True
+            if os.path.lexists(localContainerPath):
+                if os.path.realpath(localContainerPath) != os.path.realpath(canonicalContainerPath):
+                    os.unlink(localContainerPath)
+                else:
+                    createSymlink = False
+            if createSymlink:
+                os.symlink(os.path.relpath(canonicalContainerPath, self.engineContainersSymlinkDir), localContainerPath)
+            
+            # Now, check the relative symbolic link of metadata
+            createSymlink = True
+            if os.path.lexists(localContainerPathMeta):
+                if os.path.realpath(localContainerPathMeta) != os.path.realpath(canonicalContainerPathMeta):
+                    os.unlink(localContainerPathMeta)
+                else:
+                    createSymlink = False
+            if createSymlink:
+                os.symlink(os.path.relpath(canonicalContainerPathMeta, self.engineContainersSymlinkDir), localContainerPathMeta)
+            
+            # Last, hardlink or copy the container and its metadata
+            if containers_dir is not None:
+                containerPath = os.path.join(containers_dir, containerFilename)
+                containerPathMeta = os.path.join(containers_dir, containerFilenameMeta)
+                
+                # Do not allow overwriting in offline mode
+                if not offline or not os.path.exists(containerPath):
+                    link_or_copy(localContainerPath, containerPath)
+                if not offline or not os.path.exists(containerPathMeta):
+                    link_or_copy(localContainerPathMeta, containerPathMeta)
+            else:
+                containerPath = localContainerPath
+            
+            # And add to the list of containers
             containersList.append(
                 Container(
                     origTaggedName=tag,
                     taggedName=dockerTag,
                     signature=tagId,
                     fingerprint=fingerprint,
-                    type=self.containerType
+                    type=self.containerType,
+                    localPath=containerPath
                 )
             )
         
