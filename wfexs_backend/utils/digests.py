@@ -20,6 +20,7 @@ from __future__ import absolute_import
 import base64
 import functools
 import hashlib
+import json
 import os
 from typing import List, Union
 
@@ -62,6 +63,15 @@ def nihDigester(digestAlgorithm, digest: bytes) -> Union[Fingerprint, bytes]:
     digestAlgorithm = VALID_NI_ALGOS.get(digestAlgorithm, digestAlgorithm)
     
     return generate_nih_from_digest(digest, algo=digestAlgorithm)
+
+def ComputeDigestFromObject(obj, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, repMethod=stringifyDigest) -> Fingerprint:
+    """
+    Accessory method used to compute the digest of an input file-like object
+    """
+    h = hashlib.new(digestAlgorithm)
+    h.update(json.dumps(obj, sort_keys=True).encode('utf-8'))
+
+    return repMethod(digestAlgorithm, h.digest())
 
 def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
     """
