@@ -39,6 +39,7 @@ from wfexs_backend.wfexs_backend import WfExSBackend
 from wfexs_backend import get_WfExS_version
 from wfexs_backend.common import StrDocEnum, ArgsDefaultWithRawHelpFormatter
 from wfexs_backend.common import CacheType as WfExS_CacheType
+from wfexs_backend.utils.misc import DatetimeEncoder
 
 class WfExS_Commands(StrDocEnum):
     Init = ('init', 'Init local setup')
@@ -65,6 +66,7 @@ class WfExS_Staged_WorkDir_Commands(StrDocEnum):
     Mount = ('mount', 'Mount the staged instances which match the input pattern')
     Remove = ('rm', 'Removes the staged instances which match the input pattern')
     Shell = ('shell', 'Launches a command in the workdir\n\tFirst parameter is either the staged instance id or the nickname.\n\tIt launches the command specified after the id.\n\tIf there is no additional parameters, it launches a shell\n\tin the mounted working directory of the instance')
+    Status = ('status', 'Shows staged instances status')
 #    Validate = 'validate'
 
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
@@ -120,7 +122,7 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
         if logLevel <= logging.INFO:
             contents = sorted(map(lambda l: l[1], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x['stamp'])
             for entry in contents:
-                json.dump(entry, sys.stdout, indent=4, sort_keys=True)
+                json.dump(entry, sys.stdout, cls=DatetimeEncoder, indent=4, sort_keys=True)
                 print()
         else:
             contents = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)))
@@ -166,7 +168,7 @@ def processStagedWorkdirCommand(wB:WfExSBackend, args: argparse.Namespace, logle
         )
         for instance_id, nickname, creation, wfSetup, _ in contents:
             is_damaged = True  if wfSetup is None  else  wfSetup.is_damaged
-            print(f'{instance_id}\t{nickname}\t{creation}\t{wfSetup.is_encrypted}\t{is_damaged}')
+            print(f'{instance_id}\t{nickname}\t{creation.isoformat()}\t{wfSetup.is_encrypted}\t{is_damaged}')
     
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Remove:
         print('\n'.join(map(lambda x: 'Removed: ' + '\t'.join(x), wB.removeStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs))))
@@ -183,6 +185,17 @@ def processStagedWorkdirCommand(wB:WfExSBackend, args: argparse.Namespace, logle
                         logging.exception(f'Error while executing {instance_id} ({nickname})')
                     finally:
                         wfInstance.cleanup()
+    elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Status:
+        if len(args.staged_workdir_command_args) > 0:
+            for instance_id, nickname, creation, wfSetup, mStatus in wB.statusStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs):
+                is_damaged = True  if wfSetup is None  else  wfSetup.is_damaged
+                print(
+f"""=> Instance {instance_id} ({nickname})
+* Is damaged? {is_damaged}
+* Created: {creation.isoformat()}
+* Secure (encrypted)? {wfSetup.is_encrypted}
+* {repr(mStatus)}
+""")
     
     # Thi
     return retval
@@ -410,13 +423,14 @@ if __name__ == "__main__":
     if command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
     
-    print("\t- Working directory will be {}".format(wfInstance.workDir), file=sys.stderr)
+    wfSetup = wfInstance.getStagedSetup()
+    print("\t- Working directory will be {}".format(wfSetup.work_dir), file=sys.stderr)
     sys.stderr.flush()
     
     if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
-        wfSetup = wfInstance.stageWorkDir()
-        
         print("\t- Instance {} (nickname '{}') (to be used with -J)".format(wfSetup.instance_id, wfSetup.nickname))
+        wfInstance.stageWorkDir()
+        
     
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)

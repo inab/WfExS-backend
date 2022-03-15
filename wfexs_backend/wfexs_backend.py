@@ -62,7 +62,7 @@ from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
-from .utils.misc import translate_glob_args
+from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
 from .utils.passphrase_wrapper import generate_nickname, generate_passphrase
 
 from .fetchers import AbstractStatefulFetcher
@@ -466,7 +466,7 @@ class WfExSBackend:
         
         return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, instanceId, nickname, create_ok=create_ok)
     
-    def parseOrCreateRawWorkDir(self, uniqueRawWorkDir: AbsPath, instanceId: Optional[WfExSInstanceId] = None, nickname: Optional[str] = None, create_ok: bool = False) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
+    def parseOrCreateRawWorkDir(self, uniqueRawWorkDir: AbsPath, instanceId: Optional[WfExSInstanceId] = None, nickname: Optional[str] = None, create_ok: bool = False) -> Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]:
         """
         This method returns the absolute path to the raw working directory
         """
@@ -479,32 +479,32 @@ class WfExSBackend:
             os.makedirs(uniqueRawWorkDir, exist_ok=True)
             if nickname is None:
                 nickname = generate_nickname()
-            creation = datetime.datetime.utcnow().isoformat() + 'Z'
+            creation = datetime.datetime.now(tz=datetime.timezone.utc)
             with open(id_json_path, mode='w', encoding='utf-8') as idF:
                 idNick = {
                     'instance_id': instanceId,
                     'nickname': nickname,
                     'creation': creation
                 }
-                json.dump(idNick, idF)
+                json.dump(idNick, idF, cls=DatetimeEncoder)
             os.chmod(id_json_path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
         elif os.path.exists(id_json_path):
             with open(id_json_path, mode='r', encoding='utf-8') as iH:
-                idNick = json.load(iH)
+                idNick = jsonFilterDecodeFromStream(iH)
                 instanceId = idNick['instance_id']
                 nickname = idNick.get('nickname', instanceId)
                 creation = idNick.get('creation')
             
             # This file should not change
             if creation is None:
-                creation = datetime.datetime.utcfromtimestamp(os.path.getctime(id_json_path)).isoformat() + 'Z'
+                creation = datetime.datetime.fromtimestamp(os.path.getctime(id_json_path), tz=datetime.timezone.utc)
         else:
             instanceId = os.path.basename(uniqueRawWorkDir)
             nickname = instanceId
             creation = None
         
         if creation is None:
-            creation = datetime.datetime.utcfromtimestamp(os.path.getctime(uniqueRawWorkDir)).isoformat() + 'Z'
+            creation = datetime.datetime.fromtimestamp(os.path.getctime(uniqueRawWorkDir), tz=datetime.timezone.utc)
         
         return instanceId, nickname, creation, uniqueRawWorkDir
     
@@ -651,7 +651,7 @@ class WfExSBackend:
         
         return self.encfs_type, self.encfs_cmd, securePassphrase
     
-    def listStagedWorkflows(self, *args, acceptGlob:bool=False, doCleanup:bool=True) -> Iterator[Tuple[WfExSInstanceId, str, str, StagedSetup, Optional[WF]]]:
+    def listStagedWorkflows(self, *args, acceptGlob:bool=False, doCleanup:bool=True) -> Iterator[Tuple[WfExSInstanceId, str, str, Optional[StagedSetup], Optional[WF]]]:
         entries = set(args)
         if entries and acceptGlob:
             reEntries = translate_glob_args(entries)
@@ -679,22 +679,38 @@ class WfExSBackend:
                     isDamaged = False
                     isEncrypted = False
                     wfSetup = None
+                    wfInstance = None
                     try:
                         wfInstance = self.fromWorkDir(instanceId, fail_ok=True)
                         try:
                             wfSetup = wfInstance.getStagedSetup()
                         except Exception as e:
-                            raise e
-                        finally:
-                            # Should we force an unmount?
-                            if doCleanup:
-                                wfInstance.cleanup()
-                                wfInstance = None
+                            self.logger.exception(f'Something wrong with staged setup from {instanceId} ({nickname})')
+                        
                     except:
-                        import traceback
-                        traceback.print_exc()
+                        self.logger.exception(f'Something wrong with workflow {instanceId} ({nickname})')
                     
+                    # Give a chance to work on the passed instance
                     yield instanceId, nickname, creation, wfSetup, wfInstance
+                    
+                    # Should we force an unmount?
+                    if doCleanup and (wfInstance is not None):
+                        wfInstance.cleanup()
+                        wfInstance = None
+                    
+    
+    def statusStagedWorkflows(self, *args, acceptGlob:bool=False) -> Iterator[Tuple[WfExSInstanceId, str, str, Optional[StagedSetup], Optional[MarshallingStatus]]]:
+        if len(args) > 0:
+            for instance_id, nickname, creation, wfSetup, wfInstance in self.listStagedWorkflows(*args, acceptGlob=acceptGlob, doCleanup=True):
+                self.logger.debug(f"Status {instance_id} {nickname}")
+                
+                # This is needed to trigger the cascade of
+                # state unmarshalling and validations
+                if wfInstance is not None:
+                    wfInstance.unmarshallExport(offline=True, fail_ok=True)
+                    mStatus = wfInstance.getMarshallingStatus()
+                
+                yield instance_id, nickname, creation, wfSetup, mStatus
     
     def removeStagedWorkflows(self, *args, acceptGlob:bool=False) -> Iterator[Tuple[WfExSInstanceId, str]]:
         if len(args) > 0:
