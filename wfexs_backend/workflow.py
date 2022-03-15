@@ -20,6 +20,7 @@ import datetime
 import inspect
 import json
 import logging
+import os
 import pathlib
 import platform
 import shutil
@@ -118,7 +119,7 @@ class WF:
                  creds_config=None,
                  instanceId: Optional[WfExSInstanceId] = None,
                  nickname: Optional[str] = None,
-                 creation: Optional[str] = None,
+                 creation: Optional[datetime.datetime] = None,
                  rawWorkDir: Optional[Union[RelPath, AbsPath]] = None,
                  paranoid_mode: Optional[bool] = None,
                  fail_ok: bool = False
@@ -141,7 +142,7 @@ class WF:
         :param creds_config: Dictionary with the different credential contexts
         :param instanceId: The instance id of this working directory
         :param nickname: The nickname of this working directory
-        :param creation: The creation timestamp in ISO8601
+        :param creation: The creation timestamp
         :param rawWorkDir: Raw working directory
         :param paranoid_mode: Should we enable paranoid mode for this workflow?
         :type wfexs: WfExSBackend
@@ -154,7 +155,7 @@ class WF:
         :type workflow_config: dict
         :type creds_config: dict
         :type instanceId: str
-        :type creation str
+        :type creation datetime.datetime
         :type rawWorkDir: str
         :type paranoid_mode: bool
         :type fail_ok: bool
@@ -244,7 +245,7 @@ class WF:
             self.instanceId = instanceId
         
         if creation is None:
-            self.workdir_creation = datetime.datetime.utcnow().isoformat() + 'Z'
+            self.workdir_creation = datetime.datetime.now(tz=datetime.timezone.utc)
         else:
             self.workdir_creation = creation
         self.nickname = nickname
@@ -281,6 +282,7 @@ class WF:
 
         was_setup = self.setupWorkdir(doSecureWorkDir, fail_ok=fail_ok)
         
+        self.configMarshalled = None
         if was_setup:
             # This directory will hold either symbolic links to the cached
             # inputs, or the inputs properly post-processed (decompressed,
@@ -307,10 +309,10 @@ class WF:
             self.containersDir = os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR)
 
             
-            self.configMarshalled = False
             # This is true when the working directory already exists
             if checkSecure:
                 if not os.path.isdir(self.metaDir):
+                    self.configMarshalled = False
                     errstr = "Staged working directory {} is incomplete".format(self.workDir)
                     self.logger.exception(errstr)
                     if not fail_ok:
@@ -330,6 +332,7 @@ class WF:
                 self.marshallConfig(overwrite=True)
                 is_damaged = False
         else:
+            self.configMarshalled = False
             is_damaged = True
             self.inputsDir = None
             self.intermediateDir = None
@@ -377,9 +380,9 @@ class WF:
         self.matCheckOutputs = None
         self.cacheROCrateFilename = None
         
-        self.stageMarshalled = False
-        self.executionMarshalled = False
-        self.exportMarshalled = False
+        self.stageMarshalled = None
+        self.executionMarshalled = None
+        self.exportMarshalled = None
 
     FUSE_SYSTEM_CONF = '/etc/fuse.conf'
 
@@ -508,6 +511,14 @@ class WF:
     
     def getStagedSetup(self) -> StagedSetup:
         return self.stagedSetup
+    
+    def getMarshallingStatus(self) -> MarshallingStatus:
+        return MarshallingStatus(
+            config=self.configMarshalled,
+            stage=self.stageMarshalled,
+            execution=self.executionMarshalled,
+            export=self.exportMarshalled
+        )
     
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
@@ -1060,49 +1071,52 @@ class WF:
         self.marshallExport()
 
 
-    def marshallConfig(self, overwrite: bool = False):
+    def marshallConfig(self, overwrite: bool = False) -> Union[bool, datetime.datetime]:
         # The seed should have be already written
         
         # Now, the config itself
-        workflow_meta_file = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
-        if overwrite or not os.path.exists(workflow_meta_file) or os.path.getsize(workflow_meta_file) == 0:
-            with open(workflow_meta_file, mode='w', encoding='utf-8') as wmF:
-                workflow_meta = {
-                    'workflow_id': self.id,
-                    'paranoid_mode': self.paranoidMode
-                }
-                if self.nickname is not None:
-                    workflow_meta['nickname'] = self.nickname
-                if self.version_id is not None:
-                    workflow_meta['version'] = self.version_id
-                if self.descriptor_type is not None:
-                    workflow_meta['workflow_type'] = self.descriptor_type
-                if self.trs_endpoint is not None:
-                    workflow_meta['trs_endpoint'] = self.trs_endpoint
-                if self.workflow_config is not None:
-                    workflow_meta['workflow_config'] = self.workflow_config
-                if self.params is not None:
-                    workflow_meta['params'] = self.params
-                if self.outputs is not None:
-                    outputs = {output.name: output for output in self.outputs}
-                    workflow_meta['outputs'] = outputs
+        if overwrite or (self.configMarshalled is None):
+            workflow_meta_filename = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
+            if overwrite or not os.path.exists(workflow_meta_filename) or os.path.getsize(workflow_meta_filename) == 0:
+                with open(workflow_meta_filename, mode='w', encoding='utf-8') as wmF:
+                    workflow_meta = {
+                        'workflow_id': self.id,
+                        'paranoid_mode': self.paranoidMode
+                    }
+                    if self.nickname is not None:
+                        workflow_meta['nickname'] = self.nickname
+                    if self.version_id is not None:
+                        workflow_meta['version'] = self.version_id
+                    if self.descriptor_type is not None:
+                        workflow_meta['workflow_type'] = self.descriptor_type
+                    if self.trs_endpoint is not None:
+                        workflow_meta['trs_endpoint'] = self.trs_endpoint
+                    if self.workflow_config is not None:
+                        workflow_meta['workflow_config'] = self.workflow_config
+                    if self.params is not None:
+                        workflow_meta['params'] = self.params
+                    if self.outputs is not None:
+                        outputs = {output.name: output for output in self.outputs}
+                        workflow_meta['outputs'] = outputs
 
-                yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
-                
-        creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-        if overwrite or not os.path.exists(creds_file):
-            with open(creds_file, mode='w', encoding='utf-8') as crF:
-                yaml.dump(marshall_namedtuple(self.creds_config), crF, Dumper=YAMLDumper)
+                    yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
+            
+            creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
+            if overwrite or not os.path.exists(creds_file):
+                with open(creds_file, mode='w', encoding='utf-8') as crF:
+                    yaml.dump(marshall_namedtuple(self.creds_config), crF, Dumper=YAMLDumper)
+            
+            self.configMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc)
         
-        self.configMarshalled = True
+        return self.configMarshalled
     
-    def unmarshallConfig(self, fail_ok: bool = False) -> bool:
-        config_unmarshalled = True
-        if not self.configMarshalled:
+    def unmarshallConfig(self, fail_ok: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        if self.configMarshalled is None:
+            config_unmarshalled = True
             workflow_meta_filename = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
             # If the file does not exist, fail fast
             if not os.path.isfile(workflow_meta_filename):
-                self.logger.error(f'Marshalled config file {workflow_meta_filename} does not exist')
+                self.logger.debug(f'Marshalled config file {workflow_meta_filename} does not exist')
                 return False
             
             workflow_meta = None
@@ -1138,17 +1152,17 @@ class WF:
                         self.outputs = None
             except IOError as ioe:
                 config_unmarshalled = False
-                self.logger.exception("Marshalled config file {} I/O errors".format(workflow_meta_filename))
+                self.logger.debug("Marshalled config file {} I/O errors".format(workflow_meta_filename))
                 if not fail_ok:
                     raise WFException("ERROR opening/reading config file") from ioe
             except TypeError as te:
                 config_unmarshalled = False
-                self.logger.exception("Marshalled config file {} unmarshalling errors".format(workflow_meta_filename))
+                self.logger.debug("Marshalled config file {} unmarshalling errors".format(workflow_meta_filename))
                 if not fail_ok:
                     raise WFException("ERROR unmarshalling config file") from te
             except Exception as e:
                 config_unmarshalled = False
-                self.logger.exception("Marshalled config file {} misc errors".format(workflow_meta_filename))
+                self.logger.debug("Marshalled config file {} misc errors".format(workflow_meta_filename))
                 if not fail_ok:
                     raise WFException("ERROR processing config file") from e
             
@@ -1176,20 +1190,26 @@ class WF:
                     if not fail_ok:
                         raise WFException(errstr)
                     
-                self.configMarshalled = config_unmarshalled
+                self.configMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc)
         
-        return config_unmarshalled
+        return self.configMarshalled
     
-    def marshallStage(self, exist_ok: bool = True):
-        if not self.stageMarshalled:
-            self.marshallConfig(overwrite=False)
-
+    def marshallStage(self, exist_ok: bool = True, overwrite: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        if overwrite or (self.stageMarshalled is None):
+            # Do not even try
+            if self.marshallConfig(overwrite=overwrite) is None:
+                return None
+            
             marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
             if os.path.exists(marshalled_stage_file):
-                if not exist_ok:
-                    raise WFException("Marshalled stage file already exists")
-                self.logger.debug("Marshalled stage file {} already exists".format(marshalled_stage_file))
-            else:
+                errmsg = "Marshalled stage file {} already exists".format(marshalled_stage_file)
+                if not overwrite and not exist_ok:
+                    raise WFException(errmsg)
+                self.logger.debug(errmsg)
+                self.stageMarshalled = True
+            
+            
+            if not self.stageMarshalled or overwrite:
                 stage = {
                     'repoURL': self.repoURL,
                     'repoTag': self.repoTag,
@@ -1208,20 +1228,32 @@ class WF:
                     marshalled_stage = marshall_namedtuple(stage)
                     yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
 
-            self.stageMarshalled = True
+            self.stageMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_stage_file), tz=datetime.timezone.utc)
         elif not exist_ok:
-            raise WFException("Marshalled stage file already exists")
+            raise WFException(f"Marshalled stage file already exists")
+        
+        return self.stageMarshalled
 
-    def unmarshallStage(self, offline: bool = False):
-        if not self.stageMarshalled:
+    def unmarshallStage(self, offline: bool = False, fail_ok: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        if self.stageMarshalled is None:
+            # If basic state does not work, even do not try
+            retval = self.unmarshallConfig(fail_ok=fail_ok)
+            if not retval:
+                return None
+            
             marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
             if not os.path.exists(marshalled_stage_file):
-                raise WFException("Marshalled stage file does not exists. Stage state was not stored")
+                errmsg = f'Marshalled stage file {marshalled_stage_file} does not exists. Stage state was not stored'
+                self.logger.debug(errmsg)
+                self.stageMarshalled = False
+                if fail_ok:
+                    return self.stageMarshalled
+                raise WFException(errmsg)
 
             self.logger.debug("Parsing marshalled stage state file {}".format(marshalled_stage_file))
-            with open(marshalled_stage_file, mode='r', encoding='utf-8') as msF:
-                marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
-                try:
+            try:
+                with open(marshalled_stage_file, mode='r', encoding='utf-8') as msF:
+                    marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
                     stage = unmarshall_namedtuple(marshalled_stage, globals())
                     self.repoURL = stage['repoURL']
                     self.repoTag = stage['repoTag']
@@ -1234,21 +1266,32 @@ class WF:
 
                     # This is needed to properly set up the materializedEngine
                     self.setupEngine(offline=True)
-                except Exception as e:
-                    raise WFException("Error while unmarshalling content from stage state file {}. Reason: {}".format(marshalled_stage_file,e))
+            except Exception as e:
+                errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(marshalled_stage_file,e)
+                self.logger.debug(errmsg)
+                self.stageMarshalled = False
+                if fail_ok:
+                    return self.stageMarshalled
+                raise WFException(errmsg) from e
 
-            self.stageMarshalled = True
+            self.stageMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_stage_file), tz=datetime.timezone.utc)
+        
+        return self.stageMarshalled
 
-    def marshallExecute(self, exist_ok: bool = True):
-        if not self.executionMarshalled:
-            self.marshallStage(exist_ok=exist_ok)
+    def marshallExecute(self, exist_ok: bool = True, overwrite: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        if overwrite or (self.executionMarshalled is None):
+            if self.marshallStage(exist_ok=exist_ok, overwrite=overwrite) is None:
+                return None
 
             marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
             if os.path.exists(marshalled_execution_file):
-                if not exist_ok:
-                    raise WFException("Marshalled execution file already exists")
-                self.logger.debug("Marshalled execution file {} already exists".format(marshalled_execution_file))
-            else:
+                errmsg = "Marshalled execution file {} already exists".format(marshalled_execution_file)
+                if not overwrite and not exist_ok:
+                    raise WFException(errmsg)
+                self.logger.debug(errmsg)
+                self.executionMarshalled = True
+            
+            if not self.executionMarshalled or overwrite:
                 execution = {
                     'exitVal': self.exitVal,
                     'augmentedInputs': self.augmentedInputs,
@@ -1260,41 +1303,64 @@ class WF:
                 with open(marshalled_execution_file, mode='w', encoding='utf-8') as msF:
                     yaml.dump(marshall_namedtuple(execution), msF, Dumper=YAMLDumper)
 
-            self.executionMarshalled = True
+            self.executionMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc)
         elif not exist_ok:
             raise WFException("Marshalled execution file already exists")
+        
+        return self.executionMarshalled
 
-    def unmarshallExecute(self, offline: bool = True):
-        if not self.executionMarshalled:
-            self.unmarshallStage(offline=offline)
+    def unmarshallExecute(self, offline: bool = True, fail_ok: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        if self.executionMarshalled is None:
+            # If stage state is not properly prepared, even do not try
+            retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
+            if not retval:
+                return None
+            
             marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
             if not os.path.exists(marshalled_execution_file):
-                raise WFException("Marshalled execution file does not exists. Execution state was not stored")
+                errmsg = f"Marshalled execution file {marshalled_execution_file} does not exists. Execution state was not stored"
+                self.logger.debug(errmsg)
+                self.executionMarshalled = False
+                if fail_ok:
+                    return self.executionMarshalled
+                raise WFException(errmsg)
 
             self.logger.debug("Parsing marshalled execution state file {}".format(marshalled_execution_file))
-            with open(marshalled_execution_file, mode='r', encoding='utf-8') as meF:
-                marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
-                try:
+            try:
+                with open(marshalled_execution_file, mode='r', encoding='utf-8') as meF:
+                    marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
                     execution = unmarshall_namedtuple(marshalled_execution, globals())
 
                     self.exitVal = execution['exitVal']
                     self.augmentedInputs = execution['augmentedInputs']
                     self.matCheckOutputs = execution['matCheckOutputs']
-                except Exception as e:
-                    raise WFException("Error while unmarshalling content from execution state file {}. Reason: {}".format(marshalled_execution_file, e))
+            except Exception as e:
+                errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(marshalled_execution_file, e)
+                self.logger.debug(errmsg)
+                self.executionMarshalled = False
+                if fail_ok:
+                    return self.executionMarshalled
+                raise WFException(errmsg) from e
 
-            self.executionMarshalled = True
+            self.executionMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc)
+        
+        return self.executionMarshalled
 
-    def marshallExport(self, exist_ok: bool = True):
-        if not self.exportMarshalled:
-            self.marshallExecute(exist_ok=exist_ok)
+    def marshallExport(self, exist_ok: bool = True, overwrite: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        if overwrite or (self.exportMarshalled is None):
+            # Do not even try saving the state
+            if self.marshallExecute(exist_ok=exist_ok, overwrite=overwrite) is None:
+                return None
 
             marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
             if os.path.exists(marshalled_export_file):
-                if not exist_ok:
-                    raise WFException("Marshalled export results file already exists")
-                self.logger.debug("Marshalled export results file {} already exists".format(marshalled_export_file))
-            else:
+                errmsg = "Marshalled export results file {} already exists".format(marshalled_export_file)
+                if not overwrite and not exist_ok:
+                    raise WFException(errmsg)
+                self.logger.debug(errmsg)
+                self.exportMarshalled = True
+            
+            if not self.exportMarshalled or overwrite:
                 exported_results = {
                     # TODO
                 }
@@ -1303,28 +1369,46 @@ class WF:
                 with open(marshalled_export_file, mode='w', encoding='utf-8') as msF:
                     yaml.dump(marshall_namedtuple(exported_results), msF, Dumper=YAMLDumper)
 
-            self.exportMarshalled = True
+            self.exportMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc)
         elif not exist_ok:
             raise WFException("Marshalled export results file already exists")
+        
+        return self.exportMarshalled
 
-    def unmarshallExport(self, offline: bool = True):
-        if not self.exportMarshalled:
-            self.unmarshallExecute(offline=offline)
+    def unmarshallExport(self, offline: bool = True, fail_ok: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        if self.exportMarshalled is None:
+            # If execute state does not work, even do not try
+            retval = self.unmarshallExecute(offline=offline, fail_ok=fail_ok)
+            if not retval:
+                return None
+            
             marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
             if not os.path.exists(marshalled_export_file):
-                raise WFException("Marshalled export results file does not exists. Export results state was not stored")
+                errmsg = f"Marshalled export results file {marshalled_export_file} does not exists. Export results state was not stored"
+                self.logger.debug(errmsg)
+                self.exportMarshalled = False
+                if fail_ok:
+                    return self.exportMarshalled
+                raise WFException(errmsg)
 
             self.logger.debug("Parsing marshalled export results state file {}".format(marshalled_export_file))
-            with open(marshalled_export_file, mode='r', encoding='utf-8') as meF:
-                marshalled_export = yaml.load(meF, Loader=YAMLLoader)
-                try:
+            try:
+                with open(marshalled_export_file, mode='r', encoding='utf-8') as meF:
+                    marshalled_export = yaml.load(meF, Loader=YAMLLoader)
                     exported_results = unmarshall_namedtuple(marshalled_export, globals())
 
                     # TODO
-                except Exception as e:
-                    raise WFException(f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}")
+            except Exception as e:
+                errmsg = f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}"
+                self.logger.debug(e)
+                self.exportMarshalled = False
+                if fail_ok:
+                    return self.exportMarshalled
+                raise WFException(errmsg) from e
 
-            self.exportMarshalled = True
+            self.exportMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc)
+        
+        return self.exportMarshalled
 
     def createStageResearchObject(self, doMaterializedROCrate: bool = False):
         """
