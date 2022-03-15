@@ -371,6 +371,20 @@ class StagedSetup(NamedTuple):
     is_encrypted: bool
     is_damaged: bool
 
+import datetime
+class MarshallingStatus(NamedTuple):
+    config: Optional[Union[bool, datetime.datetime]]
+    stage: Optional[Union[bool, datetime.datetime]]
+    execution: Optional[Union[bool, datetime.datetime]]
+    export: Optional[Union[bool, datetime.datetime]]
+    
+    def __repr__(self):
+        return f"""Marshalling date status:
+- config: {"(never done)" if self.config is None  else  self.config.isoformat()  if isinstance(self.config, datetime.datetime)  else  "(failed/not done yet)"}
+- stage: {"(never done)" if self.stage is None  else  self.stage.isoformat()  if isinstance(self.stage, datetime.datetime)  else  "(failed/not done yet)"}
+- execution: {"(never done)" if self.execution is None  else  self.execution.isoformat()  if isinstance(self.execution, datetime.datetime)  else  "(failed/not done yet)"}
+- export: {"(never done)" if self.export is None  else  self.export.isoformat()  if isinstance(self.export, datetime.datetime)  else  "(failed/not done yet)"}
+"""
 
 class ContainerType(enum.Enum):
     Singularity = 'singularity'
