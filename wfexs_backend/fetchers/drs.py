@@ -20,13 +20,15 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
 
-from . import fetchClassicURL
-from ..common import *
+from . import fetchClassicURL, FetcherException
+
+from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import LicensedURI, URIType, URIWithMetadata
 
 DRS_SCHEME = 'drs'
 
@@ -100,7 +102,7 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
         metadata_array.append(URIWithMetadata(remote_file, gathered_meta, preferredName))
         metadata_array.extend(metametaio)
     except urllib.error.HTTPError as he:
-        raise WFException("Error fetching DRS metadata for {} : {} {}".format(remote_file, he.code, he.reason))
+        raise FetcherException("Error fetching DRS metadata for {} : {} {}".format(remote_file, he.code, he.reason)) from he
     
     # With the metadata, let's compose the URL to be returned
     # (which could not be cached)
@@ -117,7 +119,7 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
                 _ , metametaaccio = fetchClassicURL(object_access_metadata_url, metaaccio, secContext=upperSecContext)
                 object_access_metadata = json.loads(metaaccio.getvalue().decode('utf-8'))
             except urllib.error.HTTPError as he:
-                raise WFException("Error fetching DRS access link {} for {} : {} {}".format(access_id, remote_file, he.code, he.reason))
+                raise FetcherException("Error fetching DRS access link {} for {} : {} {}".format(access_id, remote_file, he.code, he.reason)) from he
 
             object_url = object_access_metadata.get('url')
             object_headers = object_access_metadata.get('headers')

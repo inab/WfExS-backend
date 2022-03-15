@@ -50,11 +50,18 @@ import crypt4gh.lib
 import crypt4gh.keys.kdf
 import crypt4gh.keys.c4gh
 
-from .common import *
+from .common import AbstractWfExSException
+from .common import AbsPath, RelPath
+from .common import RepoTag, RepoURL
+from .common import CacheType, ContentKind, URIType, URIWithMetadata
+from .common import MaterializedContent, SecurityContextConfig, WorkflowType
+from .common import ExitVal, ProtocolFetcher, WfExSInstanceId
+from .common import MarshallingStatus, StagedSetup
+from .common import DEFAULT_FUSERMOUNT_CMD, DEFAULT_GIT_CMD, DEFAULT_PROGS
+
 from .encrypted_fs import DEFAULT_ENCRYPTED_FS_TYPE, \
   DEFAULT_ENCRYPTED_FS_CMD, DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT, \
   ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS, EncryptedFSType
-#from .encrypted_fs import *
 from .engine import WorkflowEngine, WORKDIR_PASSPHRASE_FILE
 
 
@@ -75,6 +82,9 @@ from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
 from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
 
 from .workflow import WF
+
+class WfExSBackendException(AbstractWfExSException):
+    pass
 
 class WfExSBackend:
     """
@@ -155,7 +165,7 @@ class WfExSBackend:
                 logger.warning("[WARNING] Installation {} file {} does not exist".format(elem, fname))
 
         if numExist == 1:
-            raise WFException("Inconsistent {} section, as one of the keys is missing".format(cls.CRYPT4GH_SECTION))
+            raise WfExSBackendException("Inconsistent {} section, as one of the keys is missing".format(cls.CRYPT4GH_SECTION))
 
         # Time to generate the pairs needed to work with crypt4gh
         if numExist == 0:
@@ -239,7 +249,7 @@ class WfExSBackend:
             jv = jsonschema.validators.validator_for(schema)(schema)
             return list(jv.iter_errors(instance=configToValidate))
         except Exception as e:
-            raise WFException(f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}")
+            raise WfExSBackendException(f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}")
 
     def __init__(self, local_config: Optional[Mapping[str, Any]] = None, config_directory: Optional[Union[RelPath, AbsPath]] = None):
         """
@@ -272,9 +282,9 @@ class WfExSBackend:
         try:
             encfs_type = EncryptedFSType(encfs_type)
         except:
-            raise WFException('Invalid default encryption filesystem {}'.format(encfs_type))
+            raise WfExSBackendException('Invalid default encryption filesystem {}'.format(encfs_type))
         if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-            raise WFException('FIXME: Default encryption filesystem {} mount procedure is not implemented')
+            raise WfExSBackendException('FIXME: Default encryption filesystem {} mount procedure is not implemented')
         self.encfs_type = encfs_type
 
         self.encfs_cmd = encfsSect.get('command', DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type])
@@ -474,7 +484,7 @@ class WfExSBackend:
         id_json_path = os.path.join(uniqueRawWorkDir, self.ID_JSON_FILENAME)
         if not os.path.exists(uniqueRawWorkDir):
             if not create_ok:
-                raise WFException(f"Creation of {uniqueRawWorkDir} is not allowed by parameter")
+                raise WfExSBackendException(f"Creation of {uniqueRawWorkDir} is not allowed by parameter")
                 
             os.makedirs(uniqueRawWorkDir, exist_ok=True)
             if nickname is None:
@@ -514,14 +524,14 @@ class WfExSBackend:
         as well as the nickname
         """
         if uniqueRawWorkDir is None:
-            raise WFException('Unable to initialize, no directory provided')
+            raise WfExSBackendException('Unable to initialize, no directory provided')
         
         # Obtaining the absolute path to the working directory
         if not os.path.isabs(uniqueRawWorkDir):
             uniqueRawWorkDir = os.path.normpath(os.path.join(self.baseWorkDir, uniqueRawWorkDir))
 
         if not os.path.isdir(uniqueRawWorkDir):
-            raise WFException('Unable to initialize, {} is not a directory'.format(uniqueRawWorkDir))
+            raise WfExSBackendException('Unable to initialize, {} is not a directory'.format(uniqueRawWorkDir))
         
         return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, create_ok=False)
 
@@ -620,9 +630,9 @@ class WfExSBackend:
         try:
             encfs_type = EncryptedFSType(encfs_type)
         except:
-            raise WFException('Invalid encryption filesystem {} in working directory'.format(encfs_type))
+            raise WfExSBackendException('Invalid encryption filesystem {} in working directory'.format(encfs_type))
         if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-            raise WFException('FIXME: Encryption filesystem {} mount procedure is not implemented')
+            raise WfExSBackendException('FIXME: Encryption filesystem {} mount procedure is not implemented')
 
         # If the working directory encrypted filesystem does not
         # match the configured one, use its default executable
@@ -632,7 +642,7 @@ class WfExSBackend:
             encfs_cmd = self.encfs_cmd
 
         if securePassphrase == '':
-            raise WFException('Encryption filesystem key does not follow the right format')
+            raise WfExSBackendException('Encryption filesystem key does not follow the right format')
         
         return encfs_type, encfs_cmd, securePassphrase
 
@@ -783,7 +793,7 @@ class WfExSBackend:
         if not isinstance(handler, (
                 types.FunctionType, types.LambdaType, types.MethodType, types.BuiltinFunctionType,
                 types.BuiltinMethodType)):
-            raise WFException('Trying to set for scheme {} a invalid handler'.format(scheme))
+            raise WfExSBackendException('Trying to set for scheme {} a invalid handler'.format(scheme))
 
         self.cacheHandler.addSchemeHandlers({scheme.lower(): handler})
 
@@ -894,7 +904,7 @@ class WfExSBackend:
                     if len(wf_path) >= 5:
                         repoRelPath = '/'.join(wf_path[4:])
         elif not fail_ok:
-            raise WFException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
+            raise WfExSBackendException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
 
         self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
 
@@ -915,7 +925,7 @@ class WfExSBackend:
         try:
             roCK, roCrateFile, _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
         except Exception as e:
-            raise WFException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e))
+            raise WfExSBackendException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e)) from e
 
         crate_hashed_id = hashlib.sha1(roCrateURL.encode('utf-8')).hexdigest()
         cachedFilename = os.path.join(self.cacheROCrateDir, crate_hashed_id + WF.DEFAULT_RO_EXTENSION)

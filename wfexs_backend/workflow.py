@@ -31,7 +31,7 @@ import threading
 import time
 import types
 
-from typing import List, Mapping, Pattern, Tuple, Type, Union
+from typing import Any, List, Mapping, Optional, Pattern, Tuple, Type, Union
 from urllib import parse
 
 from rocrate import rocrate
@@ -45,7 +45,14 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 import yaml
 
-from .common import *
+from .common import AbstractWfExSException
+from .common import AbsPath, RelPath, WfExSInstanceId
+from .common import RepoTag, RepoURL
+from .common import CacheType, ContentKind, WorkflowType, URIType
+from .common import ExpectedOutput, LocalWorkflow, MaterializedWorkflowEngine
+from .common import GeneratedContent, GeneratedDirectoryContent
+from .common import MaterializedContent, MaterializedInput, MaterializedOutput
+from .common import MarshallingStatus, SecurityContextConfig, StagedSetup
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
@@ -86,6 +93,10 @@ def _wakeupEncDir(cond, workDir, logger):
     finally:
         cond.release()
 
+
+class WFException(AbstractWfExSException):
+    pass
+
 class WF:
     """
     Workflow enaction class
@@ -116,7 +127,7 @@ class WF:
                  params=None,
                  outputs=None,
                  workflow_config=None,
-                 creds_config=None,
+                 creds_config: Optional[SecurityContextConfig] =None,
                  instanceId: Optional[WfExSInstanceId] = None,
                  nickname: Optional[str] = None,
                  creation: Optional[datetime.datetime] = None,
@@ -153,7 +164,7 @@ class WF:
         :type params: dict
         :type outputs: dict
         :type workflow_config: dict
-        :type creds_config: dict
+        :type creds_config: SecurityContextConfig
         :type instanceId: str
         :type creation datetime.datetime
         :type rawWorkDir: str
@@ -552,7 +563,7 @@ class WF:
         return cls(wfexs, instanceId=instanceId, nickname=nickname, rawWorkDir=rawWorkDir, creation=creation, fail_ok=fail_ok)
     
     @classmethod
-    def FromFiles(cls, wfexs, workflowMetaFilename, securityContextsConfigFilename=None, paranoidMode: bool = False):
+    def FromFiles(cls, wfexs, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] =None, paranoidMode: bool = False):
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
 
@@ -566,7 +577,7 @@ class WF:
         return cls.FromDescription(wfexs, workflow_meta, creds_config, paranoidMode=paranoidMode)
     
     @classmethod
-    def FromDescription(cls, wfexs, workflow_meta, creds_config=None, paranoidMode: bool = False):
+    def FromDescription(cls, wfexs, workflow_meta, creds_config: Optional[SecurityContextConfig] = None, paranoidMode: bool = False):
         """
         :param wfexs: WfExSBackend instance
         :param workflow_meta: The configuration describing both the workflow
@@ -575,7 +586,7 @@ class WF:
         :param paranoidMode:
         :type wfexs: WfExSBackend
         :type workflow_meta: dict
-        :type creds_config: dict
+        :type creds_config: SecurityContextConfig
         :type paranoidMode: bool
         :return: Workflow configuration
         """
@@ -600,7 +611,7 @@ class WF:
         )
     
     @classmethod
-    def FromForm(cls, wfexs, workflow_meta, paranoidMode:bool = False):  # VRE
+    def FromForm(cls, wfexs, workflow_meta, paranoidMode: bool = False):  # VRE
         """
 
         :param wfexs: WfExSBackend instance
@@ -608,7 +619,7 @@ class WF:
         and the inputs to use when it is being instantiated.
         :param paranoidMode:
         :type workflow_meta: dict
-        :type paranoidMode:
+        :type paranoidMode: bool
         :return: Workflow configuration
         """
         
@@ -624,7 +635,7 @@ class WF:
             paranoid_mode=paranoidMode
         )
 
-    def fetchWorkflow(self, offline=False):
+    def fetchWorkflow(self, offline: bool = False):
         """
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
@@ -724,7 +735,7 @@ class WF:
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
 
-    def setupEngine(self, offline=False):
+    def setupEngine(self, offline: bool = False):
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
             self.fetchWorkflow(offline=offline)
@@ -750,7 +761,7 @@ class WF:
             )
         self.materializedEngine = matWfEngV2
 
-    def materializeWorkflow(self, offline=False):
+    def materializeWorkflow(self, offline: bool = False):
         if self.materializedEngine is None:
             self.setupEngine(offline=offline)
 
@@ -760,7 +771,7 @@ class WF:
                 os.makedirs(self.containersDir, exist_ok=True)
             self.materializedEngine = WorkflowEngine.MaterializeWorkflowAndContainers(self.materializedEngine, self.containersDir, offline=offline)
 
-    def injectInputs(self, paths, workflowInputs_destdir=None, workflowInputs_cacheDir=None, lastInput=0):
+    def injectInputs(self, paths, workflowInputs_destdir=None, workflowInputs_cacheDir=None, lastInput: int = 0):
         if workflowInputs_destdir is None:
             workflowInputs_destdir = self.inputsDir
         if workflowInputs_cacheDir is None:
@@ -805,7 +816,7 @@ class WF:
 
         return lastInput
 
-    def materializeInputs(self, offline: bool = False, lastInput:int=0):
+    def materializeInputs(self, offline: bool = False, lastInput: int = 0):
         theParams, numInputs = self.fetchInputs(
             self.params,
             workflowInputs_destdir=self.inputsDir,
@@ -1754,7 +1765,7 @@ class WF:
 
         raise WFException("Unable to find a workflow in {}".format(trs_tools_url))
 
-    def getWorkflowRepoFromROCrateURL(self, roCrateURL, expectedEngineDesc: WorkflowType = None, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+    def getWorkflowRepoFromROCrateURL(self, roCrateURL: URIType, expectedEngineDesc: WorkflowType = None, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
         """
 
         :param roCrateURL:

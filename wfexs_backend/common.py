@@ -438,7 +438,7 @@ class MaterializedWorkflowEngine(NamedTuple):
     operational_containers: Optional[List[Container]] = None
 
 
-class WFException(Exception):
+class AbstractWfExSException(Exception):
     pass
 
 

@@ -25,7 +25,11 @@ import os
 import shutil
 import logging
 import argparse
-from ..common import *
+
+from . import FetcherException
+
+from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import URIType, URIWithMetadata
 
 # Logger of this module
 logger = logging.getLogger(__name__)
@@ -53,7 +57,7 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
     except botocore.exceptions.ClientError as error:
         errmsg = f'S3 client authentication error on {remote_file}'
         logger.exception(errmsg)
-        raise WFException(errmsg) from error
+        raise FetcherException(errmsg) from error
     
     metadata_payload = []
     metadata = {
@@ -83,7 +87,7 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
         if response["KeyCount"] == 0:
             errmsg = f'Path prefix {blob_prefix} from {remote_file} matches no blob'
             logger.error(errmsg)
-            raise WFException(errmsg)
+            raise FetcherException(errmsg)
         
         # Let's use the paginator
         try:
@@ -98,13 +102,13 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
                     except Exception as e:
                         errmsg = f'Error downloading {key["Key"]} from {remote_file} to {local_blob_filename}'
                         logger.exception(errmsg)
-                        raise WFException(errmsg) from e
-        except WFException as wfe:
-            raise wfe
+                        raise FetcherException(errmsg) from e
+        except FetcherException as fe:
+            raise fe
         except Exception as e:
             errmsg = f'Error paginating {prefix} from {remote_file} to {local_path}'
             logger.exception(errmsg)
-            raise WFException(errmsg) from e
+            raise FetcherException(errmsg) from e
         kind = ContentKind.Directory
     
     return kind, [ URIWithMetadata(remote_file, metadata) ]

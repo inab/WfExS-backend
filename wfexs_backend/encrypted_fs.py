@@ -16,10 +16,14 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import enum
 import subprocess
 import tempfile
 
-from .common import *
+from .common import AbstractWfExSException
+
+class EncryptedFSException(AbstractWfExSException):
+    pass
 
 # This is needed to support different FUSE encryption filesystem implementations
 class EncryptedFSType(enum.Enum):
@@ -73,7 +77,7 @@ def _mountEncFS(encfs_cmd, encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, u
                 encfs_init_stderr_v = c_stF.read()
             
             errstr = "Could not init/mount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(encfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
-            raise WFException(errstr)
+            raise EncryptedFSException(errstr)
 
 def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPass:str, allowOther:bool = False):
     with tempfile.NamedTemporaryFile() as gocryptfs_init_stdout, tempfile.NamedTemporaryFile() as gocryptfs_init_stderr:
@@ -148,7 +152,7 @@ def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniq
                 encfs_init_stderr_v = c_stF.read()
             
             errstr = "Could not init/mount gocryptfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(gocryptfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
-            raise WFException(errstr)
+            raise EncryptedFSException(errstr)
 
 ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS = {
     EncryptedFSType.EncFS: _mountEncFS,

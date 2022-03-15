@@ -26,12 +26,20 @@ import enum
 import glob
 import logging
 
-from .common import *
+from .common import AbstractWfExSException, AbstractWorkflowEngineType
+from .common import AbsPath, RelPath
+from .common import DEFAULT_CONTAINER_TYPE, DEFAULT_DOCKER_CMD, DEFAULT_ENGINE_MODE
+from .common import Container, ContainerType, ContentKind, EngineMode, StagedSetup
+from .common import EnginePath, EngineVersion, Fingerprint, WFLangVersion
+from .common import GeneratedContent, GeneratedDirectoryContent
+from .common import ContainerTaggedName, LocalWorkflow, MaterializedOutput
+from .common import ExitVal, ExpectedOutput, SymbolicOutputName, URIType
+from .common import MaterializedInput, MaterializedWorkflowEngine
 
-from typing import Any, Dict, List, Set, Tuple
+from typing import Any, Dict, List, Mapping, Set, Tuple, Union
 from collections import namedtuple
 
-from .container import Container, ContainerFactory, NoContainerFactory
+from .container import ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
 from .docker_container import DockerContainerFactory
 from .podman_container import PodmanContainerFactory
@@ -64,7 +72,7 @@ WORKDIR_PASSPHRASE_FILE = '.passphrase'
 
 STATS_DAG_DOT_FILE = 'dag.dot'
 
-class WorkflowEngineException(Exception):
+class WorkflowEngineException(AbstractWfExSException):
     """
     Exceptions fired by instances of WorkflowEngine
     """

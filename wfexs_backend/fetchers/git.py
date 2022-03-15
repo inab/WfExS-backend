@@ -21,11 +21,14 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Mapping, Optional
+from typing import List, Mapping, Optional, Tuple, Union
 from urllib import parse
 
-from . import AbstractStatefulFetcher
-from ..common import *
+from . import AbstractStatefulFetcher, FetcherException
+
+from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import URIType, URIWithMetadata
+from ..common import DEFAULT_GIT_CMD, RepoTag, SymbolicName
 
 class GitFetcher(AbstractStatefulFetcher):
     def __init__(self, progs: Mapping[SymbolicName, AbsPath]):
@@ -57,7 +60,7 @@ class GitFetcher(AbstractStatefulFetcher):
                         os.makedirs(repo_destdir)
                     except IOError:
                         errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(repoURL)
-                        raise WFException(errstr)
+                        raise FetcherException(errstr)
 
                 repo_hashed_tag_id = hashlib.sha1(b'' if repoTag is None else repoTag.encode('utf-8')).hexdigest()
                 repo_tag_destdir = os.path.join(repo_destdir, repo_hashed_tag_id)
@@ -128,7 +131,7 @@ class GitFetcher(AbstractStatefulFetcher):
 
                     errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                         repoURL, repoTag, retval, git_stdout_v, git_stderr_v)
-                    raise WFException(errstr)
+                    raise FetcherException(errstr)
 
         # Last, we have to obtain the effective checkout
         gitrevparse_params = [
@@ -155,7 +158,7 @@ class GitFetcher(AbstractStatefulFetcher):
         # These are the usual URIs which can be understood by pip
         # See https://pip.pypa.io/en/stable/cli/pip_install/#git
         if not parsedInputURL.scheme.startswith('git+') and parsedInputURL.scheme != 'git':
-            raise WFException()
+            raise FetcherException()
             
         # Getting the scheme git is going to understand
         if len(parsedInputURL.scheme) > 3:
@@ -197,7 +200,7 @@ class GitFetcher(AbstractStatefulFetcher):
         elif os.path.isfile(cachedContentPath):
             kind = ContentKind.File
         else:
-            raise WFException(f"Remote {remote_file} is neither a file nor a directory (does it exist?)")
+            raise FetcherException(f"Remote {remote_file} is neither a file nor a directory (does it exist?)")
         
         shutil.move(cachedContentPath, cachedFilename)
         

@@ -17,8 +17,6 @@
 
 from __future__ import absolute_import
 
-from ..common import *
-
 from functools import partial
 import abc
 import collections.abc

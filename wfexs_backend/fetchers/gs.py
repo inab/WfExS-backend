@@ -19,9 +19,12 @@ from google.cloud import storage
 from urllib.parse import urlparse
 import logging
 import os
-
-from ..common import *
 from typing import List, Optional, Tuple, Union
+
+from . import FetcherException
+
+from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import URIType, URIWithMetadata
 
 
 logger = logging.getLogger()
@@ -54,7 +57,7 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
     except Exception as e:
         errmsg = f'GS authentication error on {remote_file}'
         logger.exception(errmsg)
-        raise WFException(errmsg) from e
+        raise FetcherException(errmsg) from e
     
     # Obtain the instance of the bucket
     try:
@@ -62,7 +65,7 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
     except Exception as e:
         errmsg = f'Invalid bucket name {bucket_name} on {remote_file}'
         logger.exception(errmsg)
-        raise WFException(errmsg)
+        raise FetcherException(errmsg)
     
     # Build the blob
     try:
@@ -70,7 +73,7 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
     except Exception as e:
         errmsg = f'Unable to create blob {prefix} for {remote_file}'
         logger.exception(errmsg)
-        raise WFException(errmsg)
+        raise FetcherException(errmsg)
         
     # Does the blob exist?
     metadata_payload = []
@@ -86,7 +89,7 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
         except Exception as e:
             errmsg = f'Error downloading {remote_file} to {local_path}'
             logger.exception(errmsg)
-            raise WFException(errmsg) from e
+            raise FetcherException(errmsg) from e
     else:
         # Let's assume this is a prefix, so use the slash delimiter
         blob_prefix = prefix
@@ -97,7 +100,7 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
         if len(blobs) == 0:
             errmsg = f'Path prefix {blob_prefix} from {remote_file} matches no blob'
             logger.error(errmsg)
-            raise WFException(errmsg)
+            raise FetcherException(errmsg)
         
         for blob in blobs:
             local_blob_filename = os.path.join(local_path, blob.name[len(blob_prefix):])
@@ -108,7 +111,7 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
             except Exception as e:
                 errmsg = f'Error downloading {blob.name} from {remote_file} to {local_blob_filename}'
                 logger.exception(errmsg)
-                raise WFException(errmsg) from e
+                raise FetcherException(errmsg) from e
         
         kind = ContentKind.Directory
     

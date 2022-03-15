@@ -24,13 +24,16 @@ import abc
 import logging
 import inspect
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from collections import namedtuple
 
-from .common import *
+from .common import AbstractWfExSException
+from .common import AbsPath, RelPath
+from .common import ContainerFileNamingMethod, ContainerTaggedName
+from .common import Container, ContainerType
 
 
-class ContainerFactoryException(Exception):
+class ContainerFactoryException(AbstractWfExSException):
     """
     Exceptions fired by instances of ContainerFactory
     """

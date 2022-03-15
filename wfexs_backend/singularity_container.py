@@ -23,11 +23,15 @@ import re
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 from urllib import parse
 import uuid
 
-from .common import *
+from .common import AbsPath, RelPath
+from .common import Container, ContainerType
+from .common import ContainerFileNamingMethod, ContainerTaggedName
+from .common import DEFAULT_SINGULARITY_CMD
+
 from .container import ContainerFactory, ContainerFactoryException
 
 from .utils.contents import link_or_copy

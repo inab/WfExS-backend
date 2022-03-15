@@ -18,6 +18,7 @@ from __future__ import absolute_import
 
 import json
 import logging
+import os
 import re
 import shutil
 import stat
@@ -26,13 +27,19 @@ import sys
 import tempfile
 import venv
 
-from typing import Set, Tuple
+from typing import List, Set, Tuple
 
 import jsonpath_ng
 import jsonpath_ng.ext
 import yaml
 
-from .common import *
+from .common import AbsPath, RelPath
+from .common import ContainerType, ContentKind, WorkflowType
+from .common import MaterializedContent, MaterializedInput, MaterializedOutput
+from .common import ContainerTaggedName, LocalWorkflow, MaterializedWorkflowEngine
+from .common import EngineMode, EnginePath, EngineVersion
+from .common import ExpectedOutput, ExitVal, Fingerprint, URIType
+
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .engine import WorkflowEngine, WorkflowEngineException
 
@@ -334,7 +341,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         if not os.path.isfile(packedLocalWorkflowFile) or os.path.getsize(packedLocalWorkflowFile) == 0:
             if offline:
-                raise WFException(
+                raise WorkflowEngineException(
                     "Cannot allow to materialize packed CWL workflow in offline mode. Risk to access external content.")
 
             # Execute cwltool --pack

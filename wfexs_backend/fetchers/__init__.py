@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+import abc
 import http.client
 import io
 import logging
@@ -28,13 +29,19 @@ from paramiko.config import SSH_PORT as DEFAULT_SSH_PORT
 import shutil
 import stat
 
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Mapping, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
 
-from ..common import *
+from ..common import AbstractWfExSException
+from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import SymbolicName, URIType, URIWithMetadata
+
 from ..utils.ftp_downloader import FTPDownloader
+
+class FetcherException(AbstractWfExSException):
+    pass
 
 class AbstractStatefulFetcher(abc.ABC):
     """
@@ -119,7 +126,7 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
                 break
             
     except urllib.error.HTTPError as he:
-        raise WFException("Error fetching {} : {} {}".format(orig_remote_file, he.code, he.reason))
+        raise FetcherException("Error fetching {} : {} {}".format(orig_remote_file, he.code, he.reason))
     finally:
         # Closing files opened by this code
         if download_file != cachedFilename:
@@ -220,7 +227,7 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
     password = secContext.get('password')
     sshKey = secContext.get('key')
     if (username is None) or ((password is None) and (sshKey is None)):
-        raise WFException("Cannot download content from {} without credentials".format(remote_file))
+        raise FetcherException("Cannot download content from {} without credentials".format(remote_file))
     
     connBlock = {
         'username': username,
@@ -265,7 +272,7 @@ def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[S
     parsedInputURL = parse.urlparse(remote_file)
     localPath = parsedInputURL.path
     if not os.path.exists(localPath):
-        raise WFException("Local path {} is not available".format(localPath))
+        raise FetcherException("Local path {} is not available".format(localPath))
     
     kind = None
     if os.path.isdir(localPath):
@@ -275,7 +282,7 @@ def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[S
         shutil.copy2(localPath, cachedFilename)
         kind = ContentKind.File
     else:
-        raise WFException("Local path {} is neither a file nor a directory".format(localPath))
+        raise FetcherException("Local path {} is neither a file nor a directory".format(localPath))
     
     return kind, [ URIWithMetadata(remote_file, {}) ]
 

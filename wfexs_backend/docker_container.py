@@ -22,10 +22,14 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Mapping, Tuple
+from typing import Dict, List, Mapping, Tuple, Union
 import uuid
 
-from .common import *
+from .common import AbsPath, RelPath
+from .common import Container, ContainerType
+from .common import ContainerFileNamingMethod, ContainerTaggedName
+from .common import DEFAULT_DOCKER_CMD
+
 from .container import ContainerFactory, ContainerFactoryException
 from .utils.contents import link_or_copy
 from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject, nihDigester

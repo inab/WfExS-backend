@@ -19,14 +19,17 @@ from __future__ import absolute_import
 
 import io
 import json
+import os
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
 
-from . import fetchClassicURL
-from ..common import *
+from . import fetchClassicURL, FetcherException
+
+from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import URIType, URIWithMetadata
 
 
 INTERNAL_TRS_SCHEME_PREFIX = 'wfexs.trs.files'
@@ -71,7 +74,7 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
         
         metaio = None
     except urllib.error.HTTPError as he:
-        raise WFException("Error fetching or processing TRS files metadata for {} : {} {}".format(remote_file, he.code, he.reason))
+        raise FetcherException("Error fetching or processing TRS files metadata for {} : {} {}".format(remote_file, he.code, he.reason)) from he
     
     os.makedirs(cachedFilename, exist_ok=True)
     absdirs = set()
@@ -111,7 +114,7 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
             metadata_array.extend(metaelem)
     
     if emptyWorkflow:
-        raise WFException("Error processing TRS files for {} : no file was found.\n{}".format(remote_file, metadata))
+        raise FetcherException("Error processing TRS files for {} : no file was found.\n{}".format(remote_file, metadata))
     
     return ContentKind.Directory, metadata_array
 

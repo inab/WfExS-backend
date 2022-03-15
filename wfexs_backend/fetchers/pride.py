@@ -20,13 +20,15 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
 
-from . import fetchClassicURL
-from ..common import *
+from . import fetchClassicURL, FetcherException
+
+from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import URIType, URIWithMetadata
 
 
 PRIDE_PROJECTS_REST='https://www.ebi.ac.uk/pride/ws/archive/v2/projects/'
@@ -56,7 +58,7 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
         gathered_meta['payload'] = metadata
         metadata_array.extend(metametaio)
     except urllib.error.HTTPError as he:
-        raise WFException("Error fetching PRIDE metadata for {} : {} {}".format(projectId, he.code, he.reason))
+        raise FetcherException("Error fetching PRIDE metadata for {} : {} {}".format(projectId, he.code, he.reason))
     
     try:
         for addAtt in metadata['additionalAttributes']:
@@ -67,7 +69,7 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
         else:
             pride_project_url = metadata['_links']['datasetFtpUrl']['href']
     except Exception as e:
-        raise WFException("Error processing PRIDE project metadata for {} : {}".format(remote_file, e))
+        raise FetcherException("Error processing PRIDE project metadata for {} : {}".format(remote_file, e))
     
     return pride_project_url, metadata_array
 

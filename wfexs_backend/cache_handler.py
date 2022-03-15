@@ -28,14 +28,23 @@ import shutil
 import urllib.parse
 import uuid
 
-from typing import Iterator, List, Mapping
+from typing import Any, Iterator, List, Mapping
 from typing import Optional, Pattern, Tuple, Union
 
-from .common import *
+from .common import AbstractWfExSException
+from .common import AbsPath
+from .common import ContentKind, LicensedURI, ProtocolFetcher, URIWithMetadata
+from .common import AnyURI, Fingerprint, SecurityContextConfig, URIType
+
+from .fetchers import FetcherException
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, stringifyFilenameDigest
 from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
 
 META_JSON_POSTFIX = '_meta.json'
+
+class CacheHandlerException(AbstractWfExSException):
+    pass
+
 class SchemeHandlerCacheHandler:
     def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
         # Getting a logger focused on specific classes
@@ -67,7 +76,7 @@ class SchemeHandlerCacheHandler:
                 os.makedirs(hashDir)
             except IOError:
                 errstr = "ERROR: Unable to create directory for workflow URI hashes {}.".format(hashDir)
-                raise WFException(errstr)
+                raise CacheHandlerException(errstr)
         
         return hashDir
     
@@ -241,14 +250,14 @@ class SchemeHandlerCacheHandler:
         
         if inputKind is None:
             if tempCachedFilename is None:
-                raise WFException(f"No defined paths or input kinds, which would lead to an empty cache entry")
+                raise CacheHandlerException(f"No defined paths or input kinds, which would lead to an empty cache entry")
                 
             if os.path.isdir(tempCachedFilename):
                 inputKind = ContentKind.Directory
             elif os.path.isfile(tempCachedFilename):
                 inputKind = ContentKind.File
             else:
-                raise WFException(f"Local path {tempCachedFilename} is neither a file nor a directory")
+                raise CacheHandlerException(f"Local path {tempCachedFilename} is neither a file nor a directory")
         
         fingerprint = None
         # Are we dealing with a redirection?
@@ -260,7 +269,7 @@ class SchemeHandlerCacheHandler:
                 fingerprint = ComputeDigestFromDirectory(tempCachedFilename, repMethod=stringifyFilenameDigest)
                 putativeInputKind = ContentKind.Directory
             else:
-                raise WFException(f"FIXME: Cached {tempCachedFilename} from {the_remote_file} is neither file nor directory")
+                raise CacheHandlerException(f"FIXME: Cached {tempCachedFilename} from {the_remote_file} is neither file nor directory")
             
             if inputKind != putativeInputKind:
                 self.logger.error(f"FIXME: Mismatch at {the_remote_file} : {inputKind} vs {putativeInputKind}")
@@ -347,7 +356,7 @@ class SchemeHandlerCacheHandler:
                 os.makedirs(destdir)
             except IOError:
                 errstr = "ERROR: Unable to create directory for workflow inputs {}.".format(destdir)
-                raise WFException(errstr)
+                raise CacheHandlerException(errstr)
         
         # The directory where the symlinks derived from SHA1 obtained from URIs
         # to the content are placed
@@ -443,7 +452,7 @@ class SchemeHandlerCacheHandler:
                 fetched_metadata_array = list(map(lambda rm: URIWithMetadata(uri=rm['uri'], metadata=rm['metadata'], preferredName=rm.get('preferredName')), metaStructure['metadata_array']))
             elif offline:
                 # As this is a handler for online resources, comply with offline mode
-                raise WFException(f"Cannot download content in offline mode from {remote_file} to {uriCachedFilename}")
+                raise CacheHandlerException(f"Cannot download content in offline mode from {remote_file} to {uriCachedFilename}")
             else:
                 # Cache miss
                 # As this is a handler for online resources, comply with offline mode
@@ -458,7 +467,7 @@ class SchemeHandlerCacheHandler:
                         if schemeHandler is None:
                             errmsg = f'No {theScheme} scheme handler for {the_remote_file} (while processing {remote_file}). Was this data injected in the cache?'
                             self.logger.error(errmsg)
-                            raise WFException(errmsg) from nested_exception
+                            raise CacheHandlerException(errmsg) from nested_exception
 
                         try:
                             # Content is fetched here
@@ -491,13 +500,13 @@ class SchemeHandlerCacheHandler:
                                 os.unlink(absUriCachedFilename)
                             
                             os.symlink(next_input_file, absUriCachedFilename)
-                        except WFException as we:
-                            raise we from nested_exception
+                        except FetcherException as che:
+                            raise che from nested_exception
                         except Exception as e:
                             errmsg = "Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(the_remote_file, uriCachedFilename, remote_file, tempCachedFilename, e)
                             self.logger.error(errmsg)
-                            raise WFException(errmsg) from nested_exception
-                    except WFException as wfe:
+                            raise CacheHandlerException(errmsg) from nested_exception
+                    except FetcherException as wfe:
                         # Keeping the newest element of the chain
                         nested_exception = wfe
                     else:
@@ -509,7 +518,7 @@ class SchemeHandlerCacheHandler:
                 # No one of the URIs could be fetched or resolved
                 if failed:
                     if len(uncachedInputs) > 1:
-                        raise WFException(f"{len(uncachedInputs)} alternate URIs have failed (see nested reasons)") from nested_exception
+                        raise CacheHandlerException(f"{len(uncachedInputs)} alternate URIs have failed (see nested reasons)") from nested_exception
                     else:
                         raise nested_exception
             
