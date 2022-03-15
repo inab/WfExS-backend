@@ -64,7 +64,10 @@ WORKDIR_STDOUT_FILE = 'stdout.txt'
 WORKDIR_STDERR_FILE = 'stderr.txt'
 
 WORKDIR_WORKFLOW_META_FILE = 'workflow_meta.yaml'
-WORKDIR_SECURITY_CONTEXT_FILE = 'credentials.yaml'
+
+# This one is commented-out, as credentials SHOULD NEVER BE SAVED
+# WORKDIR_SECURITY_CONTEXT_FILE = 'credentials.yaml'
+
 WORKDIR_MARSHALLED_STAGE_FILE = 'stage-state.yaml'
 WORKDIR_MARSHALLED_EXECUTE_FILE = 'execution-state.yaml'
 WORKDIR_MARSHALLED_EXPORT_FILE = 'export-state.yaml'

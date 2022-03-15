@@ -57,7 +57,7 @@ from .common import MarshallingStatus, SecurityContextConfig, StagedSetup
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
 from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_SECURITY_CONTEXT_FILE, WORKDIR_PASSPHRASE_FILE
+from .engine import WORKDIR_WORKFLOW_META_FILE, WORKDIR_PASSPHRASE_FILE
 from .engine import WORKDIR_MARSHALLED_STAGE_FILE, WORKDIR_MARSHALLED_EXECUTE_FILE, WORKDIR_MARSHALLED_EXPORT_FILE
 from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR, \
     WORKDIR_ENGINE_TWEAKS_RELDIR, WORKDIR_WORKFLOW_RELDIR, WORKDIR_CONTAINERS_RELDIR
@@ -150,7 +150,7 @@ class WF:
         :param params: Optional params for the workflow execution.
         :param outputs:
         :param workflow_config: Tweaks for workflow enactment, like some overrides
-        :param creds_config: Dictionary with the different credential contexts
+        :param creds_config: Dictionary with the different credential contexts, only used to fetch fresh contents
         :param instanceId: The instance id of this working directory
         :param nickname: The nickname of this working directory
         :param creation: The creation timestamp
@@ -534,24 +534,6 @@ class WF:
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
 
-    # DEPRECATED
-    @staticmethod
-    def ReadConfigFromMeta(metaDir: AbsPath) -> Tuple[Mapping, Mapping]:
-        # In order to be able to build next paths to call
-        workflowMetaFilename = os.path.join(metaDir, WORKDIR_WORKFLOW_META_FILE)
-        securityContextsConfigFilename = os.path.join(metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-        
-        with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
-
-        # Last, try loading the security contexts credentials file
-        if os.path.exists(securityContextsConfigFilename):
-            with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
-                creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
-        else:
-            creds_config = {}
-        
-        return workflow_meta, creds_config
 
     @classmethod
     def FromWorkDir(cls, wfexs, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False):
@@ -1112,10 +1094,12 @@ class WF:
 
                     yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
             
-            creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-            if overwrite or not os.path.exists(creds_file):
-                with open(creds_file, mode='w', encoding='utf-8') as crF:
-                    yaml.dump(marshall_namedtuple(self.creds_config), crF, Dumper=YAMLDumper)
+            # This has been commented-out, as credentials should NEVER be kept!!!
+            #
+            # creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
+            # if overwrite or not os.path.exists(creds_file):
+            #     with open(creds_file, mode='w', encoding='utf-8') as crF:
+            #         yaml.dump(marshall_namedtuple(self.creds_config), crF, Dumper=YAMLDumper)
             
             self.configMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc)
         
@@ -1186,20 +1170,23 @@ class WF:
                     if not fail_ok:
                         raise WFException(errstr)
 
-                creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
-                if os.path.exists(creds_file):
-                    with open(creds_file, mode="r", encoding="utf-8") as scf:
-                        self.creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
-                else:
-                    self.creds_config = {}
-                
-                valErrors = self.wfexs.ConfigValidate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
-                if len(valErrors) > 0:
-                    config_unmarshalled = False
-                    errstr = f'ERROR in security context block {creds_file}: {valErrors}'
-                    self.logger.error(errstr)
-                    if not fail_ok:
-                        raise WFException(errstr)
+                # This has been commented-out, as credentials should NEVER be kept!!!
+                #
+                # creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
+                # if os.path.exists(creds_file):
+                #     with open(creds_file, mode="r", encoding="utf-8") as scf:
+                #         self.creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+                # else:
+                #     self.creds_config = {}
+                # 
+                # valErrors = self.wfexs.ConfigValidate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
+                # if len(valErrors) > 0:
+                #     config_unmarshalled = False
+                #     errstr = f'ERROR in security context block {creds_file}: {valErrors}'
+                #     self.logger.error(errstr)
+                #     if not fail_ok:
+                #         raise WFException(errstr)
+                self.creds_config = dict()
                     
                 self.configMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc)
         
