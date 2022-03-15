@@ -33,14 +33,7 @@ from typing import Optional, Pattern, Tuple, Union
 
 from .common import *
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, stringifyFilenameDigest
-from .utils.misc import translate_glob_args
-
-class DatetimeEncoder(json.JSONEncoder):
-        def default(self, obj):
-                if isinstance(obj, datetime.datetime):
-                        return obj.isoformat()
-                # Let the base class default method raise the TypeError
-                return super().default(obj)
+from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
 
 META_JSON_POSTFIX = '_meta.json'
 class SchemeHandlerCacheHandler:
@@ -81,11 +74,11 @@ class SchemeHandlerCacheHandler:
     @staticmethod
     def _parseMetaStructure(fMeta: AbsPath) -> Mapping[str, Any]:
         with open(fMeta, mode="r", encoding="utf-8") as eH:
-            metaStructure = json.load(eH)
+            metaStructure = jsonFilterDecodeFromStream(eH)
         
         # Generating an stamp signature
         if metaStructure.get('stamp') is None:
-            metaStructure['stamp'] = datetime.datetime.fromtimestamp(os.path.getmtime(fMeta), tz=datetime.timezone.utc).isoformat() + 'Z'
+            metaStructure['stamp'] = datetime.datetime.fromtimestamp(os.path.getmtime(fMeta), tz=datetime.timezone.utc)
         
         metaStructure.setdefault('path', dict())['meta'] = {
             'relative': os.path.basename(fMeta),
@@ -157,7 +150,8 @@ class SchemeHandlerCacheHandler:
                                     
                                     cascadeEntries.add(*resolves_to)
                     except:
-                        pass
+                        import traceback
+                        self.logger.debug(traceback.format_exc())
         
         # Now, the cascade passes
         while len(cascadeEntries) > 0:
@@ -289,7 +283,7 @@ class SchemeHandlerCacheHandler:
                     )
                 ]
             metaStructure = {
-                'stamp': datetime.datetime.utcnow().isoformat() + 'Z',
+                'stamp': datetime.datetime.now(tz=datetime.timezone.utc),
                 'metadata_array': list(map(lambda m: {'uri': m.uri, 'metadata': m.metadata, 'preferredName': m.preferredName}, fetched_metadata_array))
             }
             if finalCachedFilename is not None:
