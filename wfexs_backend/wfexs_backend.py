@@ -52,7 +52,7 @@ import crypt4gh.keys.c4gh
 
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath
-from .common import RepoTag, RepoURL
+from .common import RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, URIType, URIWithMetadata
 from .common import MaterializedContent, SecurityContextConfig, WorkflowType
 from .common import ExitVal, ProtocolFetcher, WfExSInstanceId
@@ -750,7 +750,7 @@ class WfExSBackend:
                     break
         return retval
 
-    def cacheFetch(self, remote_file:Union[parse.ParseResult, URIType, List[Union[parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
+    def cacheFetch(self, remote_file:Union[LicensedURI, parse.ParseResult, URIType, List[Union[LicensedURI, parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
         
