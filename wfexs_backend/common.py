@@ -201,7 +201,7 @@ class MaterializedInput(NamedTuple):
       instances from MaterializedContent
     """
     name: SymbolicParamName
-    values: List[Union[bool, str, int, float, MaterializedContent]]
+    values: Union[List[bool], List[str], List[int], List[float], List[MaterializedContent]]
 
 
 GlobPattern = NewType('GlobPattern', str)
@@ -304,7 +304,7 @@ class MaterializedOutput(NamedTuple):
     name: SymbolicOutputName
     kind: ContentKind
     expectedCardinality: Tuple[int, int]
-    values: List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]
+    values: Union[List[bool], List[str], List[int], List[float], List[GeneratedContent], List[GeneratedDirectoryContent]]
 
 
 class LocalWorkflow(NamedTuple):
