@@ -31,11 +31,11 @@ from wfexs_backend import __author__ as wfexs_backend_author
 from wfexs_backend import __license__ as wfexs_backend_license
 
 # Populating the long description
-with open("README.md", "r") as fh:
+with open("README.md", mode="r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 # Populating the install requirements
-with open('requirements.txt') as f:
+with open('requirements.txt', mode="r", encoding="iso-8859-1") as f:
     requirements = []
     egg = re.compile(r"#[^#]*egg=([^=&]+)")
     for line in f.read().splitlines():
