@@ -19,10 +19,10 @@ from __future__ import absolute_import
 
 import os
 import shutil
-from typing import Any, List, Mapping, Optional, Union
+from typing import cast, Any, List, Mapping, Optional, Sequence, Union
 
 from ..common import AbsPath, AbstractGeneratedContent, ContentKind
-from ..common import ExpectedOutput, GeneratedContent
+from ..common import ExpectedOutput, Fingerprint, GeneratedContent
 from ..common import GeneratedDirectoryContent, LicensedURI, RelPath
 
 from .digests import nihDigester, ComputeDigestFromDirectory
@@ -38,20 +38,22 @@ def GetGeneratedDirectoryContent(
     The signatureMethod tells whether to generate a signature and fill-in
     the new signature element from GeneratedDirectoryContent tuple
     """
-    theValues = []
+    theValues : List[Union[AbstractGeneratedContent, GeneratedContent, GeneratedDirectoryContent]] = []
     with os.scandir(thePath) as itEntries:
         for entry in itEntries:
             # Hidden files are skipped by default
             if not entry.name.startswith('.'):
-                theValue = None
+                theValue : Optional[Union[AbstractGeneratedContent, GeneratedContent, GeneratedDirectoryContent]] = None
                 if entry.is_file():
+                    entry_path = cast(AbsPath, entry.path)
                     theValue = GeneratedContent(
-                        local=entry.path,
+                        local=entry_path,
                         # uri=None, 
-                        signature=ComputeDigestFromFile(entry.path, repMethod=signatureMethod)
+                        signature=cast(Fingerprint, ComputeDigestFromFile(entry_path, repMethod=signatureMethod))
                     )
                 elif entry.is_dir():
-                    theValue = GetGeneratedDirectoryContent(entry.path, signatureMethod=signatureMethod)
+                    entry_path = cast(AbsPath, entry.path)
+                    theValue = GetGeneratedDirectoryContent(entry_path, signatureMethod=signatureMethod)
 
                 if theValue is not None:
                     theValues.append(theValue)
@@ -66,13 +68,13 @@ def GetGeneratedDirectoryContent(
         local=thePath,
         uri=uri,
         preferredFilename=preferredFilename,
-        values=theValues,
+        values=cast(Sequence[AbstractGeneratedContent], theValues),
         signature=signature
     )
 
 def GetGeneratedDirectoryContentFromList(
     thePath: AbsPath,
-    theValues: List[AbstractGeneratedContent],
+    theValues: Sequence[AbstractGeneratedContent],
     uri: Optional[LicensedURI] = None,
     preferredFilename: Optional[RelPath] = None,
     signatureMethod = None
@@ -156,7 +158,7 @@ def CWLDesc2Content(
 
 def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
     # We should not deal with symlinks
-    src = os.path.realpath(src)
+    src = cast(AbsPath, os.path.realpath(src))
     
     # First, check whether inputs and content
     # are in the same filesystem
