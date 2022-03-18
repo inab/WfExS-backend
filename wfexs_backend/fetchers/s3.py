@@ -20,11 +20,10 @@ from botocore import UNSIGNED
 from botocore.client import Config
 import botocore.exceptions
 from urllib.parse import urlparse
-from typing import Any, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 import os
 import shutil
 import logging
-import argparse
 
 from . import FetcherException
 
@@ -48,7 +47,6 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
         access_key = None
         secret_key = None
 
-    s3 = boto3.resource('s3')
     try:
         if access_key == None and secret_key == None:
             s3cli = boto3.client('s3', config=Config(signature_version=UNSIGNED))
