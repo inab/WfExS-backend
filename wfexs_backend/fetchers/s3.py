@@ -20,7 +20,7 @@ from botocore import UNSIGNED
 from botocore.client import Config
 import botocore.exceptions
 from urllib.parse import urlparse
-from typing import List, Optional, Tuple, Union
+from typing import List, Mapping, Optional, Tuple, Union
 import os
 import shutil
 import logging
@@ -57,7 +57,7 @@ def downloadContentFrom_s3(remote_file:URIType, cachedFilename:AbsPath, secConte
         logger.exception(errmsg)
         raise FetcherException(errmsg) from error
     
-    metadata_payload = []
+    metadata_payload : List[Mapping] = []
     metadata = {
         'fetched': remote_file,
         'payload': metadata_payload

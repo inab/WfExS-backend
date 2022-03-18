@@ -19,7 +19,7 @@ from google.cloud import storage
 from urllib.parse import urlparse
 import logging
 import os
-from typing import List, Optional, Tuple, Union
+from typing import List, Mapping, Optional, Tuple, Union
 
 from . import FetcherException
 
@@ -76,7 +76,7 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
         raise FetcherException(errmsg)
         
     # Does the blob exist?
-    metadata_payload = []
+    metadata_payload : List[Mapping] = []
     metadata = {
         'fetched': remote_file,
         'payload': metadata_payload

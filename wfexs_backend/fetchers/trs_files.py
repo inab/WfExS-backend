@@ -21,7 +21,7 @@ import io
 import json
 import os
 
-from typing import List, Optional, Tuple, Union
+from typing import cast, List, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
@@ -50,9 +50,9 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
     embedded_remote_file = parsedInputURL.path
     
     if not embedded_remote_file.endswith(TRS_FILES_SUFFIX):
-        metadata_url = embedded_remote_file + TRS_FILES_SUFFIX
+        metadata_url = cast(URIType, embedded_remote_file + TRS_FILES_SUFFIX)
     else:
-        metadata_url = embedded_remote_file
+        metadata_url = cast(URIType, embedded_remote_file)
         descriptor_base_url = embedded_remote_file[0:-len(TRS_FILES_SUFFIX)] + TRS_DESCRIPTOR_INFIX
     
     topMeta = {
@@ -84,8 +84,8 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
         if file_rel_path is not None:
             emptyWorkflow = False
             
-            file_url = descriptor_base_url + file_rel_path
-            absfile = os.path.join(cachedFilename, file_rel_path)
+            file_url = cast(URIType, descriptor_base_url + file_rel_path)
+            absfile = cast(AbsPath, os.path.join(cachedFilename, file_rel_path))
             
             # Intermediate path creation
             reldir = os.path.dirname(file_rel_path)
@@ -106,8 +106,8 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
                 topMeta['workflow_entrypoint'] = file_rel_path
                 topMeta['remote_workflow_entrypoint'] = metadataPD.get('url')
                 
-                descriptorMeta = None
-                metadataPD = None
+                del descriptorMeta
+                del metadataPD
                 
             # and another for the raw content (in case no workflow repo is identified)
             _ , metaelem = fetchClassicURL(file_url, absfile, {'headers': { 'Accept': 'text/plain' } })
