@@ -24,8 +24,7 @@ import abc
 import logging
 import inspect
 
-from typing import Dict, List, Tuple, Union
-from collections import namedtuple
+from typing import Dict, List, Union
 
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath
