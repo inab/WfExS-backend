@@ -22,7 +22,6 @@ import tempfile
 import atexit
 import shutil
 import abc
-import enum
 import glob
 import logging
 
@@ -35,9 +34,9 @@ from .common import GeneratedContent, GeneratedDirectoryContent
 from .common import ContainerTaggedName, LocalWorkflow, MaterializedOutput
 from .common import ExitVal, ExpectedOutput, SymbolicOutputName, URIType
 from .common import MaterializedInput, MaterializedWorkflowEngine
+from .common import WorkflowType
 
-from typing import Any, Dict, List, Mapping, Set, Tuple, Union
-from collections import namedtuple
+from typing import Any, List, Mapping, Optional, Set, Tuple, Type, Union
 
 from .container import ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
@@ -82,7 +81,7 @@ class WorkflowEngineException(AbstractWfExSException):
     pass
 
 
-CONTAINER_FACTORY_CLASSES = [
+CONTAINER_FACTORY_CLASSES : List[Type[ContainerFactory]] = [
     SingularityContainerFactory,
     DockerContainerFactory,
     PodmanContainerFactory,
@@ -95,17 +94,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                  cacheDir=None,
                  workflow_config=None,
                  local_config=None,
-                 engineTweaksDir=None,
-                 cacheWorkflowDir=None,
-                 cacheWorkflowInputsDir=None,
-                 workDir=None,
-                 outputsDir=None,
-                 outputMetaDir=None,
-                 intermediateDir=None,
-                 tempDir=None,
+                 engineTweaksDir: Optional[Union[RelPath, AbsPath]] = None,
+                 cacheWorkflowDir: Optional[Union[RelPath, AbsPath]] = None,
+                 cacheWorkflowInputsDir: Optional[Union[RelPath, AbsPath]] = None,
+                 workDir: Optional[Union[RelPath, AbsPath]] = None,
+                 outputsDir: Optional[Union[RelPath, AbsPath]] = None,
+                 outputMetaDir: Optional[Union[RelPath, AbsPath]] = None,
+                 intermediateDir: Optional[Union[RelPath, AbsPath]] = None,
+                 tempDir: Optional[Union[RelPath, AbsPath]] = None,
                  secure_exec : bool = False,
                  allowOther : bool = False,
-                 config_directory=None
+                 config_directory: Optional[Union[RelPath, AbsPath]] = None
                  ):
         """
         Abstract init method
@@ -281,11 +280,11 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @classmethod
     def FromStagedSetup(cls,
             staged_setup:StagedSetup,
-            cache_dir=None,
-            cache_workflow_dir=None,
-            cache_workflow_inputs_dir=None,
+            cache_dir: Optional[Union[RelPath, AbsPath]] = None,
+            cache_workflow_dir: Optional[Union[RelPath, AbsPath]] = None,
+            cache_workflow_inputs_dir: Optional[Union[RelPath, AbsPath]] = None,
             local_config=None,
-            config_directory=None
+            config_directory: Optional[Union[RelPath, AbsPath]] = None
     ):
         """
         Init method from staged setup instance
