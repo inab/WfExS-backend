@@ -20,7 +20,7 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import List, Optional, Tuple, Union
+from typing import cast, List, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
@@ -44,7 +44,7 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
     
     parsedInputURL = parse.urlparse(remote_file)
     projectId = parsedInputURL.path
-    metadata_url = parse.urljoin(PRIDE_PROJECTS_REST, projectId)
+    metadata_url = cast(URIType, parse.urljoin(PRIDE_PROJECTS_REST, projectId))
     
     gathered_meta = {'fetched': metadata_url}
     metadata_array = [

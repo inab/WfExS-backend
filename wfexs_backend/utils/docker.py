@@ -30,7 +30,7 @@ class DockerHelperException(Exception):
     pass
 
 class Credentials(NamedTuple):
-    domain : str
+    domain : Optional[str]
     username : str
     password : str
 
