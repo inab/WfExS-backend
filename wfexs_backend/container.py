@@ -29,7 +29,8 @@ from typing import Dict, List, Union
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath
 from .common import ContainerFileNamingMethod, ContainerTaggedName
-from .common import Container, ContainerType
+from .common import Container
+from . import common
 
 
 class ContainerFactoryException(AbstractWfExSException):
@@ -103,7 +104,7 @@ class ContainerFactory(abc.ABC):
         
     @classmethod
     @abc.abstractmethod
-    def ContainerType(cls) -> ContainerType:
+    def ContainerType(cls) -> common.ContainerType:
         pass
     
     @property
@@ -111,7 +112,7 @@ class ContainerFactory(abc.ABC):
         return self._environment
     
     @property
-    def containerType(self) -> ContainerType:
+    def containerType(self) -> common.ContainerType:
         return self.ContainerType()
     
     @property
@@ -149,8 +150,8 @@ class NoContainerFactory(ContainerFactory):
     #    super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name)
     
     @classmethod
-    def ContainerType(cls) -> ContainerType:
-        return ContainerType.NoContainer
+    def ContainerType(cls) -> common.ContainerType:
+        return common.ContainerType.NoContainer
     
     def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Union[RelPath, AbsPath] = None, offline: bool = False) -> List[Container]:
         """

@@ -22,7 +22,7 @@ import functools
 import hashlib
 import json
 import os
-from typing import List, Union
+from typing import cast, List, Mapping, Optional, Sequence, Tuple, Union
 
 from ..common import AbsPath, AbstractGeneratedContent, Fingerprint
 from ..common import GeneratedContent, RelPath, scantree
@@ -32,10 +32,10 @@ DEFAULT_DIGEST_ALGORITHM = 'sha256'
 DEFAULT_DIGEST_BUFFER_SIZE = 65536
 
 def stringifyDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
-    return '{0}={1}'.format(digestAlgorithm, str(base64.standard_b64encode(digest), 'iso-8859-1'))
+    return cast(Fingerprint, '{0}={1}'.format(digestAlgorithm, str(base64.standard_b64encode(digest), 'iso-8859-1')))
 
 def stringifyFilenameDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
-    return '{0}~{1}'.format(digestAlgorithm, str(base64.urlsafe_b64encode(digest), 'iso-8859-1'))
+    return cast(Fingerprint, '{0}~{1}'.format(digestAlgorithm, str(base64.urlsafe_b64encode(digest), 'iso-8859-1')))
 
 def nullProcessDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
     return digest
@@ -44,7 +44,7 @@ from rfc6920.methods import generate_nih_from_digest
 
 # As of https://datatracker.ietf.org/doc/html/rfc6920#page-17
 # rewrite the names of the algorithms
-VALID_NI_ALGOS = {
+VALID_NI_ALGOS : Mapping[str,str] = {
        'sha256': 'sha-256',
        'sha256-128': 'sha-256-128',
        'sha256_128': 'sha-256-128',
@@ -87,7 +87,7 @@ def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM
 
 
 @functools.lru_cache(maxsize=32)
-def ComputeDigestFromFile(filename: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
+def ComputeDigestFromFile(filename: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Optional[Union[Fingerprint, bytes]]:
     """
     Accessory method used to compute the digest of an input file
     """
@@ -99,19 +99,19 @@ def ComputeDigestFromFile(filename: Union[AbsPath, RelPath], digestAlgorithm=DEF
     with open(filename, mode='rb') as f:
         return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize, repMethod)
 
-def ComputeDigestFromDirectory(dirname: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
+def ComputeDigestFromDirectory(dirname: Union[AbsPath, RelPath], digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Union[Fingerprint, bytes]:
     """
     Accessory method used to compute the digest of an input directory,
     based on the names and digest of the files in the directory
     """
-    cEntries = [ ]
+    cEntries : List[Tuple[bytes, bytes]] = [ ]
     # First, gather and compute all the files
     for entry in scantree(dirname):
         if entry.is_file():
             cEntries.append(
                 (
                     os.path.relpath(entry.path, dirname).encode('utf-8'),
-                    ComputeDigestFromFile(entry.path, repMethod=nullProcessDigest)
+                    cast(bytes, ComputeDigestFromFile(entry.path, repMethod=nullProcessDigest))
                 )
             )
     
@@ -128,16 +128,16 @@ def ComputeDigestFromDirectory(dirname: Union[AbsPath, RelPath], digestAlgorithm
 
 def ComputeDigestFromGeneratedContentList(
     dirname: Union[AbsPath, RelPath],
-    theValues: List[AbstractGeneratedContent],
+    theValues: Sequence[AbstractGeneratedContent],
     digestAlgorithm=DEFAULT_DIGEST_ALGORITHM,
     bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE,
     repMethod=stringifyDigest
-) -> Fingerprint:
+) -> Union[Fingerprint, bytes]:
     """
     Accessory method used to compute the digest of an input directory,
     based on the names and digest of the files in the directory
     """
-    cEntries = [ ]
+    cEntries : List[Tuple[bytes, bytes]] = [ ]
     # First, gather and compute all the files
     for theValue in theValues:
         if isinstance(theValue, GeneratedContent):
