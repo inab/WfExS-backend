@@ -28,7 +28,7 @@ from . import AbstractStatefulFetcher, FetcherException
 
 from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
 from ..common import URIType, URIWithMetadata
-from ..common import DEFAULT_GIT_CMD, RepoTag, SymbolicName
+from ..common import DEFAULT_GIT_CMD, RepoURL, RepoTag, SymbolicName
 
 class GitFetcher(AbstractStatefulFetcher):
     def __init__(self, progs: Mapping[SymbolicName, AbsPath]):
@@ -36,7 +36,7 @@ class GitFetcher(AbstractStatefulFetcher):
         
         self.git_cmd = self.progs.get(DEFAULT_GIT_CMD, DEFAULT_GIT_CMD)
 
-    def doMaterializeRepo(self, repoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, Mapping[str, str]]:
+    def doMaterializeRepo(self, repoURL:RepoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, Mapping[str, str]]:
         """
 
         :param repoURL:
