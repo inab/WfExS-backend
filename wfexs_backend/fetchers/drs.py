@@ -20,7 +20,7 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import List, Optional, Tuple, Union
+from typing import cast, List, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
@@ -32,7 +32,7 @@ from ..common import LicensedURI, URIType, URIWithMetadata
 
 DRS_SCHEME = 'drs'
 
-def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[List[LicensedURI], List[URIWithMetadata]]:
     upperSecContext = dict()
     
     parsedInputURL = parse.urlparse(remote_file)
@@ -55,6 +55,8 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
     
     # Setting up the credentials
     netloc = parsedInputURL.hostname
+    if netloc is None:
+        netloc = ''
     headers = dict()
     if isinstance(secContext, dict):
         headers = secContext.get('headers', {})
@@ -86,7 +88,7 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
                                             '', '', ''))
     
     # Now, get the object metadata
-    object_metadata_url = drs_service_prefix + 'objects/' + object_id
+    object_metadata_url = cast(URIType, drs_service_prefix + 'objects/' + object_id)
     
     gathered_meta = {'fetched': object_metadata_url}
     metadata_array = [ ]
@@ -106,13 +108,13 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
     
     # With the metadata, let's compose the URL to be returned
     # (which could not be cached)
-    retURL = []
+    retURL : List[LicensedURI] = []
     for access_method in object_metadata.get('access_methods', []):
         object_url = access_method.get('access_url')
         access_id = access_method.get('access_id')
         customSecContext = None
         if (object_url is None) and (access_id is not None):
-            object_access_metadata_url = object_metadata_url + '/access/' + parse.quote(access_id, safe='')
+            object_access_metadata_url = cast(URIType, object_metadata_url + '/access/' + parse.quote(access_id, safe=''))
             
             try:
                 metaaccio = io.BytesIO()
