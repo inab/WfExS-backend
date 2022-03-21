@@ -25,6 +25,9 @@ import abc
 import glob
 import logging
 
+from typing import cast, Any, Callable, List, Mapping
+from typing import Optional, Sequence, Set, Tuple, Type, Union
+
 from .common import AbstractWfExSException, AbstractWorkflowEngineType
 from .common import AbsPath, RelPath
 from .common import DEFAULT_CONTAINER_TYPE, DEFAULT_DOCKER_CMD, DEFAULT_ENGINE_MODE
@@ -34,9 +37,8 @@ from .common import GeneratedContent, GeneratedDirectoryContent
 from .common import ContainerTaggedName, LocalWorkflow, MaterializedOutput
 from .common import ExitVal, ExpectedOutput, SymbolicOutputName, URIType
 from .common import MaterializedInput, MaterializedWorkflowEngine
-from .common import WorkflowType
-
-from typing import Any, List, Mapping, Optional, Set, Tuple, Type, Union
+from .common import MaterializedContent, SymbolicParamName
+from . import common
 
 from .container import ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
@@ -91,7 +93,7 @@ CONTAINER_FACTORY_CLASSES : List[Type[ContainerFactory]] = [
 
 class WorkflowEngine(AbstractWorkflowEngineType):
     def __init__(self,
-                 cacheDir=None,
+                 cacheDir : Optional[Union[RelPath, AbsPath]] = None,
                  workflow_config=None,
                  local_config=None,
                  engineTweaksDir: Optional[Union[RelPath, AbsPath]] = None,
@@ -131,7 +133,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.local_config = local_config
         
         if config_directory is None:
-            config_directory = os.getcwd()
+            config_directory = cast(AbsPath, os.getcwd())
         self.config_directory = config_directory
         
         # Getting a logger focused on specific classes
@@ -146,12 +148,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             cacheDir = local_config.get('cacheDir')
         
         if cacheDir is None:
-            cacheDir = tempfile.mkdtemp(prefix='WfExS', suffix='backend')
+            cacheDir = cast(AbsPath, tempfile.mkdtemp(prefix='WfExS', suffix='backend'))
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, cacheDir)
         else:
             if not os.path.isabs(cacheDir):
-                cacheDir = os.path.normpath(os.path.join(config_directory,cacheDir))
+                cacheDir = cast(AbsPath, os.path.normpath(os.path.join(config_directory,cacheDir)))
             # Be sure the directory exists
             os.makedirs(cacheDir, exist_ok=True)
 
@@ -162,26 +164,26 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         # Needed for those cases where alternate version of the workflow is generated
         if cacheWorkflowDir is None:
-            cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
+            cacheWorkflowDir = cast(AbsPath, os.path.join(cacheDir, 'wf-cache'))
             os.makedirs(cacheWorkflowDir, exist_ok=True)
         self.cacheWorkflowDir = cacheWorkflowDir
         
         # Needed for those cases where there is a shared cache
         if cacheWorkflowInputsDir is None:
-            cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
+            cacheWorkflowInputsDir = cast(AbsPath, os.path.join(cacheDir, 'wf-inputs'))
             os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
         self.cacheWorkflowInputsDir = cacheWorkflowInputsDir
         
         # Setting up working directories, one per instance
         if workDir is None:
-            workDir = tempfile.mkdtemp(prefix='WfExS-exec', suffix='workdir')
+            workDir = cast(AbsPath, tempfile.mkdtemp(prefix='WfExS-exec', suffix='workdir'))
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, workDir)
         self.workDir = workDir
 
         # This directory should hold intermediate workflow steps results
         if intermediateDir is None:
-            intermediateDir = os.path.join(workDir, WORKDIR_INTERMEDIATE_RELDIR)
+            intermediateDir = cast(AbsPath, os.path.join(workDir, WORKDIR_INTERMEDIATE_RELDIR))
         os.makedirs(intermediateDir, exist_ok=True)
         self.intermediateDir = intermediateDir
 
@@ -189,20 +191,20 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # be either symbolic links to the intermediate results directory
         # or newly generated content
         if outputsDir is None:
-            outputsDir = os.path.join(workDir, WORKDIR_OUTPUTS_RELDIR)
+            outputsDir = cast(AbsPath, os.path.join(workDir, WORKDIR_OUTPUTS_RELDIR))
         os.makedirs(outputsDir, exist_ok=True)
         self.outputsDir = outputsDir
 
         # This directory will hold diverse metadata, like execution metadata
         # or newly generated content
         if outputMetaDir is None:
-            outputMetaDir = os.path.join(workDir, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR)
+            outputMetaDir = cast(AbsPath, os.path.join(workDir, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR))
         os.makedirs(outputMetaDir, exist_ok=True)
         self.outputMetaDir = outputMetaDir
         
         # This directory will hold stats metadata, as well as the dot representation
         # of the workflow execution
-        outputStatsDir = os.path.join(outputMetaDir,WORKDIR_STATS_RELDIR)
+        outputStatsDir = cast(AbsPath, os.path.join(outputMetaDir,WORKDIR_STATS_RELDIR))
         os.makedirs(outputStatsDir, exist_ok=True)
         self.outputStatsDir = outputStatsDir
 
@@ -210,14 +212,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # to tweak or patch workflow executions
         # engine tweaks directory
         if engineTweaksDir is None:
-            engineTweaksDir = os.path.join(workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
+            engineTweaksDir = cast(AbsPath, os.path.join(workDir, WORKDIR_ENGINE_TWEAKS_RELDIR))
         os.makedirs(engineTweaksDir, exist_ok=True)
         self.engineTweaksDir = engineTweaksDir
         
         # This directory is here for temporary files of any program launched from
         # WfExS or the engine itself. It should be set to TMPDIR on subprocess calls
         if tempDir is None:
-            tempDir = tempfile.mkdtemp(prefix='WfExS-exec', suffix='tempdir')
+            tempDir = cast(AbsPath, tempfile.mkdtemp(prefix='WfExS-exec', suffix='tempdir'))
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, tempDir)
         self.tempDir = tempDir
@@ -315,11 +317,11 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     
     @classmethod
     @abc.abstractmethod
-    def WorkflowType(cls) -> WorkflowType:
+    def WorkflowType(cls) -> common.WorkflowType:
         pass
 
     @property
-    def workflowType(self) -> WorkflowType:
+    def workflowType(self) -> common.WorkflowType:
         return self.WorkflowType()
     
     @classmethod
@@ -448,7 +450,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         return exitVal, augmentedInputs, matOutputs
 
     @classmethod
-    def MaterializeWorkflowAndContainers(cls, matWfEng: MaterializedWorkflowEngine, containersDir: Union[RelPath, AbsPath], offline: bool = False) -> MaterializedWorkflowEngine:
+    def MaterializeWorkflowAndContainers(cls, matWfEng: MaterializedWorkflowEngine, containersDir: AbsPath, offline: bool = False) -> MaterializedWorkflowEngine:
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(matWfEng, offline=offline)
 
         listOfContainers = matWfEngV2.instance.materializeContainers(listOfContainerTags, containersDir, offline=offline)
@@ -482,9 +484,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         True: (0, sys.maxsize),
     }
     
-    GuessedOutputKindMapping = {
-        GeneratedDirectoryContent.__class__.__name__: ContentKind.Directory,
-        GeneratedContent.__class__.__name__: ContentKind.File,
+    GuessedOutputKindMapping : Mapping[str, ContentKind] = {
+        GeneratedDirectoryContent.__name__: ContentKind.Directory,
+        GeneratedContent.__name__: ContentKind.File,
     }
     
     def identifyMaterializedOutputs(self, matInputs: List[MaterializedInput], expectedOutputs:List[ExpectedOutput], outputsDir:AbsPath, outputsMapping:Mapping[SymbolicOutputName,Any]=None) -> List[MaterializedOutput]:
@@ -495,7 +497,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if not isinstance(outputsMapping, dict):
             outputsMapping = {}
         
-        matInputHash = {
+        matInputHash : Mapping[SymbolicParamName, Union[List[bool], Sequence[str], List[int], List[float], Sequence[MaterializedContent]]] = {
             matInput.name: matInput.values
             for matInput in matInputs
         }
@@ -507,28 +509,29 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 # Engines like Nextflow
                 iEntry = 0
                 for entry in os.scandir(outputsDir):
-                    matValues = None
+                    matValuesDef : Optional[Union[List[GeneratedContent], List[GeneratedDirectoryContent]]] = None
+                    guessedOutputKindDef : ContentKind
                     # We are avoiding to enter in loops around '.' and '..'
                     if entry.is_file():
-                        matValues = [
+                        matValuesDef = [
                             GeneratedContent(
-                                local=entry.path,
-                                signature=ComputeDigestFromFile(entry.path, repMethod=nihDigester)
+                                local=cast(AbsPath, entry.path),
+                                signature=cast(Fingerprint, ComputeDigestFromFile(cast(AbsPath, entry.path), repMethod=nihDigester))
                             )
                         ]
-                        guessedOutputKind = ContentKind.File
+                        guessedOutputKindDef = ContentKind.File
                     elif entry.is_dir(follow_symlinks=False):
-                        matValues = [ GetGeneratedDirectoryContent(entry.path, signatureMethod=nihDigester) ]
-                        guessedOutputKind = ContentKind.Directory
+                        matValuesDef = [ GetGeneratedDirectoryContent(cast(AbsPath, entry.path), signatureMethod=nihDigester) ]
+                        guessedOutputKindDef = ContentKind.Directory
                     
-                    if matValues is not None:
+                    if matValuesDef is not None:
                         outputName = 'unnamed_output_{}'.format(iEntry)
                         iEntry += 1
                         matOutput = MaterializedOutput(
-                            name=outputName,
-                            kind=guessedOutputKind,
+                            name=cast(SymbolicOutputName, outputName),
+                            kind=guessedOutputKindDef,
                             expectedCardinality=self.GuessedCardinalityMapping[False],
-                            values=matValues
+                            values=matValuesDef
                         )
                     
                         matOutputs.append(matOutput)
@@ -541,103 +544,109 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     guessedOutputKind = self.GuessedOutputKindMapping.get(matValueClassName)
                     
                     if guessedOutputKind is None:
-                        self.logger.error("FIXME: Define mapping for {}".format(matValueClassName))
-                    
-                    matOutput = MaterializedOutput(
-                        name=outputName,
-                        kind=guessedOutputKind,
-                        expectedCardinality=self.GuessedCardinalityMapping.get(len(matValues) > 1),
-                        values=matValues
-                    )
-                    
-                    matOutputs.append(matOutput)
+                        self.logger.error(f"FIXME: Define mapping for {matValueClassName}, needed by {outputName}. Known ones are {list(self.GuessedOutputKindMapping.keys())}")
+                    else:
+                        matOutput = MaterializedOutput(
+                            name=outputName,
+                            kind=guessedOutputKind,
+                            expectedCardinality=self.GuessedCardinalityMapping[len(matValues) > 1],
+                            values=matValues
+                        )
+                        
+                        matOutputs.append(matOutput)
         
         # This is only applied when the expected outputs is specified
         for expectedOutput in expectedOutputs:
             cannotBeEmpty = expectedOutput.cardinality[0] != 0
-            matValues = []
+            expMatValues : Union[List[str], List[GeneratedContent], List[GeneratedDirectoryContent]] = []
             if expectedOutput.fillFrom is not None:
-                matInputValues = matInputHash.get(expectedOutput.fillFrom)
+                matInputValues : Optional[Union[List[bool], Sequence[str], List[int], List[float], Sequence[MaterializedContent]]] = matInputHash.get(expectedOutput.fillFrom)
                 if matInputValues is not None:
                     for matchedPath in matInputValues:
-                        theContent = None
-                        try:
-                            if expectedOutput.kind == ContentKind.Directory:
-                                theContent = GetGeneratedDirectoryContent(
-                                    matchedPath,
-                                    uri=None,   # TODO: generate URIs when it is advised
-                                    preferredFilename=expectedOutput.preferredFilename,
-                                    signatureMethod=nihDigester
-                                )
-                            elif expectedOutput.kind == ContentKind.File:
-                                theContent = GeneratedContent(
-                                    local=matchedPath,
-                                    uri=None,   # TODO: generate URIs when it is advised
-                                    signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigester),
-                                    preferredFilename=expectedOutput.preferredFilename
-                                )
-                                self.logger.debug(f"Filled From {expectedOutput.preferredFilename} {matchedPath}")
+                        # FIXME: Are these elements always paths??????
+                        if isinstance(matchedPath, str):
+                            theContent : Optional[Union[str, GeneratedContent, GeneratedDirectoryContent]]= None
+                            try:
+                                if expectedOutput.kind == ContentKind.Directory:
+                                    theContent = GetGeneratedDirectoryContent(
+                                        thePath=cast(AbsPath, matchedPath),
+                                        uri=None,   # TODO: generate URIs when it is advised
+                                        preferredFilename=expectedOutput.preferredFilename,
+                                        signatureMethod=nihDigester
+                                    )
+                                elif expectedOutput.kind == ContentKind.File:
+                                    theContent = GeneratedContent(
+                                        local=cast(AbsPath, matchedPath),
+                                        uri=None,   # TODO: generate URIs when it is advised
+                                        signature=cast(Fingerprint, ComputeDigestFromFile(matchedPath, repMethod=nihDigester)),
+                                        preferredFilename=expectedOutput.preferredFilename
+                                    )
+                                    self.logger.debug(f"Filled From {expectedOutput.preferredFilename} {matchedPath}")
+                                else:
+                                    # Reading the value from a file, as the glob is telling that
+                                    with open(matchedPath, mode='r', encoding='utf-8', errors='ignore') as mP:
+                                        theContent = mP.read()
+                            except:
+                                self.logger.error(f"Unable to read path {matchedPath} from filled input {expectedOutput.fillFrom}")
                             else:
-                                # Reading the value from a file, as the glob is telling that
-                                with open(matchedPath, mode='r', encoding='utf-8', errors='ignore') as mP:
-                                    theContent = mP.read()
-                        except:
-                            self.logger.error(f"Unable to read path {matchedPath} from filled input {expectedOutput.fillFrom}")
-                        matValues.append(theContent)
+                                expMatValues.append(theContent)
+                        else:
+                            self.logger.exception("FIXME!!!!!!!!!!!!")
+                            raise WorkflowEngineException("FIXME!!!!!!!!!!!!")
                 
-                if len(matValues)==0 and cannotBeEmpty:
+                if len(expMatValues)==0 and cannotBeEmpty:
                     self.logger.warning(f"Output {expectedOutput.name} got no path from filled input {expectedOutput.fillFrom}")
             elif expectedOutput.glob is not None:
-                filterMethod = None
+                filterMethod : Callable[[Union[Union[str, bytes, os.PathLike[str], os.PathLike[bytes]], int]], bool]
                 if expectedOutput.kind == ContentKind.Directory:
                     filterMethod = os.path.isdir
                 else:
                     filterMethod = os.path.isfile
-                matchedPaths = []
+                matchedPaths : List[AbsPath] = []
                 
                 for matchingPath in glob.iglob(os.path.join(outputsDir,expectedOutput.glob),recursive=True):
                     # Getting what it is only interesting for this
                     if filterMethod(matchingPath):
-                        matchedPaths.append(matchingPath)
+                        matchedPaths.append(cast(AbsPath, matchingPath))
                 
                 if len(matchedPaths) == 0 and cannotBeEmpty:
                     self.logger.warning("Output {} got no path for pattern {}".format(expectedOutput.name, expectedOutput.glob))
                 
                 for matchedPath in matchedPaths:
-                    theContent = None
+                    matchedContent : Union[str, GeneratedContent, GeneratedDirectoryContent]
                     if expectedOutput.kind == ContentKind.Directory:
-                        theContent = GetGeneratedDirectoryContent(
+                        matchedContent = GetGeneratedDirectoryContent(
                             matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised
                             preferredFilename=expectedOutput.preferredFilename,
                             signatureMethod=nihDigester
                         )
                     elif expectedOutput.kind == ContentKind.File:
-                        theContent = GeneratedContent(
+                        matchedContent = GeneratedContent(
                             local=matchedPath,
                             uri=None,   # TODO: generate URIs when it is advised
-                            signature=ComputeDigestFromFile(matchedPath, repMethod=nihDigester),
+                            signature=cast(Fingerprint, ComputeDigestFromFile(matchedPath, repMethod=nihDigester)),
                             preferredFilename=expectedOutput.preferredFilename
                         )
                     else:
                         # Reading the value from a file, as the glob is telling that
                         with open(matchedPath, mode='r', encoding='utf-8', errors='ignore') as mP:
-                            theContent = mP.read()
+                            matchedContent = mP.read()
                     
-                    matValues.append(theContent)
+                    expMatValues.append(matchedContent)
             else:
                 outputVal = outputsMapping.get(expectedOutput.name)
                 
                 if (outputVal is None) and cannotBeEmpty:
                     self.logger.warning("Output {} got no match from the outputs mapping".format(expectedOutput.name))
                 
-                matValues = CWLDesc2Content(outputVal, self.logger, expectedOutput, doGenerateSignatures=True)
+                expMatValues = CWLDesc2Content(outputVal, self.logger, expectedOutput, doGenerateSignatures=True)
             
             matOutput = MaterializedOutput(
                 name=expectedOutput.name,
                 kind=expectedOutput.kind,
                 expectedCardinality=expectedOutput.cardinality,
-                values=matValues
+                values=expMatValues
             )
             
             matOutputs.append(matOutput)
