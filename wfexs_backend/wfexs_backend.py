@@ -25,17 +25,15 @@ import json
 import jsonschema
 import logging
 import os
-import platform
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
-import time
 import types
 import uuid
 
-from typing import Any, Iterator, List, Mapping, Optional, Pattern, Tuple, Type, Union
+from typing import Any, Iterator, List, Mapping, Optional, Tuple, Type, Union
 from urllib import parse
 
 # We have preference for the C based loader and dumper, but the code
@@ -62,13 +60,12 @@ from .common import DEFAULT_FUSERMOUNT_CMD, DEFAULT_GIT_CMD, DEFAULT_PROGS
 from .encrypted_fs import DEFAULT_ENCRYPTED_FS_TYPE, \
   DEFAULT_ENCRYPTED_FS_CMD, DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT, \
   ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS, EncryptedFSType
-from .engine import WorkflowEngine, WORKDIR_PASSPHRASE_FILE
+from .engine import WorkflowEngine
 
 
 from .cache_handler import SchemeHandlerCacheHandler
 
-from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
-from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
+from .utils.marshalling_handling import unmarshall_namedtuple
 from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
 from .utils.passphrase_wrapper import generate_nickname, generate_passphrase
 
@@ -750,7 +747,7 @@ class WfExSBackend:
                     break
         return retval
 
-    def cacheFetch(self, remote_file:Union[LicensedURI, parse.ParseResult, URIType, List[Union[LicensedURI, parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata]]:
+    def cacheFetch(self, remote_file:Union[LicensedURI, parse.ParseResult, URIType, List[Union[LicensedURI, parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], List[URIType]]:
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
         
@@ -797,7 +794,7 @@ class WfExSBackend:
 
         self.cacheHandler.addSchemeHandlers({scheme.lower(): handler})
 
-    def doMaterializeRepo(self, repoURL, repoTag: RepoTag = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
+    def doMaterializeRepo(self, repoURL: RepoURL, repoTag: RepoTag = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
         """
 
         :param repoURL:
@@ -806,12 +803,15 @@ class WfExSBackend:
         :return:
         """
         gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
-        repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(repoURL,repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
+        repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(repoURL, repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
 
         # Now, let's register the checkout with cache structures
         # using its public URI
         if not repoURL.startswith('git'):
             remote_url = 'git+' + repoURL
+        else:
+            remote_url = repoURL
+        
         if repoTag is not None:
             remote_url += '@' + repoTag
 
@@ -923,7 +923,7 @@ class WfExSBackend:
         """
 
         try:
-            roCK, roCrateFile, _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
+            roCK, roCrateFile, _, _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
         except Exception as e:
             raise WfExSBackendException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e)) from e
 
@@ -932,11 +932,9 @@ class WfExSBackend:
         if not os.path.exists(cachedFilename):
             os.symlink(os.path.basename(roCrateFile), cachedFilename)
 
-        self.cacheROCrateFilename = cachedFilename
-
         return cachedFilename
 
-    def downloadContent(self, remote_file, dest: Union[AbsPath,CacheType],
+    def downloadContent(self, remote_file: Union[URIType, LicensedURI, List[URIType], List[LicensedURI]], dest: Union[AbsPath,CacheType],
                           secContext: Optional=None, offline: bool = False, ignoreCache:bool=False, registerInCache:bool=True) -> MaterializedContent:
         """
         Download remote file or directory / dataset.
@@ -947,26 +945,83 @@ class WfExSBackend:
         :param offline:
         :type remote_file: str
         """
-        parsedInputURL = parse.urlparse(remote_file)
-
-        if not all([parsedInputURL.scheme, parsedInputURL.path]):
-            raise RuntimeError("Input is not a valid remote URL or CURIE source")
-
+        
+        # Preparation of needed structures
+        if isinstance(remote_file, list):
+            remote_uris_e = remote_file
         else:
-            # Default pretty filename
-            prettyFilename = parsedInputURL.path.split('/')[-1]
+            remote_uris_e = [ remote_file ]
+        
+        firstURI : URIType = None
+        firstParsedURI = None
+        remote_uris : List[URIType] = []
+        # Brief validation of correct uris
+        for remote_uri_e in remote_uris_e:
+            if isinstance(remote_uri_e, LicensedURI):
+                remote_uri = remote_uri_e.uri
+            else:
+                remote_uri = remote_uri_e
+            
+            parsedURI = parse.urlparse(remote_uri)
+            validableComponents = [ parsedURI.scheme, parsedURI.path ]
+            if not all(validableComponents):
+                raise RuntimeError(f"Input does not have {remote_uri} as a valid remote URL or CURIE source ")
+            remote_uris.append(remote_uri)
+            if firstParsedURI is None:
+                firstURI = remote_uri_e
+                firstParsedURI = parsedURI
 
-            # Assure workflow inputs directory exists before the next step
-            if isinstance(dest, CacheType):
-                workflowInputs_destdir = self.cachePathMap[dest]
+        # Assure workflow inputs directory exists before the next step
+        if isinstance(dest, CacheType):
+            workflowInputs_destdir = self.cachePathMap[dest]
 
-            self.logger.info("downloading workflow input: {}".format(remote_file))
+        self.logger.info("downloading workflow input: {}".format(' or '.join(remote_uris)))
 
-            inputKind, cachedFilename, metadata_array = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
-            self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
+        inputKind, cachedFilename, metadata_array, cachedLicences = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
+        self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
 
-            # FIXME: What to do when there is more than one entry in the metadata array?
-            if len(metadata_array) > 0 and (metadata_array[0].preferredName is not None):
-                prettyFilename = metadata_array[0].preferredName
-
-            return MaterializedContent(cachedFilename, remote_file, prettyFilename, inputKind, metadata_array)
+        prettyFilename = None
+        if len(metadata_array) > 0:
+            self.logger.info("downloaded workflow input: {} => {}".format(' -> '.join(map(lambda m: m.uri, metadata_array)), cachedFilename))
+            
+            if isinstance(firstURI, LicensedURI):
+                firstLicensedURI = LicensedURI(
+                    uri=metadata_array[0].uri,
+                    licences=cachedLicences,
+                    attributions=firstURI.attributions
+                )
+            else:
+                firstURI = metadata_array[0].uri
+            # The preferred name is obtained from the metadata
+            for m in metadata_array:
+                if m.preferredName is not None:
+                    prettyFilename = m.preferredName
+                    break
+        
+        if prettyFilename is None:
+            # Default pretty filename in the worst case
+            prettyFilename = firstParsedURI.path.split('/')[-1]
+        
+        if isinstance(firstURI, LicensedURI):
+            # Junking the security context
+            if firstURI.secContext is None:
+                firstLicensedURI = firstURI
+            else:
+                firstLicensedURI = LicensedURI(
+                    uri=firstURI.uri,
+                    licences=firstURI.licences,
+                    attributions=firstURI.attributions
+                )
+        else:
+            # No licensing information attached
+            firstLicensedURI = LicensedURI(
+                uri=firstURI
+            )
+        
+        return MaterializedContent(
+            local=cachedFilename,
+            licensed_uri=firstLicensedURI,
+            prettyFilename=prettyFilename,
+            kind=inputKind,
+            metadata_array=metadata_array
+        )
