@@ -27,7 +27,7 @@ import sys
 import tempfile
 import venv
 
-from typing import List, Set, Tuple
+from typing import cast, List, Optional, Set, Tuple, Union
 
 import jsonpath_ng
 import jsonpath_ng.ext
@@ -63,7 +63,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
     
-    DEFAULT_CWLTOOL_VERSION = '3.1.20220204090313'
+    DEFAULT_CWLTOOL_VERSION = cast(EngineVersion, '3.1.20220204090313')
 
     DEVEL_CWLTOOL_PACKAGE = f'git+{CWLTOOL_REPO}.git'
     # Set this constant to something meaningful only when a hotfix
@@ -74,11 +74,11 @@ class CWLWorkflowEngine(WorkflowEngine):
     #DEFAULT_CWL_UTILS_VERSION = 'v0.10'
     #DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20211116214159'
 
-    PODMAN_CWLTOOL_VERSION = '3.1.20210921111717'
-    NO_WRAPPER_CWLTOOL_VERSION = '3.1.20210921111717'
-    CWLTOOL_MAX_PYVER = [
+    PODMAN_CWLTOOL_VERSION = cast(EngineVersion, '3.1.20210921111717')
+    NO_WRAPPER_CWLTOOL_VERSION = cast(EngineVersion, '3.1.20210921111717')
+    CWLTOOL_MAX_PYVER: List[Tuple[Optional[int], Optional[int], EngineVersion]] = [
         (3, None, NO_WRAPPER_CWLTOOL_VERSION),
-        (3, 6, '3.1.20220116183622'),
+        (3, 6, cast(EngineVersion, '3.1.20220116183622')),
         (None, None, DEFAULT_CWLTOOL_VERSION)
     ]
     
@@ -189,7 +189,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     def SupportedSecureExecContainerTypes(cls) -> Set[ContainerType]:
         return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
 
-    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
+    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -222,7 +222,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         return engineVer, newLocalWf
 
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Optional[Fingerprint]]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,

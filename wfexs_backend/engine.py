@@ -364,7 +364,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         return crate , compLang  
     
     @abc.abstractmethod
-    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: EngineVersion = None) -> Tuple[EngineVersion, LocalWorkflow]:
+    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -372,7 +372,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         pass
 
     @abc.abstractmethod
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Optional[Fingerprint]]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,

@@ -337,7 +337,7 @@ class LocalWorkflow(NamedTuple):
     dir: AbsPath
     relPath: RelPath
     effectiveCheckout: RepoTag
-    langVersion: Optional[WFLangVersion] = None
+    langVersion: Optional[Union[EngineVersion, WFLangVersion]] = None
 
 
 # This skeleton is here only for type mapping reasons
@@ -470,7 +470,7 @@ class MaterializedWorkflowEngine(NamedTuple):
     operational_containers: List of Container instances (needed by engine)
     """
     instance: AbstractWorkflowEngineType
-    version: str
+    version: EngineVersion
     fingerprint: Union[Fingerprint, str]
     engine_path: EnginePath
     workflow: LocalWorkflow
