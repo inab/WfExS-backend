@@ -17,14 +17,12 @@
 
 import argparse
 import atexit
-import datetime
 import json
 import logging
 import os
 import sys
 import shutil
 import tempfile
-import enum
 
 import yaml
 
@@ -125,12 +123,12 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
                 json.dump(entry, sys.stdout, cls=DatetimeEncoder, indent=4, sort_keys=True)
                 print()
         else:
-            contents = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)))
+            contents = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x.uri)
             for entry in contents:
                 print(entry)
             
     elif args.cache_command == WfExS_Cache_Commands.Remove:
-        print('\n'.join(map(lambda x: '\t'.join(x), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
+        print('\n'.join(map(lambda x: '\t'.join([x[0].uri, x[1], x[2]]), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
     elif args.cache_command == WfExS_Cache_Commands.Inject:
         injected_uri = args.cache_command_args[0]
         finalCachedFilename = args.cache_command_args[1]
@@ -140,7 +138,7 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
         cH.inject(cPath, injected_uri, finalCachedFilename=finalCachedFilename)
     elif args.cache_command == WfExS_Cache_Commands.Validate:
         for metaUri, validated, metaStructure in cH.validate(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade):
-            print(f"\t- {metaUri} {validated}")
+            print(f"\t- {metaUri.uri} {validated}")
     #    pass
     
     return retval
@@ -200,8 +198,7 @@ f"""=> Instance {instance_id} ({nickname})
     # Thi
     return retval
 
-if __name__ == "__main__":
-    
+def main():
     wfexs_version = get_WfExS_version()
     if wfexs_version[1] is None:
         verstr = wfexs_version[0]
@@ -443,3 +440,6 @@ if __name__ == "__main__":
     
     if command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
         wfInstance.createResultsResearchObject(args.doMaterializedROCrate)
+
+if __name__ == "__main__":
+        main()
