@@ -20,8 +20,8 @@ from __future__ import absolute_import
 import abc
 import enum
 import os
-from typing import Any, Callable, List, Mapping, NamedTuple
-from typing import NewType, Optional, Pattern, Tuple, Type, Union
+from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple
+from typing import NewType, Optional, Pattern, Sequence, Tuple, Type, Union
 
 
 # Patching default context in order to load CA certificates from certifi
@@ -102,7 +102,7 @@ Fingerprint = NewType('Fingerprint', str)
 # Exit value from any kind of execution
 ExitVal = NewType('ExitVal', int)
 
-SecurityContextConfig = Mapping[str, Any]
+SecurityContextConfig = Dict[str, Any]
 
 # As each workflow engine can have its own naming convention, leave them to
 # provide it
@@ -142,8 +142,27 @@ class Attribution(NamedTuple):
     # ORCID or another permanent, representative link
     pid: URIType
     roles: List[AttributionRole] = []
+    
+    @classmethod
+    def ParseRawAttribution(cls, rawAttribution: Mapping):
+        return cls(
+            name=rawAttribution['name'],
+            pid=rawAttribution['pid'],
+            roles=[ AttributionRole(rawRole) for rawRole in rawAttribution['roles'] ]
+        )
+    
+    @classmethod
+    def ParseRawAttributions(cls, rawAttributions: Optional[List[Mapping]]) -> List:
+        attributions = []
+        if isinstance(rawAttributions, list):
+            for rawAttribution in rawAttributions:
+                attributions.append(cls.ParseRawAttribution(rawAttribution))
+        
+        return attributions
+        
 
-NoPermissionLicence = 'https://choosealicense.com/no-permission/'
+NoLicence : URIType = cast(URIType, 'https://choosealicense.com/no-permission/')
+DefaultNoLicenceTuple : Tuple[URIType, ...] = (NoLicence, )
 
 class LicensedURI(NamedTuple):
     """
@@ -156,9 +175,9 @@ class LicensedURI(NamedTuple):
     it can provide the authentication metadata
     """
     uri: URIType
-    # A licence URL, either from a repository, or a site like
+    # One or more licence URLs, either from a repository, or a site like
     # choosealicense.com or spdx.org/licenses/
-    licence: URIType = NoPermissionLicence
+    licences: Tuple[URIType, ...] = DefaultNoLicenceTuple
     attributions: List[Attribution] = []
     secContext: Optional[SecurityContextConfig] = None
 
@@ -171,9 +190,9 @@ class URIWithMetadata(NamedTuple):
     preferredName: A pretty way to name this resource. Workflow
         execution can decide whether to honour it or not
     """
-    uri: AnyURI
+    uri: URIType
     metadata: Mapping[str,Any]
-    preferredName: RelPath = None
+    preferredName: Optional[RelPath] = None
 
 class MaterializedContent(NamedTuple):
     """
@@ -186,12 +205,13 @@ class MaterializedContent(NamedTuple):
       of the execution environment
     """
     local: AbsPath
-    uri: AnyURI
+    licensed_uri: LicensedURI
     prettyFilename: RelPath
     kind: ContentKind = ContentKind.File
     metadata_array: Optional[List[URIWithMetadata]] = None
 
-ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]]
+ProtocolFetcherReturn = Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata], Optional[Tuple[URIType, ...]]]
+ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], ProtocolFetcherReturn]
 
 
 class MaterializedInput(NamedTuple):
@@ -201,7 +221,7 @@ class MaterializedInput(NamedTuple):
       instances from MaterializedContent
     """
     name: SymbolicParamName
-    values: Union[List[bool], List[str], List[int], List[float], List[MaterializedContent]]
+    values: Union[List[bool], Sequence[str], List[int], List[float], Sequence[MaterializedContent]]
 
 
 GlobPattern = NewType('GlobPattern', str)
@@ -287,7 +307,7 @@ class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
       uploaded from the computational environment
     """
     local: AbsPath
-    values: List[AbstractGeneratedContent]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
+    values: Sequence[AbstractGeneratedContent]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
     uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
     signature: Optional[Fingerprint] = None
@@ -304,7 +324,7 @@ class MaterializedOutput(NamedTuple):
     name: SymbolicOutputName
     kind: ContentKind
     expectedCardinality: Tuple[int, int]
-    values: Union[List[bool], List[str], List[int], List[float], List[GeneratedContent], List[GeneratedDirectoryContent]]
+    values: Union[List[bool], Sequence[str], List[int], List[float], Sequence[GeneratedContent], Sequence[GeneratedDirectoryContent]]
 
 
 class LocalWorkflow(NamedTuple):
@@ -317,12 +337,33 @@ class LocalWorkflow(NamedTuple):
     dir: AbsPath
     relPath: RelPath
     effectiveCheckout: RepoTag
-    langVersion: WFLangVersion = None
+    langVersion: Optional[WFLangVersion] = None
 
 
 # This skeleton is here only for type mapping reasons
 class AbstractWorkflowEngineType(abc.ABC):
-    pass
+    @abc.abstractmethod
+    def sideContainers(self) -> List[ContainerTaggedName]:
+        pass
+    
+    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName], containersDir: Union[RelPath, AbsPath], offline: bool = False) -> "List[Container]":
+        pass
+    
+    @abc.abstractmethod
+    def materializeWorkflow(self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: bool = False) -> "Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]":
+        """
+        Method to ensure the workflow has been materialized. It returns the 
+        localWorkflow directory, as well as the list of containers
+        
+        For Nextflow it is usually a no-op, but for CWL it requires resolution
+        """
+
+        pass
+    
+    @abc.abstractmethod
+    def launchWorkflow(self, matWfEng: "MaterializedWorkflowEngine", inputs: List[MaterializedInput],
+                       outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
+        pass
 
 
 TRS_Workflow_Descriptor = str
@@ -412,9 +453,9 @@ class Container(NamedTuple):
     origTaggedName: str
     taggedName: URIType
     type: ContainerType
-    localPath: AbsPath = None
-    signature: Fingerprint = None
-    fingerprint: Fingerprint = None
+    localPath: Optional[AbsPath] = None
+    signature: Optional[Fingerprint] = None
+    fingerprint: Optional[Fingerprint] = None
 
 
 class MaterializedWorkflowEngine(NamedTuple):
