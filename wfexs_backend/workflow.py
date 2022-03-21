@@ -22,16 +22,15 @@ import json
 import logging
 import os
 import pathlib
-import platform
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
-import time
-import types
 
 from typing import Any, List, Mapping, Optional, Pattern, Tuple, Type, Union
+from typing import TYPE_CHECKING
+
 from urllib import parse
 
 from rocrate import rocrate
@@ -47,12 +46,15 @@ import yaml
 
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath, WfExSInstanceId
-from .common import RepoTag, RepoURL
+from .common import RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, WorkflowType, URIType
 from .common import ExpectedOutput, LocalWorkflow, MaterializedWorkflowEngine
 from .common import GeneratedContent, GeneratedDirectoryContent
 from .common import MaterializedContent, MaterializedInput, MaterializedOutput
 from .common import MarshallingStatus, SecurityContextConfig, StagedSetup
+from .common import Attribution, DefaultNoLicenceTuple
+# These imports are needed to properly unmarshall from YAML
+from .common import Container, URIWithMetadata
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
@@ -71,16 +73,19 @@ from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
 
+if TYPE_CHECKING:
+    from .wfexs_backend import WfExSBackend
+
 # The list of classes to be taken into account
 # CWL detection is before, as Nextflow one is
 # a bit lax (only detects a couple of too common
 # keywords)
-WORKFLOW_ENGINE_CLASSES = [
+WORKFLOW_ENGINE_CLASSES : List[Type[WorkflowEngine]] = [
     CWLWorkflowEngine,
     NextflowWorkflowEngine,
 ]
 
-def _wakeupEncDir(cond, workDir, logger):
+def _wakeupEncDir(cond: threading.Condition, workDir: AbsPath, logger: logging.Logger):
     """
     This method periodically checks whether the directory is still available
     """
@@ -119,7 +124,7 @@ class WF:
 
 
     def __init__(self,
-                 wfexs,
+                 wfexs: "WfExSBackend",
                  workflow_id=None,
                  version_id=None,
                  descriptor_type=None,
@@ -178,6 +183,8 @@ class WF:
         self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
         
         self.wfexs = wfexs
+        self.encWorkDir : AbsPath = None
+        self.workDir : AbsPath = None
         
         if isinstance(paranoid_mode, bool):
             self.paranoidMode = paranoid_mode
@@ -536,7 +543,7 @@ class WF:
 
 
     @classmethod
-    def FromWorkDir(cls, wfexs, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False):
+    def FromWorkDir(cls, wfexs: "WfExSBackend", workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False):
         if wfexs is None:
             raise WFException('Unable to initialize, no WfExSBackend instance provided')
         
@@ -545,7 +552,7 @@ class WF:
         return cls(wfexs, instanceId=instanceId, nickname=nickname, rawWorkDir=rawWorkDir, creation=creation, fail_ok=fail_ok)
     
     @classmethod
-    def FromFiles(cls, wfexs, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] =None, paranoidMode: bool = False):
+    def FromFiles(cls, wfexs: "WfExSBackend", workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] =None, paranoidMode: bool = False):
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
 
@@ -559,7 +566,7 @@ class WF:
         return cls.FromDescription(wfexs, workflow_meta, creds_config, paranoidMode=paranoidMode)
     
     @classmethod
-    def FromDescription(cls, wfexs, workflow_meta, creds_config: Optional[SecurityContextConfig] = None, paranoidMode: bool = False):
+    def FromDescription(cls, wfexs: "WfExSBackend", workflow_meta, creds_config: Optional[SecurityContextConfig] = None, paranoidMode: bool = False):
         """
         :param wfexs: WfExSBackend instance
         :param workflow_meta: The configuration describing both the workflow
@@ -593,7 +600,7 @@ class WF:
         )
     
     @classmethod
-    def FromForm(cls, wfexs, workflow_meta, paranoidMode: bool = False):  # VRE
+    def FromForm(cls, wfexs: "WfExSBackend", workflow_meta, paranoidMode: bool = False):  # VRE
         """
 
         :param wfexs: WfExSBackend instance
@@ -817,6 +824,41 @@ class WF:
         
         return secContext
     
+    def buildLicensedURI(self, remote_file: Union[URIType, Mapping, List], contextName: Optional[str] = None, licences: Tuple[URIType, ...] = DefaultNoLicenceTuple, attributions: List[Attribution] = []) -> Union[LicensedURI, List[LicensedURI]]:
+        if isinstance(remote_file, list):
+            return [ self.buildLicensedURI(remote_url, contextName=contextName, licences=licences, attributions=attributions) for remote_url in remote_file]
+        
+        if isinstance(remote_file, dict):
+            # The value of the attributes is superseded
+            remote_url = remote_file['uri']
+            licences = remote_file.get('licences', licences)
+            if isinstance(licences, list):
+                licences = tuple(licences)
+            contextName = remote_file.get('security-context', contextName)
+            
+            # Reconstruction of the attributions
+            rawAttributions = remote_file.get('attributions')
+            parsed_attributions = Attribution.ParseRawAttributions(remote_file.get('attributions'))
+            # Only overwrite in this case
+            if len(parsed_attributions) > 0:
+                attributions = parsed_attributions
+        else:
+            remote_url = remote_file
+        
+        secContext = None
+        if contextName is not None:
+            secContext = self.creds_config.get(contextName)
+            if secContext is None:
+                raise WFException(
+                    'No security context {} is available, needed by {}'.format(contextName, remote_file))
+        
+        return LicensedURI(
+            uri=remote_url,
+            licences=licences,
+            attributions=attributions,
+            secContext=secContext
+        )
+    
     def fetchInputs(self, params, workflowInputs_destdir: AbsPath,
                     prefix:str='', lastInput:int=0, offline: bool = False) -> Tuple[List[MaterializedInput], int]:
         """
@@ -873,22 +915,23 @@ class WF:
                             continue
 
                         remote_files = inputs['url']
-                        cacheable = not self.paranoidMode if inputs.get('cache', True) else False
+                        # We are sending the context name thinking in the future,
+                        # as it could contain potential hints for authenticated access
+                        contextName = inputs.get('security-context')
                         if not isinstance(remote_files, list):  # more than one input file
-                            remote_files = [remote_files]
+                            remote_files = [ remote_files ]
+                        # Embedding the context
+                        alt_remote_files = [ self.buildLicensedURI(remote_file, contextName=contextName) for remote_file in remote_files ]
+                        
+                        cacheable = not self.paranoidMode if inputs.get('cache', True) else False
 
                         remote_pairs = []
                         # The storage dir depends on whether it can be cached or not
                         storeDir = CacheType.Input if cacheable else workflowInputs_destdir
-                        for remote_file in remote_files:
-                            # We are sending the context name thinking in the future,
-                            # as it could contain potential hints for authenticated access
-                            contextName = inputs.get('security-context')
-                            secContext = self.getContext(remote_file, contextName)
+                        for alt_remote_file in alt_remote_files:
                             matContent = self.wfexs.downloadContent(
-                                remote_file,
+                                alt_remote_file,
                                 dest=storeDir,
-                                secContext=secContext,
                                 offline=offline,
                                 ignoreCache=not cacheable,
                                 registerInCache=cacheable
@@ -921,7 +964,7 @@ class WF:
 
                             if globExplode is not None:
                                 prettyLocalPath = pathlib.Path(prettyLocal)
-                                matParse = parse.urlparse(matContent.uri)
+                                matParse = parse.urlparse(matContent.licensed_uri.uri)
                                 for exp in prettyLocalPath.glob(globExplode):
                                     relPath = exp.relative_to(prettyLocalPath)
                                     relName = str(relPath)
@@ -930,10 +973,16 @@ class WF:
                                         relExpPath += '/'
                                     relExpPath += '/'.join(map(lambda part: parse.quote_plus(part), relPath.parts))
                                     expUri = parse.urlunparse((matParse.scheme, matParse.netloc, relExpPath, matParse.params, matParse.query, matParse.fragment))
+                                    
+                                    # TODO: enrich outputs to add licensing features?
+                                    lic_expUri = LicensedURI(
+                                        uri=expUri,
+                                        licences=matContent.licensed_uri.licences
+                                    )
                                     remote_pairs.append(
                                         MaterializedContent(
                                             local=str(exp),
-                                            uri=expUri,
+                                            licensed_uri=lic_expUri,
                                             prettyFilename=relName,
                                             metadata_array=matContent.metadata_array,
                                             kind=ContentKind.Directory if exp.is_dir() else ContentKind.File
@@ -941,8 +990,14 @@ class WF:
                                     )
                             else:
                                 remote_pairs.append(
-                                    MaterializedContent(prettyLocal, matContent.uri, matContent.prettyFilename,
-                                                        matContent.kind, matContent.metadata_array))
+                                    MaterializedContent(
+                                        local=prettyLocal,
+                                        licensed_uri=matContent.licensed_uri,
+                                        prettyFilename=matContent.prettyFilename,
+                                        kind=matContent.kind,
+                                        metadata_array=matContent.metadata_array
+                                    )
+                                )
 
                         theInputs.append(MaterializedInput(linearKey, remote_pairs))
                     else:
@@ -978,7 +1033,7 @@ class WF:
         """
         BEWARE: This is a destructive step! So, once run, there is no back!
         """
-        self.bag = bagit.make_bag(self.workDir)
+        return bagit.make_bag(self.workDir)
 
     DefaultCardinality = '1'
     CardinalityMapping = {
@@ -1500,7 +1555,7 @@ class WF:
                 if isinstance(itemInValues, MaterializedContent):
                     # TODO: embed metadata_array in some way
                     itemInLocalSource = itemInValues.local
-                    itemInURISource = itemInValues.uri
+                    itemInURISource = itemInValues.licensed_uri
                     if os.path.isfile(itemInLocalSource):   # if is a file
                         properties = {
                             'name': in_item.name
@@ -1609,11 +1664,11 @@ class WF:
         trsMetadataCache = os.path.join(self.metaDir, self.TRS_METADATA_FILE)
 
         try:
-            metaContentKind, cachedTRSMetaFile, trsMetaMeta = cacheHandler.fetch(trs_endpoint_v2_meta_url, self.metaDir, offline)
+            metaContentKind, cachedTRSMetaFile, trsMetaMeta, trsMetaLicences = cacheHandler.fetch(trs_endpoint_v2_meta_url, self.metaDir, offline)
             trs_endpoint_meta_url = trs_endpoint_v2_meta_url
         except WFException as wfe:
             try:
-                metaContentKind, cachedTRSMetaFile, trsMetaMeta = cacheHandler.fetch(trs_endpoint_v2_beta2_meta_url, self.metaDir, offline)
+                metaContentKind, cachedTRSMetaFile, trsMetaMeta, trsMetaLicences = cacheHandler.fetch(trs_endpoint_v2_beta2_meta_url, self.metaDir, offline)
                 trs_endpoint_meta_url = trs_endpoint_v2_beta2_meta_url
             except WFException as wfebeta:
                 raise WFException("Unable to fetch metadata from {} in order to identify whether it is a working GA4GH TRSv2 endpoint. Exceptions:\n{}\n{}".format(self.trs_endpoint, wfe, wfebeta))
@@ -1623,12 +1678,12 @@ class WF:
             os.symlink(os.path.basename(cachedTRSMetaFile), trsMetadataCache)
 
         with open(trsMetadataCache, mode="r", encoding="utf-8") as ctmf:
-            self.trs_endpoint_meta = json.load(ctmf)
+            trs_endpoint_meta = json.load(ctmf)
 
         # Minimal check
-        trs_version = self.trs_endpoint_meta.get('api_version')
+        trs_version = trs_endpoint_meta.get('api_version')
         if trs_version is None:
-            trs_version = self.trs_endpoint_meta.get('type', {}).get('version')
+            trs_version = trs_endpoint_meta.get('type', {}).get('version')
 
         if trs_version is None:
             raise WFException("Unable to identify TRS version from {}".format(trs_endpoint_meta_url))
@@ -1637,7 +1692,7 @@ class WF:
         trs_tools_url = parse.urljoin(self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe=''))
 
         trsQueryCache = os.path.join(self.metaDir, self.TRS_QUERY_CACHE_FILE)
-        _, cachedTRSQueryFile, _ = cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
+        _, cachedTRSQueryFile, _, _ = cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
         # Giving a friendly name
         if not os.path.exists(trsQueryCache):
             os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
@@ -1719,7 +1774,7 @@ class WF:
         toolFilesURL = trs_tools_url + '/versions/' + parse.quote(toolVersionId, safe='') + '/' + parse.quote(chosenDescriptorType, safe='') + '/files'
 
         # Detecting whether RO-Crate trick will work
-        if self.trs_endpoint_meta.get('organization', {}).get('name') == 'WorkflowHub':
+        if trs_endpoint_meta.get('organization', {}).get('name') == 'WorkflowHub':
             self.logger.debug("WorkflowHub workflow")
             # And this is the moment where the RO-Crate must be fetched
             roCrateURL = toolFilesURL + '?' + parse.urlencode({'format': 'zip'})
@@ -1731,7 +1786,7 @@ class WF:
             self.logger.debug("TRS workflow")
             # Learning the available files and maybe
             # which is the entrypoint to the workflow
-            _, trsFilesDir, trsFilesMeta = self.wfexs.cacheFetch(INTERNAL_TRS_SCHEME_PREFIX + ':' + toolFilesURL, CacheType.TRS, offline)
+            _, trsFilesDir, trsFilesMeta, _ = self.wfexs.cacheFetch(INTERNAL_TRS_SCHEME_PREFIX + ':' + toolFilesURL, CacheType.TRS, offline)
 
             expectedEngineDesc = self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
             remote_workflow_entrypoint = trsFilesMeta[0].metadata.get('remote_workflow_entrypoint')
@@ -1760,6 +1815,7 @@ class WF:
         :return:
         """
         roCrateFile = self.wfexs.downloadROcrate(roCrateURL, offline=offline)
+        self.cacheROCrateFilename = roCrateFile
         self.logger.info("downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile))
 
         return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
