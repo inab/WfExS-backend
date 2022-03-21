@@ -21,22 +21,24 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import List, Mapping, Optional, Tuple, Union
+from typing import cast, Dict, List, Mapping, Optional, Tuple, Type, Union
 from urllib import parse
 
 from . import AbstractStatefulFetcher, FetcherException
 
-from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import AbsPath, RelPath
+from ..common import AnyURI, ContentKind, SecurityContextConfig
 from ..common import URIType, URIWithMetadata
 from ..common import DEFAULT_GIT_CMD, RepoURL, RepoTag, SymbolicName
+from ..common import ProtocolFetcherReturn
 
 class GitFetcher(AbstractStatefulFetcher):
     def __init__(self, progs: Mapping[SymbolicName, AbsPath]):
         super().__init__(progs=progs)
         
-        self.git_cmd = self.progs.get(DEFAULT_GIT_CMD, DEFAULT_GIT_CMD)
+        self.git_cmd = self.progs.get(cast(SymbolicName, DEFAULT_GIT_CMD), DEFAULT_GIT_CMD)
 
-    def doMaterializeRepo(self, repoURL:RepoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, Mapping[str, str]]:
+    def doMaterializeRepo(self, repoURL:RepoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, Dict[str, Union[RepoURL, Optional[RepoTag]]]]:
         """
 
         :param repoURL:
@@ -48,7 +50,7 @@ class GitFetcher(AbstractStatefulFetcher):
         # Assure directory exists before next step
         if repo_tag_destdir is None:
             if base_repo_destdir is None:
-                repo_tag_destdir = tempfile.mkdtemp(prefix='wfexs', suffix='.git')
+                repo_tag_destdir = cast(AbsPath, tempfile.mkdtemp(prefix='wfexs', suffix='.git'))
                 atexit.register(shutil.rmtree, repo_tag_destdir)
             else:
                 repo_hashed_id = hashlib.sha1(repoURL.encode('utf-8')).hexdigest()
@@ -63,7 +65,7 @@ class GitFetcher(AbstractStatefulFetcher):
                         raise FetcherException(errstr)
 
                 repo_hashed_tag_id = hashlib.sha1(b'' if repoTag is None else repoTag.encode('utf-8')).hexdigest()
-                repo_tag_destdir = os.path.join(repo_destdir, repo_hashed_tag_id)
+                repo_tag_destdir = cast(AbsPath, os.path.join(repo_destdir, repo_hashed_tag_id))
         
         self.logger.debug(f'Repo dir {repo_tag_destdir}')
         
@@ -141,7 +143,7 @@ class GitFetcher(AbstractStatefulFetcher):
         self.logger.debug(f'Running "{" ".join(gitrevparse_params)}"')
         with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1',
                               cwd=repo_tag_destdir) as revproc:
-            repo_effective_checkout = revproc.stdout.read().rstrip()
+            repo_effective_checkout = cast(RepoTag, revproc.stdout.read().rstrip())
             
         metadata = {
             'repo': repoURL,
@@ -152,7 +154,7 @@ class GitFetcher(AbstractStatefulFetcher):
         return repo_tag_destdir, repo_effective_checkout, metadata
 
 
-    def fetch(self, remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+    def fetch(self, remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
         parsedInputURL = parse.urlparse(remote_file)
         
         # These are the usual URIs which can be understood by pip
@@ -167,6 +169,7 @@ class GitFetcher(AbstractStatefulFetcher):
             gitScheme = parsedInputURL.scheme
 
         # Getting the tag or branch
+        repoTag : Optional[RepoTag]
         if '@' in parsedInputURL.path:
             gitPath, repoTag = parsedInputURL.path.split('@', 1)
         else:
@@ -183,14 +186,15 @@ class GitFetcher(AbstractStatefulFetcher):
             repoRelPath = None
 
         # Now, reassemble the repoURL, to be used by git client
-        repoURL = parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, '', '', ''))
+        repoURL = cast(RepoURL, parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, '', '', '')))
         
         repo_tag_destdir , repo_effective_checkout, metadata = self.doMaterializeRepo(repoURL, repoTag=repoTag)
         metadata['relpath'] = repoRelPath
         
+        preferredName : Optional[RelPath]
         if repoRelPath is not None:
             cachedContentPath = os.path.join(repo_tag_destdir, repoRelPath)
-            preferredName = repoRelPath.split('/')[-1]
+            preferredName = cast(RelPath, repoRelPath.split('/')[-1])
         else:
             cachedContentPath = repo_tag_destdir
             preferredName = None
@@ -210,11 +214,11 @@ class GitFetcher(AbstractStatefulFetcher):
                 metadata=metadata,
                 preferredName=preferredName
             )
-        ]
+        ], None
         
 
 # These are de-facto schemes supported by pip and git client
-SCHEME_HANDLERS = {
+SCHEME_HANDLERS : Mapping[str, Type[AbstractStatefulFetcher]] = {
     'git': GitFetcher,
     'git+https': GitFetcher,
     'git+http': GitFetcher,

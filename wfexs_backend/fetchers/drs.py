@@ -20,7 +20,7 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import cast, List, Optional, Tuple, Union
+from typing import cast, List, Mapping, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
@@ -29,10 +29,11 @@ from . import fetchClassicURL, FetcherException
 
 from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
 from ..common import LicensedURI, URIType, URIWithMetadata
+from ..common import ProtocolFetcher, ProtocolFetcherReturn
 
 DRS_SCHEME = 'drs'
 
-def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[List[LicensedURI], List[URIWithMetadata]]:
+def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     upperSecContext = dict()
     
     parsedInputURL = parse.urlparse(remote_file)
@@ -95,7 +96,7 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
     metadata = None
     try:
         metaio = io.BytesIO()
-        _ , metametaio = fetchClassicURL(object_metadata_url, metaio, secContext=upperSecContext)
+        _ , metametaio, _ = fetchClassicURL(object_metadata_url, metaio, secContext=upperSecContext)
         object_metadata = json.loads(metaio.getvalue().decode('utf-8'))
         # Gathering the preferred name
         preferredName = object_metadata.get('name')
@@ -118,7 +119,7 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
             
             try:
                 metaaccio = io.BytesIO()
-                _ , metametaaccio = fetchClassicURL(object_access_metadata_url, metaaccio, secContext=upperSecContext)
+                _ , metametaaccio, _ = fetchClassicURL(object_access_metadata_url, metaaccio, secContext=upperSecContext)
                 object_access_metadata = json.loads(metaaccio.getvalue().decode('utf-8'))
             except urllib.error.HTTPError as he:
                 raise FetcherException("Error fetching DRS access link {} for {} : {} {}".format(access_id, remote_file, he.code, he.reason)) from he
@@ -138,8 +139,8 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
             )
             retURL.append(lic_uri)
     
-    return retURL, metadata_array
+    return retURL, metadata_array, None
 
-SCHEME_HANDLERS = {
+SCHEME_HANDLERS : Mapping[str, ProtocolFetcher] = {
     DRS_SCHEME: downloadContentFromDRS,
 }

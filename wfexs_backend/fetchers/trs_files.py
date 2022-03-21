@@ -21,7 +21,7 @@ import io
 import json
 import os
 
-from typing import cast, List, Optional, Tuple, Union
+from typing import cast, List, Mapping, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
@@ -30,6 +30,7 @@ from . import fetchClassicURL, FetcherException
 
 from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
 from ..common import URIType, URIWithMetadata
+from ..common import ProtocolFetcher, ProtocolFetcherReturn
 
 
 INTERNAL_TRS_SCHEME_PREFIX = 'wfexs.trs.files'
@@ -37,7 +38,7 @@ INTERNAL_TRS_SCHEME_PREFIX = 'wfexs.trs.files'
 TRS_FILES_SUFFIX = '/files'
 TRS_DESCRIPTOR_INFIX = '/descriptor/'
 
-def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
     Method to download contents from TRS files related to a tool
 
@@ -67,7 +68,7 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
     metaio = None
     try:
         metaio = io.BytesIO()
-        _ , metametaio = fetchClassicURL(metadata_url, metaio)
+        _ , metametaio, _ = fetchClassicURL(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode('utf-8'))
         topMeta['payload'] = metadata
         metadata_array.extend(metametaio)
@@ -98,7 +99,7 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
             # it is fetched twice, one for the metadata,
             if file_desc.get('file_type') == 'PRIMARY_DESCRIPTOR':
                 descriptorMeta = io.BytesIO()
-                _ , metaprimary = fetchClassicURL(file_url, descriptorMeta)
+                _ , metaprimary, _ = fetchClassicURL(file_url, descriptorMeta)
                 metadata_array.extend(metaprimary)
                 
                 # This metadata can help a lot to get the workflow repo
@@ -110,15 +111,15 @@ def fetchTRSFiles(remote_file:URIType, cachedFilename:AbsPath, secContext:Option
                 del metadataPD
                 
             # and another for the raw content (in case no workflow repo is identified)
-            _ , metaelem = fetchClassicURL(file_url, absfile, {'headers': { 'Accept': 'text/plain' } })
+            _ , metaelem, _ = fetchClassicURL(file_url, absfile, {'headers': { 'Accept': 'text/plain' } })
             metadata_array.extend(metaelem)
     
     if emptyWorkflow:
         raise FetcherException("Error processing TRS files for {} : no file was found.\n{}".format(remote_file, metadata))
     
-    return ContentKind.Directory, metadata_array
+    return ContentKind.Directory, metadata_array, None
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS = {
+SCHEME_HANDLERS : Mapping[str, ProtocolFetcher] = {
     INTERNAL_TRS_SCHEME_PREFIX: fetchTRSFiles,
 }

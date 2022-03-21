@@ -29,7 +29,7 @@ from paramiko.config import SSH_PORT as DEFAULT_SSH_PORT
 import shutil
 import stat
 
-from typing import Any, List, Mapping, Optional, Tuple, Union
+from typing import cast, Any, Dict, List, Mapping, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
@@ -37,6 +37,7 @@ import urllib.error
 from ..common import AbstractWfExSException
 from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
 from ..common import SymbolicName, URIType, URIWithMetadata
+from ..common import ProtocolFetcher, ProtocolFetcherReturn
 
 from ..utils.ftp_downloader import FTPDownloader
 
@@ -55,13 +56,22 @@ class AbstractStatefulFetcher(abc.ABC):
         self.progs = progs
     
     @abc.abstractmethod
-    def fetch(self, remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+    def fetch(self, remote_file:URIType, cachedFilename: AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
         """
         This is the method to be implemented by the stateful fetcher
         """
         pass
 
-def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
+    
+    @abc.abstractmethod
+    def fetch(self, remote_file:URIType, cachedFilename: Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
+        """
+        This is the method to be implemented by the stateful fetcher
+        """
+        pass
+
+def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
     Method to fetch contents from http, https and ftp
 
@@ -98,11 +108,12 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
                 netloc += ':' + str(parsedInputURL.port)
 
             # Now the credentials are properly set up
-            remote_file = parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
-                                            parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment))
+            remote_file = cast(URIType, parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
+                                            parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
         method = secContext.get('method')
     
     # Preparing where it is going to be written
+    download_file : Union[io.TextIOBase, io.BufferedIOBase, io.RawIOBase, io.IOBase, io.BufferedWriter]
     if isinstance(cachedFilename, (io.TextIOBase, io.BufferedIOBase, io.RawIOBase, io.IOBase)):
         download_file = cachedFilename
     else:
@@ -132,9 +143,9 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
         if download_file != cachedFilename:
             download_file.close()
     
-    return ContentKind.File, [ uri_with_metadata ]
+    return ContentKind.File, [ uri_with_metadata ], None
 
-def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
     Method to fetch contents from ftp
 
@@ -145,7 +156,7 @@ def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
     
     parsedInputURL = parse.urlparse(remote_file)
     kind = None
-    connParams = {
+    connParams : Dict[str, Optional[Union[int, str]]] = {
         'HOST': parsedInputURL.hostname,
     }
     if parsedInputURL.port is not None:
@@ -162,15 +173,15 @@ def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
     else:
         kind = ContentKind.File
     
-    return kind, [ URIWithMetadata(remote_file, {}) ]
+    return kind, [ URIWithMetadata(remote_file, {}) ], None
 
-def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None) -> Tuple[Union[int,bool], ContentKind]:
+def sftpCopy(sftp:paramiko.SFTPClient, sshPath:AbsPath, localPath:AbsPath, sshStat: Optional[paramiko.SFTPAttributes] = None) -> Tuple[Union[int,bool], Optional[ContentKind]]:
     if sshStat is None:
         sshStat = sftp.stat(sshPath)
     
     # Trios
     transTrios = []
-    recur = []
+    recur : List[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]] = []
     kind = None
     if stat.S_ISREG(sshStat.st_mode):
         transTrios.append((sshPath, sshStat, localPath))
@@ -181,14 +192,17 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None) -> Tupl
         recur = []
         # List of remote files
         for filename in sftp.listdir(sshPath):
-            rPath = os.path.join(sshPath, filename)
-            lPath = os.path.join(localPath, filename)
+            rPath = cast(AbsPath, os.path.join(sshPath, filename))
+            lPath = cast(AbsPath, os.path.join(localPath, filename))
             rStat = sftp.stat(rPath)
             
-            if stat.S_ISREG(rStat.st_mode):
-                transTrios.append((rPath, rStat, lPath))
-            elif stat.S_ISDIR(rStat.st_mode):
-                recur.append((rPath, rStat, lPath))
+            if rStat.st_mode is not None:
+                if stat.S_ISREG(rStat.st_mode):
+                    transTrios.append((rPath, rStat, lPath))
+                elif stat.S_ISDIR(rStat.st_mode):
+                    recur.append((rPath, rStat, lPath))
+            else:
+                logging.warning(f"Corner case where either paramiko or server {sftp.get_channel().getpeername()} is not providing stats for {rPath}")
         kind = ContentKind.Directory
     else:
         return False, None
@@ -202,12 +216,14 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath, localPath, sshStat=None) -> Tupl
     
     # And recurse on these
     for rDir, rStat, lDir in recur:
-        numCopied += sftpCopy(sftp, rDir, lDir, sshStat=rStat)
+        subNumCopied , _ = sftpCopy(sftp, rDir, lDir, sshStat=rStat)
+        if isinstance(subNumCopied, int):
+            numCopied += subNumCopied
     
     return numCopied, kind
 
 # TODO: test this codepath
-def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
     Method to fetch contents from ssh / sftp servers
 
@@ -240,8 +256,10 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
         connBlock['password'] = password
     
     sshHost = parsedInputURL.hostname
+    if sshHost is None:
+        sshHost = ''
     sshPort = parsedInputURL.port  if parsedInputURL.port is not None  else  DEFAULT_SSH_PORT
-    sshPath = parsedInputURL.path
+    sshPath = cast(AbsPath, parsedInputURL.path)
     
     t = None
     try:
@@ -253,14 +271,18 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
         t.connect(**connBlock)
         sftp = paramiko.SFTPClient.from_transport(t)
         
-        _ , kind = sftpCopy(sftp,sshPath,cachedFilename)
-        return kind, [ URIWithMetadata(remote_file, {}) ]
+        if sftp is None:
+            raise FetcherException(f"Unable to set up a connection to {sshHost}:{sshPort}")
+        _ , kind = sftpCopy(sftp, sshPath, cachedFilename)
+        if kind is None:
+            raise FetcherException(f"sftp copy from {sshHost}:{sshPort}/{sshPath} failed")
+        return kind, [ URIWithMetadata(remote_file, {}) ], None
     finally:
         # Closing the SFTP connection
         if t is not None:
             t.close()
 
-def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
     Method to fetch contents from local contents
 
@@ -284,9 +306,9 @@ def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[S
     else:
         raise FetcherException("Local path {} is neither a file nor a directory".format(localPath))
     
-    return kind, [ URIWithMetadata(remote_file, {}) ]
+    return kind, [ URIWithMetadata(remote_file, {}) ], None
 
-DEFAULT_SCHEME_HANDLERS = {
+DEFAULT_SCHEME_HANDLERS : Mapping[str, ProtocolFetcher] = {
     'http': fetchClassicURL,
     'https': fetchClassicURL,
     'ftp': fetchFTPURL,

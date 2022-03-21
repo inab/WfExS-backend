@@ -25,11 +25,12 @@ from . import FetcherException
 
 from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
 from ..common import URIType, URIWithMetadata
+from ..common import ProtocolFetcher, ProtocolFetcherReturn
 
 
 logger = logging.getLogger()
 
-def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secContext: Optional[SecurityContextConfig] = None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secContext: Optional[SecurityContextConfig] = None) -> ProtocolFetcherReturn:
     """
         Method to download contents from Google Storage.
 
@@ -115,9 +116,9 @@ def downloadContentFrom_gs(remote_file: URIType, cachedFilename: AbsPath, secCon
         
         kind = ContentKind.Directory
     
-    return kind, [URIWithMetadata(remote_file, metadata)]
+    return kind, [URIWithMetadata(remote_file, metadata)], None
 
 
-GS_SCHEME_HANDLERS = {
+GS_SCHEME_HANDLERS : Mapping[str, ProtocolFetcher] = {
     'gs': downloadContentFrom_gs
 }

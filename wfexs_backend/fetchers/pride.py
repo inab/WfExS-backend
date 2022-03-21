@@ -20,7 +20,7 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import cast, List, Optional, Tuple, Union
+from typing import cast, List, Mapping, Optional, Tuple, Union
 
 from urllib import request, parse
 import urllib.error
@@ -28,12 +28,13 @@ import urllib.error
 from . import fetchClassicURL, FetcherException
 
 from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import ProtocolFetcher, ProtocolFetcherReturn
 from ..common import URIType, URIWithMetadata
 
 
 PRIDE_PROJECTS_REST='https://www.ebi.ac.uk/pride/ws/archive/v2/projects/'
 
-def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata]]:
+def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
     Method to resolve contents from PRIDE project ids
 
@@ -53,7 +54,7 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
     metadata = None
     try:
         metaio = io.BytesIO()
-        _ , metametaio = fetchClassicURL(metadata_url, metaio)
+        _ , metametaio, _ = fetchClassicURL(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode('utf-8'))
         gathered_meta['payload'] = metadata
         metadata_array.extend(metametaio)
@@ -71,9 +72,9 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
     except Exception as e:
         raise FetcherException("Error processing PRIDE project metadata for {} : {}".format(remote_file, e))
     
-    return pride_project_url, metadata_array
+    return pride_project_url, metadata_array, None
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS = {
+SCHEME_HANDLERS : Mapping[str, ProtocolFetcher] = {
     'pride.project': fetchPRIDEProject,
 }
