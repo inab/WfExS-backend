@@ -5,6 +5,85 @@
 	"description": "WfExS-backend stage definition file (EOSC-Life Demonstrator 7 JSON Schemas)",
 	"type": "object",
 	"definitions": {
+		"LicensedURI": {
+			"type": "object",
+			"properties": {
+				"uri": {
+					"type": "string",
+					"description": "The URI of the resource",
+					"format": "uri",
+					"minLength": 1
+				},
+				"licences": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"description": "URL to the description of the licence of the data. And by default, no permission to use or distribute it",
+						"format": "uri",
+						"default": "https://choosealicense.com/no-permission/",
+						"minLength": 1
+					}
+				},
+				"attributions": {
+					"type": "array",
+					"uniqueItems": true,
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"type": "string",
+								"description": "Name of the author",
+								"minLength": 1
+							},
+							"pid": {
+								"type": "string",
+								"description": "A unique way to represent this author, either through her/his ORCID or another permanent, representative link",
+								"format": "uri",
+								"minLength": 1
+							},
+							"roles": {
+								"type": "array",
+								"uniqueItems": true,
+								"items": {
+									"type": "string",
+									"documentation": "The valid roles come from CASRAI CRediT, and can be visited through http://credit.niso.org/contributor-roles/{term}/",
+									"enum": [
+										"conceptualization",
+										"data-curation",
+										"formal-analysis",
+										"funding-acquisition",
+										"investigation",
+										"methodology",
+										"project-administration",
+										"resources",
+										"software",
+										"supervision",
+										"validation",
+										"visualization",
+										"writing-original-draft",
+										"writing-review-editing"
+									]
+								},
+								"minItems": 1
+							}
+						},
+						"required": [
+							"name",
+							"pid",
+							"roles"
+						]
+					}
+				},
+				"security-context": {
+					"documentation": "The name of the optional security context to be used to authenticate in order to reach the resource",
+					"type": "string",
+					"minLength": 1
+				}
+			},
+			"required": [
+				"uri"
+			]
+		},
 		"Param": {
 			"oneOf": [
 				{
@@ -52,11 +131,37 @@
 											"minLength": 1
 										},
 										{
+											"$ref": "#/definitions/LicensedURI"
+										},
+										{
 											"type": "array",
 											"items": {
-												"type": "string",
-												"format": "uri",
-												"minLength": 1
+												"oneOf": [
+													{
+														"$ref": "#/definitions/LicensedURI"
+													},
+													{
+														"type": "string",
+														"format": "uri",
+														"minLength": 1
+													},
+													{
+														"type": "array",
+														"items": {
+															"oneOf": [
+																{
+																	"$ref": "#/definitions/LicensedURI"
+																},
+																{
+																	"type": "string",
+																	"format": "uri",
+																	"minLength": 1
+																}
+															]
+														},
+														"minItems": 2
+													}
+												]
 											},
 											"minArrayLength": 1
 										}
