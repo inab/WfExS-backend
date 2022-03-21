@@ -22,9 +22,10 @@ import fnmatch
 import json
 import re
 
-from typing import Any, Iterator, List, Mapping, Pattern
+from typing import Any, Iterator, List, Mapping, Optional, Pattern
+from typing import cast, Dict, Sequence, Tuple, Union
 
-def translate_glob_args(args:Iterator[str]) -> List[Pattern]:
+def translate_glob_args(args: Sequence[str]) -> List[Pattern]:
     return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
 
 class DatetimeEncoder(json.JSONEncoder):
@@ -37,7 +38,7 @@ class DatetimeEncoder(json.JSONEncoder):
 # Next implementation of datetime.datetime.fromisoformat has been
 # borrowed from cpython, so the code does not depend on Python 3.7+
 # https://github.com/python/cpython/blob/998ae1fa3fb05a790071217cf8f6ae3a928da13f/Lib/datetime.py#L1721
-def datetimeFromISOFormat(date_string):
+def datetimeFromISOFormat(date_string: str) -> datetime.datetime:
 	"""Construct a datetime from the output of datetime.isoformat()."""
 	if not isinstance(date_string, str):
 		raise TypeError('fromisoformat: argument must be str')
@@ -48,20 +49,24 @@ def datetimeFromISOFormat(date_string):
 	
 	try:
 		date_components = _parse_isoformat_date(dstr)
-	except ValueError:
-		raise ValueError(f'Invalid isoformat string: {date_string!r}')
+	except IndexError as ie:
+        # When the string is shorter than it was expected,
+        # an IndexError arises, instead of a ValueError
+		raise ValueError(f'Invalid isoformat string: {date_string!r}') from ie
+	except ValueError as ve:
+		raise ValueError(f'Invalid isoformat string: {date_string!r}') from ve
 	
 	if tstr:
 		try:
 			time_components = _parse_isoformat_time(tstr)
-		except ValueError:
-			raise ValueError(f'Invalid isoformat string: {date_string!r}')
+		except ValueError as ve2:
+			raise ValueError(f'Invalid isoformat string: {date_string!r}') from ve2
 	else:
 		time_components = [0, 0, 0, 0, None]
 	
 	return datetime.datetime(*date_components,*time_components)
 
-def _parse_isoformat_date(dtstr):
+def _parse_isoformat_date(dtstr: str) -> List[int]:
 	# It is assumed that this function will only be called with a
 	# string of length exactly 10, and (though this is not used) ASCII-only
 	year = int(dtstr[0:4])
@@ -77,7 +82,7 @@ def _parse_isoformat_date(dtstr):
 	
 	return [year, month, day]
 
-def _parse_isoformat_time(tstr):
+def _parse_isoformat_time(tstr: str) -> List[Union[int, datetime.timezone, None]]:
 	# Format supported is HH[:MM[:SS[.fff[fff]]]][+HH:MM[:SS[.ffffff]]]
 	len_str = len(tstr)
 	if len_str < 2:
@@ -87,7 +92,7 @@ def _parse_isoformat_time(tstr):
 	tz_pos = (tstr.find('-') + 1 or tstr.find('+') + 1 or tstr.find('Z') + 1)
 	timestr = tstr[:tz_pos-1] if tz_pos > 0 else tstr
 	
-	time_comps = _parse_hh_mm_ss_ff(timestr)
+	time_comps = cast(List[Union[int, datetime.timezone, None]], _parse_hh_mm_ss_ff(timestr))
 	
 	tzi = None
 	if tz_pos > 0:
@@ -124,7 +129,7 @@ def _parse_isoformat_time(tstr):
 	
 	return time_comps
 
-def _parse_hh_mm_ss_ff(tstr):
+def _parse_hh_mm_ss_ff(tstr: str) -> List[int]:
 	# Parses things of the form HH[:MM[:SS[.fff[fff]]]]
 	len_str = len(tstr)
 	
@@ -163,9 +168,9 @@ def _parse_hh_mm_ss_ff(tstr):
 
 	return time_comps
 	
-def load_with_datetime(pairs, tz=None) -> Mapping:
+def load_with_datetime(pairs: Sequence[Tuple[str, Any]], tz:  Optional[datetime.tzinfo] =None) -> Mapping[str, Any]:
 	"""Load with dates"""
-	d = {}
+	d: Dict[str, Any] = {}
 	for k, v in pairs:
 		if isinstance(v, str):
 			try:
@@ -179,7 +184,7 @@ def load_with_datetime(pairs, tz=None) -> Mapping:
 			d[k] = v             
 	return d
 
-def jsonFilterDecodeFromStream(stream, tz=None) -> Any:
+def jsonFilterDecodeFromStream(stream, tz: Optional[datetime.tzinfo] =None) -> Any:
 	"""
 	Decode JSON content from a stream, translating ISO8601 dates to strings
 	"""
