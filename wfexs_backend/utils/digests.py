@@ -73,7 +73,7 @@ def ComputeDigestFromObject(obj, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, repMe
 
     return repMethod(digestAlgorithm, h.digest())
 
-def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Fingerprint:
+def ComputeDigestFromFileLike(filelike, digestAlgorithm=DEFAULT_DIGEST_ALGORITHM, bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE, repMethod=stringifyDigest) -> Union[Fingerprint, bytes]:
     """
     Accessory method used to compute the digest of an input file-like object
     """
