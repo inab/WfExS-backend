@@ -59,8 +59,9 @@ def GetGeneratedDirectoryContent(
                     theValues.append(theValue)
     
     # As this is a heavy operation, do it only when it is requested
+    signature : Optional[Fingerprint]
     if callable(signatureMethod):
-        signature = ComputeDigestFromDirectory(thePath, repMethod=signatureMethod)
+        signature = cast(Fingerprint, ComputeDigestFromDirectory(thePath, repMethod=signatureMethod))
     else:
         signature = None
     
@@ -85,8 +86,9 @@ def GetGeneratedDirectoryContentFromList(
     """
     
     # As this is a heavy operation, do it only when it is requested
+    signature : Optional[Fingerprint]
     if callable(signatureMethod):
-        signature = ComputeDigestFromGeneratedContentList(thePath, theValues, repMethod=signatureMethod)
+        signature = cast(Fingerprint, ComputeDigestFromGeneratedContentList(thePath, theValues, repMethod=signatureMethod))
     else:
         signature = None
     
@@ -111,7 +113,7 @@ def CWLDesc2Content(
     logger,
     expectedOutput: Optional[ExpectedOutput] = None,
     doGenerateSignatures: bool = False
-) -> List[Union[bool, str, int, float, GeneratedContent, GeneratedDirectoryContent]]:
+) -> Union[List[bool], List[str], List[int], List[float], List[GeneratedContent], List[GeneratedDirectoryContent]]:
     """
     """
     matValues = []
