@@ -935,7 +935,7 @@ class WfExSBackend:
         return cachedFilename
 
     def downloadContent(self, remote_file: Union[URIType, LicensedURI, List[URIType], List[LicensedURI]], dest: Union[AbsPath,CacheType],
-                          secContext: Optional=None, offline: bool = False, ignoreCache:bool=False, registerInCache:bool=True) -> MaterializedContent:
+                          secContext: Optional[SecurityContextConfig] = None, offline: bool = False, ignoreCache:bool=False, registerInCache:bool=True) -> MaterializedContent:
         """
         Download remote file or directory / dataset.
 
