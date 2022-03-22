@@ -505,7 +505,7 @@ class SchemeHandlerCacheHandler:
 
                         try:
                             # Content is fetched here
-                            inputKind, fetched_metadata_array, fetched_licences = schemeHandler(the_remote_file, tempCachedFilename, secContext=usableSecContext)
+                            inputKind, fetched_metadata_array, fetched_licences = schemeHandler(the_remote_file, tempCachedFilename, secContext=usableSecContext if usableSecContext else None)
                             
                             # Overwrite the licence if it is explicitly returned
                             if fetched_licences is not None:
@@ -545,7 +545,7 @@ class SchemeHandlerCacheHandler:
                             raise che from nested_exception
                         except Exception as e:
                             errmsg = "Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(the_remote_file, uriCachedFilename, remote_file, tempCachedFilename, e)
-                            self.logger.error(errmsg)
+                            self.logger.exception(errmsg)
                             raise CacheHandlerException(errmsg) from nested_exception
                     except FetcherException as wfe:
                         # Keeping the newest element of the chain
