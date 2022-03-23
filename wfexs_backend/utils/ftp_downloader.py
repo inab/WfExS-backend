@@ -99,10 +99,11 @@ class FTPDownloader:
         # This is needed to detect reconnections
         stream = None
         retries = self.max_retries
+        open_mode = 'wb'
         while retries > 0:
             try:
                 stream = await client.download_stream(dfdPath, offset=downloaded_size)
-                with upload_file_path.open(mode='ab', buffering=1024*1024) as wb:
+                with upload_file_path.open(mode=open_mode, buffering=1024*1024) as wb:
                     wb.seek(downloaded_size)
                     async for block in stream.iter_by_block():
                         wb.write(block)
@@ -117,7 +118,6 @@ class FTPDownloader:
     
                 break
             except ConnectionResetError:
-                self.logger.debug("Reconnecting")
                 await self._reconnect(client)
             except Exception as e:
                 retries -= 1
@@ -125,9 +125,12 @@ class FTPDownloader:
                 if retries == 0:
                     raise e
                 await self._reconnect(client)
+            
+            # In order to concatenate
+            open_mode = 'ab'
         
     async def _reconnect(self, client):
-        self.logger.debug("Reconnecting")
+        self.logger.debug(f"Reconnecting {self.HOST}:{self.PORT}")
         try:
             await client.quit()
         except:
@@ -140,7 +143,7 @@ class FTPDownloader:
         This method mirrors a whole directory into a destination one
         dfdPath must be absolute
         """
-        self.logger.info('Get files list')
+        self.logger.debug(f'Get files list {dfdPath}')
         
         retries = self.max_retries
         while retries > 0:
@@ -187,11 +190,11 @@ class FTPDownloader:
                     f'({i + 1}/{len(files_list)}) {file_name} -> ../{path}')
                 if download:
                     await self.__download_file_async(client, upload_file_path, path, info)
-                    self.logger.info('Loading: Complete')
+                    self.logger.debug('Loading: Complete')
         else:
-            self.logger.warning('Nothing new to download')
+            self.logger.debug('Nothing new to download')
 #                self.clear_tasks()
-        self.logger.info('Files downloaded')
+        self.logger.debug(f'Files from {dfdPath} downloaded to {downloaded_path}')
         
         return downloaded_path
 
@@ -200,7 +203,7 @@ class FTPDownloader:
         dfdPath must be absolute
         """
         
-        self.logger.info('Get file')
+        self.logger.debug(f'Get file {dfdPath}')
         
         file_name = dfdPath.name
         upload_file_path = utdPath
@@ -221,11 +224,11 @@ class FTPDownloader:
                              f'{upload_file_path}')
         if download:
             await self.__download_file_async(client, upload_file_path, dfdPath, dfdStat)
-            self.logger.info('Loading: Complete')
+            self.logger.debug('Loading: Complete')
         else:
-            self.logger.warning('Nothing new to download')
+            self.logger.debug('Nothing new to download')
 #           self.clear_tasks()
-        self.logger.info('File downloaded')
+        self.logger.debug(f'File {dfdPath} downloaded to {upload_file_path}')
         
         return upload_file_path
 
