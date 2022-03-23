@@ -1555,7 +1555,7 @@ class WF:
                 if isinstance(itemInValues, MaterializedContent):
                     # TODO: embed metadata_array in some way
                     itemInLocalSource = itemInValues.local
-                    itemInURISource = itemInValues.licensed_uri
+                    itemInURISource = itemInValues.licensed_uri.uri
                     if os.path.isfile(itemInLocalSource):   # if is a file
                         properties = {
                             'name': in_item.name
