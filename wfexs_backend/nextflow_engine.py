@@ -21,6 +21,7 @@ import functools
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -44,7 +45,10 @@ from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .fetchers import fetchClassicURL
 
 # A default name for the static bash
-DEFAULT_STATIC_BASH_CMD = 'bash.static'
+DEFAULT_STATIC_BASH_CMDS = [
+    'bash.static',
+    f'bash-{platform.system().lower()}-{platform.machine()}',
+]
 
 @functools.lru_cache()
 def _tzstring():
@@ -114,10 +118,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
             self.java_cmd = abs_java_cmd
         
         # Obtaining the full path to static bash
-        self.static_bash_cmd = shutil.which(toolsSect.get('staticBashCommand', DEFAULT_STATIC_BASH_CMD))
+        for default_static_bash_cmd in DEFAULT_STATIC_BASH_CMDS:
+            self.static_bash_cmd = shutil.which(toolsSect.get('staticBashCommand', default_static_bash_cmd))
+            if self.static_bash_cmd is not None:
+                break
         
         if self.static_bash_cmd is None:
-            self.logger.warning("Static bash command is not available. It could be needed for some images")
+            self.logger.warning(f"Static bash command is not available (looked for {DEFAULT_STATIC_BASH_CMDS}). It could be needed for some images")
         
         # Deciding whether to unset JAVA_HOME
         wfexs_dirname = os.path.dirname(os.path.abspath(sys.argv[0]))

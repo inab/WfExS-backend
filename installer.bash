@@ -6,7 +6,7 @@ JDK_MAJOR_VER=11
 JDK_VER=${JDK_MAJOR_VER}.0.11
 JDK_REV=9
 OPENJ9_VER=0.26.0
-GOCRYPTFS_VER=v2.2.0
+GOCRYPTFS_VER=v2.2.1
 STATIC_BASH_VER=5.1.004-1.2.2
 
 # Getting the installation directory
@@ -115,19 +115,20 @@ fi
 if [ -n "${GOCRYPTFS_INSTALLED}" ] ; then
 	echo "GoCryptFS ${GOCRYPTFS_VER} already installed"
 else
-	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_linux-static_amd64.tar.gz"
+	pythonSystem="$(python3 -c 'import platform; print(platform.system().lower())')"
+	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_${pythonSystem}-static_amd64.tar.gz"
 	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
 	( cd "${downloadDir}" && curl -L -O "${gocryptfs_url}" )
 	tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz
 fi
 
-
-if [ -x "${envDir}/bin/bash-linux-x86_64" ] ; then
-	echo "Static bash copy already available (to patch buggy bash within singularity containers being run by Nextflow)"
+staticBash="$(python3 -c 'import platform; print("bash-{}-{}".format(platform.system().lower(), platform.machine()))')"
+if [ -x "${envDir}/bin/${staticBash}" ] ; then
+	echo "Static bash copy ${staticBash} already available (to patch buggy bash within singularity containers being run by Nextflow)"
 else
-	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/bash-linux-x86_64"
+	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/${staticBash}"
 	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
 	( cd "${downloadDir}" && curl -L -O "${static_bash_url}" )
-	mv "${downloadDir}/bash-linux-x86_64" "${envDir}/bin/bash-linux-x86_64"
-	chmod +x "${envDir}/bin/bash-linux-x86_64"
+	mv "${downloadDir}/${staticBash}" "${envDir}/bin/${staticBash}"
+	chmod +x "${envDir}/bin/${staticBash}"
 fi
