@@ -33,7 +33,7 @@ from ..common import DEFAULT_GIT_CMD, RepoURL, RepoTag, SymbolicName
 from ..common import ProtocolFetcherReturn
 
 class GitFetcher(AbstractStatefulFetcher):
-    def __init__(self, progs: Mapping[SymbolicName, AbsPath]):
+    def __init__(self, progs: Mapping[SymbolicName, Union[RelPath, AbsPath]]):
         super().__init__(progs=progs)
         
         self.git_cmd = self.progs.get(cast(SymbolicName, DEFAULT_GIT_CMD), DEFAULT_GIT_CMD)

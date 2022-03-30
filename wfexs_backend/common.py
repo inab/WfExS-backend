@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import abc
+import datetime
 import enum
 import os
 from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple
@@ -38,22 +39,27 @@ def create_augmented_context(purpose=ssl.Purpose.SERVER_AUTH, *, cafile=None, ca
 if ssl._create_default_https_context != create_augmented_context:
     ssl._create_default_https_context = create_augmented_context
 
+# Abstraction of names
+SymbolicName = NewType('SymbolicName', str)
+# This is a relative path
+RelPath = NewType('RelPath', str)
+# This is an absolute path
+AbsPath = NewType('AbsPath', str)
 
+DEFAULT_GIT_CMD = cast(SymbolicName, 'git')
+DEFAULT_DOCKER_CMD = cast(SymbolicName, 'docker')
+DEFAULT_SINGULARITY_CMD = cast(SymbolicName, 'singularity')
+DEFAULT_PODMAN_CMD = cast(SymbolicName, 'podman')
+DEFAULT_JAVA_CMD = cast(SymbolicName, 'java')
+DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, 'fusermount')
 
-DEFAULT_GIT_CMD = 'git'
-DEFAULT_DOCKER_CMD = 'docker'
-DEFAULT_SINGULARITY_CMD = 'singularity'
-DEFAULT_PODMAN_CMD = 'podman'
-DEFAULT_JAVA_CMD = 'java'
-DEFAULT_FUSERMOUNT_CMD = 'fusermount'
-
-DEFAULT_PROGS = {
-    DEFAULT_GIT_CMD: DEFAULT_GIT_CMD,
-    DEFAULT_DOCKER_CMD: DEFAULT_DOCKER_CMD,
-    DEFAULT_SINGULARITY_CMD: DEFAULT_SINGULARITY_CMD,
-    DEFAULT_PODMAN_CMD: DEFAULT_PODMAN_CMD,
-    DEFAULT_JAVA_CMD: DEFAULT_JAVA_CMD,
-    DEFAULT_FUSERMOUNT_CMD: DEFAULT_FUSERMOUNT_CMD,
+DEFAULT_PROGS : Dict[SymbolicName, RelPath] = {
+    DEFAULT_GIT_CMD: cast(RelPath, DEFAULT_GIT_CMD),
+    DEFAULT_DOCKER_CMD: cast(RelPath, DEFAULT_DOCKER_CMD),
+    DEFAULT_SINGULARITY_CMD: cast(RelPath, DEFAULT_SINGULARITY_CMD),
+    DEFAULT_PODMAN_CMD: cast(RelPath, DEFAULT_PODMAN_CMD),
+    DEFAULT_JAVA_CMD: cast(RelPath, DEFAULT_JAVA_CMD),
+    DEFAULT_FUSERMOUNT_CMD: cast(RelPath, DEFAULT_FUSERMOUNT_CMD),
 }
 
 
@@ -67,7 +73,6 @@ DEFAULT_ENGINE_MODE = EngineMode.Local
 WfExSInstanceId = NewType('WfExSInstanceId', str)
 
 # Abstraction of input params and output names
-SymbolicName = NewType('SymbolicName', str)
 SymbolicParamName = NewType('SymbolicParamName', SymbolicName)
 SymbolicOutputName = NewType('SymbolicOutputName', SymbolicName)
 
@@ -79,10 +84,6 @@ URIType = NewType('URIType', str)
 RepoURL = NewType('RepoURL', URIType)
 # The tag, branch or hash of a workflow in a git repository
 RepoTag = NewType('RepoTag', str)
-# This is a relative path
-RelPath = NewType('RelPath', str)
-# This is an absolute path
-AbsPath = NewType('AbsPath', str)
 # This is also an absolute path
 EnginePath = NewType('EnginePath', AbsPath)
 
@@ -103,6 +104,7 @@ Fingerprint = NewType('Fingerprint', str)
 ExitVal = NewType('ExitVal', int)
 
 SecurityContextConfig = Dict[str, Any]
+SecurityContextConfigBlock = Dict[str, SecurityContextConfig]
 
 # As each workflow engine can have its own naming convention, leave them to
 # provide it
@@ -335,8 +337,8 @@ class LocalWorkflow(NamedTuple):
     langVersion: workflow language version / revision
     """
     dir: AbsPath
-    relPath: RelPath
-    effectiveCheckout: RepoTag
+    relPath: Optional[RelPath]
+    effectiveCheckout: Optional[RepoTag]
     langVersion: Optional[Union[EngineVersion, WFLangVersion]] = None
 
 
@@ -363,6 +365,18 @@ class AbstractWorkflowEngineType(abc.ABC):
     @abc.abstractmethod
     def launchWorkflow(self, matWfEng: "MaterializedWorkflowEngine", inputs: List[MaterializedInput],
                        outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
+        pass
+    
+    @classmethod
+    @abc.abstractmethod
+    def FromStagedSetup(cls,
+            staged_setup: "StagedSetup",
+            cache_dir: Optional[Union[RelPath, AbsPath]] = None,
+            cache_workflow_dir: Optional[Union[RelPath, AbsPath]] = None,
+            cache_workflow_inputs_dir: Optional[Union[RelPath, AbsPath]] = None,
+            local_config=None,
+            config_directory: Optional[Union[RelPath, AbsPath]] = None
+    ):
         pass
 
 
@@ -395,17 +409,17 @@ class WorkflowType(NamedTuple):
 
 class StagedSetup(NamedTuple):
     instance_id: WfExSInstanceId
-    nickname: str
-    creation: str
+    nickname: Optional[str]
+    creation: datetime.datetime
     workflow_config: Mapping
-    engine_tweaks_dir: AbsPath
+    engine_tweaks_dir: Optional[AbsPath]
     raw_work_dir: AbsPath
-    work_dir: AbsPath
-    workflow_dir: AbsPath
-    inputs_dir: AbsPath
-    outputs_dir: AbsPath
-    intermediate_dir: AbsPath
-    meta_dir: AbsPath
+    work_dir: Optional[AbsPath]
+    workflow_dir: Optional[AbsPath]
+    inputs_dir: Optional[AbsPath]
+    outputs_dir: Optional[AbsPath]
+    intermediate_dir: Optional[AbsPath]
+    meta_dir: Optional[AbsPath]
     temp_dir: AbsPath
     secure_exec: bool
     allow_other: bool

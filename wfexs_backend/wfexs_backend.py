@@ -33,7 +33,9 @@ import tempfile
 import types
 import uuid
 
-from typing import Any, Iterator, List, Mapping, Optional, Tuple, Type, Union
+from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
+from typing import cast, Set, Tuple, Type, Union
+
 from urllib import parse
 
 # We have preference for the C based loader and dumper, but the code
@@ -49,10 +51,11 @@ import crypt4gh.keys.kdf
 import crypt4gh.keys.c4gh
 
 from .common import AbstractWfExSException
-from .common import AbsPath, RelPath
+from .common import AbsPath, RelPath, SymbolicName
 from .common import RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, URIType, URIWithMetadata
-from .common import MaterializedContent, SecurityContextConfig, WorkflowType
+from .common import MaterializedContent, WorkflowType
+from .common import SecurityContextConfig, SecurityContextConfigBlock
 from .common import ExitVal, ProtocolFetcher, WfExSInstanceId
 from .common import MarshallingStatus, StagedSetup
 from .common import DEFAULT_FUSERMOUNT_CMD, DEFAULT_GIT_CMD, DEFAULT_PROGS
@@ -98,7 +101,7 @@ class WfExSBackend:
     ID_JSON_FILENAME = '.id.json'
 
     SCHEMAS_REL_DIR = 'schemas'
-    CONFIG_SCHEMA = 'config.json'
+    CONFIG_SCHEMA = cast(RelPath, 'config.json')
     
     @classmethod
     def generate_passphrase(cls) -> str:
@@ -121,9 +124,9 @@ class WfExSBackend:
 
         # Getting the config directory
         if config_directory is None:
-            config_directory = os.getcwd()
+            config_directory = cast(AbsPath, os.getcwd())
         if not os.path.isabs(config_directory):
-            config_directory = os.path.abspath(config_directory)
+            config_directory = cast(AbsPath, os.path.abspath(config_directory))
 
         if key_prefix is None:
             key_prefix = ''
@@ -268,7 +271,7 @@ class WfExSBackend:
             sys.exit(1)
 
         self.local_config = local_config
-        self.progs = DEFAULT_PROGS.copy()
+        self.progs : Dict[SymbolicName, Union[RelPath, AbsPath]] = DEFAULT_PROGS.copy()
 
         toolSect = local_config.get('tools', {})
         self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
@@ -303,9 +306,9 @@ class WfExSBackend:
 
         # Getting the config directory, needed for relative filenames
         if config_directory is None:
-            config_directory = os.getcwd()
+            config_directory = cast(AbsPath, os.getcwd())
         if not os.path.isabs(config_directory):
-            config_directory = os.path.abspath(config_directory)
+            config_directory = cast(AbsPath, os.path.abspath(config_directory))
 
         self.config_directory = config_directory
 
@@ -336,20 +339,20 @@ class WfExSBackend:
 
         # Setting up caching directories
         self.cacheDir = cacheDir
-        self.cachePathMap = dict()
-        cacheWorkflowDir = os.path.join(cacheDir, 'wf-cache')
+        self.cachePathMap : Dict[str, AbsPath] = dict()
+        cacheWorkflowDir = cast(AbsPath, os.path.join(cacheDir, 'wf-cache'))
         os.makedirs(cacheWorkflowDir, exist_ok=True)
         self.cachePathMap[CacheType.Workflow] = cacheWorkflowDir
 
-        cacheROCrateDir = os.path.join(cacheDir, 'ro-crate-cache')
+        cacheROCrateDir = cast(AbsPath, os.path.join(cacheDir, 'ro-crate-cache'))
         os.makedirs(cacheROCrateDir, exist_ok=True)
         self.cachePathMap[CacheType.ROCrate] = cacheROCrateDir
 
-        cacheTRSFilesDir = os.path.join(cacheDir, 'trs-files-cache')
+        cacheTRSFilesDir = cast(AbsPath, os.path.join(cacheDir, 'trs-files-cache'))
         os.makedirs(cacheTRSFilesDir, exist_ok=True)
         self.cachePathMap[CacheType.TRS] = cacheTRSFilesDir
 
-        cacheWorkflowInputsDir = os.path.join(cacheDir, 'wf-inputs')
+        cacheWorkflowInputsDir = cast(AbsPath, os.path.join(cacheDir, 'wf-inputs'))
         os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
         self.cachePathMap[CacheType.Input] = cacheWorkflowInputsDir
 
@@ -369,7 +372,7 @@ class WfExSBackend:
         self.defaultParanoidMode = False
 
         # cacheHandler is created on first use
-        self._sngltn = dict()
+        self._sngltn : Dict[Type[AbstractStatefulFetcher], AbstractStatefulFetcher] = dict()
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, dict())
 
         # All the custom ones should be added here
@@ -399,10 +402,10 @@ class WfExSBackend:
     def cacheWorkflowInputsDir(self) -> AbsPath:
         return self.cachePathMap[CacheType.Input]
 
-    def getCacheHandler(self, cache_type:CacheType) -> Tuple[SchemeHandlerCacheHandler, AbsPath]:
+    def getCacheHandler(self, cache_type:CacheType) -> Tuple[SchemeHandlerCacheHandler, Optional[AbsPath]]:
         return self.cacheHandler, self.cachePathMap.get(cache_type)
 
-    def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher]) -> AbstractStatefulFetcher:
+    def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher]) -> Optional[AbstractStatefulFetcher]:
         """
         Method to instantiate stateful fetchers once
         """
@@ -426,7 +429,9 @@ class WfExSBackend:
             for scheme, schemeHandler in schemeHandlers.items():
                 instSchemeHandler = None
                 if inspect.isclass(schemeHandler):
-                    instSchemeHandler = self.instantiateStatefulFetcher(schemeHandler).fetch
+                    instSchemeInstance = self.instantiateStatefulFetcher(schemeHandler)
+                    if instSchemeInstance is not None:
+                        instSchemeHandler = instSchemeInstance.fetch
                 elif callable(schemeHandler):
                     instSchemeHandler = schemeHandler
 
@@ -452,11 +457,11 @@ class WfExSBackend:
         """
         return WF(self, workflow_id, version_id, descriptor_type, trs_endpoint, params, outputs, workflow_config, creds_config)
     
-    def createRawWorkDir(self, nickname: Optional[str] = None) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
+    def createRawWorkDir(self, nickname: Optional[str] = None) -> Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]:
         """
         This method creates a new, empty, raw working directory
         """
-        instanceId = str(uuid.uuid4())
+        instanceId = cast(WfExSInstanceId, str(uuid.uuid4()))
         if nickname is None:
             nickname = generate_nickname()
         else:
@@ -464,12 +469,12 @@ class WfExSBackend:
         
         return self.getOrCreateRawWorkDirFromInstanceId(instanceId, nickname, create_ok=True)
     
-    def getOrCreateRawWorkDirFromInstanceId(self, instanceId: WfExSInstanceId, nickname: Optional[str] = None, create_ok: bool = False) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
+    def getOrCreateRawWorkDirFromInstanceId(self, instanceId: WfExSInstanceId, nickname: Optional[str] = None, create_ok: bool = False) -> Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]:
         """
         This method returns the absolute path to the raw working directory
         """
         # TODO: Add some validation about the working directory
-        uniqueRawWorkDir = os.path.join(self.baseWorkDir, instanceId)
+        uniqueRawWorkDir = cast(AbsPath, os.path.join(self.baseWorkDir, instanceId))
         
         return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, instanceId, nickname, create_ok=create_ok)
     
@@ -479,11 +484,14 @@ class WfExSBackend:
         """
         # TODO: Add some validation about the working directory
         id_json_path = os.path.join(uniqueRawWorkDir, self.ID_JSON_FILENAME)
+        creation : Optional[datetime.datetime]
         if not os.path.exists(uniqueRawWorkDir):
             if not create_ok:
                 raise WfExSBackendException(f"Creation of {uniqueRawWorkDir} is not allowed by parameter")
                 
             os.makedirs(uniqueRawWorkDir, exist_ok=True)
+            if instanceId is None:
+                instanceId = cast(WfExSInstanceId, os.path.basename(uniqueRawWorkDir))
             if nickname is None:
                 nickname = generate_nickname()
             creation = datetime.datetime.now(tz=datetime.timezone.utc)
@@ -498,15 +506,15 @@ class WfExSBackend:
         elif os.path.exists(id_json_path):
             with open(id_json_path, mode='r', encoding='utf-8') as iH:
                 idNick = jsonFilterDecodeFromStream(iH)
-                instanceId = idNick['instance_id']
-                nickname = idNick.get('nickname', instanceId)
-                creation = idNick.get('creation')
+                instanceId = cast(WfExSInstanceId, idNick['instance_id'])
+                nickname = cast(str, idNick.get('nickname', instanceId))
+                creation = cast(Optional[datetime.datetime], idNick.get('creation'))
             
             # This file should not change
             if creation is None:
                 creation = datetime.datetime.fromtimestamp(os.path.getctime(id_json_path), tz=datetime.timezone.utc)
         else:
-            instanceId = os.path.basename(uniqueRawWorkDir)
+            instanceId = cast(WfExSInstanceId, os.path.basename(uniqueRawWorkDir))
             nickname = instanceId
             creation = None
         
@@ -515,7 +523,7 @@ class WfExSBackend:
         
         return instanceId, nickname, creation, uniqueRawWorkDir
     
-    def normalizeRawWorkingDirectory(self, uniqueRawWorkDir: Union[RelPath, AbsPath]) -> Tuple[WfExSInstanceId, str, str, AbsPath]:
+    def normalizeRawWorkingDirectory(self, uniqueRawWorkDir: Union[RelPath, AbsPath]) -> Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]:
         """
         This method returns the id of a working directory,
         as well as the nickname
@@ -525,12 +533,12 @@ class WfExSBackend:
         
         # Obtaining the absolute path to the working directory
         if not os.path.isabs(uniqueRawWorkDir):
-            uniqueRawWorkDir = os.path.normpath(os.path.join(self.baseWorkDir, uniqueRawWorkDir))
+            uniqueRawWorkDir = cast(AbsPath, os.path.normpath(os.path.join(self.baseWorkDir, uniqueRawWorkDir)))
 
         if not os.path.isdir(uniqueRawWorkDir):
             raise WfExSBackendException('Unable to initialize, {} is not a directory'.format(uniqueRawWorkDir))
         
-        return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, create_ok=False)
+        return self.parseOrCreateRawWorkDir(cast(AbsPath, uniqueRawWorkDir), create_ok=False)
 
     def fromWorkDir(self, workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False) -> WF:
         return WF.FromWorkDir(self, workflowWorkingDirectory, fail_ok=fail_ok)
@@ -543,6 +551,22 @@ class WfExSBackend:
 
     def fromFiles(self, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] = None, paranoidMode: bool = False) -> WF:
         return WF.FromFiles(self, workflowMetaFilename, securityContextsConfigFilename, paranoidMode)
+
+    def parseAndValidateSecurityContextFile(self, securityContextsConfigFilename: Union[RelPath, AbsPath]) -> Tuple[ExitVal, SecurityContextConfigBlock]:
+        numErrors = 0
+        self.logger.info(f'Validating {securityContextsConfigFilename}')
+
+        creds_config = WF.ReadSecurityContextFile(securityContextsConfigFilename)
+
+        valErrors = self.ConfigValidate(creds_config, WF.SECURITY_CONTEXT_SCHEMA)
+        if len(valErrors) == 0:
+            self.logger.info('No validation errors in security block')
+        else:
+            for iErr, valError in enumerate(valErrors):
+                self.logger.error(f'ERROR {iErr} in security context block: {valError}')
+                numErrors += 1
+
+        return cast(ExitVal, numErrors), creds_config
 
     def validateConfigFiles(self, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] = None) -> ExitVal:
         numErrors = 0
@@ -564,20 +588,10 @@ class WfExSBackend:
 
         # Last, try loading the security contexts credentials file
         if securityContextsConfigFilename and os.path.exists(securityContextsConfigFilename):
-            self.logger.info(f'Validating {securityContextsConfigFilename}')
+            numErrors_sec, _ = self.parseAndValidateSecurityContextFile(securityContextsConfigFilename)
+            numErrors += numErrors_sec
 
-            with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
-                creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
-
-            valErrors = self.ConfigValidate(creds_config, WF.SECURITY_CONTEXT_SCHEMA)
-            if len(valErrors) == 0:
-                self.logger.info('No validation errors in security block')
-            else:
-                for iErr, valError in enumerate(valErrors):
-                    self.logger.error(f'ERROR {iErr} in security context block: {valError}')
-                    numErrors += 1
-
-        return 1 if numErrors > 0 else 0
+        return cast(ExitVal, 1 if numErrors > 0 else 0)
 
     def fromDescription(self, workflow_meta, creds_config=None, paranoidMode: bool = False) -> WF:
         """
@@ -621,13 +635,13 @@ class WfExSBackend:
                 sender_pubkey=None
             )
 
-        encfs_type, _, securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
+        encfs_type_str, _, securePassphrase = clearF.getvalue().decode('utf-8').partition('=')
         del clearF
-        self.logger.debug(encfs_type + ' ' + securePassphrase)
+        self.logger.debug(encfs_type_str + ' ' + securePassphrase)
         try:
-            encfs_type = EncryptedFSType(encfs_type)
+            encfs_type = EncryptedFSType(encfs_type_str)
         except:
-            raise WfExSBackendException('Invalid encryption filesystem {} in working directory'.format(encfs_type))
+            raise WfExSBackendException('Invalid encryption filesystem {} in working directory'.format(encfs_type_str))
         if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
             raise WfExSBackendException('FIXME: Encryption filesystem {} mount procedure is not implemented')
 
@@ -658,8 +672,8 @@ class WfExSBackend:
         
         return self.encfs_type, self.encfs_cmd, securePassphrase
     
-    def listStagedWorkflows(self, *args, acceptGlob:bool=False, doCleanup:bool=True) -> Iterator[Tuple[WfExSInstanceId, str, str, Optional[StagedSetup], Optional[WF]]]:
-        entries = set(args)
+    def listStagedWorkflows(self, *args, acceptGlob:bool=False, doCleanup:bool=True) -> Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]]:
+        entries : Set[str] = set(args)
         if entries and acceptGlob:
             reEntries = translate_glob_args(entries)
         else:
@@ -670,7 +684,7 @@ class WfExSBackend:
                 # Avoiding loops
                 if entry.is_dir(follow_symlinks=False) and not entry.name.startswith('.'):
                     try:
-                        instanceId, nickname, creation, _ = self.parseOrCreateRawWorkDir(entry.path, create_ok=False)
+                        instanceId, nickname, creation, instanceRawWorkdir = self.parseOrCreateRawWorkDir(entry.path, create_ok=False)
                     except:
                         self.logger.warning(f'Skipped {entry.name} on listing')
                         continue
@@ -688,7 +702,7 @@ class WfExSBackend:
                     wfSetup = None
                     wfInstance = None
                     try:
-                        wfInstance = self.fromWorkDir(instanceId, fail_ok=True)
+                        wfInstance = self.fromWorkDir(instanceRawWorkdir, fail_ok=True)
                         try:
                             wfSetup = wfInstance.getStagedSetup()
                         except Exception as e:
@@ -706,7 +720,7 @@ class WfExSBackend:
                         wfInstance = None
                     
     
-    def statusStagedWorkflows(self, *args, acceptGlob:bool=False) -> Iterator[Tuple[WfExSInstanceId, str, str, Optional[StagedSetup], Optional[MarshallingStatus]]]:
+    def statusStagedWorkflows(self, *args, acceptGlob:bool=False) -> Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[MarshallingStatus]]]:
         if len(args) > 0:
             for instance_id, nickname, creation, wfSetup, wfInstance in self.listStagedWorkflows(*args, acceptGlob=acceptGlob, doCleanup=True):
                 self.logger.debug(f"Status {instance_id} {nickname}")
@@ -722,32 +736,36 @@ class WfExSBackend:
     def removeStagedWorkflows(self, *args, acceptGlob:bool=False) -> Iterator[Tuple[WfExSInstanceId, str]]:
         if len(args) > 0:
             for instance_id, nickname, creation, wfSetup, _ in self.listStagedWorkflows(*args, acceptGlob=acceptGlob, doCleanup=True):
-                self.logger.debug(f"Removing {instance_id} {nickname}")
-                shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
-                yield instance_id, nickname
+                if wfSetup is not None:
+                    self.logger.debug(f"Removing {instance_id} {nickname}")
+                    shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
+                    yield instance_id, nickname
     
     def shellFirstStagedWorkflow(self, *args, stdin=sys.stdin, stdout=sys.stdout, stderr=sys.stderr, acceptGlob:bool=False, firstMatch:bool=True) -> ExitVal:
-        retval = -1
+        retval = cast(ExitVal, -1)
         if len(args) > 0:
             theEnv = dict(os.environ)
             if len(args) > 1:
-                command = args[1:]
+                command = cast(Sequence[str], args[1:])
             else:
                 command = [ os.environ.get('SHELL', '/bin/sh') ]
             for instance_id, nickname, creation, wfSetup, wfInstance in self.listStagedWorkflows(args[0], acceptGlob=acceptGlob, doCleanup=False):
-                # We are doing it only for the first match
-                self.logger.info(f'Running {command} at {instance_id} ({nickname})')
-                # Setting a custom symbol
-                theEnv['PROMPT_COMMAND'] = f"echo \"(WfExS '{nickname}')\""
+                # We are doing it only for the first non-corrupted match
+                if (wfSetup is not None) and (wfInstance is not None):
+                    self.logger.info(f'Running {command} at {instance_id} ({nickname})')
+                    # Setting a custom symbol
+                    theEnv['PROMPT_COMMAND'] = f"echo \"(WfExS '{nickname}')\""
 
-                cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=stdin, stdout=stdout, stderr=stderr, env=theEnv)
-                retval = cp.returncode
-                wfInstance.cleanup()
-                if firstMatch:
-                    break
+                    cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=stdin, stdout=stdout, stderr=stderr, env=theEnv)
+                    retval = cast(ExitVal, cp.returncode)
+                    wfInstance.cleanup()
+                    if firstMatch:
+                        break
+                else:
+                    self.logger.info(f'Cannot run {command} at {instance_id} ({nickname}), as it is corrupted')
         return retval
 
-    def cacheFetch(self, remote_file:Union[LicensedURI, parse.ParseResult, URIType, List[Union[LicensedURI, parse.ParseResult, URIType]]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], List[URIType]]:
+    def cacheFetch(self, remote_file:Union[LicensedURI, parse.ParseResult, URIType, List[LicensedURI], List[parse.ParseResult], List[URIType]], cacheType: CacheType, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
         
@@ -794,7 +812,7 @@ class WfExSBackend:
 
         self.cacheHandler.addSchemeHandlers({scheme.lower(): handler})
 
-    def doMaterializeRepo(self, repoURL: RepoURL, repoTag: RepoTag = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
+    def doMaterializeRepo(self, repoURL: RepoURL, repoTag: Optional[RepoTag] = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
         """
 
         :param repoURL:
@@ -802,7 +820,7 @@ class WfExSBackend:
         :param doUpdate:
         :return:
         """
-        gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
+        gitFetcherInst = cast(GitFetcher, self.instantiateStatefulFetcher(GitFetcher))
         repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(repoURL, repoTag=repoTag, doUpdate=doUpdate, base_repo_destdir=self.cacheWorkflowDir)
 
         # Now, let's register the checkout with cache structures
@@ -817,10 +835,10 @@ class WfExSBackend:
 
         self.cacheHandler.inject(
             self.cacheWorkflowDir,
-            remote_url,
+            cast(URIType, remote_url),
             fetched_metadata_array=[
                 URIWithMetadata(
-                    uri=remote_url,
+                    uri=cast(URIType, remote_url),
                     metadata=metadata,
                 )
             ],
@@ -831,7 +849,7 @@ class WfExSBackend:
         return repoDir, repoEffectiveCheckout
 
 
-    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = False) -> Tuple[RepoURL, RepoTag, RelPath]:
+    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = False) -> Tuple[Optional[RepoURL], Optional[RepoTag], Optional[RelPath]]:
         repoURL = None
         repoTag = None
         repoRelPath = None
@@ -908,7 +926,7 @@ class WfExSBackend:
 
         self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
 
-        return repoURL, repoTag, repoRelPath
+        return cast(Optional[RepoURL], repoURL), cast(Optional[RepoTag], repoTag), cast(Optional[RelPath], repoRelPath)
 
     def downloadROcrate(self, roCrateURL, offline: bool = False) -> AbsPath:
         """
@@ -932,7 +950,7 @@ class WfExSBackend:
         if not os.path.exists(cachedFilename):
             os.symlink(os.path.basename(roCrateFile), cachedFilename)
 
-        return cachedFilename
+        return cast(AbsPath, cachedFilename)
 
     def downloadContent(self, remote_file: Union[URIType, LicensedURI, List[URIType], List[LicensedURI]], dest: Union[AbsPath,CacheType],
                           secContext: Optional[SecurityContextConfig] = None, offline: bool = False, ignoreCache:bool=False, registerInCache:bool=True) -> MaterializedContent:
@@ -950,9 +968,11 @@ class WfExSBackend:
         if isinstance(remote_file, list):
             remote_uris_e = remote_file
         else:
-            remote_uris_e = [ remote_file ]
+            remote_uris_e = cast(Union[List[URIType], List[LicensedURI]], [ remote_file ])
         
-        firstURI : URIType = None
+        assert len(remote_uris_e) > 0, "The list of remote URIs to download should have at least one element"
+        
+        firstURI : Optional[Union[URIType, LicensedURI]] = None
         firstParsedURI = None
         remote_uris : List[URIType] = []
         # Brief validation of correct uris
@@ -967,9 +987,13 @@ class WfExSBackend:
             if not all(validableComponents):
                 raise RuntimeError(f"Input does not have {remote_uri} as a valid remote URL or CURIE source ")
             remote_uris.append(remote_uri)
+            
             if firstParsedURI is None:
                 firstURI = remote_uri_e
                 firstParsedURI = parsedURI
+        
+        assert firstURI is not None
+        assert firstParsedURI is not None
 
         # Assure workflow inputs directory exists before the next step
         if isinstance(dest, CacheType):
@@ -1000,7 +1024,7 @@ class WfExSBackend:
         
         if prettyFilename is None:
             # Default pretty filename in the worst case
-            prettyFilename = firstParsedURI.path.split('/')[-1]
+            prettyFilename = cast(RelPath, firstParsedURI.path.split('/')[-1])
         
         if isinstance(firstURI, LicensedURI):
             # Junking the security context

@@ -34,6 +34,7 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from wfexs_backend.wfexs_backend import WfExSBackend
+from wfexs_backend.workflow import WF
 from wfexs_backend import get_WfExS_version
 from wfexs_backend.common import StrDocEnum, ArgsDefaultWithRawHelpFormatter
 from wfexs_backend.common import CacheType as WfExS_CacheType
@@ -55,6 +56,7 @@ class WfExS_Commands(StrDocEnum):
 class WfExS_Cache_Commands(StrDocEnum):
     List = ('ls', 'List the cache entries')
     Inject = ('inject', 'Inject a new entry in the cache')
+    Fetch = ('fetch', 'Fetch a new cache entry, giving as input both the URI and optionally both a security context file and a security context name')
     Remove = ('rm', 'Remove an entry from the cache')
     Validate = ('validate', 'Validate the consistency of the cache')
 
@@ -128,18 +130,52 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
                 print(entry)
             
     elif args.cache_command == WfExS_Cache_Commands.Remove:
-        print('\n'.join(map(lambda x: '\t'.join([x[0].uri, x[1], x[2]]), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
+        print('\n'.join(map(lambda x: '\t'.join([x[0].uri, x[1]]), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
     elif args.cache_command == WfExS_Cache_Commands.Inject:
-        injected_uri = args.cache_command_args[0]
-        finalCachedFilename = args.cache_command_args[1]
-        # # First, remove old occurrence
-        # cH.remove(cPath, injected_uri)
-        # Then, inject new occurrence
-        cH.inject(cPath, injected_uri, finalCachedFilename=finalCachedFilename)
+        if len(args.cache_command_args) == 2:
+            injected_uri = args.cache_command_args[0]
+            finalCachedFilename = args.cache_command_args[1]
+            # # First, remove old occurrence
+            # cH.remove(cPath, injected_uri)
+            # Then, inject new occurrence
+            cH.inject(cPath, injected_uri, finalCachedFilename=finalCachedFilename)
+        else:
+            print(f"ERROR: subcommand {args.cache_command} takes two positional parameters: the URI to be injected, and the path to the local content to be associated to that URI", file=sys.stderr)
+            retval = 1
     elif args.cache_command == WfExS_Cache_Commands.Validate:
         for metaUri, validated, metaStructure in cH.validate(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade):
             print(f"\t- {metaUri.uri} {validated}")
     #    pass
+    elif args.cache_command == WfExS_Cache_Commands.Fetch:
+        if len(args.cache_command_args) == 1 or len(args.cache_command_args) == 3:
+            uri_to_fetch = args.cache_command_args[0]
+            secContext = None
+            if len(args.cache_command_args) == 3:
+                secContextFilename = args.cache_command_args[1]
+                secContextName = args.cache_command_args[2]
+        
+                if os.path.exists(secContextFilename):
+                    numErrors, secContextBlock = wfBackend.parseAndValidateSecurityContextFile(secContextFilename)
+                    if numErrors > 0:
+                        print(f"ERROR: security context file {secContextFilename} has {numErrors} errors", file=sys.stderr)
+                        retval = 1
+                else:
+                    print(f"ERROR: security context file {secContextFilename} does not exist", file=sys.stderr)
+                    retval = 1
+                
+                if retval == 0:
+                    secContext = secContextBlock.get(secContextName)
+                    if secContext is None:
+                        print(f"ERROR: security context file {secContextFilename} does not contain the security context {secContextName}", file=sys.stderr)
+                        retval = 1
+            
+            if retval == 0:
+                contentKind, abs_path, metadata, licences = wfBackend.cacheFetch(uri_to_fetch, args.cache_type, offline=False, secContext=secContext)
+                print(f'{contentKind}\t{abs_path}\t{licences}\t{metadata}')
+        else:
+            print(f"ERROR: subcommand {args.cache_command} takes either one or three positional parameters: the URI to be fetched, the path to a security context file and the security context to be used for the fetch operation", file=sys.stderr)
+            retval = 1
+            
     
     return retval
 

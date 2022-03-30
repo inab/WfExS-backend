@@ -20,7 +20,9 @@ import enum
 import subprocess
 import tempfile
 
-from .common import AbstractWfExSException
+from typing import cast
+
+from .common import AbstractWfExSException, RelPath
 
 class EncryptedFSException(AbstractWfExSException):
     pass
@@ -32,8 +34,8 @@ class EncryptedFSType(enum.Enum):
 
 DEFAULT_ENCRYPTED_FS_TYPE = EncryptedFSType.EncFS
 DEFAULT_ENCRYPTED_FS_CMD = {
-    EncryptedFSType.EncFS: 'encfs',
-    EncryptedFSType.GoCryptFS: 'gocryptfs',
+    EncryptedFSType.EncFS: cast(RelPath, 'encfs'),
+    EncryptedFSType.GoCryptFS: cast(RelPath, 'gocryptfs'),
 }
 
 # Idle timeout, in minutes

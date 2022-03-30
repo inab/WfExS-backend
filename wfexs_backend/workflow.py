@@ -29,7 +29,7 @@ import tempfile
 import threading
 
 from typing import Any, List, Mapping, Optional, Pattern, Tuple, Type, Union
-from typing import TYPE_CHECKING
+from typing import cast, TYPE_CHECKING
 
 from urllib import parse
 
@@ -51,10 +51,11 @@ from .common import CacheType, ContentKind, WorkflowType, URIType
 from .common import ExpectedOutput, LocalWorkflow, MaterializedWorkflowEngine
 from .common import GeneratedContent, GeneratedDirectoryContent
 from .common import MaterializedContent, MaterializedInput, MaterializedOutput
-from .common import MarshallingStatus, SecurityContextConfig, StagedSetup
+from .common import MarshallingStatus, StagedSetup
+from .common import SecurityContextConfig, SecurityContextConfigBlock
 from .common import Attribution, DefaultNoLicenceTuple
 # These imports are needed to properly unmarshall from YAML
-from .common import Container, URIWithMetadata
+from .common import Container, URIWithMetadata, ExitVal
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
@@ -107,12 +108,12 @@ class WF:
     Workflow enaction class
     """
 
-    TRS_METADATA_FILE = 'trs_metadata.json'
-    TRS_QUERY_CACHE_FILE = 'trs_result.json'
-    TRS_TOOL_FILES_FILE = 'trs_tool_files.json'
+    TRS_METADATA_FILE = cast(RelPath, 'trs_metadata.json')
+    TRS_QUERY_CACHE_FILE = cast(RelPath, 'trs_result.json')
+    TRS_TOOL_FILES_FILE =  cast(RelPath, 'trs_tool_files.json')
 
-    SECURITY_CONTEXT_SCHEMA = 'security-context.json'
-    STAGE_DEFINITION_SCHEMA = 'stage-definition.json'
+    SECURITY_CONTEXT_SCHEMA=  cast(RelPath, 'security-context.json')
+    STAGE_DEFINITION_SCHEMA=  cast(RelPath, 'stage-definition.json')
 
     DEFAULT_RO_EXTENSION = ".crate.zip"
     DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
@@ -132,7 +133,7 @@ class WF:
                  params=None,
                  outputs=None,
                  workflow_config=None,
-                 creds_config: Optional[SecurityContextConfig] =None,
+                 creds_config: Optional[SecurityContextConfigBlock] =None,
                  instanceId: Optional[WfExSInstanceId] = None,
                  nickname: Optional[str] = None,
                  creation: Optional[datetime.datetime] = None,
@@ -169,7 +170,7 @@ class WF:
         :type params: dict
         :type outputs: dict
         :type workflow_config: dict
-        :type creds_config: SecurityContextConfig
+        :type creds_config: SecurityContextConfigBlock
         :type instanceId: str
         :type creation datetime.datetime
         :type rawWorkDir: str
@@ -183,8 +184,8 @@ class WF:
         self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
         
         self.wfexs = wfexs
-        self.encWorkDir : AbsPath = None
-        self.workDir : AbsPath = None
+        self.encWorkDir : Optional[AbsPath] = None
+        self.workDir : Optional[AbsPath] = None
         
         if isinstance(paranoid_mode, bool):
             self.paranoidMode = paranoid_mode
@@ -193,7 +194,8 @@ class WF:
         
         if not isinstance(workflow_config, dict):
             workflow_config = {}
-
+        
+        self.outputs : Optional[List[ExpectedOutput]]
         if workflow_id is not None:
             workflow_meta = {
                 'workflow_id': workflow_id
@@ -283,9 +285,9 @@ class WF:
             else:
                 self.instanceId , self.nickname, self.workdir_creation , self.rawWorkDir = self.wfexs.getOrCreateRawWorkDirFromInstanceId(instanceId, self.nickname, create_ok=False)
         else:
-            self.rawWorkDir = rawWorkDir
+            self.rawWorkDir = cast(AbsPath, os.path.abspath(rawWorkDir))
             if instanceId is None:
-                self.instanceId , self.nickname, self.workdir_creation, _ = self.wfexs.parseOrCreateRawWorkDir(rawWorkDir, create_ok=False)
+                self.instanceId , self.nickname, self.workdir_creation, _ = self.wfexs.parseOrCreateRawWorkDir(self.rawWorkDir, create_ok=False)
 
         # TODO: enforce restrictive permissions on each raw working directory
         self.allowOther = False
@@ -300,31 +302,39 @@ class WF:
 
         was_setup = self.setupWorkdir(doSecureWorkDir, fail_ok=fail_ok)
         
-        self.configMarshalled = None
+        self.configMarshalled : Optional[Union[bool, datetime.datetime]] = None
+        self.inputsDir : Optional[AbsPath]
+        self.intermediateDir : Optional[AbsPath]
+        self.outputsDir : Optional[AbsPath]
+        self.engineTweaksDir : Optional[AbsPath]
+        self.metaDir : Optional[AbsPath]
+        self.workflowDir : Optional[AbsPath]
+        self.containersDir : Optional[AbsPath]
         if was_setup:
+            assert self.workDir is not None, "Workdir has to be already defined at this point"
             # This directory will hold either symbolic links to the cached
             # inputs, or the inputs properly post-processed (decompressed,
             # decrypted, etc....)
-            self.inputsDir = os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
+            self.inputsDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR))
             os.makedirs(self.inputsDir, exist_ok=True)
             # This directory should hold intermediate workflow steps results
-            self.intermediateDir = os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
+            self.intermediateDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR))
             os.makedirs(self.intermediateDir, exist_ok=True)
             # This directory will hold the final workflow results, which could
             # be either symbolic links to the intermediate results directory
             # or newly generated content
-            self.outputsDir = os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR)
+            self.outputsDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR))
             os.makedirs(self.outputsDir, exist_ok=True)
             # This directory is here for those files which are created in order
             # to tweak or patch workflow executions
-            self.engineTweaksDir = os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
+            self.engineTweaksDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR))
             os.makedirs(self.engineTweaksDir, exist_ok=True)
             # This directory will hold metadata related to the execution
-            self.metaDir = os.path.join(self.workDir, WORKDIR_META_RELDIR)
+            self.metaDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_META_RELDIR))
             # This directory will hold either a hardlink or a copy of the workflow
-            self.workflowDir = os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR)
+            self.workflowDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR))
             # This directory will hold either a hardlink or a copy of the containers
-            self.containersDir = os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR)
+            self.containersDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR))
 
             
             # This is true when the working directory already exists
@@ -380,9 +390,9 @@ class WF:
             is_damaged=is_damaged
         )
         
-        self.repoURL = None
-        self.repoTag = None
-        self.repoRelPath = None
+        self.repoURL : Optional[RepoURL] = None
+        self.repoTag : Optional[RepoTag] = None
+        self.repoRelPath : Optional[RelPath] = None
         self.repoDir = None
         self.repoEffectiveCheckout = None
         self.engine = None
@@ -393,7 +403,7 @@ class WF:
         self.localWorkflow = None
         self.materializedEngine = None
 
-        self.exitVal = None
+        self.exitVal : Optional[ExitVal] = None
         self.augmentedInputs = None
         self.matCheckOutputs = None
         self.cacheROCrateFilename = None
@@ -408,6 +418,8 @@ class WF:
         uniqueRawWorkDir = self.rawWorkDir
 
         allowOther = False
+        uniqueEncWorkDir : Optional[AbsPath]
+        uniqueWorkDir : AbsPath
         if doSecureWorkDir:
             # We need to detect whether fuse has enabled user_allow_other
             # the only way I know is parsing /etc/fuse.conf
@@ -419,15 +431,15 @@ class WF:
                             break
                     self.logger.debug(f"FUSE has user_allow_other: {allowOther}")
 
-            uniqueEncWorkDir = os.path.join(uniqueRawWorkDir, '.crypt')
-            uniqueWorkDir = os.path.join(uniqueRawWorkDir, 'work')
+            uniqueEncWorkDir = cast(AbsPath, os.path.join(uniqueRawWorkDir, '.crypt'))
+            uniqueWorkDir = cast(AbsPath, os.path.join(uniqueRawWorkDir, 'work'))
 
             # The directories should exist before calling encryption FS mount
             os.makedirs(uniqueEncWorkDir, exist_ok=True)
             os.makedirs(uniqueWorkDir, exist_ok=True)
 
             # This is the passphrase needed to decrypt the filesystem
-            passphraseFile = os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
+            passphraseFile = cast(AbsPath, os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE))
             
             if os.path.exists(passphraseFile):
                 encfs_type, encfs_cmd, securePassphrase = self.wfexs.readSecuredPassphrase(passphraseFile)
@@ -473,7 +485,7 @@ class WF:
 
         # The temporary directory is in the raw working directory as
         # some container engine could fail
-        uniqueTempDir = os.path.join(uniqueRawWorkDir,'.TEMP')
+        uniqueTempDir = cast(AbsPath, os.path.join(uniqueRawWorkDir,'.TEMP'))
         os.makedirs(uniqueTempDir, exist_ok=True)
         os.chmod(uniqueTempDir, 0o1777)
 
@@ -552,21 +564,27 @@ class WF:
         return cls(wfexs, instanceId=instanceId, nickname=nickname, rawWorkDir=rawWorkDir, creation=creation, fail_ok=fail_ok)
     
     @classmethod
+    def ReadSecurityContextFile(cls, securityContextsConfigFilename: Union[RelPath, AbsPath]) -> SecurityContextConfigBlock:
+        with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
+            creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+            
+        return creds_config
+    
+    @classmethod
     def FromFiles(cls, wfexs: "WfExSBackend", workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] =None, paranoidMode: bool = False):
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
 
         # Last, try loading the security contexts credentials file
         if securityContextsConfigFilename and os.path.exists(securityContextsConfigFilename):
-            with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
-                creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+            creds_config = cls.ReadSecurityContextFile(securityContextsConfigFilename)
         else:
             creds_config = {}
 
         return cls.FromDescription(wfexs, workflow_meta, creds_config, paranoidMode=paranoidMode)
     
     @classmethod
-    def FromDescription(cls, wfexs: "WfExSBackend", workflow_meta, creds_config: Optional[SecurityContextConfig] = None, paranoidMode: bool = False):
+    def FromDescription(cls, wfexs: "WfExSBackend", workflow_meta, creds_config: Optional[SecurityContextConfigBlock] = None, paranoidMode: bool = False):
         """
         :param wfexs: WfExSBackend instance
         :param workflow_meta: The configuration describing both the workflow
@@ -575,7 +593,7 @@ class WF:
         :param paranoidMode:
         :type wfexs: WfExSBackend
         :type workflow_meta: dict
-        :type creds_config: SecurityContextConfig
+        :type creds_config: SecurityContextConfigBlock
         :type paranoidMode: bool
         :return: Workflow configuration
         """
@@ -631,11 +649,12 @@ class WF:
 
         If the workflow id is an URL, it is supposed to be a git repository,
         and the version will represent either the branch, tag or specific commit.
-        So, the whole TRS fetching machinery is bypassed.
+        So, the whole TRS fetching machinery is bypassed.workflowDir
         """
         parsedRepoURL = parse.urlparse(self.id)
 
         # It is not an absolute URL, so it is being an identifier in the workflow
+        repoRelPath : Optional[RelPath]
         if parsedRepoURL.scheme == '':
             if (self.trs_endpoint is not None) and len(self.trs_endpoint) > 0:
                 engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromTRS(offline=offline)
@@ -649,10 +668,10 @@ class WF:
 
             if guessedRepoURL is not None:
                 repoURL = guessedRepoURL
-                repoTag = guessedRepoTag if guessedRepoTag is not None else self.version_id
+                repoTag = guessedRepoTag if guessedRepoTag is not None else cast(RepoTag, self.version_id)
                 repoRelPath = guessedRepoRelPath
             else:
-                engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromROCrateURL(self.id, offline=offline)
+                engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromROCrateURL(cast(URIType, self.id), offline=offline)
 
         if repoURL is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
@@ -677,10 +696,11 @@ class WF:
 
         # For the cases of pure TRS repos, like Dockstore
         if repoDir is None:
-            repoDir = repoURL
+            repoDir = cast(AbsPath, repoURL)
 
         # Workflow Language version cannot be assumed here yet
         # A copy of the workflows is kept
+        assert self.workflowDir is not None, "The workflow directory should be defined"
         if os.path.isdir(self.workflowDir):
             shutil.rmtree(self.workflowDir)
         link_or_copy(repoDir, self.workflowDir)
@@ -774,7 +794,7 @@ class WF:
             # as it could contain potential hints for authenticated access
             fileuri = parse.urlunparse(('file', '', os.path.abspath(path), '', '', ''))
             matContent = self.wfexs.downloadContent(
-                fileuri,
+                cast(URIType, fileuri),
                 dest=storeDir,
                 ignoreCache=not cacheable,
                 registerInCache=cacheable
@@ -806,6 +826,7 @@ class WF:
         return lastInput
 
     def materializeInputs(self, offline: bool = False, lastInput: int = 0):
+        assert self.inputsDir is not None, "The working directory should not be corrupted beyond basic usage"
         theParams, numInputs = self.fetchInputs(
             self.params,
             workflowInputs_destdir=self.inputsDir,
@@ -826,7 +847,15 @@ class WF:
     
     def buildLicensedURI(self, remote_file: Union[URIType, Mapping, List], contextName: Optional[str] = None, licences: Tuple[URIType, ...] = DefaultNoLicenceTuple, attributions: List[Attribution] = []) -> Union[LicensedURI, List[LicensedURI]]:
         if isinstance(remote_file, list):
-            return [ self.buildLicensedURI(remote_url, contextName=contextName, licences=licences, attributions=attributions) for remote_url in remote_file]
+            retvals = []
+            for remote_url in remote_file:
+                retval = self.buildLicensedURI(remote_url, contextName=contextName, licences=licences, attributions=attributions)
+                if isinstance(retval, list):
+                    retvals.extend(retval)
+                else:
+                    retvals.append(retval)
+            
+            return retvals
         
         if isinstance(remote_file, dict):
             # The value of the attributes is superseded
@@ -873,8 +902,10 @@ class WF:
         :type params: dict
         :type prefix: str
         """
+        assert self.outputsDir is not None, "Working directory should not be corrupted beyond basic usage"
+        
         theInputs = []
-
+        
         paramsIter = params.items() if isinstance(params, dict) else enumerate(params)
         for key, inputs in paramsIter:
             # We are here for the
@@ -900,7 +931,7 @@ class WF:
                             globExplode = inputs.get('globExplode')
 
                             # This is to nest the directory where to place the different files
-                            inputDestDir = os.path.join(inputDestDir, *linearKey.split('.'))
+                            inputDestDir = cast(AbsPath, os.path.join(inputDestDir, *linearKey.split('.')))
                             os.makedirs(inputDestDir, exist_ok=True)
                         elif inputClass == 'File' and inputs.get('autoFill', False):
                             # We have to autofill this with the outputs directory,
@@ -927,7 +958,7 @@ class WF:
 
                         remote_pairs = []
                         # The storage dir depends on whether it can be cached or not
-                        storeDir = CacheType.Input if cacheable else workflowInputs_destdir
+                        storeDir : Union[CacheType, AbsPath] = CacheType.Input if cacheable else workflowInputs_destdir
                         for alt_remote_file in alt_remote_files:
                             matContent = self.wfexs.downloadContent(
                                 alt_remote_file,
@@ -940,7 +971,7 @@ class WF:
                             # Now, time to create the symbolic link
                             lastInput += 1
 
-                            prettyLocal = os.path.join(inputDestDir, matContent.prettyFilename)
+                            prettyLocal = cast(AbsPath, os.path.join(inputDestDir, matContent.prettyFilename))
 
                             # As Nextflow has some issues when two inputs of a process
                             # have the same basename, harden by default
@@ -955,8 +986,8 @@ class WF:
 
                             if hardenPrettyLocal:
                                 # Trying to avoid collisions on input naming
-                                prettyLocal = os.path.join(inputDestDir,
-                                                           str(lastInput) + '_' + matContent.prettyFilename)
+                                prettyLocal = cast(AbsPath, os.path.join(inputDestDir,
+                                                           str(lastInput) + '_' + matContent.prettyFilename))
 
                             if not os.path.exists(prettyLocal):
                                 # We are either hardlinking or copying here
@@ -967,7 +998,7 @@ class WF:
                                 matParse = parse.urlparse(matContent.licensed_uri.uri)
                                 for exp in prettyLocalPath.glob(globExplode):
                                     relPath = exp.relative_to(prettyLocalPath)
-                                    relName = str(relPath)
+                                    relName = cast(RelPath, str(relPath))
                                     relExpPath = matParse.path
                                     if relExpPath[-1] != '/':
                                         relExpPath += '/'
@@ -976,12 +1007,12 @@ class WF:
                                     
                                     # TODO: enrich outputs to add licensing features?
                                     lic_expUri = LicensedURI(
-                                        uri=expUri,
+                                        uri=cast(URIType, expUri),
                                         licences=matContent.licensed_uri.licences
                                     )
                                     remote_pairs.append(
                                         MaterializedContent(
-                                            local=str(exp),
+                                            local=cast(AbsPath, str(exp)),
                                             licensed_uri=lic_expUri,
                                             prettyFilename=relName,
                                             metadata_array=matContent.metadata_array,
@@ -1084,7 +1115,7 @@ class WF:
 
             eOutput = ExpectedOutput(
                 name=outputKey,
-                kind=self.OutputClassMapping.get(outputDesc.get('c-l-a-s-s'), ContentKind.File.name),
+                kind=self.OutputClassMapping.get(outputDesc.get('c-l-a-s-s'), ContentKind.File),
                 preferredFilename=outputDesc.get('preferredName'),
                 cardinality=cardinality,
                 fillFrom=fillFrom,
@@ -1120,6 +1151,7 @@ class WF:
 
 
     def marshallConfig(self, overwrite: bool = False) -> Union[bool, datetime.datetime]:
+        assert self.metaDir is not None, "Working directory should not be corrupted beyond basic usage"
         # The seed should have be already written
         
         # Now, the config itself
@@ -1161,6 +1193,8 @@ class WF:
         return self.configMarshalled
     
     def unmarshallConfig(self, fail_ok: bool = False) -> Optional[Union[bool, datetime.datetime]]:
+        assert self.metaDir is not None, "Working directory should not be corrupted beyond basic usage"
+        
         if self.configMarshalled is None:
             config_unmarshalled = True
             workflow_meta_filename = os.path.join(self.metaDir, WORKDIR_WORKFLOW_META_FILE)
@@ -1820,7 +1854,7 @@ class WF:
 
         return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
 
-    def getWorkflowRepoFromROCrateFile(self, roCrateFile: AbsPath, expectedEngineDesc: WorkflowType = None) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+    def getWorkflowRepoFromROCrateFile(self, roCrateFile: AbsPath, expectedEngineDesc: WorkflowType = None) -> Tuple[WorkflowType, RepoURL, Optional[RepoTag], Optional[RelPath]]:
         """
 
         :param roCrateFile:

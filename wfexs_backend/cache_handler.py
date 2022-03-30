@@ -375,7 +375,7 @@ class SchemeHandlerCacheHandler:
             
             yield licensed_meta_uri, validated, retMetaStructure
     
-    def fetch(self, remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType, List[Union[LicensedURI, urllib.parse.ParseResult, URIType]]], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
+    def fetch(self, remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType, List[LicensedURI], List[urllib.parse.ParseResult], List[URIType]], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
         # The directory with the content, whose name is based on sha256
         if not os.path.exists(destdir):
             try:

@@ -35,7 +35,7 @@ from urllib import request, parse
 import urllib.error
 
 from ..common import AbstractWfExSException
-from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
+from ..common import AbsPath, RelPath, ContentKind, SecurityContextConfig
 from ..common import SymbolicName, URIType, URIWithMetadata
 from ..common import ProtocolFetcher, ProtocolFetcherReturn
 
@@ -48,7 +48,7 @@ class AbstractStatefulFetcher(abc.ABC):
     """
     Abstract class to model stateful fetchers
     """
-    def __init__(self, progs: Mapping[SymbolicName, AbsPath]):
+    def __init__(self, progs: Mapping[SymbolicName, Union[RelPath, AbsPath]]):
         import inspect
         
         self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
@@ -71,6 +71,23 @@ class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
         """
         pass
 
+def get_opener_with_auth(top_level_url: str, username: str, password: str) -> request.OpenerDirector:
+	"""
+	Taken from https://stackoverflow.com/a/44239906
+	"""
+	
+	# create a password manager
+	password_mgr = request.HTTPPasswordMgrWithPriorAuth()
+	
+	# Add the username and password.
+	# If we knew the realm, we could use it instead of None.
+	password_mgr.add_password(None, top_level_url, username, password, is_authenticated=True)
+	
+	handler = request.HTTPBasicAuthHandler(password_mgr)
+
+	# create "opener" (OpenerDirector instance)
+	return request.build_opener(handler)
+
 def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesIO], secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
     Method to fetch contents from http, https and ftp
@@ -83,6 +100,7 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
     headers = {}
     method = None
     orig_remote_file = remote_file
+    opener = request.urlopen
     if isinstance(secContext, dict):
         headers = secContext.get('headers', {}).copy()
         token = secContext.get('token')
@@ -98,18 +116,20 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
         elif username is not None:
             if password is None:
                 password = ''
-
-            # Time to set up user and password in URL
-            parsedInputURL = parse.urlparse(remote_file)
-
-            netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
-                                                                        safe='') + '@' + parsedInputURL.hostname
-            if parsedInputURL.port is not None:
-                netloc += ':' + str(parsedInputURL.port)
-
-            # Now the credentials are properly set up
-            remote_file = cast(URIType, parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
-                                            parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
+            
+            opener = get_opener_with_auth(remote_file, username, password).open
+            
+            # # Time to set up user and password in URL
+            # parsedInputURL = parse.urlparse(remote_file)
+            # 
+            # netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
+            #                                                             safe='') + '@' + parsedInputURL.hostname
+            # if parsedInputURL.port is not None:
+            #     netloc += ':' + str(parsedInputURL.port)
+            # 
+            # # Now the credentials are properly set up
+            # remote_file = cast(URIType, parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
+            #                                 parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
         method = secContext.get('method')
     
     # Preparing where it is going to be written
@@ -122,7 +142,7 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
     uri_with_metadata = None
     try:
         req_remote = request.Request(remote_file, headers=headers, method=method)
-        with request.urlopen(req_remote) as url_response:
+        with opener(req_remote) as url_response:
             
             uri_with_metadata = URIWithMetadata(url_response.url, dict(url_response.headers.items()))
             
@@ -163,8 +183,14 @@ def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
         connParams['PORT'] = parsedInputURL.port
     
     if isinstance(secContext, dict):
-        connParams['USER'] = secContext.get('username')
-        connParams['PASSWORD'] = secContext.get('password')
+        # There could be some corner cases where an empty
+        # dictionary, or a dictionary without the needed keys
+        # has been provided
+        username = secContext.get('username')
+        password = secContext.get('password')
+        if (username is not None) and (password is not None):
+            connParams['USER'] = username
+            connParams['PASSWORD'] = password
     
     ftp_client = FTPDownloader(**connParams)
     retval = ftp_client.download(download_path=parsedInputURL.path, upload_path=cachedFilename)

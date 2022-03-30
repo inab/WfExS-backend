@@ -25,7 +25,7 @@ import re
 from typing import Any, Iterator, List, Mapping, Optional, Pattern
 from typing import cast, Dict, Sequence, Tuple, Union
 
-def translate_glob_args(args: Sequence[str]) -> List[Pattern]:
+def translate_glob_args(args: Union[Iterator[str], Sequence[str]]) -> List[Pattern]:
     return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
 
 class DatetimeEncoder(json.JSONEncoder):
