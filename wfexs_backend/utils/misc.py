@@ -20,10 +20,15 @@ from __future__ import absolute_import
 import datetime
 import fnmatch
 import json
+import os
 import re
 
 from typing import Any, Iterator, List, Mapping, Optional, Pattern
 from typing import cast, Dict, Sequence, Tuple, Union
+
+import jsonschema
+
+from ..common import AbstractWfExSException, RelPath
 
 def translate_glob_args(args: Union[Iterator[str], Sequence[str]]) -> List[Pattern]:
     return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
@@ -189,3 +194,23 @@ def jsonFilterDecodeFromStream(stream, tz: Optional[datetime.tzinfo] =None) -> A
 	Decode JSON content from a stream, translating ISO8601 dates to strings
 	"""
 	return json.load(stream,object_pairs_hook=lambda x: load_with_datetime(x, tz))
+
+
+class ConfigValidationException(AbstractWfExSException):
+    pass
+
+SCHEMAS_REL_DIR = 'schemas'
+
+def config_validate(configToValidate: Mapping[str, Any], relSchemaFile: RelPath) -> List[Any]:
+    # Locating the schemas directory, where all the schemas should be placed
+    schemaFile = os.path.join(os.path.dirname(__file__), '..', SCHEMAS_REL_DIR, relSchemaFile)
+
+    try:
+        with open(schemaFile, mode="r", encoding="utf-8") as sF:
+            schema = json.load(sF)
+
+        jv = jsonschema.validators.validator_for(schema)(schema)
+        return list(jv.iter_errors(instance=configToValidate))
+    except Exception as e:
+        raise ConfigValidationException(f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}")
+

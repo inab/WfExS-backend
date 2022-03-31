@@ -68,6 +68,7 @@ from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_
 from .utils.contents import link_or_copy
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
+from .utils.misc import config_validate
 
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX
 
@@ -219,7 +220,7 @@ class WF:
             if outputs is not None:
                 workflow_meta['outputs'] = outputs
             
-            valErrors = self.wfexs.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
+            valErrors = config_validate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
             if len(valErrors) > 0:
                 errstr = f'ERROR in workflow staging definition block: {valErrors}'
                 self.logger.error(errstr)
@@ -228,7 +229,7 @@ class WF:
             if not isinstance(creds_config, dict):
                 creds_config = {}
 
-            valErrors = self.wfexs.ConfigValidate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
+            valErrors = config_validate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
             if len(valErrors) > 0:
                 errstr = f'ERROR in security context block: {valErrors}'
                 self.logger.error(errstr)
@@ -1251,7 +1252,7 @@ class WF:
                     raise WFException("ERROR processing config file") from e
             
             if workflow_meta is not None:
-                valErrors = self.wfexs.ConfigValidate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
+                valErrors = config_validate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
                 if len(valErrors) > 0:
                     config_unmarshalled = False
                     errstr = f'ERROR in workflow staging definition block {workflow_meta_filename}: {valErrors}'
@@ -1268,7 +1269,7 @@ class WF:
                 # else:
                 #     self.creds_config = {}
                 # 
-                # valErrors = self.wfexs.ConfigValidate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
+                # valErrors = config_validate(self.creds_config, self.SECURITY_CONTEXT_SCHEMA)
                 # if len(valErrors) > 0:
                 #     config_unmarshalled = False
                 #     errstr = f'ERROR in security context block {creds_file}: {valErrors}'

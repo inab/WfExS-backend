@@ -22,7 +22,6 @@ import hashlib
 import inspect
 import io
 import json
-import jsonschema
 import logging
 import os
 import shutil
@@ -69,6 +68,7 @@ from .engine import WorkflowEngine
 from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.marshalling_handling import unmarshall_namedtuple
+from .utils.misc import config_validate
 from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
 from .utils.passphrase_wrapper import generate_nickname, generate_passphrase
 
@@ -237,20 +237,6 @@ class WfExSBackend:
             creds_config=creds_config
         )
 
-    @classmethod
-    def ConfigValidate(cls, configToValidate: Mapping[str, Any], relSchemaFile: RelPath) -> List[Any]:
-        # Locating the schemas directory, where all the schemas should be placed
-        schemaFile = os.path.join(os.path.dirname(__file__), cls.SCHEMAS_REL_DIR, relSchemaFile)
-
-        try:
-            with open(schemaFile, mode="r", encoding="utf-8") as sF:
-                schema = json.load(sF)
-
-            jv = jsonschema.validators.validator_for(schema)(schema)
-            return list(jv.iter_errors(instance=configToValidate))
-        except Exception as e:
-            raise WfExSBackendException(f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}")
-
     def __init__(self, local_config: Optional[Mapping[str, Any]] = None, config_directory: Optional[Union[RelPath, AbsPath]] = None):
         """
         Init function
@@ -265,7 +251,7 @@ class WfExSBackend:
             local_config = {}
 
         # validate the local configuration object
-        valErrors = self.ConfigValidate(local_config, self.CONFIG_SCHEMA)
+        valErrors = config_validate(local_config, self.CONFIG_SCHEMA)
         if len(valErrors) > 0:
             self.logger.error(f'ERROR in local configuration block: {valErrors}')
             sys.exit(1)
@@ -558,7 +544,7 @@ class WfExSBackend:
 
         creds_config = WF.ReadSecurityContextFile(securityContextsConfigFilename)
 
-        valErrors = self.ConfigValidate(creds_config, WF.SECURITY_CONTEXT_SCHEMA)
+        valErrors = config_validate(creds_config, WF.SECURITY_CONTEXT_SCHEMA)
         if len(valErrors) == 0:
             self.logger.info('No validation errors in security block')
         else:
@@ -578,7 +564,7 @@ class WfExSBackend:
         if not isinstance(workflow_meta, dict):
             workflow_meta = {}
 
-        valErrors = self.ConfigValidate(workflow_meta, WF.STAGE_DEFINITION_SCHEMA)
+        valErrors = config_validate(workflow_meta, WF.STAGE_DEFINITION_SCHEMA)
         if len(valErrors) == 0:
             self.logger.info('No validation errors in staging definition block')
         else:
