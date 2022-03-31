@@ -23,6 +23,10 @@ import enum
 import os
 from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple
 from typing import NewType, Optional, Pattern, Sequence, Tuple, Type, Union
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rocrate.model.computerlanguage import ComputerLanguage
 
 
 # Patching default context in order to load CA certificates from certifi
@@ -224,6 +228,7 @@ class MaterializedInput(NamedTuple):
     """
     name: SymbolicParamName
     values: Union[List[bool], Sequence[str], List[int], List[float], Sequence[MaterializedContent]]
+    secondaryInputs: Optional[Sequence[MaterializedContent]] = None
 
 
 GlobPattern = NewType('GlobPattern', str)
@@ -378,7 +383,10 @@ class AbstractWorkflowEngineType(abc.ABC):
             config_directory: Optional[Union[RelPath, AbsPath]] = None
     ):
         pass
-
+    
+    @abc.abstractmethod
+    def getEmptyCrateAndComputerLanguage(self, langVersion: Optional[Union[EngineVersion, WFLangVersion]]) -> "ComputerLanguage":
+        pass
 
 TRS_Workflow_Descriptor = str
 

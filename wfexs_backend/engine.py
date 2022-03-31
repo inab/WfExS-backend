@@ -340,7 +340,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def supportsSecureExecContainerType(self, containerType : ContainerType) -> bool:
         return containerType in self.SupportedSecureExecContainerTypes()
     
-    def getEmptyCrateAndComputerLanguage(self, langVersion: WFLangVersion) -> ComputerLanguage:
+    def getEmptyCrateAndComputerLanguage(self, langVersion: Optional[Union[EngineVersion, WFLangVersion]]) -> ComputerLanguage:
         """
         Due the internal synergies between an instance of ComputerLanguage
         and the RO-Crate it is attached to, both of them should be created

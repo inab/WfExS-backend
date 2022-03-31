@@ -478,4 +478,4 @@ When it is not set, a temporary directory is created, which will be removed when
 |                |   |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2021-08-02 at 18:53:16 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-03-31 at 22:21:58 +0200

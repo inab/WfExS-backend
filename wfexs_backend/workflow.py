@@ -28,8 +28,8 @@ import sys
 import tempfile
 import threading
 
-from typing import Any, List, Mapping, Optional, Pattern, Tuple, Type, Union
-from typing import cast, TYPE_CHECKING
+from typing import Any, List, Mapping, Optional, Pattern, Sequence
+from typing import cast, TYPE_CHECKING, Tuple, Type, Union
 
 from urllib import parse
 
@@ -46,12 +46,13 @@ import yaml
 
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath, WfExSInstanceId
+from .common import Fingerprint
 from .common import RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, WorkflowType, URIType
 from .common import ExpectedOutput, LocalWorkflow, MaterializedWorkflowEngine
 from .common import GeneratedContent, GeneratedDirectoryContent
 from .common import MaterializedContent, MaterializedInput, MaterializedOutput
-from .common import MarshallingStatus, StagedSetup
+from .common import MarshallingStatus, StagedSetup, EngineVersion
 from .common import SecurityContextConfig, SecurityContextConfigBlock
 from .common import Attribution, DefaultNoLicenceTuple
 # These imports are needed to properly unmarshall from YAML
@@ -394,24 +395,24 @@ class WF:
         self.repoURL : Optional[RepoURL] = None
         self.repoTag : Optional[RepoTag] = None
         self.repoRelPath : Optional[RelPath] = None
-        self.repoDir = None
-        self.repoEffectiveCheckout = None
-        self.engine = None
-        self.engineVer = None
-        self.engineDesc = None
+        self.repoDir : Optional[AbsPath] = None
+        self.repoEffectiveCheckout : Optional[RepoTag] = None
+        self.engine : Optional[WorkflowEngine] = None
+        self.engineVer : Optional[EngineVersion] = None
+        self.engineDesc : Optional[WorkflowType] = None
 
-        self.materializedParams = None
-        self.localWorkflow = None
-        self.materializedEngine = None
+        self.materializedParams : Optional[List[MaterializedInput]] = None
+        self.localWorkflow : Optional[LocalWorkflow] = None
+        self.materializedEngine : Optional[MaterializedWorkflowEngine] = None
 
         self.exitVal : Optional[ExitVal] = None
-        self.augmentedInputs = None
-        self.matCheckOutputs = None
+        self.augmentedInputs : Optional[List[MaterializedInput]] = None
+        self.matCheckOutputs : Optional[List[MaterializedOutput]] = None
         self.cacheROCrateFilename = None
         
-        self.stageMarshalled = None
-        self.executionMarshalled = None
-        self.exportMarshalled = None
+        self.stageMarshalled : Optional[Union[bool, datetime.datetime]] = None
+        self.executionMarshalled : Optional[Union[bool, datetime.datetime]] = None
+        self.exportMarshalled : Optional[Union[bool, datetime.datetime]] = None
 
     FUSE_SYSTEM_CONF = '/etc/fuse.conf'
 
@@ -749,8 +750,11 @@ class WF:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
             self.fetchWorkflow(offline=offline)
+        
+        assert self.engine is not None, "Workflow engine not properly identified or set up"
 
         if self.materializedEngine is None:
+            assert self.localWorkflow is not None
             localWorkflow = self.localWorkflow
         else:
             localWorkflow = self.materializedEngine.workflow
@@ -774,9 +778,12 @@ class WF:
     def materializeWorkflow(self, offline: bool = False):
         if self.materializedEngine is None:
             self.setupEngine(offline=offline)
-
+        
+        assert self.materializedEngine is not None, "The materialized workflow engine should be available at this point"
+        
         # This information is badly needed for provenance
         if self.materializedEngine.containers is None:
+            assert self.containersDir is not None, "The destination directory should be available here"
             if not offline:
                 os.makedirs(self.containersDir, exist_ok=True)
             self.materializedEngine = WorkflowEngine.MaterializeWorkflowAndContainers(self.materializedEngine, self.containersDir, offline=offline)
@@ -889,6 +896,83 @@ class WF:
             secContext=secContext
         )
     
+    def _fetchRemoteFiles(self, remote_files: Sequence[Union[URIType, Mapping, List]], contextName: Optional[str], offline:bool, storeDir: Union[AbsPath,CacheType], cacheable: bool, inputDestDir:AbsPath, globExplode: Optional[str], lastInput: int = 0) -> Tuple[Sequence[MaterializedContent], int]:
+        remote_pairs = []
+        # Embedding the context
+        alt_remote_files = [ self.buildLicensedURI(remote_file, contextName=contextName) for remote_file in remote_files ]
+        for alt_remote_file in alt_remote_files:
+            matContent = self.wfexs.downloadContent(
+                alt_remote_file,
+                dest=storeDir,
+                offline=offline,
+                ignoreCache=not cacheable,
+                registerInCache=cacheable
+            )
+
+            # Now, time to create the symbolic link
+            lastInput += 1
+
+            prettyLocal = cast(AbsPath, os.path.join(inputDestDir, matContent.prettyFilename))
+
+            # As Nextflow has some issues when two inputs of a process
+            # have the same basename, harden by default
+            hardenPrettyLocal = True
+            # hardenPrettyLocal = False
+            # if os.path.islink(prettyLocal):
+            #     oldLocal = os.readlink(prettyLocal)
+            #
+            #     hardenPrettyLocal = oldLocal != matContent.local
+            # elif os.path.exists(prettyLocal):
+            #     hardenPrettyLocal = True
+
+            if hardenPrettyLocal:
+                # Trying to avoid collisions on input naming
+                prettyLocal = cast(AbsPath, os.path.join(inputDestDir,
+                                           str(lastInput) + '_' + matContent.prettyFilename))
+
+            if not os.path.exists(prettyLocal):
+                # We are either hardlinking or copying here
+                link_or_copy(matContent.local, prettyLocal)
+
+            if globExplode is not None:
+                prettyLocalPath = pathlib.Path(prettyLocal)
+                matParse = parse.urlparse(matContent.licensed_uri.uri)
+                for exp in prettyLocalPath.glob(globExplode):
+                    relPath = exp.relative_to(prettyLocalPath)
+                    relName = cast(RelPath, str(relPath))
+                    relExpPath = matParse.path
+                    if relExpPath[-1] != '/':
+                        relExpPath += '/'
+                    relExpPath += '/'.join(map(lambda part: parse.quote_plus(part), relPath.parts))
+                    expUri = parse.urlunparse((matParse.scheme, matParse.netloc, relExpPath, matParse.params, matParse.query, matParse.fragment))
+                    
+                    # TODO: enrich outputs to add licensing features?
+                    lic_expUri = LicensedURI(
+                        uri=cast(URIType, expUri),
+                        licences=matContent.licensed_uri.licences
+                    )
+                    remote_pairs.append(
+                        MaterializedContent(
+                            local=cast(AbsPath, str(exp)),
+                            licensed_uri=lic_expUri,
+                            prettyFilename=relName,
+                            metadata_array=matContent.metadata_array,
+                            kind=ContentKind.Directory if exp.is_dir() else ContentKind.File
+                        )
+                    )
+            else:
+                remote_pairs.append(
+                    MaterializedContent(
+                        local=prettyLocal,
+                        licensed_uri=matContent.licensed_uri,
+                        prettyFilename=matContent.prettyFilename,
+                        kind=matContent.kind,
+                        metadata_array=matContent.metadata_array
+                    )
+                )
+        
+        return remote_pairs, lastInput
+    
     def fetchInputs(self, params, workflowInputs_destdir: AbsPath,
                     prefix:str='', lastInput:int=0, offline: bool = False) -> Tuple[List[MaterializedInput], int]:
         """
@@ -950,88 +1034,31 @@ class WF:
                         # We are sending the context name thinking in the future,
                         # as it could contain potential hints for authenticated access
                         contextName = inputs.get('security-context')
-                        if not isinstance(remote_files, list):  # more than one input file
-                            remote_files = [ remote_files ]
-                        # Embedding the context
-                        alt_remote_files = [ self.buildLicensedURI(remote_file, contextName=contextName) for remote_file in remote_files ]
+                        
+                        secondary_remote_files = inputs.get('secondary-urls')
                         
                         cacheable = not self.paranoidMode if inputs.get('cache', True) else False
 
-                        remote_pairs = []
                         # The storage dir depends on whether it can be cached or not
                         storeDir : Union[CacheType, AbsPath] = CacheType.Input if cacheable else workflowInputs_destdir
-                        for alt_remote_file in alt_remote_files:
-                            matContent = self.wfexs.downloadContent(
-                                alt_remote_file,
-                                dest=storeDir,
-                                offline=offline,
-                                ignoreCache=not cacheable,
-                                registerInCache=cacheable
+                        
+                        if not isinstance(remote_files, list):  # more than one input file
+                            remote_files = [ remote_files ]
+                        remote_pairs, lastInput = self._fetchRemoteFiles(remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
+                        
+                        if secondary_remote_files is not None:
+                            secondary_remote_files = [ secondary_remote_files ]
+                            secondary_remote_pairs, lastInput = self._fetchRemoteFiles(secondary_remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
+                        else:
+                            secondary_remote_pairs = None
+                        
+                        theInputs.append(
+                            MaterializedInput(
+                                name=linearKey,
+                                values=remote_pairs,
+                                secondaryInputs=secondary_remote_pairs
                             )
-
-                            # Now, time to create the symbolic link
-                            lastInput += 1
-
-                            prettyLocal = cast(AbsPath, os.path.join(inputDestDir, matContent.prettyFilename))
-
-                            # As Nextflow has some issues when two inputs of a process
-                            # have the same basename, harden by default
-                            hardenPrettyLocal = True
-                            # hardenPrettyLocal = False
-                            # if os.path.islink(prettyLocal):
-                            #     oldLocal = os.readlink(prettyLocal)
-                            #
-                            #     hardenPrettyLocal = oldLocal != matContent.local
-                            # elif os.path.exists(prettyLocal):
-                            #     hardenPrettyLocal = True
-
-                            if hardenPrettyLocal:
-                                # Trying to avoid collisions on input naming
-                                prettyLocal = cast(AbsPath, os.path.join(inputDestDir,
-                                                           str(lastInput) + '_' + matContent.prettyFilename))
-
-                            if not os.path.exists(prettyLocal):
-                                # We are either hardlinking or copying here
-                                link_or_copy(matContent.local, prettyLocal)
-
-                            if globExplode is not None:
-                                prettyLocalPath = pathlib.Path(prettyLocal)
-                                matParse = parse.urlparse(matContent.licensed_uri.uri)
-                                for exp in prettyLocalPath.glob(globExplode):
-                                    relPath = exp.relative_to(prettyLocalPath)
-                                    relName = cast(RelPath, str(relPath))
-                                    relExpPath = matParse.path
-                                    if relExpPath[-1] != '/':
-                                        relExpPath += '/'
-                                    relExpPath += '/'.join(map(lambda part: parse.quote_plus(part), relPath.parts))
-                                    expUri = parse.urlunparse((matParse.scheme, matParse.netloc, relExpPath, matParse.params, matParse.query, matParse.fragment))
-                                    
-                                    # TODO: enrich outputs to add licensing features?
-                                    lic_expUri = LicensedURI(
-                                        uri=cast(URIType, expUri),
-                                        licences=matContent.licensed_uri.licences
-                                    )
-                                    remote_pairs.append(
-                                        MaterializedContent(
-                                            local=cast(AbsPath, str(exp)),
-                                            licensed_uri=lic_expUri,
-                                            prettyFilename=relName,
-                                            metadata_array=matContent.metadata_array,
-                                            kind=ContentKind.Directory if exp.is_dir() else ContentKind.File
-                                        )
-                                    )
-                            else:
-                                remote_pairs.append(
-                                    MaterializedContent(
-                                        local=prettyLocal,
-                                        licensed_uri=matContent.licensed_uri,
-                                        prettyFilename=matContent.prettyFilename,
-                                        kind=matContent.kind,
-                                        metadata_array=matContent.metadata_array
-                                    )
-                                )
-
-                        theInputs.append(MaterializedInput(linearKey, remote_pairs))
+                        )
                     else:
                         raise WFException(
                             'Unrecognized input class "{}", attached to "{}"'.format(inputClass, linearKey))
@@ -1128,7 +1155,11 @@ class WF:
 
     def executeWorkflow(self, offline: bool = False):
         self.unmarshallStage(offline=offline)
-
+        
+        assert self.materializedEngine is not None
+        assert self.materializedParams is not None
+        assert self.outputs is not None
+        
         exitVal, augmentedInputs, matCheckOutputs = WorkflowEngine.ExecuteWorkflow(self.materializedEngine,
                                                                                    self.materializedParams,
                                                                                    self.outputs)
@@ -1288,16 +1319,20 @@ class WF:
             if self.marshallConfig(overwrite=overwrite) is None:
                 return None
             
+            assert self.metaDir is not None, "The metadata directory should be available"
+            
             marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
+            stageAlreadyMarshalled = False
             if os.path.exists(marshalled_stage_file):
                 errmsg = "Marshalled stage file {} already exists".format(marshalled_stage_file)
                 if not overwrite and not exist_ok:
                     raise WFException(errmsg)
                 self.logger.debug(errmsg)
-                self.stageMarshalled = True
+                stageAlreadyMarshalled = True
             
             
-            if not self.stageMarshalled or overwrite:
+            if not stageAlreadyMarshalled or overwrite:
+                assert self.materializedEngine is not None, "The engine should have already been materialized at this point"
                 stage = {
                     'repoURL': self.repoURL,
                     'repoTag': self.repoTag,
@@ -1328,6 +1363,8 @@ class WF:
             retval = self.unmarshallConfig(fail_ok=fail_ok)
             if not retval:
                 return None
+            
+            assert self.metaDir is not None, "The metadata directory should be available"
             
             marshalled_stage_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE)
             if not os.path.exists(marshalled_stage_file):
@@ -1371,15 +1408,18 @@ class WF:
             if self.marshallStage(exist_ok=exist_ok, overwrite=overwrite) is None:
                 return None
 
+            assert self.metaDir is not None, "The metadata directory should be available"
+            
             marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
+            executionAlreadyMarshalled = False
             if os.path.exists(marshalled_execution_file):
                 errmsg = "Marshalled execution file {} already exists".format(marshalled_execution_file)
                 if not overwrite and not exist_ok:
                     raise WFException(errmsg)
                 self.logger.debug(errmsg)
-                self.executionMarshalled = True
+                executionAlreadyMarshalled = True
             
-            if not self.executionMarshalled or overwrite:
+            if not executionAlreadyMarshalled or overwrite:
                 execution = {
                     'exitVal': self.exitVal,
                     'augmentedInputs': self.augmentedInputs,
@@ -1403,6 +1443,8 @@ class WF:
             retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
             if not retval:
                 return None
+
+            assert self.metaDir is not None, "The metadata directory should be available"
             
             marshalled_execution_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE)
             if not os.path.exists(marshalled_execution_file):
@@ -1440,16 +1482,19 @@ class WF:
             if self.marshallExecute(exist_ok=exist_ok, overwrite=overwrite) is None:
                 return None
 
+            assert self.metaDir is not None, "The metadata directory should be available"
+
             marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
+            exportAlreadyMarshalled = False
             if os.path.exists(marshalled_export_file):
                 errmsg = "Marshalled export results file {} already exists".format(marshalled_export_file)
                 if not overwrite and not exist_ok:
                     raise WFException(errmsg)
                 self.logger.debug(errmsg)
-                self.exportMarshalled = True
+                exportAlreadyMarshalled = True
             
-            if not self.exportMarshalled or overwrite:
-                exported_results = {
+            if not exportAlreadyMarshalled or overwrite:
+                exported_results : Mapping[str, Any] = {
                     # TODO
                 }
 
@@ -1469,6 +1514,8 @@ class WF:
             retval = self.unmarshallExecute(offline=offline, fail_ok=fail_ok)
             if not retval:
                 return None
+
+            assert self.metaDir is not None, "The metadata directory should be available"
             
             marshalled_export_file = os.path.join(self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE)
             if not os.path.exists(marshalled_export_file):
@@ -1517,6 +1564,12 @@ class WF:
         """
         # TODO: implement deserialization
         self.unmarshallExport(offline=True)
+        
+        assert self.localWorkflow is not None
+        assert self.materializedEngine is not None
+        assert self.repoURL is not None
+        assert self.augmentedInputs is not None
+        assert self.matCheckOutputs is not None
 
         # TODO: implement logic of doMaterializedROCrate
 
@@ -1531,12 +1584,22 @@ class WF:
         else:
             # FIXME: What to do when workflow is in git repository different from GitHub??
             # FIXME: What to do when workflow is not in a git repository??
-            wf_path = os.path.join(self.localWorkflow.dir, self.localWorkflow.relPath)
+            if self.localWorkflow.relPath is not None:
+                wf_path = os.path.join(self.localWorkflow.dir, self.localWorkflow.relPath)
+            else:
+                wf_path = self.localWorkflow.dir
             wfCrate, compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(self.localWorkflow.langVersion)
-            wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag + "/" + os.path.dirname(self.localWorkflow.relPath)
+            # TODO: how to get the name of the default branch?
+            repoTag = self.repoTag  if self.repoTag is not None  else  "main"
+            wf_url = self.repoURL.replace(".git", "/") + "tree/" + repoTag
+            if self.localWorkflow.relPath is not None:
+                wf_url += "/" + os.path.dirname(self.localWorkflow.relPath)
 
             # TODO create method to create wf_url
             matWf = self.materializedEngine.workflow
+            
+            assert matWf.effectiveCheckout is not None, "The effective checkout should be available"
+            
             parsed_repo_url = parse.urlparse(self.repoURL)
             if parsed_repo_url.netloc == 'github.com':
                 parsed_repo_path = parsed_repo_url.path.split('/')
@@ -1547,9 +1610,12 @@ class WF:
                     '',  # Needed to prepend a slash
                     parsed_repo_path[1],
                     repo_name,
-                    matWf.effectiveCheckout,
-                    self.localWorkflow.relPath
+                    matWf.effectiveCheckout
                 ]
+                
+                if self.localWorkflow.relPath is not None:
+                    wf_entrypoint_path.append(self.localWorkflow.relPath)
+                
                 wf_entrypoint_url = parse.urlunparse(
                     ('https', 'raw.githubusercontent.com', '/'.join(wf_entrypoint_path), '', '', ''))
             else:
@@ -1607,6 +1673,9 @@ class WF:
         for out_item in self.matCheckOutputs:
             if isinstance(out_item, MaterializedOutput):
                 itemOutValues = out_item.values[0]
+                
+                assert isinstance(itemOutValues, (GeneratedContent, GeneratedDirectoryContent))
+                
                 itemOutSource = itemOutValues.local
                 itemOutName = out_item.name
                 properties = {
@@ -1634,7 +1703,7 @@ class WF:
                             elif isinstance(item, GeneratedDirectoryContent):   # if is a directory that contains directories
 
                                 # search recursively for other content inside directories
-                                def search_new_content(content_list):
+                                def search_new_content(content_list: Sequence[Union[GeneratedContent, GeneratedDirectoryContent]]) -> Sequence[Mapping['str', Fingerprint]]:
                                     tempList = []
                                     for content in content_list:
                                         if isinstance(content, GeneratedContent):   # if is a file

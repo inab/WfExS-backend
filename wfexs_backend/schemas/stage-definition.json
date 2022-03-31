@@ -5,23 +5,24 @@
 	"description": "WfExS-backend stage definition file (EOSC-Life Demonstrator 7 JSON Schemas)",
 	"type": "object",
 	"definitions": {
+		"PlainURI": {
+			"type": "string",
+			"format": "uri",
+			"minLength": 1
+		},
 		"LicensedURI": {
 			"type": "object",
 			"properties": {
 				"uri": {
-					"type": "string",
 					"description": "The URI of the resource",
-					"format": "uri",
-					"minLength": 1
+					"$ref": "#/definitions/PlainURI"
 				},
 				"licences": {
 					"type": "array",
 					"items": {
-						"type": "string",
 						"description": "URL to the description of the licence of the data. And by default, no permission to use or distribute it",
-						"format": "uri",
 						"default": "https://choosealicense.com/no-permission/",
-						"minLength": 1
+						"$ref": "#/definitions/PlainURI"
 					}
 				},
 				"attributions": {
@@ -36,10 +37,8 @@
 								"minLength": 1
 							},
 							"pid": {
-								"type": "string",
 								"description": "A unique way to represent this author, either through her/his ORCID or another permanent, representative link",
-								"format": "uri",
-								"minLength": 1
+								"$ref": "#/definitions/PlainURI"
 							},
 							"roles": {
 								"type": "array",
@@ -84,6 +83,45 @@
 				"uri"
 			]
 		},
+		"InputURI": {
+			"oneOf": [
+				{
+					"$ref": "#/definitions/PlainURI"
+				},
+				{
+					"$ref": "#/definitions/LicensedURI"
+				},
+				{
+					"type": "array",
+					"items": {
+						"oneOf": [
+							{
+								"$ref": "#/definitions/LicensedURI"
+							},
+							{
+								"$ref": "#/definitions/PlainURI"
+							},
+							{
+								"description": "This element is an array of alternate URLs, so any of them provide the very same resources",
+								"type": "array",
+								"items": {
+									"oneOf": [
+										{
+											"$ref": "#/definitions/LicensedURI"
+										},
+										{
+											"$ref": "#/definitions/PlainURI"
+										}
+									]
+								},
+								"minItems": 2
+							}
+						]
+					},
+					"minItems": 1
+				}
+			]
+		},
 		"Param": {
 			"oneOf": [
 				{
@@ -124,48 +162,12 @@
 									]
 								},
 								"url": {
-									"oneOf": [
-										{
-											"type": "string",
-											"format": "uri",
-											"minLength": 1
-										},
-										{
-											"$ref": "#/definitions/LicensedURI"
-										},
-										{
-											"type": "array",
-											"items": {
-												"oneOf": [
-													{
-														"$ref": "#/definitions/LicensedURI"
-													},
-													{
-														"type": "string",
-														"format": "uri",
-														"minLength": 1
-													},
-													{
-														"type": "array",
-														"items": {
-															"oneOf": [
-																{
-																	"$ref": "#/definitions/LicensedURI"
-																},
-																{
-																	"type": "string",
-																	"format": "uri",
-																	"minLength": 1
-																}
-															]
-														},
-														"minItems": 2
-													}
-												]
-											},
-											"minItems": 1
-										}
-									]
+									"description": "The URL(s) where this input is available",
+									"$ref": "#/definitions/InputURI"
+								},
+								"secondary-urls": {
+									"description": "Secondary URLs are URLs pointing to contents which will feed secondary inputs (CWL concept)",
+									"$ref": "#/definitions/InputURI"
 								},
 								"security-context": {
 									"type": "string",
@@ -240,8 +242,7 @@
 		"trs_endpoint": {
 			"title": "The optional TRS endpoing",
 			"description": "If this key is set, it will tell the GA4GH TRS service where to look for the workflow_id (and optional version)",
-			"type": "string",
-			"format": "uri"
+			"$ref": "#/definitions/PlainURI"
 		},
 		"version": {
 			"title": "Workflow version",
@@ -254,8 +255,7 @@
 		"workflow_id": {
 			"oneOf": [
 				{
-					"type": "string",
-					"format": "uri"
+					"$ref": "#/definitions/PlainURI"
 				},
 				{
 					"type": "integer"
