@@ -8,23 +8,32 @@ python WfExS-backend.py cache --help
 
 ```
 usage: WfExS-backend.py cache [-h] [-r] [--cascade] [-g]
-                              {ls,inject,rm,validate}
-                              {input,ro-crate,ga4gh-trs,workflow}
+                              {ls,inject,fetch,rm,validate} {input,ro-crate,ga4gh-trs,workflow}
                               [cache_command_args [cache_command_args ...]]
 
 positional arguments:
-  {ls,inject,rm,validate}
+  {ls,inject,fetch,rm,validate}
                         Cache command to perform
+                        
+                        ls          List the cache entries
+                        inject      Inject a new entry in the cache
+                        fetch       Fetch a new cache entry, giving as input both the URI and optionally both a security context file and a security context name
+                        rm          Remove an entry from the cache
+                        validate    Validate the consistency of the cache
   {input,ro-crate,ga4gh-trs,workflow}
                         Cache type to perform the cache command
+                        
+                        input       Cached or injected inputs
+                        ro-crate    Cached RO-Crates (usually from WorkflowHub)
+                        ga4gh-trs   Cached files from tools described at GA4GH TRS repositories
+                        workflow    Cached workflows, which come from a git repository
   cache_command_args    Optional cache element names (default: None)
 
 optional arguments:
   -h, --help            show this help message and exit
-  -r                    Try doing the operation recursively (i.e. both
-                        metadata and data) (default: False)
-  --cascade             Try doing the operation in cascade (including the URIs
-                        which resolve to other URIs) (default: False)
+  -r                    Try doing the operation recursively (i.e. both metadata and data) (default: False)
+  --cascade             Try doing the operation in cascade (including the URIs which resolve to other URIs)
+                        (default: False)
   -g, --glob            Given cache element names are globs (default: False)
 ```
 
@@ -54,6 +63,11 @@ Currently implemented operations over these caches are:
   
 * `validate`: This operation checks that the recorded fingerprint on download matches the local contents.
   It accepts the very same arguments as `ls`
+
+* `fetch`: This operation allows fetching any content which could be fetched from a staging definition
+  file. It takes as input an URI to be fetched using WfExS-backend machinery. If the resource to be
+  fetched requires authentication, then second element should be a security context file and the third
+  one should be the name of the security context where the credentials to be used are available.
 
 ## Examples
 
@@ -167,3 +181,7 @@ python WfExS-backend.py -v -L tests/local_config_gocryptfs.yaml cache rm -r -g i
 2021-12-15 16:43:52,652 - [INFO] Removing cache sha256~TNiuY7tftn5xTDGCuzA1350Og-3SbMUdRDnNRMMBUxY= metadata /home/jmfernandez/projects/WfExS-backend/wfexs-backend-test/wf-inputs/uri_hashes/42be63ef9b0fc7d80d09513bfd3fa42b2288fd9b_meta.json
 ftp://ftp-trace.ncbi.nih.gov/giab/ftp/data/NA12878/NIST_NA12878_HG001_HiSeq_300x/140407_D00360_0017_BH947YADXX/Project_RM8398/Sample_U5c/U5c_CCGTCC_L001_R1_001.fastq.gz    /home/jmfernandez/projects/WfExS-backend/wfexs-backend-test/wf-inputs/uri_hashes/42be63ef9b0fc7d80d09513bfd3fa42b2288fd9b_meta.json /home/jmfernandez/projects/WfExS-backend/wfexs-backend-test/wf-inputs/sha256~TNiuY7tftn5xTDGCuzA1350Og-3SbMUdRDnNRMMBUxY=
 ```
+
+### Fetching contents
+
+There are a couple of self-contained examples at [../fetchers-tests/test-recipes.md](../fetchers-tests/test-recipes.md) .

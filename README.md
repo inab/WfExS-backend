@@ -59,50 +59,45 @@ EOSC-Life deliverable D8.1, _Zenodo_
 python WfExS-backend.py --full-help
 ```
 ```
-usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
-                        [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
-                        [--full-help]
-                        {init,cache,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCONFIGFILENAME]
+                        [--cache-dir CACHEDIR] [-V] [--full-help]
+                        {init,cache,staged-workdir,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.4.10-23-ge039d1f
-(e039d1f9b4333367353a1c78936fff7de511f835)
+WfExS (workflow execution service) backend 0.4.13 (8d81aac503dca656644f80579bcc2742b32abea0)
 
 optional arguments:
   -h, --help            show this help message and exit
   --log-file LOGFILENAME
-                        Store messages in a file instead of using standard
-                        error and standard output
-  -q, --quiet           Only show engine warnings and errors
-  -v, --verbose         Show verbose (informational) messages
-  -d, --debug           Show debug messages (use with care, as it can disclose
-                        passphrases and passwords)
+                        Store messages in a file instead of using standard error and standard output (default:
+                        None)
+  -q, --quiet           Only show engine warnings and errors (default: None)
+  -v, --verbose         Show verbose (informational) messages (default: None)
+  -d, --debug           Show debug messages (use with care, as it can disclose passphrases and passwords)
+                        (default: None)
   -L LOCALCONFIGFILENAME, --local-config LOCALCONFIGFILENAME
-                        Local installation configuration file
-  --cache-dir CACHEDIR  Caching directory
+                        Local installation configuration file (default: /home/jmfernandez/projects/WfExS-
+                        backend/wfexs_config.yml)
+  --cache-dir CACHEDIR  Caching directory (default: None)
   -V, --version         show program's version number and exit
-  --full-help           It returns full help
+  --full-help           It returns full help (default: False)
 
 commands:
   Command to run. It must be one of these
 
-  {init,cache,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+  {init,cache,staged-workdir,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
     init                Init local setup
     cache               Cache handling subcommands
-    config-validate     Validate the configuration files to be used for
-                        staging and execution
-    stage               Prepare the staging (working) directory for workflow
-                        execution, fetching dependencies and contents
-    mount-workdir       Mount the encrypted staging directory on secure
-                        staging scenarios
+    staged-workdir      Staged working directories handling subcommands
+    config-validate     Validate the configuration files to be used for staging and execution
+    stage               Prepare the staging (working) directory for workflow execution, fetching dependencies and
+                        contents
+    mount-workdir       Mount the encrypted staging directory on secure staging scenarios
     export-stage        Export the staging directory as an RO-Crate
-    offline-execute     Execute an already prepared workflow in the staging
-                        directory
+    offline-execute     Execute an already prepared workflow in the staging directory
     execute             Execute the stage + offline-execute + export steps
-    export-results      Export the results to a remote location, gathering
-                        their public ids
-    export-crate        Export an already executed workflow in the staging
-                        directory as an RO-Crate
+    export-results      Export the results to a remote location, gathering their public ids
+    export-crate        Export an already executed workflow in the staging directory as an RO-Crate
 
 Subparser 'init'
 usage: WfExS-backend.py init [-h]
@@ -111,47 +106,84 @@ optional arguments:
   -h, --help  show this help message and exit
 
 Subparser 'cache'
-usage: WfExS-backend.py cache [-h] [-r] [-g]
-                              {ls,inject,rm,validate}
-                              {input,ro-crate,ga4gh-trs,workflow}
+usage: WfExS-backend.py cache [-h] [-r] [--cascade] [-g]
+                              {ls,inject,fetch,rm,validate} {input,ro-crate,ga4gh-trs,workflow}
                               [cache_command_args [cache_command_args ...]]
 
 positional arguments:
-  {ls,inject,rm,validate}
+  {ls,inject,fetch,rm,validate}
                         Cache command to perform
+                        
+                        ls          List the cache entries
+                        inject      Inject a new entry in the cache
+                        fetch       Fetch a new cache entry, giving as input both the URI and optionally both a security context file and a security context name
+                        rm          Remove an entry from the cache
+                        validate    Validate the consistency of the cache
   {input,ro-crate,ga4gh-trs,workflow}
                         Cache type to perform the cache command
-  cache_command_args    Optional cache element names
+                        
+                        input       Cached or injected inputs
+                        ro-crate    Cached RO-Crates (usually from WorkflowHub)
+                        ga4gh-trs   Cached files from tools described at GA4GH TRS repositories
+                        workflow    Cached workflows, which come from a git repository
+  cache_command_args    Optional cache element names (default: None)
 
 optional arguments:
   -h, --help            show this help message and exit
-  -r                    Try doing the operation recursively (i.e. both
-                        metadata and data)
-  -g                    Given cache element names are globs
+  -r                    Try doing the operation recursively (i.e. both metadata and data) (default: False)
+  --cascade             Try doing the operation in cascade (including the URIs which resolve to other URIs)
+                        (default: False)
+  -g, --glob            Given cache element names are globs (default: False)
+
+Subparser 'staged-workdir'
+usage: WfExS-backend.py staged-workdir [-h] [-g]
+                                       {offline-exec,ls,mount,rm,shell,status}
+                                       [staged_workdir_command_args [staged_workdir_command_args ...]]
+
+positional arguments:
+  {offline-exec,ls,mount,rm,shell,status}
+                        Staged working directory command to perform
+                        
+                        offline-exec    Offline execute the staged instances which match the input pattern
+                        ls              List the staged instances
+                                It shows the instance id, nickname,
+                                encryption and whether they are damaged
+                        mount           Mount the staged instances which match the input pattern
+                        rm              Removes the staged instances which match the input pattern
+                        shell           Launches a command in the workdir
+                                First parameter is either the staged instance id or the nickname.
+                                It launches the command specified after the id.
+                                If there is no additional parameters, it launches a shell
+                                in the mounted working directory of the instance
+                        status          Shows staged instances status
+  staged_workdir_command_args
+                        Optional staged working directory element names (default: None)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -g, --glob            Given staged workflow names are globs (default: False)
 
 Subparser 'config-validate'
-usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME
-                                        [-Z SECURITYCONTEXTSCONFIGFILENAME]
+usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
-                        Configuration file, describing workflow and inputs
+                        Configuration file, describing workflow and inputs (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts,
-                        which hold credentials and similar
+                        Configuration file, describing security contexts, which hold credentials and similar
+                        (default: None)
 
 Subparser 'stage'
-usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME
-                              [-Z SECURITYCONTEXTSCONFIGFILENAME]
+usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
-                        Configuration file, describing workflow and inputs
+                        Configuration file, describing workflow and inputs (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts,
-                        which hold credentials and similar
+                        Configuration file, describing security contexts, which hold credentials and similar
+                        (default: None)
 
 Subparser 'mount-workdir'
 usage: WfExS-backend.py mount-workdir [-h] -J WORKFLOWWORKINGDIRECTORY
@@ -159,7 +191,7 @@ usage: WfExS-backend.py mount-workdir [-h] -J WORKFLOWWORKINGDIRECTORY
 optional arguments:
   -h, --help            show this help message and exit
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
-                        Already staged job directory
+                        Already staged job directory (default: None)
 
 Subparser 'export-stage'
 usage: WfExS-backend.py export-stage [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
@@ -167,9 +199,8 @@ usage: WfExS-backend.py export-stage [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
 optional arguments:
   -h, --help            show this help message and exit
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
-                        Already staged job directory
-  --full                Should the RO-Crate contain a copy of the inputs (and
-                        outputs)?
+                        Already staged job directory (default: None)
+  --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
 
 Subparser 'offline-execute'
 usage: WfExS-backend.py offline-execute [-h] -J WORKFLOWWORKINGDIRECTORY
@@ -177,21 +208,19 @@ usage: WfExS-backend.py offline-execute [-h] -J WORKFLOWWORKINGDIRECTORY
 optional arguments:
   -h, --help            show this help message and exit
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
-                        Already staged job directory
+                        Already staged job directory (default: None)
 
 Subparser 'execute'
-usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME
-                                [-Z SECURITYCONTEXTSCONFIGFILENAME] [--full]
+usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [--full]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
-                        Configuration file, describing workflow and inputs
+                        Configuration file, describing workflow and inputs (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts,
-                        which hold credentials and similar
-  --full                Should the RO-Crate contain a copy of the inputs (and
-                        outputs)?
+                        Configuration file, describing security contexts, which hold credentials and similar
+                        (default: None)
+  --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
 
 Subparser 'export-results'
 usage: WfExS-backend.py export-results [-h] -J WORKFLOWWORKINGDIRECTORY
@@ -199,7 +228,7 @@ usage: WfExS-backend.py export-results [-h] -J WORKFLOWWORKINGDIRECTORY
 optional arguments:
   -h, --help            show this help message and exit
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
-                        Already staged job directory
+                        Already staged job directory (default: None)
 
 Subparser 'export-crate'
 usage: WfExS-backend.py export-crate [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
@@ -207,9 +236,8 @@ usage: WfExS-backend.py export-crate [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
 optional arguments:
   -h, --help            show this help message and exit
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
-                        Already staged job directory
-  --full                Should the RO-Crate contain a copy of the inputs (and
-                        outputs)?
+                        Already staged job directory (default: None)
+  --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
 
 ```
 
