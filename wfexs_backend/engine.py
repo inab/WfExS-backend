@@ -192,8 +192,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # or newly generated content
         if outputsDir is None:
             outputsDir = cast(AbsPath, os.path.join(workDir, WORKDIR_OUTPUTS_RELDIR))
+        elif not os.path.isabs(outputsDir):
+            outputsDir = cast(AbsPath, os.path.abspath(outputsDir))
         os.makedirs(outputsDir, exist_ok=True)
-        self.outputsDir = outputsDir
+        self.outputsDir = cast(AbsPath, outputsDir)
 
         # This directory will hold diverse metadata, like execution metadata
         # or newly generated content
