@@ -78,6 +78,7 @@ def GetGeneratedDirectoryContentFromList(
     theValues: Sequence[AbstractGeneratedContent],
     uri: Optional[LicensedURI] = None,
     preferredFilename: Optional[RelPath] = None,
+    secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None,
     signatureMethod = None
 ) -> GeneratedDirectoryContent:
     """
@@ -97,7 +98,8 @@ def GetGeneratedDirectoryContentFromList(
         uri=uri,
         preferredFilename=preferredFilename,
         values=theValues,
-        signature=signature
+        signature=signature,
+        secondaryFiles=secondaryFiles
     )
 
 
@@ -131,7 +133,14 @@ def CWLDesc2Content(
         if (expectedOutput is not None) and foundKind != expectedOutput.kind:
             logger.warning("For output {} obtained kind does not match ({} vs {})".format(expectedOutput.name, expectedOutput.kind, foundKind))
         
-        matValue = None
+        # What to do with auxiliary/secondary files?
+        secondaryFilesRaw = cwlDesc.get('secondaryFiles')
+        if secondaryFilesRaw:
+            secondaryFiles = CWLDesc2Content(secondaryFilesRaw, logger, doGenerateSignatures=doGenerateSignatures)
+        else:
+            secondaryFiles = None
+
+        matValue : Optional[Union[GeneratedDirectoryContent, GeneratedContent]] = None
         if foundKind == ContentKind.Directory:
             theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger, doGenerateSignatures=doGenerateSignatures)
             matValue = GetGeneratedDirectoryContentFromList(
@@ -140,21 +149,19 @@ def CWLDesc2Content(
                 # TODO: Generate URIs when it is advised
                 # uri=None,
                 preferredFilename=None if expectedOutput is None else expectedOutput.preferredFilename,
+                secondaryFiles=secondaryFiles,
                 signatureMethod=repMethod
             )
         elif foundKind == ContentKind.File:
             matValue = GeneratedContent(
                 local=cwlDesc['path'],
-                signature=ComputeDigestFromFile(cwlDesc['path'], repMethod=repMethod)
+                signature=ComputeDigestFromFile(cwlDesc['path'], repMethod=repMethod),
+                secondaryFiles=secondaryFiles
             )
         
         if matValue is not None:
             matValues.append(matValue)
             
-            # What to do with auxiliary/secondary files?
-            secondaryFiles = cwlDesc.get('secondaryFiles', [])
-            if len(secondaryFiles) > 0:
-                matValues.extend(CWLDesc2Content(secondaryFiles, logger, doGenerateSignatures=doGenerateSignatures))
 
     return matValues
 

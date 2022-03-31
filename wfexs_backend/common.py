@@ -23,7 +23,7 @@ import enum
 import os
 from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple
 from typing import NewType, Optional, Pattern, Sequence, Tuple, Type, Union
-from typing import TYPE_CHECKING
+from typing import MutableMapping, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rocrate.model.computerlanguage import ComputerLanguage
@@ -108,7 +108,7 @@ Fingerprint = NewType('Fingerprint', str)
 ExitVal = NewType('ExitVal', int)
 
 SecurityContextConfig = Dict[str, Any]
-SecurityContextConfigBlock = Dict[str, SecurityContextConfig]
+SecurityContextConfigBlock = MutableMapping[str, SecurityContextConfig]
 
 # As each workflow engine can have its own naming convention, leave them to
 # provide it
@@ -299,6 +299,7 @@ class GeneratedContent(AbstractGeneratedContent, NamedTuple):
     signature: Fingerprint
     uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
+    secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None
 
 
 class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
@@ -318,6 +319,7 @@ class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
     uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
     signature: Optional[Fingerprint] = None
+    secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None
 
 
 class MaterializedOutput(NamedTuple):

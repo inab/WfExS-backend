@@ -27,7 +27,8 @@ import sys
 import tempfile
 import venv
 
-from typing import cast, List, Optional, Set, Tuple, Union
+from typing import cast, Any, List, Mapping, MutableMapping
+from typing import MutableSequence, Optional, Set, Tuple, Union
 
 import jsonpath_ng
 import jsonpath_ng.ext
@@ -39,19 +40,23 @@ from .common import MaterializedContent, MaterializedInput, MaterializedOutput
 from .common import ContainerTaggedName, LocalWorkflow, MaterializedWorkflowEngine
 from .common import EngineMode, EnginePath, EngineVersion
 from .common import ExpectedOutput, ExitVal, Fingerprint, URIType
+from .common import SymbolicParamName
+from . import common
 
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .engine import WorkflowEngine, WorkflowEngineException
 
+from .utils.contents import CWLClass2WfExS
+
 
 # Next methods are borrowed from
 # https://github.com/common-workflow-language/cwltool/blob/5bdb3d3dd47d8d1b3a1685220b4b6ce0f94c055e/cwltool/singularity.py#L83
-def _normalize_image_id(string: str) -> str:
-    return string.replace("/", "_") + ".img"
+def _normalize_image_id(string: str) -> RelPath:
+    return cast(RelPath, string.replace("/", "_") + ".img")
 
 
-def _normalize_sif_id(string: str) -> str:
-    return string.replace("/", "_") + ".sif"
+def _normalize_sif_id(string: str) -> RelPath:
+    return cast(RelPath, string.replace("/", "_") + ".sif")
 
 
 class CWLWorkflowEngine(WorkflowEngine):
@@ -84,7 +89,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     
     NODEJS_WRAPPER = 'nodejs_wrapper.bash'
     
-    NODEJS_CONTAINER_TAG = 'docker.io/node:slim'
+    NODEJS_CONTAINER_TAG = cast(ContainerTaggedName, 'docker.io/node:slim')
     OPERATIONAL_CONTAINER_TAGS = [
         NODEJS_CONTAINER_TAG
     ]
@@ -168,15 +173,15 @@ class CWLWorkflowEngine(WorkflowEngine):
         os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
 
     @classmethod
-    def WorkflowType(cls) -> WorkflowType:
+    def WorkflowType(cls) -> common.WorkflowType:
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
             shortname='cwl',
             name='Common Workflow Language',
             clazz=cls,
             uriMatch=[re.compile(r'^https://w3id\.org/cwl/')],
-            uriTemplate=r'https://w3id.org/cwl/{}/',
-            url='https://www.commonwl.org/',
+            uriTemplate=cast(URIType, r'https://w3id.org/cwl/{}/'),
+            url=cast(URIType, 'https://www.commonwl.org/'),
             trs_descriptor='CWL',
             rocrate_programming_language='#cwl'
         )
@@ -196,7 +201,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         """
         cwlPath = localWf.dir
         if localWf.relPath is not None:
-            cwlPath = os.path.join(cwlPath, localWf.relPath)
+            cwlPath = cast(AbsPath, os.path.join(cwlPath, localWf.relPath))
 
         # Is this a yaml?
         cwlVersion = None
@@ -305,7 +310,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         # TODO
 
-        return engineVersion, cwl_install_dir, ""
+        return engineVersion, cast(EnginePath, cwl_install_dir), cast(Fingerprint, engineVersion)
 
     def materializeWorkflow(self, matWorkflowEngine: MaterializedWorkflowEngine, offline: bool = False) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
         """
@@ -316,11 +321,13 @@ class CWLWorkflowEngine(WorkflowEngine):
         """
         localWf = matWorkflowEngine.workflow
         localWorkflowDir = localWf.dir
-
+        
+        assert localWf.relPath is not None, "CWL workflows should have a relative file path"
+        
         if os.path.isabs(localWf.relPath):
-            localWorkflowFile = localWf.relPath
+            localWorkflowFile = cast(AbsPath, localWf.relPath)
         else:
-            localWorkflowFile = os.path.join(localWorkflowDir, localWf.relPath)
+            localWorkflowFile = cast(AbsPath, os.path.join(localWorkflowDir, localWf.relPath))
         engineVersion = matWorkflowEngine.version
         # CWLWorkflowEngine directory is needed
         cwl_install_dir = matWorkflowEngine.engine_path
@@ -387,7 +394,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
                 containerTags.add(dockerPullId)
 
-        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=packedLocalWorkflowFile,
+        newLocalWf = LocalWorkflow(dir=localWf.dir, relPath=cast(RelPath, packedLocalWorkflowFile),
                                    effectiveCheckout=localWf.effectiveCheckout, langVersion=cwlVersion)
         newWfEngine = MaterializedWorkflowEngine(
             instance=matWorkflowEngine.instance,
@@ -422,10 +429,13 @@ class CWLWorkflowEngine(WorkflowEngine):
     @staticmethod
     def generateDotWorkflow(matWfEng: MaterializedWorkflowEngine, dagFile: AbsPath) -> None:
         localWf = matWfEng.workflow
+        
+        assert localWf.relPath is not None, "CWL workflows should have a relative file path"
+        
         if os.path.isabs(localWf.relPath):
-            localWorkflowFile = localWf.relPath
+            localWorkflowFile = cast(AbsPath, localWf.relPath)
         else:
-            localWorkflowFile = os.path.join(localWf.dir, localWf.relPath)
+            localWorkflowFile = cast(AbsPath, os.path.join(localWf.dir, localWf.relPath))
         engineVersion = matWfEng.version
         cwl_install_dir = matWfEng.engine_path
         # Execute cwltool --print-dot
@@ -456,12 +466,15 @@ class CWLWorkflowEngine(WorkflowEngine):
         Method to execute the workflow
         """
         localWf = matWfEng.workflow
+        
+        assert localWf.relPath is not None, "CWL workflows should have a relative file path"
+        
         if os.path.isabs(localWf.relPath):
-            localWorkflowFile = localWf.relPath
+            localWorkflowFile = cast(AbsPath, localWf.relPath)
         else:
-            localWorkflowFile = os.path.join(localWf.dir, localWf.relPath)
+            localWorkflowFile = cast(AbsPath, os.path.join(localWf.dir, localWf.relPath))
         engineVersion = matWfEng.version
-        dagFile = os.path.join(self.outputStatsDir, STATS_DAG_DOT_FILE)
+        dagFile = cast(AbsPath, os.path.join(self.outputStatsDir, STATS_DAG_DOT_FILE))
 
         if os.path.exists(localWorkflowFile):
             # CWLWorkflowEngine directory is needed
@@ -494,7 +507,6 @@ class CWLWorkflowEngine(WorkflowEngine):
                         first_workflow = workflow
                 
                 # Now, deciding
-                workflow = None
                 if first_workflow is None:
                     raise WorkflowEngineException(f"FIXME?: No workflow was found in {localWorkflowFile}")
                 elif len(workflows) > 1 and '#main' in workflows:
@@ -559,6 +571,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 debugFlag = '--verbose'
                             
                             if self.container_factory.containerType == ContainerType.Singularity:
+                                assert matWfEng.containers_path is not None, "The containers path should exist"
+                                
                                 cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
                                 instEnv['CWL_SINGULARITY_CACHE'] = matWfEng.containers_path
                                 instEnv['SINGULARITY_CONTAIN'] = '1'
@@ -611,9 +625,12 @@ class CWLWorkflowEngine(WorkflowEngine):
 
                             # Reading the output for the report
                             matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, self.outputsDir, outputsMapping)
+                else:
+                    retVal = -1
+                    matOutputs = []
 
-                    # FIXME: create augmentedInputs properly
-                    return retVal, matInputs, matOutputs
+                # FIXME: create augmentedInputs properly
+                return cast(ExitVal, retVal), matInputs, matOutputs
 
             except WorkflowEngineException as wfex:
                 raise wfex
@@ -657,7 +674,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         if len(cwlInputs) == 0:  # Is list of declared inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Workflow with no declared inputs")
 
-        execInputs = dict()
+        execInputs : MutableMapping[SymbolicParamName, Union[bool, int, float, str, Mapping, List[bool], List[int], List[float], List[str], MutableSequence[Mapping]]] = dict()
         for matInput in matInputs:
             if isinstance(matInput, MaterializedInput):  # input is a MaterializedInput
                 # numberOfInputs = len(matInput.values)  # number of inputs inside a MaterializedInput
@@ -703,13 +720,23 @@ class CWLWorkflowEngine(WorkflowEngine):
                                     self.logger.warning("Input {} is not materialized".format(name))
                                 value_local = value.local
                                 
+                                eInput : MutableMapping[str, Any] = {"class": classType, "location": value_local}
+                                if matInput.secondaryInputs is not None:
+                                    eInput['secondaryFiles'] = [
+                                        {
+                                            "class": list(CWLClass2WfExS.keys())[list(CWLClass2WfExS.values()).index(secInput.kind)],
+                                            "location": secInput.local
+                                        }
+                                        for secInput in matInput.secondaryInputs
+                                    ]
                                 if isArray:
-                                    execInputs.setdefault(name, []).append({"class": classType, "location": value_local})
+                                    execInputs.setdefault(name, []).append(eInput)
+                                    # FIXME: secondary parameters in an array of inputs?!?!?
                                 elif name in execInputs:
                                     raise WorkflowEngineException(
                                         "ERROR: Input {} is not array, but it received more than one value".format(name))
                                 else:
-                                    execInputs[name] = {"class": classType, "location": value_local}
+                                    execInputs[name] = eInput
                             else: # The error now is managed outside
                                 # FIXME: do something better for other kinds
                                 #
