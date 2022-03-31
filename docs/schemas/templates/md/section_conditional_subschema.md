@@ -1,6 +1,6 @@
 {% if schema.kw_if %}
     {% set first_property =  schema.kw_if | get_first_property %}
-    
+
     {% if schema.kw_then %}
         {% if first_property is not none %}
             {%- filter md_heading(depth) -%}If (
@@ -12,7 +12,7 @@
             If(_complex condition_)
         {% endif %}
         {% with schema=schema.kw_then, skip_headers=False, depth=depth %}
-            {% include "content.html" %}
+            {% include "content.md" %}
         {% endwith %}
     {% endif %}
     {% if schema.kw_else %}
@@ -26,7 +26,7 @@
             IfNot(_complex condition_)
         {% endif %}
         {% with schema=schema.kw_else, skip_headers=False, depth=depth %}
-            {% include "content.html" %}
+            {% include "content.md" %}
         {% endwith %}
     {% endif %}
 {% endif %}
