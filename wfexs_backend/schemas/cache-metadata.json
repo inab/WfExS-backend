@@ -1,0 +1,127 @@
+{
+	"$id": "https://www.eosc-life.eu/d7/WfExS-backend/Cache-Metadata",
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "WfExS-backend cache metadata",
+	"description": "WfExS-backend cache metadata file (EOSC-Life Demonstrator 7 JSON Schemas)",
+	"type": "object",
+	"properties": {
+		"stamp": {
+			"description": "When this cache entry was stored",
+			"type": "string",
+			"format": "date-time"
+		},
+		"licences": {
+			"type": "array",
+			"items": {
+				"type": "string",
+				"format": "uri",
+				"default": "https://choosealicense.com/no-permission/"
+			},
+			"default": []
+		},
+		"metadata_array": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"properties": {
+					"uri": {
+						"type": "string",
+						"format": "uri"
+					},
+					"metadata": {
+						"oneOf": [
+							{
+								"type": "array",
+								"items": {
+									"type": "object",
+									"minProperties": 1
+								}
+							},
+							{
+								"type": "object"
+							}
+						]
+					},
+					"preferredName": {
+						"type": [ "string", "null" ]
+					}
+				},
+				"required": [
+					"uri",
+					"metadata"
+				]
+			}
+		}
+	},
+	"oneOf": [
+		{
+			"properties": {
+				"resolves_to": {
+					"description": "This metadata cache entry resolves to these",
+					"oneOf": [
+						{
+							"description": "This metadata cache entry resolves to a single URI",
+							"type": "string",
+							"format": "uri",
+							"minLength": 1
+						},
+						{
+							"description": "This metadata cache entry resolves to multiple URIs",
+							"type": "array",
+							"items": {
+								"type": "string",
+								"format": "uri",
+								"minLength": 1
+							},
+							"minItems": 1
+						}
+					]
+				}
+			},
+			"required": [
+				"metadata_array",
+				"resolves_to"
+			]
+		},
+		{
+			"properties": {
+				"kind": {
+					"description": "Kind of cached content. It could be either a file or a directory",
+					"type": "string",
+					"enum": [
+						"file",
+						"dir"
+					]
+				},
+				"fingerprint": {
+					"description": "The fingerprint of the content, which is the name of the hashing algorithm, the '~' separator and the encoded hash in base64",
+					"type": "string",
+					"format": "^[^~]+~[A-Za-z0-9+/]+"
+				},
+				"path": {
+					"description": "Both the relative and absolute paths to the cached file or directory, using the base directory of the cached metadata as reference",
+					"type": "object",
+					"properties": {
+						"relative": {
+							"type": "string"
+						},
+						"absolute": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"relative",
+						"absolute"
+					]
+				}
+			},
+			"required": [
+				"metadata_array",
+				"kind",
+				"fingerprint",
+				"path"
+			]
+		}
+	]
+		
+}

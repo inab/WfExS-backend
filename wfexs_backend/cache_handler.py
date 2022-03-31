@@ -38,7 +38,9 @@ from .common import ContentKind, LicensedURI, ProtocolFetcher, URIWithMetadata
 from .common import Fingerprint, SecurityContextConfig, URIType
 
 from .fetchers import FetcherException
+
 from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, stringifyFilenameDigest
+from .utils.misc import config_validate
 from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
 
 META_JSON_POSTFIX = '_meta.json'
@@ -47,6 +49,8 @@ class CacheHandlerException(AbstractWfExSException):
     pass
 
 class SchemeHandlerCacheHandler:
+    CACHE_METADATA_SCHEMA = cast(RelPath, 'cache-metadata.json')
+    
     def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
         # Getting a logger focused on specific classes
         import inspect
@@ -81,8 +85,11 @@ class SchemeHandlerCacheHandler:
         
         return cast(AbsPath, hashDir)
     
-    @staticmethod
-    def _parseMetaStructure(fMeta: AbsPath) -> Mapping[str, Any]:
+    def _parseMetaStructure(self, fMeta: AbsPath, validate_meta: bool = False) -> Mapping[str, Any]:
+        """
+        Parse cache metadata structure, with optional validation
+        """
+        
         with open(fMeta, mode="r", encoding="utf-8") as eH:
             metaStructure = jsonFilterDecodeFromStream(eH)
         
@@ -106,6 +113,17 @@ class SchemeHandlerCacheHandler:
                         'relative': os.path.relpath(finalCachedFilename, hashDir),
                         'absolute': finalCachedFilename
                     })
+        
+        if validate_meta or self.logger.getEffectiveLevel() <= logging.DEBUG:
+            # Serialize JSON to serialize instances and deserialize without typecasts
+            # in order to properly validate
+            flatMetaStructure = json.loads(json.dumps(metaStructure, cls=DatetimeEncoder))
+            
+            val_errors = config_validate(flatMetaStructure, self.CACHE_METADATA_SCHEMA)
+            if len(val_errors) > 0:
+                self.logger.error(f'CMVE => {len(val_errors)} errors in cache metadata file {fMeta}')
+                for i_err, val_error in enumerate(val_errors):
+                    self.logger.error(f'CMVE {i_err}: {val_error}')
         
         return metaStructure
     
@@ -330,6 +348,14 @@ class SchemeHandlerCacheHandler:
                 metaStructure['resolves_to'] = inputKind
             
             json.dump(metaStructure, mOut, cls=DatetimeEncoder)
+            
+            if self.logger.getEffectiveLevel() <= logging.DEBUG:
+                flatMetaStructure = json.loads(json.dumps(metaStructure, cls=DatetimeEncoder))
+                val_errors = config_validate(flatMetaStructure, self.CACHE_METADATA_SCHEMA)
+                if len(val_errors) > 0:
+                    self.logger.error(f'CMSVE => {len(val_errors)} errors in just stored cache metadata file {uriMetaCachedFilename}')
+                    for i_err, val_error in enumerate(val_errors):
+                        self.logger.error(f'CMSVE {i_err}: {val_error}')
         
         return finalCachedFilename, fingerprint
     
