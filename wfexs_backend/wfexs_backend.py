@@ -33,7 +33,7 @@ import types
 import uuid
 
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
-from typing import cast, Set, Tuple, Type, Union
+from typing import cast, MutableMapping, Set, Tuple, Type, Union
 
 from urllib import parse
 
@@ -257,7 +257,7 @@ class WfExSBackend:
             sys.exit(1)
 
         self.local_config = local_config
-        self.progs : Dict[SymbolicName, Union[RelPath, AbsPath]] = DEFAULT_PROGS.copy()
+        self.progs : MutableMapping[SymbolicName, Union[RelPath, AbsPath]] = DEFAULT_PROGS.copy()
 
         toolSect = local_config.get('tools', {})
         self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
@@ -325,7 +325,7 @@ class WfExSBackend:
 
         # Setting up caching directories
         self.cacheDir = cacheDir
-        self.cachePathMap : Dict[str, AbsPath] = dict()
+        self.cachePathMap : MutableMapping[str, AbsPath] = dict()
         cacheWorkflowDir = cast(AbsPath, os.path.join(cacheDir, 'wf-cache'))
         os.makedirs(cacheWorkflowDir, exist_ok=True)
         self.cachePathMap[CacheType.Workflow] = cacheWorkflowDir
@@ -358,7 +358,7 @@ class WfExSBackend:
         self.defaultParanoidMode = False
 
         # cacheHandler is created on first use
-        self._sngltn : Dict[Type[AbstractStatefulFetcher], AbstractStatefulFetcher] = dict()
+        self._sngltn : MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher] = dict()
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, dict())
 
         # All the custom ones should be added here
