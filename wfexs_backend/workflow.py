@@ -270,7 +270,6 @@ class WF:
             self.workdir_creation = datetime.datetime.now(tz=datetime.timezone.utc)
         else:
             self.workdir_creation = creation
-        self.nickname = nickname
         
         self.encfs_type = None
         self.encfsCond = None
@@ -282,14 +281,16 @@ class WF:
         checkSecure = True
         if rawWorkDir is None:
             if instanceId is None:
-                self.instanceId , self.nickname, self.workdir_creation , self.rawWorkDir = self.wfexs.createRawWorkDir(self.nickname)
+                self.instanceId , self.nickname, self.workdir_creation , self.rawWorkDir = self.wfexs.createRawWorkDir(nickname_prefix=nickname)
                 checkSecure = False
             else:
-                self.instanceId , self.nickname, self.workdir_creation , self.rawWorkDir = self.wfexs.getOrCreateRawWorkDirFromInstanceId(instanceId, self.nickname, create_ok=False)
+                self.instanceId , self.nickname, self.workdir_creation , self.rawWorkDir = self.wfexs.getOrCreateRawWorkDirFromInstanceId(instanceId, nickname=nickname, create_ok=False)
         else:
             self.rawWorkDir = cast(AbsPath, os.path.abspath(rawWorkDir))
             if instanceId is None:
-                self.instanceId , self.nickname, self.workdir_creation, _ = self.wfexs.parseOrCreateRawWorkDir(self.rawWorkDir, create_ok=False)
+                self.instanceId , self.nickname, self.workdir_creation, _ = self.wfexs.parseOrCreateRawWorkDir(self.rawWorkDir, nickname=nickname, create_ok=False)
+            else:
+                self.nickname = nickname
 
         # TODO: enforce restrictive permissions on each raw working directory
         self.allowOther = False
@@ -557,7 +558,11 @@ class WF:
 
 
     @classmethod
-    def FromWorkDir(cls, wfexs: "WfExSBackend", workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False):
+    def FromWorkDir(cls, wfexs: "WfExSBackend", workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False) -> "WF":
+        """
+        This class method requires an existing staged working directory
+        """
+        
         if wfexs is None:
             raise WFException('Unable to initialize, no WfExSBackend instance provided')
         
@@ -573,9 +578,17 @@ class WF:
         return creds_config
     
     @classmethod
-    def FromFiles(cls, wfexs: "WfExSBackend", workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] =None, paranoidMode: bool = False):
+    def FromFiles(cls, wfexs: "WfExSBackend", workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] = None, nickname_prefix: Optional[str] = None, paranoidMode: bool = False) -> "WF":
+        """
+        This class method creates a new staged working directory
+        """
+        
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+            
+        # Should we prepend the nickname prefix?
+        if nickname_prefix is not None:
+            workflow_meta['nickname'] = nickname_prefix + workflow_meta.get('nickname', "")
 
         # Last, try loading the security contexts credentials file
         if securityContextsConfigFilename and os.path.exists(securityContextsConfigFilename):
@@ -586,8 +599,10 @@ class WF:
         return cls.FromDescription(wfexs, workflow_meta, creds_config, paranoidMode=paranoidMode)
     
     @classmethod
-    def FromDescription(cls, wfexs: "WfExSBackend", workflow_meta, creds_config: Optional[SecurityContextConfigBlock] = None, paranoidMode: bool = False):
+    def FromDescription(cls, wfexs: "WfExSBackend", workflow_meta, creds_config: Optional[SecurityContextConfigBlock] = None, paranoidMode: bool = False) -> "WF":
         """
+        This class method might create a new staged working directory
+        
         :param wfexs: WfExSBackend instance
         :param workflow_meta: The configuration describing both the workflow
         and the inputs to use when it is being instantiated.

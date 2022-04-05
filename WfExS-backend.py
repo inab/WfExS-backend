@@ -94,6 +94,12 @@ def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, preStagePar
             dest="securityContextsConfigFilename",
             help="Configuration file, describing security contexts, which hold credentials and similar"
         )
+        ap_.add_argument(
+            '-n',
+            '--nickname-prefix',
+            dest="nickname_prefix",
+            help="Nickname prefix to be used on staged workdir creation"
+        )
     
     if postStageParams:
         ap_.add_argument(
@@ -450,7 +456,7 @@ def main():
         retval = wfBackend.validateConfigFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
         sys.exit(retval)
     else:
-        wfInstance = wfBackend.fromFiles(args.workflowConfigFilename, args.securityContextsConfigFilename)
+        wfInstance = wfBackend.fromFiles(args.workflowConfigFilename, args.securityContextsConfigFilename, nickname_prefix=args.nickname_prefix)
     
     # This is needed to be sure the encfs instance is unmounted
     if command != WfExS_Commands.MountWorkDir:

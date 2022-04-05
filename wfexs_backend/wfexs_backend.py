@@ -108,7 +108,7 @@ class WfExSBackend:
         return generate_passphrase(passphrase_length=cls.DEFAULT_PASSPHRASE_LENGTH)
 
     @classmethod
-    def bootstrap(cls, local_config: Mapping[str, Any], config_directory: Optional[Union[RelPath,AbsPath]] = None, key_prefix: Optional[str] = None) -> Tuple[bool, Mapping[str, Any]]:
+    def bootstrap(cls, local_config: MutableMapping[str, Any], config_directory: Optional[Union[RelPath,AbsPath]] = None, key_prefix: Optional[str] = None) -> Tuple[bool, MutableMapping[str, Any]]:
         """
         :param local_config: Relevant local configuration, like the cache directory.
         :param config_directory: The filename to be used to resolve relative paths
@@ -204,7 +204,7 @@ class WfExSBackend:
         return updated, local_config
 
     @classmethod
-    def FromDescription(cls, workflow_meta, local_config, creds_config=None, config_directory=None) -> WF:
+    def FromDescription(cls, workflow_meta, local_config: MutableMapping[str, Any], creds_config=None, config_directory=None) -> WF:
         """
 
         :param workflow_meta: The configuration describing both the workflow
@@ -237,7 +237,7 @@ class WfExSBackend:
             creds_config=creds_config
         )
 
-    def __init__(self, local_config: Optional[Mapping[str, Any]] = None, config_directory: Optional[Union[RelPath, AbsPath]] = None):
+    def __init__(self, local_config: Optional[MutableMapping[str, Any]] = None, config_directory: Optional[Union[RelPath, AbsPath]] = None):
         """
         Init function
 
@@ -443,17 +443,17 @@ class WfExSBackend:
         """
         return WF(self, workflow_id, version_id, descriptor_type, trs_endpoint, params, outputs, workflow_config, creds_config)
     
-    def createRawWorkDir(self, nickname: Optional[str] = None) -> Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]:
+    def createRawWorkDir(self, nickname_prefix: Optional[str] = None) -> Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]:
         """
         This method creates a new, empty, raw working directory
         """
         instanceId = cast(WfExSInstanceId, str(uuid.uuid4()))
-        if nickname is None:
+        if nickname_prefix is None:
             nickname = generate_nickname()
         else:
-            nickname += ' ' + generate_nickname()
+            nickname = nickname_prefix + generate_nickname()
         
-        return self.getOrCreateRawWorkDirFromInstanceId(instanceId, nickname, create_ok=True)
+        return self.getOrCreateRawWorkDirFromInstanceId(instanceId, nickname=nickname, create_ok=True)
     
     def getOrCreateRawWorkDirFromInstanceId(self, instanceId: WfExSInstanceId, nickname: Optional[str] = None, create_ok: bool = False) -> Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]:
         """
@@ -535,8 +535,8 @@ class WfExSBackend:
     def enableDefaultParanoidMode(self):
         self.defaultParanoidMode = True
 
-    def fromFiles(self, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] = None, paranoidMode: bool = False) -> WF:
-        return WF.FromFiles(self, workflowMetaFilename, securityContextsConfigFilename, paranoidMode)
+    def fromFiles(self, workflowMetaFilename: Union[RelPath, AbsPath], securityContextsConfigFilename: Optional[Union[RelPath, AbsPath]] = None, nickname_prefix: Optional[str] = None, paranoidMode: bool = False) -> WF:
+        return WF.FromFiles(self, workflowMetaFilename, securityContextsConfigFilename=securityContextsConfigFilename, nickname_prefix=nickname_prefix, paranoidMode=paranoidMode)
 
     def parseAndValidateSecurityContextFile(self, securityContextsConfigFilename: Union[RelPath, AbsPath]) -> Tuple[ExitVal, SecurityContextConfigBlock]:
         numErrors = 0
@@ -988,11 +988,12 @@ class WfExSBackend:
         self.logger.info("downloading workflow input: {}".format(' or '.join(remote_uris)))
 
         inputKind, cachedFilename, metadata_array, cachedLicences = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
-        self.logger.info("downloaded workflow input: {} => {}".format(remote_file, cachedFilename))
+        downloaded_uri = remote_file.uri  if isinstance(remote_file, LicensedURI)  else  remote_file
+        self.logger.info("downloaded workflow input: {} => {}".format(downloaded_uri, cachedFilename))
 
         prettyFilename = None
         if len(metadata_array) > 0:
-            self.logger.info("downloaded workflow input: {} => {}".format(' -> '.join(map(lambda m: m.uri, metadata_array)), cachedFilename))
+            self.logger.info("downloaded workflow input chain: {} => {}".format(' -> '.join(map(lambda m: m.uri, metadata_array)), cachedFilename))
             
             if isinstance(firstURI, LicensedURI):
                 firstLicensedURI = LicensedURI(
