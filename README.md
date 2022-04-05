@@ -59,22 +59,20 @@ EOSC-Life deliverable D8.1, _Zenodo_
 python WfExS-backend.py --full-help
 ```
 ```
-usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCONFIGFILENAME]
-                        [--cache-dir CACHEDIR] [-V] [--full-help]
+usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
+                        [--full-help]
                         {init,cache,staged-workdir,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.4.13 (8d81aac503dca656644f80579bcc2742b32abea0)
+WfExS (workflow execution service) backend 0.4.13-4-g8b97a32 (8b97a328d3163cb4295a09dae6def45341e2acca)
 
 optional arguments:
   -h, --help            show this help message and exit
   --log-file LOGFILENAME
-                        Store messages in a file instead of using standard error and standard output (default:
-                        None)
+                        Store messages in a file instead of using standard error and standard output (default: None)
   -q, --quiet           Only show engine warnings and errors (default: None)
   -v, --verbose         Show verbose (informational) messages (default: None)
-  -d, --debug           Show debug messages (use with care, as it can disclose passphrases and passwords)
-                        (default: None)
+  -d, --debug           Show debug messages (use with care, as it can disclose passphrases and passwords) (default: None)
   -L LOCALCONFIGFILENAME, --local-config LOCALCONFIGFILENAME
                         Local installation configuration file (default: /home/jmfernandez/projects/WfExS-
                         backend/wfexs_config.yml)
@@ -90,8 +88,7 @@ commands:
     cache               Cache handling subcommands
     staged-workdir      Staged working directories handling subcommands
     config-validate     Validate the configuration files to be used for staging and execution
-    stage               Prepare the staging (working) directory for workflow execution, fetching dependencies and
-                        contents
+    stage               Prepare the staging (working) directory for workflow execution, fetching dependencies and contents
     mount-workdir       Mount the encrypted staging directory on secure staging scenarios
     export-stage        Export the staging directory as an RO-Crate
     offline-execute     Execute an already prepared workflow in the staging directory
@@ -131,8 +128,7 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -r                    Try doing the operation recursively (i.e. both metadata and data) (default: False)
-  --cascade             Try doing the operation in cascade (including the URIs which resolve to other URIs)
-                        (default: False)
+  --cascade             Try doing the operation in cascade (including the URIs which resolve to other URIs) (default: False)
   -g, --glob            Given cache element names are globs (default: False)
 
 Subparser 'staged-workdir'
@@ -164,26 +160,28 @@ optional arguments:
   -g, --glob            Given staged workflow names are globs (default: False)
 
 Subparser 'config-validate'
-usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME]
+usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
                         Configuration file, describing workflow and inputs (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts, which hold credentials and similar
-                        (default: None)
+                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+  -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
+                        Nickname prefix to be used on staged workdir creation (default: None)
 
 Subparser 'stage'
-usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME]
+usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
                         Configuration file, describing workflow and inputs (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts, which hold credentials and similar
-                        (default: None)
+                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+  -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
+                        Nickname prefix to be used on staged workdir creation (default: None)
 
 Subparser 'mount-workdir'
 usage: WfExS-backend.py mount-workdir [-h] -J WORKFLOWWORKINGDIRECTORY
@@ -211,15 +209,16 @@ optional arguments:
                         Already staged job directory (default: None)
 
 Subparser 'execute'
-usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [--full]
+usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX] [--full]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
                         Configuration file, describing workflow and inputs (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts, which hold credentials and similar
-                        (default: None)
+                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+  -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
+                        Nickname prefix to be used on staged workdir creation (default: None)
   --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
 
 Subparser 'export-results'
