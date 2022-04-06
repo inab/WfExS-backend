@@ -331,4 +331,4 @@ Must be one of:
 |                           |                                                                           |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-03-31 at 22:21:58 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-06 at 03:20:32 +0200

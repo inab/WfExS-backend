@@ -193,4 +193,4 @@ Must be one of:
 **Description:** Custom headers to be used on the request
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-03-31 at 22:21:59 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-06 at 03:20:33 +0200

@@ -19,15 +19,16 @@
   - [3.7. [Optional] Property `WfExS-backend config > tools > dockerCommand`](#tools_dockerCommand)
   - [3.8. [Optional] Property `WfExS-backend config > tools > podmanCommand`](#tools_podmanCommand)
   - [3.9. [Optional] Property `WfExS-backend config > tools > staticBashCommand`](#tools_staticBashCommand)
-  - [3.10. [Optional] Property `WfExS-backend config > tools > nextflow`](#tools_nextflow)
-    - [3.10.1. [Optional] Property `WfExS-backend config > tools > nextflow > dockerImage`](#tools_nextflow_dockerImage)
-    - [3.10.2. [Optional] Property `WfExS-backend config > tools > nextflow > version`](#tools_nextflow_version)
-    - [3.10.3. [Optional] Property `WfExS-backend config > tools > nextflow > maxRetries`](#tools_nextflow_maxRetries)
-    - [3.10.4. [Optional] Property `WfExS-backend config > tools > nextflow > maxProcesses`](#tools_nextflow_maxProcesses)
-      - [3.10.4.1. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 0`](#tools_nextflow_maxProcesses_oneOf_i0)
-      - [3.10.4.2. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 1`](#tools_nextflow_maxProcesses_oneOf_i1)
-  - [3.11. [Optional] Property `WfExS-backend config > tools > cwl`](#tools_cwl)
-    - [3.11.1. [Optional] Property `WfExS-backend config > tools > cwl > version`](#tools_cwl_version)
+  - [3.10. [Optional] Property `WfExS-backend config > tools > staticPsCommand`](#tools_staticPsCommand)
+  - [3.11. [Optional] Property `WfExS-backend config > tools > nextflow`](#tools_nextflow)
+    - [3.11.1. [Optional] Property `WfExS-backend config > tools > nextflow > dockerImage`](#tools_nextflow_dockerImage)
+    - [3.11.2. [Optional] Property `WfExS-backend config > tools > nextflow > version`](#tools_nextflow_version)
+    - [3.11.3. [Optional] Property `WfExS-backend config > tools > nextflow > maxRetries`](#tools_nextflow_maxRetries)
+    - [3.11.4. [Optional] Property `WfExS-backend config > tools > nextflow > maxProcesses`](#tools_nextflow_maxProcesses)
+      - [3.11.4.1. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 0`](#tools_nextflow_maxProcesses_oneOf_i0)
+      - [3.11.4.2. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 1`](#tools_nextflow_maxProcesses_oneOf_i1)
+  - [3.12. [Optional] Property `WfExS-backend config > tools > cwl`](#tools_cwl)
+    - [3.12.1. [Optional] Property `WfExS-backend config > tools > cwl > version`](#tools_cwl_version)
 - [4. [Optional] Property `WfExS-backend config > workDir`](#workDir)
 
 **Title:** WfExS-backend config
@@ -142,20 +143,21 @@ When it is not set, a temporary directory is created for the session, being dest
 
 **Description:** External tools configuration block
 
-| Property                                           | Pattern | Type             | Deprecated | Definition | Title/Description                                                          |
-| -------------------------------------------------- | ------- | ---------------- | ---------- | ---------- | -------------------------------------------------------------------------- |
-| - [containerType](#tools_containerType )           | No      | enum (of string) | No         | -          | Container technology type in this installation                             |
-| - [engineMode](#tools_engineMode )                 | No      | enum (of string) | No         | -          | Workflow engine invocation mode                                            |
-| - [encrypted_fs](#tools_encrypted_fs )             | No      | object           | No         | -          | Working directory FUSE encrypted FS configuration block                    |
-| - [gitCommand](#tools_gitCommand )                 | No      | string           | No         | -          | Git client path                                                            |
-| - [javaCommand](#tools_javaCommand )               | No      | string           | No         | -          | Java path                                                                  |
-| - [singularityCommand](#tools_singularityCommand ) | No      | string           | No         | -          | Singularity client path                                                    |
-| - [dockerCommand](#tools_dockerCommand )           | No      | string           | No         | -          | Docker client path                                                         |
-| - [podmanCommand](#tools_podmanCommand )           | No      | string           | No         | -          | Podman client path                                                         |
-| - [staticBashCommand](#tools_staticBashCommand )   | No      | string           | No         | -          | Static bash command (used in singularity based Nextflow engine executions) |
-| - [nextflow](#tools_nextflow )                     | No      | object           | No         | -          | -                                                                          |
-| - [cwl](#tools_cwl )                               | No      | object           | No         | -          | -                                                                          |
-|                                                    |         |                  |            |            |                                                                            |
+| Property                                           | Pattern | Type             | Deprecated | Definition | Title/Description                                                                    |
+| -------------------------------------------------- | ------- | ---------------- | ---------- | ---------- | ------------------------------------------------------------------------------------ |
+| - [containerType](#tools_containerType )           | No      | enum (of string) | No         | -          | Container technology type in this installation                                       |
+| - [engineMode](#tools_engineMode )                 | No      | enum (of string) | No         | -          | Workflow engine invocation mode                                                      |
+| - [encrypted_fs](#tools_encrypted_fs )             | No      | object           | No         | -          | Working directory FUSE encrypted FS configuration block                              |
+| - [gitCommand](#tools_gitCommand )                 | No      | string           | No         | -          | Git client path                                                                      |
+| - [javaCommand](#tools_javaCommand )               | No      | string           | No         | -          | Java path                                                                            |
+| - [singularityCommand](#tools_singularityCommand ) | No      | string           | No         | -          | Singularity client path                                                              |
+| - [dockerCommand](#tools_dockerCommand )           | No      | string           | No         | -          | Docker client path                                                                   |
+| - [podmanCommand](#tools_podmanCommand )           | No      | string           | No         | -          | Podman client path                                                                   |
+| - [staticBashCommand](#tools_staticBashCommand )   | No      | string           | No         | -          | Static bash command (used in singularity based Nextflow engine executions)           |
+| - [staticPsCommand](#tools_staticPsCommand )       | No      | string           | No         | -          | Static ps command (used in Nextflow engine executions to assure metrics gatherin ... |
+| - [nextflow](#tools_nextflow )                     | No      | object           | No         | -          | -                                                                                    |
+| - [cwl](#tools_cwl )                               | No      | object           | No         | -          | -                                                                                    |
+|                                                    |         |                  |            |            |                                                                                      |
 
 ### <a name="tools_containerType"></a>3.1. [Optional] Property `WfExS-backend config > tools > containerType`
 
@@ -336,7 +338,19 @@ Must be one of:
 
 **Description:** There is a bug in some bash versions which make them unsuitable to run the trace machinery from Nextflow, as the trace machinery enters in a live lock. As the images containing these faulty bash versions cannot be changed, a 'monkey patch' solution where an external, static bash version is injected on workflow execution is used. The injected static bash is found through this key, which is searched on PATH variable when it is not a full path.
 
-### <a name="tools_nextflow"></a>3.10. [Optional] Property `WfExS-backend config > tools > nextflow`
+### <a name="tools_staticPsCommand"></a>3.10. [Optional] Property `WfExS-backend config > tools > staticPsCommand`
+
+**Title:** Static ps command (used in Nextflow engine executions to assure metrics gathering works even in containers without /bin/ps command)
+
+| Type                      | `string`                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+| **Default**               | `"ps.static"`                                                             |
+|                           |                                                                           |
+
+**Description:** Nextflow uses a bash wrapper to gather process execution statistics. One of the binaries used by the wrapper is `ps`. Some containers (for instance, r-base:latest) do not contain such binary. As the images which do not contain `ps` cannot be changed, a 'monkey patch' solution where an external, static ps version is injected on workflow execution is used. The injected static ps is found through this key, which is searched on PATH variable when it is not a full path.
+
+### <a name="tools_nextflow"></a>3.11. [Optional] Property `WfExS-backend config > tools > nextflow`
 
 | Type                      | `object`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -351,7 +365,7 @@ Must be one of:
 | - [maxProcesses](#tools_nextflow_maxProcesses ) | No      | Combination | No         | -          | Max number of CPUs              |
 |                                                 |         |             |            |            |                                 |
 
-#### <a name="tools_nextflow_dockerImage"></a>3.10.1. [Optional] Property `WfExS-backend config > tools > nextflow > dockerImage`
+#### <a name="tools_nextflow_dockerImage"></a>3.11.1. [Optional] Property `WfExS-backend config > tools > nextflow > dockerImage`
 
 **Title:** Image for docker-in-docker mode
 
@@ -363,7 +377,7 @@ Must be one of:
 
 **Description:** (unfinished) When `engineMode` is `docker`, the name of the image to be fetched and used. The used tag will depend on the workflow's metadata, being by default the `version`
 
-#### <a name="tools_nextflow_version"></a>3.10.2. [Optional] Property `WfExS-backend config > tools > nextflow > version`
+#### <a name="tools_nextflow_version"></a>3.11.2. [Optional] Property `WfExS-backend config > tools > nextflow > version`
 
 **Title:** Nextflow's version
 
@@ -375,7 +389,7 @@ Must be one of:
 
 **Description:** Version of Nextflow engine to be used when workflow's metadata does not provide hints about minimal version needed.
 
-#### <a name="tools_nextflow_maxRetries"></a>3.10.3. [Optional] Property `WfExS-backend config > tools > nextflow > maxRetries`
+#### <a name="tools_nextflow_maxRetries"></a>3.11.3. [Optional] Property `WfExS-backend config > tools > nextflow > maxRetries`
 
 **Title:** Retries in docker mode
 
@@ -394,7 +408,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 | **Minimum**  | &ge; 0 |
 |              |        |
 
-#### <a name="tools_nextflow_maxProcesses"></a>3.10.4. [Optional] Property `WfExS-backend config > tools > nextflow > maxProcesses`
+#### <a name="tools_nextflow_maxProcesses"></a>3.11.4. [Optional] Property `WfExS-backend config > tools > nextflow > maxProcesses`
 
 **Title:** Max number of CPUs
 
@@ -411,7 +425,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 | [item 1](#tools_nextflow_maxProcesses_oneOf_i1) |
 |                                                 |
 
-##### <a name="tools_nextflow_maxProcesses_oneOf_i0"></a>3.10.4.1. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 0`
+##### <a name="tools_nextflow_maxProcesses_oneOf_i0"></a>3.11.4.1. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 0`
 
 | Type                      | `integer`                                                                 |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -424,14 +438,14 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 | **Minimum**  | &ge; 1 |
 |              |        |
 
-##### <a name="tools_nextflow_maxProcesses_oneOf_i1"></a>3.10.4.2. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 1`
+##### <a name="tools_nextflow_maxProcesses_oneOf_i1"></a>3.11.4.2. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 1`
 
 | Type                      | `null`                                                                    |
 | ------------------------- | ------------------------------------------------------------------------- |
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 |                           |                                                                           |
 
-### <a name="tools_cwl"></a>3.11. [Optional] Property `WfExS-backend config > tools > cwl`
+### <a name="tools_cwl"></a>3.12. [Optional] Property `WfExS-backend config > tools > cwl`
 
 | Type                      | `object`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -443,7 +457,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 | - [version](#tools_cwl_version ) | No      | string | No         | -          | cwltool's version |
 |                                  |         |        |            |            |                   |
 
-#### <a name="tools_cwl_version"></a>3.11.1. [Optional] Property `WfExS-backend config > tools > cwl > version`
+#### <a name="tools_cwl_version"></a>3.12.1. [Optional] Property `WfExS-backend config > tools > cwl > version`
 
 **Title:** cwltool's version
 
@@ -478,4 +492,4 @@ When it is not set, a temporary directory is created, which will be removed when
 |                |   |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-03-31 at 22:21:58 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-06 at 03:20:32 +0200
