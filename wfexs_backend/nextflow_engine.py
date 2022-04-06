@@ -50,6 +50,11 @@ DEFAULT_STATIC_BASH_CMDS = [
     f'bash-{platform.system().lower()}-{platform.machine()}',
 ]
 
+DEFAULT_STATIC_PS_CMDS = [
+    'ps.static',
+    f'ps-{platform.system().lower()}-{platform.machine()}',
+]
+
 @functools.lru_cache()
 def _tzstring():
     try:
@@ -125,6 +130,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
         
         if self.static_bash_cmd is None:
             self.logger.warning(f"Static bash command is not available (looked for {DEFAULT_STATIC_BASH_CMDS}). It could be needed for some images")
+        
+        # Obtaining the full path to static ps
+        for default_static_ps_cmd in DEFAULT_STATIC_PS_CMDS:
+            self.static_ps_cmd = shutil.which(toolsSect.get('staticPsCommand', default_static_ps_cmd))
+            if self.static_ps_cmd is not None:
+                break
+        
+        if self.static_ps_cmd is None:
+            self.logger.warning(f"Static ps command is not available (looked for {DEFAULT_STATIC_PS_CMDS}). It could be needed for some images")
         
         # Deciding whether to unset JAVA_HOME
         wfexs_dirname = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -711,7 +725,8 @@ STDERR
         
         # and main workflow for
         # container ['"]([^'"]+)['"]
-        wfEntrypoint = localWf.relPath  if os.path.isabs(localWf.relPath)  else os.path.join(localWf.dir,localWf.relPath)
+        assert localWf.relPath is not None
+        wfEntrypoint = localWf.relPath  if os.path.isabs(localWf.relPath)  else os.path.join(localWf.dir, localWf.relPath)
         with open(wfEntrypoint,encoding='utf-8') as wfH:
             for line in wfH:
                 contMatch = self.ContScriptPat.search(line)
@@ -794,6 +809,7 @@ STDERR
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
         
         localWf = matWfEng.workflow
+        assert localWf.relPath is not None
         
         outputStatsDir = self.outputStatsDir
         
@@ -804,14 +820,12 @@ STDERR
         
         # Custom variables setup
         runEnv = dict(os.environ)
-        optBash = None
+        optStaticBinsMonkeyPatch = ""
         optWritable = None
         runEnv.update(self.container_factory.environment)
         if self.container_factory.containerType == ContainerType.Singularity:
             if self.static_bash_cmd is not None:
-                optBash = f"-B {self.static_bash_cmd}:/bin/bash"
-            else:
-                optBash = ""
+                optStaticBinsMonkeyPatch += f" -B {self.static_bash_cmd}:/bin/bash:ro"
             
             if self.writable_containers:
                 optWritable = "--writable-tmpfs"
@@ -825,6 +839,19 @@ STDERR
             else:
                 optWritable = ""
 
+        # This is needed for containers potentially without ps command
+        if self.container_factory.containerType in (ContainerType.Singularity, ContainerType.Docker, ContainerType.Podman):
+            if self.container_factory.containerType == ContainerType.Singularity:
+                volFlag = '-B'
+            else:
+                volFlag = '-v'
+                
+            if self.static_ps_cmd is not None:
+                # We are placing the patched ps command into /usr/local/bin
+                # because /bin/ps could already exist, and being a symlink
+                # to /bin/busybox, leading to a massive failure
+                optStaticBinsMonkeyPatch += f" {volFlag} {self.static_ps_cmd}:/usr/local/bin/ps:ro"
+        
         forceParamsConfFile = os.path.join(self.engineTweaksDir, 'force-params.config')
         with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
             if self.container_factory.containerType == ContainerType.Singularity:
@@ -833,7 +860,7 @@ f"""docker.enabled = false
 podman.enabled = false
 singularity.enabled = true
 singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
-singularity.runOptions = '-B {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro {optWritable} {optBash}'
+singularity.runOptions = '-B {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro {optWritable} {optStaticBinsMonkeyPatch}'
 singularity.autoMounts = true
 """, file=fPC)
             elif self.container_factory.containerType == ContainerType.Docker:

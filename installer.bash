@@ -8,6 +8,7 @@ JDK_REV=9
 OPENJ9_VER=0.26.0
 GOCRYPTFS_VER=v2.2.1
 STATIC_BASH_VER=5.1.004-1.2.2
+BUSYBOX_VER=1.35.0
 
 # Getting the installation directory
 wfexsDir="$(dirname "$0")"
@@ -122,7 +123,13 @@ else
 	tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz
 fi
 
-staticBash="$(python3 -c 'import platform; print("bash-{}-{}".format(platform.system().lower(), platform.machine()))')"
+declare -a platformSuffixes=(
+	$(python3 -c 'import platform; print("{0}-{1} {1}-{0}".format(platform.system().lower(), platform.machine()))')
+)
+platformSuffix="${platformSuffixes[0]}"
+platformSuffixRev="${platformSuffixes[1]}"
+
+staticBash="bash-${platformSuffix}"
 if [ -x "${envDir}/bin/${staticBash}" ] ; then
 	echo "Static bash copy ${staticBash} already available (to patch buggy bash within singularity containers being run by Nextflow)"
 else
@@ -132,3 +139,16 @@ else
 	mv "${downloadDir}/${staticBash}" "${envDir}/bin/${staticBash}"
 	chmod +x "${envDir}/bin/${staticBash}"
 fi
+
+for binName in ps ; do
+	staticBin="${binName}-${platformSuffix}"
+	if [ -x "${envDir}/bin/${staticBin}" ] ; then
+		echo "Static busybox ${binName} copy ${staticBin} already available (to patch missing ${binName} within singularity containers being run by Nextflow)"
+	else
+		static_bin_url="https://busybox.net/downloads/binaries/${BUSYBOX_VER}-${platformSuffixRev}-musl/busybox_${binName^^}"
+		echo "Installing busybox ${binName} ${BUSYBOX_VER} from ${static_bin_url}"
+		( cd "${downloadDir}" && curl -L -o "${staticBin}" "${static_bin_url}" )
+		mv "${downloadDir}/${staticBin}" "${envDir}/bin/${staticBin}"
+		chmod +x "${envDir}/bin/${staticBin}"
+	fi
+done

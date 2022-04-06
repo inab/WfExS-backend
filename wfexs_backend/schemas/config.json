@@ -139,6 +139,12 @@
 					"type": "string",
 					"default": "bash.static"
 				},
+				"staticPsCommand": {
+					"title": "Static ps command (used in Nextflow engine executions to assure metrics gathering works even in containers without /bin/ps command)",
+					"description": "Nextflow uses a bash wrapper to gather process execution statistics. One of the binaries used by the wrapper is `ps`. Some containers (for instance, r-base:latest) do not contain such binary. As the images which do not contain `ps` cannot be changed, a 'monkey patch' solution where an external, static ps version is injected on workflow execution is used. The injected static ps is found through this key, which is searched on PATH variable when it is not a full path.",
+					"type": "string",
+					"default": "ps.static"
+				},
 				"nextflow": {
 					"type": "object",
 					"properties": {
