@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 from typing import Any, List, Mapping, Optional, Pattern, Sequence
 from typing import cast, TYPE_CHECKING, Tuple, Type, Union
@@ -458,6 +459,17 @@ class WF:
                 self.logger.warning("Destination mount point {} is already in use".format(uniqueWorkDir))
                 was_setup = True
             else:
+                # DANGER!
+                # We are removing leftovers in work directory
+                with os.scandir(uniqueWorkDir) as uwi:
+                    for entry in uwi:
+                        # Tainted, not empty directory. Moving...
+                        if entry.name not in ('.', '..'):
+                            self.logger.warning(f"Destination mount point {uniqueWorkDir} is tainted. Moving...")
+                            shutil.move(uniqueWorkDir, uniqueWorkDir + '_tainted_' + str(time.time()))
+                            os.makedirs(uniqueWorkDir, exist_ok=True)
+                            break
+                
                 # We are going to unmount what we have mounted
                 self.doUnmount = True
 
