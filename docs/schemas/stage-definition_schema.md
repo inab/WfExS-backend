@@ -450,7 +450,7 @@ must respect the following conditions
 | - [url](#params_pattern1_oneOf_i4_oneOf_i0_url )                           | No      | object           | No         | In #/definitions/InputURI                              | The URL(s) where this input is available                                             |
 | - [secondary-urls](#params_pattern1_oneOf_i4_oneOf_i0_secondary-urls )     | No      | object           | No         | Same as [url](#params_pattern1_oneOf_i4_oneOf_i0_url ) | Secondary URLs are URLs pointing to contents which will feed secondary inputs (C ... |
 | - [security-context](#params_pattern1_oneOf_i4_oneOf_i0_security-context ) | No      | string           | No         | -                                                      | -                                                                                    |
-| - [globExplode](#params_pattern1_oneOf_i4_oneOf_i0_globExplode )           | No      | string           | No         | -                                                      | -                                                                                    |
+| - [globExplode](#params_pattern1_oneOf_i4_oneOf_i0_globExplode )           | No      | string           | No         | -                                                      | When this is set, and the class is directory, it helps filtering in what it shou ... |
 | - [autoFill](#params_pattern1_oneOf_i4_oneOf_i0_autoFill )                 | No      | boolean          | No         | -                                                      | When this key is true, the directory or file is considered an output one             |
 | - [autoPrefix](#params_pattern1_oneOf_i4_oneOf_i0_autoPrefix )             | No      | boolean          | No         | -                                                      | -                                                                                    |
 |                                                                            |         |                  |            |                                                        |                                                                                      |
@@ -839,6 +839,8 @@ Must be one of:
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 |                           |                                                                           |
 
+**Description:** When this is set, and the class is directory, it helps filtering in what it should be included
+
 ##### <a name="params_pattern1_oneOf_i4_oneOf_i0_autoFill"></a>8.1.5.1.7. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s).+$ > oneOf > item 4 > oneOf > item 0 > autoFill`
 
 | Type                      | `boolean`                                                                 |
@@ -1040,4 +1042,4 @@ Must be one of:
 |                |   |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-07 at 17:31:56 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-07 at 23:52:19 +0200
