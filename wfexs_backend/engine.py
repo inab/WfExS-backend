@@ -234,12 +234,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         else:
             engine_mode = EngineMode(engine_mode)
         self.engine_mode = engine_mode
-
-        container_type = local_config.get('tools', {}).get('containerType')
-        if container_type is None:
+        
+        # The container type first is looked up at the workflow configuration
+        # and later at the local configuration
+        container_type_str = workflow_config.get('containerType')
+        if container_type_str is None:
+            container_type_str = local_config.get('tools', {}).get('containerType')
+        
+        if container_type_str is None:
             container_type = DEFAULT_CONTAINER_TYPE
         else:
-            container_type = ContainerType(container_type)
+            container_type = ContainerType(container_type_str)
         
         if not self.supportsContainerType(container_type):
             raise WorkflowEngineException(f"Current implementation of {self.__class__.__name__} does not support {container_type}")

@@ -10,12 +10,13 @@
 - [6. [Optional] Property `WfExS-backend stage definition > workflow_type`](#workflow_type)
 - [7. [Optional] Property `WfExS-backend stage definition > workflow_config`](#workflow_config)
   - [7.1. [Optional] Property `WfExS-backend stage definition > workflow_config > secure`](#workflow_config_secure)
-  - [7.2. [Optional] Property `WfExS-backend stage definition > workflow_config > writable_containers`](#workflow_config_writable_containers)
-  - [7.3. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow`](#workflow_config_nextflow)
-    - [7.3.1. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > version`](#workflow_config_nextflow_version)
-    - [7.3.2. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > profile`](#workflow_config_nextflow_profile)
-  - [7.4. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl`](#workflow_config_cwl)
-    - [7.4.1. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl > version`](#workflow_config_cwl_version)
+  - [7.2. [Optional] Property `WfExS-backend stage definition > workflow_config > containerType`](#workflow_config_containerType)
+  - [7.3. [Optional] Property `WfExS-backend stage definition > workflow_config > writable_containers`](#workflow_config_writable_containers)
+  - [7.4. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow`](#workflow_config_nextflow)
+    - [7.4.1. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > version`](#workflow_config_nextflow_version)
+    - [7.4.2. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > profile`](#workflow_config_nextflow_profile)
+  - [7.5. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl`](#workflow_config_cwl)
+    - [7.5.1. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl > version`](#workflow_config_cwl_version)
 - [8. [Optional] Property `WfExS-backend stage definition > params`](#params)
   - [8.1. [Optional]Pattern Property `WfExS-backend stage definition > params > Param`](#params_pattern1)
     - [8.1.1. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s).+$ > oneOf > item 0`](#params_pattern1_oneOf_i0)
@@ -190,13 +191,14 @@ Must be one of:
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 |                           |                                                                           |
 
-| Property                                                       | Pattern | Type    | Deprecated | Definition | Title/Description |
-| -------------------------------------------------------------- | ------- | ------- | ---------- | ---------- | ----------------- |
-| - [secure](#workflow_config_secure )                           | No      | boolean | No         | -          | -                 |
-| - [writable_containers](#workflow_config_writable_containers ) | No      | boolean | No         | -          | -                 |
-| - [nextflow](#workflow_config_nextflow )                       | No      | object  | No         | -          | -                 |
-| - [cwl](#workflow_config_cwl )                                 | No      | object  | No         | -          | -                 |
-|                                                                |         |         |            |            |                   |
+| Property                                                       | Pattern | Type             | Deprecated | Definition | Title/Description                                      |
+| -------------------------------------------------------------- | ------- | ---------------- | ---------- | ---------- | ------------------------------------------------------ |
+| - [secure](#workflow_config_secure )                           | No      | boolean          | No         | -          | -                                                      |
+| - [containerType](#workflow_config_containerType )             | No      | enum (of string) | No         | -          | Container technology type to be used for this workflow |
+| - [writable_containers](#workflow_config_writable_containers ) | No      | boolean          | No         | -          | -                                                      |
+| - [nextflow](#workflow_config_nextflow )                       | No      | object           | No         | -          | -                                                      |
+| - [cwl](#workflow_config_cwl )                                 | No      | object           | No         | -          | -                                                      |
+|                                                                |         |                  |            |            |                                                        |
 
 ### <a name="workflow_config_secure"></a>7.1. [Optional] Property `WfExS-backend stage definition > workflow_config > secure`
 
@@ -205,7 +207,29 @@ Must be one of:
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 |                           |                                                                           |
 
-### <a name="workflow_config_writable_containers"></a>7.2. [Optional] Property `WfExS-backend stage definition > workflow_config > writable_containers`
+### <a name="workflow_config_containerType"></a>7.2. [Optional] Property `WfExS-backend stage definition > workflow_config > containerType`
+
+**Title:** Container technology type to be used for this workflow
+
+| Type                      | `enum (of string)`                                                        |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+|                           |                                                                           |
+
+**Description:** Type of container technology to be used when this staging scenario is instantiated. Supported types are:
+- Singularity (default).
+- Docker.
+- Podman
+- No containerisation technology (discouraged, but needed for some workflows)
+Encrypted working directories are unsupported when Docker or Podman are used due technological limitations
+
+Must be one of:
+* "singularity"
+* "docker"
+* "podman"
+* "none"
+
+### <a name="workflow_config_writable_containers"></a>7.3. [Optional] Property `WfExS-backend stage definition > workflow_config > writable_containers`
 
 | Type                      | `boolean`                                                                 |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -213,7 +237,7 @@ Must be one of:
 | **Default**               | `false`                                                                   |
 |                           |                                                                           |
 
-### <a name="workflow_config_nextflow"></a>7.3. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow`
+### <a name="workflow_config_nextflow"></a>7.4. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow`
 
 | Type                      | `object`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -226,7 +250,7 @@ Must be one of:
 | - [profile](#workflow_config_nextflow_profile ) | No      | string | No         | -          | -                 |
 |                                                 |         |        |            |            |                   |
 
-#### <a name="workflow_config_nextflow_version"></a>7.3.1. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > version`
+#### <a name="workflow_config_nextflow_version"></a>7.4.1. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > version`
 
 | Type                      | `string`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -239,7 +263,7 @@ Must be one of:
 | **Min length** | 1 |
 |                |   |
 
-#### <a name="workflow_config_nextflow_profile"></a>7.3.2. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > profile`
+#### <a name="workflow_config_nextflow_profile"></a>7.4.2. [Optional] Property `WfExS-backend stage definition > workflow_config > nextflow > profile`
 
 | Type                      | `string`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -251,7 +275,7 @@ Must be one of:
 | **Min length** | 1 |
 |                |   |
 
-### <a name="workflow_config_cwl"></a>7.4. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl`
+### <a name="workflow_config_cwl"></a>7.5. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl`
 
 | Type                      | `object`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -263,7 +287,7 @@ Must be one of:
 | - [version](#workflow_config_cwl_version ) | No      | string | No         | -          | -                 |
 |                                            |         |        |            |            |                   |
 
-#### <a name="workflow_config_cwl_version"></a>7.4.1. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl > version`
+#### <a name="workflow_config_cwl_version"></a>7.5.1. [Optional] Property `WfExS-backend stage definition > workflow_config > cwl > version`
 
 | Type                      | `string`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -1016,4 +1040,4 @@ Must be one of:
 |                |   |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-06 at 03:20:33 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-07 at 17:31:56 +0200
