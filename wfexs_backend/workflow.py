@@ -291,7 +291,7 @@ class WF:
             if instanceId is None:
                 self.instanceId , self.nickname, self.workdir_creation, _ = self.wfexs.parseOrCreateRawWorkDir(self.rawWorkDir, nickname=nickname, create_ok=False)
             else:
-                self.nickname = nickname
+                self.nickname = nickname  if nickname is not None  else  instanceId
 
         # TODO: enforce restrictive permissions on each raw working directory
         self.allowOther = False
@@ -410,7 +410,7 @@ class WF:
         self.exitVal : Optional[ExitVal] = None
         self.augmentedInputs : Optional[List[MaterializedInput]] = None
         self.matCheckOutputs : Optional[List[MaterializedOutput]] = None
-        self.cacheROCrateFilename = None
+        self.cacheROCrateFilename : Optional[AbsPath] = None
         
         self.stageMarshalled : Optional[Union[bool, datetime.datetime]] = None
         self.executionMarshalled : Optional[Union[bool, datetime.datetime]] = None
@@ -789,7 +789,7 @@ class WF:
         matWfEngV2 = self.engine.materializeEngine(localWorkflow, self.engineVer)
         
         # At this point, there can be uninitialized elements
-        if self.materializedEngine is not None:
+        if (self.materializedEngine is not None) and (matWfEngV2 is not None):
             matWfEngV2 = MaterializedWorkflowEngine(
                 instance=matWfEngV2.instance,
                 version=matWfEngV2.version,
@@ -1000,7 +1000,7 @@ class WF:
         
         return remote_pairs, lastInput
     
-    def fetchInputs(self, params, workflowInputs_destdir: AbsPath,
+    def fetchInputs(self, params: Union[Mapping, Sequence], workflowInputs_destdir: AbsPath,
                     prefix:str='', lastInput:int=0, offline: bool = False) -> Tuple[List[MaterializedInput], int]:
         """
         Fetch the input files for the workflow execution.
@@ -1057,35 +1057,63 @@ class WF:
                             theInputs.append(MaterializedInput(linearKey, [autoFilledFile]))
                             continue
 
-                        remote_files = inputs['url']
-                        # We are sending the context name thinking in the future,
-                        # as it could contain potential hints for authenticated access
-                        contextName = inputs.get('security-context')
-                        
-                        secondary_remote_files = inputs.get('secondary-urls')
-                        
-                        cacheable = not self.paranoidMode if inputs.get('cache', True) else False
+                        remote_files = inputs.get('url')
+                        # It has to exist
+                        if remote_files is not None:
+                            # We are sending the context name thinking in the future,
+                            # as it could contain potential hints for authenticated access
+                            contextName = inputs.get('security-context')
+                            
+                            secondary_remote_files = inputs.get('secondary-urls')
+                            
+                            cacheable = not self.paranoidMode if inputs.get('cache', True) else False
 
-                        # The storage dir depends on whether it can be cached or not
-                        storeDir : Union[CacheType, AbsPath] = CacheType.Input if cacheable else workflowInputs_destdir
-                        
-                        if not isinstance(remote_files, list):  # more than one input file
-                            remote_files = [ remote_files ]
-                        remote_pairs, lastInput = self._fetchRemoteFiles(remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
-                        
-                        if secondary_remote_files is not None:
-                            secondary_remote_files = [ secondary_remote_files ]
-                            secondary_remote_pairs, lastInput = self._fetchRemoteFiles(secondary_remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
-                        else:
-                            secondary_remote_pairs = None
-                        
-                        theInputs.append(
-                            MaterializedInput(
-                                name=linearKey,
-                                values=remote_pairs,
-                                secondaryInputs=secondary_remote_pairs
+                            # The storage dir depends on whether it can be cached or not
+                            storeDir : Union[CacheType, AbsPath] = CacheType.Input if cacheable else workflowInputs_destdir
+                            
+                            if not isinstance(remote_files, list):  # more than one input file
+                                remote_files = [ remote_files ]
+                            remote_pairs, lastInput = self._fetchRemoteFiles(remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
+                            
+                            if secondary_remote_files is not None:
+                                secondary_remote_files = [ secondary_remote_files ]
+                                secondary_remote_pairs, lastInput = self._fetchRemoteFiles(secondary_remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
+                            else:
+                                secondary_remote_pairs = None
+                            
+                            theInputs.append(
+                                MaterializedInput(
+                                    name=linearKey,
+                                    values=remote_pairs,
+                                    secondaryInputs=secondary_remote_pairs
+                                )
                             )
-                        )
+                        else:
+                            if inputClass == 'File':
+                                # Empty input, i.e. empty file
+                                inputDestPath = cast(AbsPath, os.path.join(inputDestDir, *linearKey.split('.')))
+                                os.makedirs(os.path.dirname(inputDestPath), exist_ok=True)
+                                # Creating the empty file
+                                with open(inputDestPath, mode="wb") as idH:
+                                    pass
+                                contentKind = ContentKind.File
+                            else:
+                                inputDestPath = inputDestDir
+                                contentKind = ContentKind.Directory
+                            
+                            theInputs.append(
+                                MaterializedInput(
+                                    name=linearKey,
+                                    values=[
+                                        MaterializedContent(
+                                            local=cast(AbsPath, inputDestPath),
+                                            licensed_uri=LicensedURI(uri=cast(URIType, "data:,")),
+                                            prettyFilename=cast(RelPath, os.path.basename(inputDestPath)),
+                                            kind=contentKind
+                                        )
+                                    ],
+                                )
+                            )
                     else:
                         raise WFException(
                             'Unrecognized input class "{}", attached to "{}"'.format(inputClass, linearKey))
@@ -1785,6 +1813,8 @@ class WF:
 
         :return:
         """
+        assert self.metaDir is not None
+        
         cacheHandler = self.wfexs.cacheHandler
         # Now, time to check whether it is a TRSv2
         trs_endpoint_v2_meta_url = self.trs_endpoint + 'service-info'
