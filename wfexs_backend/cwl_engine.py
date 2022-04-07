@@ -227,7 +227,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         return engineVer, newLocalWf
 
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Optional[Fingerprint]]:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,

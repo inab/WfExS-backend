@@ -274,7 +274,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(dir=nfDir, relPath=candidateNf, effectiveCheckout=localWf.effectiveCheckout, langVersion=engineVer)
 
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Optional[Fingerprint]]:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -291,9 +291,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
         verPat = re.compile(r"Version: +(.*)$")
         verMatch = verPat.search(nxf_install_stdout_v)
         
-        engineFingerprint = verMatch.group(1)  if verMatch  else None
+        engineFingerprint = verMatch.group(1)  if verMatch  else ""
         
-        return engineVersion, nextflow_install_dir, cast(Optional[Fingerprint], engineFingerprint)
+        return engineVersion, nextflow_install_dir, cast(Fingerprint, engineFingerprint)
     
     def runNextflowCommand(self, nextflow_version: EngineVersion, commandLine: List[str], workdir: Optional[AbsPath] = None, nextflow_path:Optional[EnginePath]=None, containers_path:Optional[Union[RelPath, AbsPath]]=None, stdoutFilename:AbsPath=None, stderrFilename:AbsPath=None, runEnv:dict=None) -> Tuple[ExitVal, Optional[str], Optional[str]]:
         self.logger.debug('Command => nextflow '+' '.join(commandLine))

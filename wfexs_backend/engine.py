@@ -379,7 +379,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         pass
 
     @abc.abstractmethod
-    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Optional[Fingerprint]]:
+    def materializeEngineVersion(self, engineVersion: EngineVersion) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -389,7 +389,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         pass
 
     def materializeEngine(self, localWf: LocalWorkflow,
-                          engineVersion: EngineVersion = None) -> MaterializedWorkflowEngine:
+                          engineVersion: Optional[EngineVersion] = None) -> Optional[MaterializedWorkflowEngine]:
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -399,9 +399,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # This method can be forced to materialize an specific engine version
         if engineVersion is None:
             # The identification could return an augmented LocalWorkflow instance
-            engineVersion, localWf = self.identifyWorkflow(localWf, engineVersion)
+            resLocalWf: Optional[LocalWorkflow]
+            engineVersion, resLocalWf = self.identifyWorkflow(localWf, engineVersion)
             if engineVersion is None:
                 return None
+            else:
+                assert resLocalWf is not None
+                localWf = resLocalWf
 
         # This is needed for those cases where there is no exact match
         # on the available engine version
