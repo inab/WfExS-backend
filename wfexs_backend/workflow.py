@@ -35,10 +35,12 @@ from typing import cast, TYPE_CHECKING, Tuple, Type, Union
 from urllib import parse
 
 from rocrate import rocrate
+from .ro_crate import addInputsResearchObject, addOutputsResearchObject
 import bagit
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
+
 try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:
@@ -89,6 +91,7 @@ WORKFLOW_ENGINE_CLASSES : List[Type[WorkflowEngine]] = [
     NextflowWorkflowEngine,
 ]
 
+
 def _wakeupEncDir(cond: threading.Condition, workDir: AbsPath, logger: logging.Logger):
     """
     This method periodically checks whether the directory is still available
@@ -105,6 +108,7 @@ def _wakeupEncDir(cond: threading.Condition, workDir: AbsPath, logger: logging.L
 
 class WFException(AbstractWfExSException):
     pass
+
 
 class WF:
     """
@@ -125,7 +129,6 @@ class WF:
     WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
 
     RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
-
 
     def __init__(self,
                  wfexs: "WfExSBackend",
@@ -340,7 +343,6 @@ class WF:
             # This directory will hold either a hardlink or a copy of the containers
             self.containersDir = cast(AbsPath, os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR))
 
-            
             # This is true when the working directory already exists
             if checkSecure:
                 if not os.path.isdir(self.metaDir):
@@ -358,7 +360,7 @@ class WF:
                     is_damaged = not unmarshalled
                     if is_damaged:
                         self.workflow_config = None
-                        #self.marshallConfig(overwrite=False)
+                        # self.marshallConfig(overwrite=False)
             else:
                 os.makedirs(self.metaDir, exist_ok=True)
                 self.marshallConfig(overwrite=True)
@@ -567,7 +569,6 @@ class WF:
     
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
-
 
     @classmethod
     def FromWorkDir(cls, wfexs: "WfExSBackend", workflowWorkingDirectory: Union[RelPath, AbsPath], fail_ok: bool = False) -> "WF":
@@ -1384,8 +1385,7 @@ class WF:
                     raise WFException(errmsg)
                 self.logger.debug(errmsg)
                 stageAlreadyMarshalled = True
-            
-            
+
             if not stageAlreadyMarshalled or overwrite:
                 assert self.materializedEngine is not None, "The engine should have already been materialized at this point"
                 stage = {
@@ -1645,7 +1645,7 @@ class WF:
                 wf_path = self.localWorkflow.dir
             wfCrate, compLang = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(self.localWorkflow.langVersion)
             # TODO: how to get the name of the default branch?
-            repoTag = self.repoTag  if self.repoTag is not None  else  "main"
+            repoTag = self.repoTag if self.repoTag is not None  else  "main"
             wf_url = self.repoURL.replace(".git", "/") + "tree/" + repoTag
             if self.localWorkflow.relPath is not None:
                 wf_url += "/" + os.path.dirname(self.localWorkflow.relPath)
@@ -1705,102 +1705,10 @@ class WF:
             wfCrate.isBasedOn = wf_url
 
         # Add inputs provenance to RO-crate
-        for in_item in self.augmentedInputs:
-            if isinstance(in_item, MaterializedInput):
-                itemInValues = in_item.values[0]
-                if isinstance(itemInValues, MaterializedContent):
-                    # TODO: embed metadata_array in some way
-                    itemInLocalSource = itemInValues.local
-                    itemInURISource = itemInValues.licensed_uri.uri
-                    if os.path.isfile(itemInLocalSource):   # if is a file
-                        properties = {
-                            'name': in_item.name
-                        }
-                        wfCrate.add_file(source=itemInURISource, fetch_remote=False, validate_url=False, properties=properties)
-                    elif os.path.isdir(itemInLocalSource):  # if is a directory
-                        self.logger.error("FIXME: input directory / dataset handling in RO-Crate")
-                    else:
-                        pass  # TODO raise Exception
-
-                # TODO digest other types of inputs
+        addInputsResearchObject(wfCrate, self.augmentedInputs)
 
         # Add outputs provenance to RO-crate
-        for out_item in self.matCheckOutputs:
-            if isinstance(out_item, MaterializedOutput):
-                itemOutValues = out_item.values[0]
-                
-                assert isinstance(itemOutValues, (GeneratedContent, GeneratedDirectoryContent))
-                
-                itemOutSource = itemOutValues.local
-                itemOutName = out_item.name
-                properties = {
-                    'name': itemOutName
-                }
-                if isinstance(itemOutValues, GeneratedDirectoryContent):    # if is a directory
-                    if os.path.isdir(itemOutSource):
-                        generatedDirectoryContentURI = ComputeDigestFromDirectory(itemOutSource, repMethod=nihDigester)   # generate nih for the directory
-                        dirProperties = dict.fromkeys(['hasPart'])  # files in the directory
-                        generatedContentList = []
-                        generatedDirectoryContentList = []
-
-                        for item in itemOutValues.values:
-                            if isinstance(item, GeneratedContent):  # if is a directory that contains files
-                                fileID = item.signature
-                                if fileID is None:
-                                    fileID = ComputeDigestFromFile(item.local, repMethod=nihDigester)
-                                fileProperties = {
-                                    'name': itemOutName + "::/" + os.path.basename(item.local),     # output name + file name
-                                    'isPartOf': {'@id': generatedDirectoryContentURI}  # reference to the directory
-                                }
-                                generatedContentList.append({'@id': fileID})
-                                wfCrate.add_file(source=fileID, fetch_remote=False, properties=fileProperties)
-
-                            elif isinstance(item, GeneratedDirectoryContent):   # if is a directory that contains directories
-
-                                # search recursively for other content inside directories
-                                def search_new_content(content_list: Sequence[Union[GeneratedContent, GeneratedDirectoryContent]]) -> Sequence[Mapping['str', Fingerprint]]:
-                                    tempList = []
-                                    for content in content_list:
-                                        if isinstance(content, GeneratedContent):   # if is a file
-                                            fileID = content.signature  # TODO: create a method to add files to RO-crate
-                                            if fileID is None:
-                                                fileID = ComputeDigestFromFile(content.local, repMethod=nihDigester)
-                                            fileProperties = {
-                                                'name': itemOutName + "::/" + os.path.basename(content.local),
-                                                'isPartOf': {'@id': generatedDirectoryContentURI}
-                                            }
-                                            tempList.append({'@id': fileID})
-                                            wfCrate.add_file(source=fileID, fetch_remote=False, properties=fileProperties)
-
-                                        if isinstance(content, GeneratedDirectoryContent):  # if is a directory
-                                            tempList.extend(search_new_content(content.values))
-                                    
-                                    return tempList
-
-                                generatedDirectoryContentList.append(search_new_content(item.values))
-
-                            else:
-                                pass  # TODO raise Exception
-
-                        dirProperties['hasPart'] = sum(generatedDirectoryContentList, []) + generatedContentList
-                        properties.update(dirProperties)
-                        wfCrate.add_directory(source=generatedDirectoryContentURI, fetch_remote=False, properties=properties)
-
-                    else:
-                        pass  # TODO raise Exception
-
-                elif isinstance(itemOutValues, GeneratedContent):   # if is a file
-                    if os.path.isfile(itemOutSource):
-                        fileID = itemOutValues.signature
-                        if fileID is None:
-                            fileID = ComputeDigestFromFile(itemOutSource, repMethod=nihDigester)
-                        wfCrate.add_file(source=fileID, fetch_remote=False, properties=properties)
-
-                    else:
-                        pass  # TODO raise Exception
-
-                else:
-                    pass  # TODO raise Exception
+        addOutputsResearchObject(wfCrate, self.matCheckOutputs)
 
         # Save RO-crate as execution.crate.zip
         wfCrate.write_zip(os.path.join(self.outputsDir, "execution.crate"))
