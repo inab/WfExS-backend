@@ -23,7 +23,7 @@ import enum
 import os
 from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple
 from typing import NewType, Optional, Pattern, Sequence, Tuple, Type, Union
-from typing import MutableMapping, TYPE_CHECKING
+from typing import Iterator, MutableMapping, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rocrate.model.computerlanguage import ComputerLanguage
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 import certifi
 import ssl
 
-def create_augmented_context(purpose=ssl.Purpose.SERVER_AUTH, *, cafile=None, capath=None, cadata=None):
+def create_augmented_context(purpose: ssl.Purpose = ssl.Purpose.SERVER_AUTH, *, cafile: Optional[str] = None, capath: Optional[str] = None, cadata: Optional[Union[str, bytes]] = None) -> ssl.SSLContext:
     context = ssl.create_default_context(purpose=purpose, cafile=cafile, capath=capath, cadata=cadata)
     
     context.load_verify_locations(cafile=certifi.where())
@@ -150,7 +150,7 @@ class Attribution(NamedTuple):
     roles: List[AttributionRole] = []
     
     @classmethod
-    def ParseRawAttribution(cls, rawAttribution: Mapping):
+    def ParseRawAttribution(cls, rawAttribution: Mapping[str, Any]) -> "Attribution":
         return cls(
             name=rawAttribution['name'],
             pid=rawAttribution['pid'],
@@ -158,7 +158,7 @@ class Attribution(NamedTuple):
         )
     
     @classmethod
-    def ParseRawAttributions(cls, rawAttributions: Optional[List[Mapping]]) -> List:
+    def ParseRawAttributions(cls, rawAttributions: Optional[List[Mapping[str, Any]]]) -> "Sequence[Attribution]":
         attributions = []
         if isinstance(rawAttributions, list):
             for rawAttribution in rawAttributions:
@@ -250,12 +250,12 @@ class ExpectedOutput(NamedTuple):
     """
     name: SymbolicOutputName
     kind: ContentKind
-    preferredFilename: RelPath
+    preferredFilename: Optional[RelPath]
     cardinality: Tuple[int, int]
     fillFrom: Optional[SymbolicParamName] = None
     glob: Optional[GlobPattern] = None
     
-    def _marshall(self):
+    def _marshall(self) -> MutableMapping[str, Any]:
         mD = {
             'c-l-a-s-s': self.kind.name,
             'cardinality': list(self.cardinality),
@@ -271,14 +271,14 @@ class ExpectedOutput(NamedTuple):
         return mD
     
     @classmethod
-    def _unmarshall(cls, **obj):
+    def _unmarshall(cls, **obj: Any) -> "ExpectedOutput":
         return cls(
             name=obj['name'],
             kind=ContentKind(obj['c-l-a-s-s'])  if 'c-l-a-s-s' in obj  else  ContentKind.File,
             preferredFilename=obj.get('preferredName'),
             fillFrom=obj.get('fillFrom'),
             glob=obj.get('glob'),
-            cardinality=tuple(obj['cardinality'])
+            cardinality=cast(Tuple[int, int], tuple(obj['cardinality']))
         )
 
 
@@ -381,9 +381,9 @@ class AbstractWorkflowEngineType(abc.ABC):
             cache_dir: Optional[Union[RelPath, AbsPath]] = None,
             cache_workflow_dir: Optional[Union[RelPath, AbsPath]] = None,
             cache_workflow_inputs_dir: Optional[Union[RelPath, AbsPath]] = None,
-            local_config=None,
+            local_config: Optional[Mapping[str, Any]] = None,
             config_directory: Optional[Union[RelPath, AbsPath]] = None
-    ):
+    ) -> "AbstractWorkflowEngineType":
         pass
     
     @abc.abstractmethod
@@ -410,7 +410,7 @@ class WorkflowType(NamedTuple):
     shortname: str
     name: str
     clazz: Type[AbstractWorkflowEngineType]
-    uriMatch: List[Union[Pattern, URIType]]
+    uriMatch: List[Union[Pattern[str], URIType]]
     uriTemplate: URIType
     url: URIType
     trs_descriptor: TRS_Workflow_Descriptor
@@ -421,7 +421,7 @@ class StagedSetup(NamedTuple):
     instance_id: WfExSInstanceId
     nickname: Optional[str]
     creation: datetime.datetime
-    workflow_config: Mapping
+    workflow_config: Optional[Mapping[str, Any]]
     engine_tweaks_dir: Optional[AbsPath]
     raw_work_dir: AbsPath
     work_dir: Optional[AbsPath]
@@ -443,7 +443,7 @@ class MarshallingStatus(NamedTuple):
     execution: Optional[Union[bool, datetime.datetime]]
     export: Optional[Union[bool, datetime.datetime]]
     
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"""Marshalling date status:
 - config: {"(never done)" if self.config is None  else  self.config.isoformat()  if isinstance(self.config, datetime.datetime)  else  "(failed/not done yet)"}
 - stage: {"(never done)" if self.stage is None  else  self.stage.isoformat()  if isinstance(self.stage, datetime.datetime)  else  "(failed/not done yet)"}
@@ -519,24 +519,25 @@ class ArgTypeMixin(enum.Enum):
             raise argparse.ArgumentTypeError(
                 f"{s!r} is not a valid {cls.__name__}")
     
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.value)
 
 class StrDocEnum(str, ArgTypeMixin, enum.Enum):
     # Learnt from https://docs.python.org/3.11/howto/enum.html#when-to-use-new-vs-init
-    def __new__(cls, value, description:str = ''):
+    description: str
+    def __new__(cls, value: Any, description: str = '') -> "StrDocEnum":
         obj = str.__new__(cls, value)
         obj._value_ = value
         obj.description = description
         
         return obj
     
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.value)
 
 class ArgsDefaultWithRawHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
     # Conditionally treat descriptions as raw
-    def _split_lines(self, text, width):
+    def _split_lines(self, text: str, width: int) -> List[str]:
         """
         Formats the given text by splitting the lines at '\n'.
         Overrides argparse.HelpFormatter._split_lines function.
@@ -561,7 +562,7 @@ class CacheType(StrDocEnum):
 
 
 # Next method has been borrowed from FlowMaps
-def scantree(path):
+def scantree(path: Union[RelPath, AbsPath]) -> Iterator[os.DirEntry[str]]:
     """Recursively yield DirEntry objects for given directory."""
 
     hasDirs = False
@@ -579,4 +580,4 @@ def scantree(path):
             # We are avoiding to enter in loops around '.' and '..'
             if entry.is_dir(follow_symlinks=False) and entry.name[0] != '.':
                 yield entry
-                yield from scantree(entry.path)
+                yield from scantree(cast(AbsPath, entry.path))

@@ -39,17 +39,20 @@ from urllib import parse
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
+import yaml
+YAMLLoader: Type[Union[yaml.Loader, yaml.CLoader]]
+YAMLDumper: Type[Union[yaml.Dumper, yaml.CDumper]]
 try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
-import yaml
 
 import crypt4gh.lib
 import crypt4gh.keys.kdf
 import crypt4gh.keys.c4gh
 
 from .common import AbstractWfExSException
+from .common import AbstractWorkflowEngineType
 from .common import AbsPath, RelPath, SymbolicName
 from .common import RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, URIType, URIWithMetadata
@@ -774,7 +777,7 @@ class WfExSBackend:
             secContext=secContext
         )
     
-    def instantiateEngine(self, engineDesc: WorkflowType, stagedSetup:StagedSetup) -> WorkflowEngine:
+    def instantiateEngine(self, engineDesc: WorkflowType, stagedSetup:StagedSetup) -> AbstractWorkflowEngineType:
         
         return engineDesc.clazz.FromStagedSetup(
             staged_setup=stagedSetup,

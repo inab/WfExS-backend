@@ -23,11 +23,14 @@ import os
 import sys
 import shutil
 import tempfile
+from typing import Type, Union
 
 import yaml
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
+YAMLLoader: Type[Union[yaml.Loader, yaml.CLoader]]
+YAMLDumper: Type[Union[yaml.Dumper, yaml.CDumper]]
 try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:

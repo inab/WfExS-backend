@@ -41,11 +41,13 @@ import bagit
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
 
+import yaml
+YAMLLoader: Type[Union[yaml.Loader, yaml.CLoader]]
+YAMLDumper: Type[Union[yaml.Dumper, yaml.CDumper]]
 try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
-import yaml
 
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath, WfExSInstanceId

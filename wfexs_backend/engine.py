@@ -94,8 +94,8 @@ CONTAINER_FACTORY_CLASSES : List[Type[ContainerFactory]] = [
 class WorkflowEngine(AbstractWorkflowEngineType):
     def __init__(self,
                  cacheDir : Optional[Union[RelPath, AbsPath]] = None,
-                 workflow_config=None,
-                 local_config=None,
+                 workflow_config: Optional[Mapping[str, Any]] = None,
+                 local_config: Optional[Mapping[str, Any]] = None,
                  engineTweaksDir: Optional[Union[RelPath, AbsPath]] = None,
                  cacheWorkflowDir: Optional[Union[RelPath, AbsPath]] = None,
                  cacheWorkflowInputsDir: Optional[Union[RelPath, AbsPath]] = None,
@@ -292,9 +292,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             cache_dir: Optional[Union[RelPath, AbsPath]] = None,
             cache_workflow_dir: Optional[Union[RelPath, AbsPath]] = None,
             cache_workflow_inputs_dir: Optional[Union[RelPath, AbsPath]] = None,
-            local_config=None,
+            local_config: Optional[Mapping[str, Any]] = None,
             config_directory: Optional[Union[RelPath, AbsPath]] = None
-    ):
+    ) -> AbstractWorkflowEngineType:
         """
         Init method from staged setup instance
 
