@@ -232,7 +232,7 @@
 		"Params": {
 			"type": "object",
 			"patternProperties": {
-				"^(?!c-l-a-s-s).+$": {
+				"^(?!c-l-a-s-s)[^:;]+$": {
 					"$ref": "#/definitions/Param"
 				}
 			},
@@ -333,7 +333,7 @@
 		"outputs": {
 			"type": "object",
 			"patternProperties": {
-				"^.+$": {
+				"^[^:;]+$": {
 					"type": "object",
 					"properties": {
 						"c-l-a-s-s": {
