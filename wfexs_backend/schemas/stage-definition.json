@@ -76,6 +76,7 @@
 				"security-context": {
 					"documentation": "The name of the optional security context to be used to authenticate in order to reach the resource",
 					"type": "string",
+					"pattern": "^[^:;]+$",
 					"minLength": 1
 				}
 			},
