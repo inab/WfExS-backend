@@ -24,7 +24,7 @@ import abc
 import logging
 import inspect
 
-from typing import Dict, List, Union
+from typing import Dict, List, Optional, Sequence, Union
 
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath
@@ -129,7 +129,7 @@ class ContainerFactory(abc.ABC):
         return self.engineContainersSymlinkDir
     
     @abc.abstractmethod
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Union[RelPath, AbsPath] = None, offline: bool = False) -> List[Container]:
+    def materializeContainers(self, tagList: Sequence[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Optional[Union[RelPath, AbsPath]] = None, offline: bool = False) -> Sequence[Container]:
         """
         It is assured the containers are materialized
         """
@@ -153,7 +153,7 @@ class NoContainerFactory(ContainerFactory):
     def ContainerType(cls) -> common.ContainerType:
         return common.ContainerType.NoContainer
     
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Union[RelPath, AbsPath] = None, offline: bool = False) -> List[Container]:
+    def materializeContainers(self, tagList: Sequence[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Optional[Union[RelPath, AbsPath]] = None, offline: bool = False) -> Sequence[Container]:
         """
         It is assured the no-containers are materialized
         i.e. it is a no-op

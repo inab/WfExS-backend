@@ -30,7 +30,7 @@ import tempfile
 import yaml
 
 from typing import Any, Dict, List, Mapping, Optional, Set, Tuple, Union
-from typing import cast, Pattern
+from typing import cast, MutableSequence, Pattern, Sequence
 
 from .common import AbsPath, RelPath
 from .common import ContainerType, ContentKind, SymbolicParamName, WorkflowType
@@ -169,7 +169,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         os.makedirs(self.nxf_assets, exist_ok=True)
 
     @classmethod
-    def WorkflowType(cls) -> WorkflowType:
+    def MyWorkflowType(cls) -> WorkflowType:
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
             shortname='nextflow',
@@ -756,7 +756,7 @@ STDERR
         
         return cast(RelPath, name + extension)
     
-    def structureAsNXFParams(self, matInputs: List[MaterializedInput]) -> Mapping[str, Any]:
+    def structureAsNXFParams(self, matInputs: Sequence[MaterializedInput]) -> Mapping[str, Any]:
         nxpParams: Dict[str, Any] = {}
         
         for matInput in matInputs:
@@ -783,11 +783,11 @@ STDERR
         
         return nxpParams
     
-    def augmentNextflowInputs(self, matHash:Mapping[SymbolicParamName,MaterializedInput], allExecutionParams:Mapping[str,Any], prefix='') -> List[MaterializedInput]:
+    def augmentNextflowInputs(self, matHash:Mapping[SymbolicParamName,MaterializedInput], allExecutionParams:Mapping[str,Any], prefix='') -> Sequence[MaterializedInput]:
         """
         Generate additional MaterializedInput for the implicit params.
         """
-        augmentedInputs = []
+        augmentedInputs = cast(MutableSequence[MaterializedInput], [])
         for key,val in allExecutionParams.items():
             linearKey = prefix + key
             if isinstance(val, dict):
@@ -804,7 +804,7 @@ STDERR
         
         return augmentedInputs
     
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: List[MaterializedInput], outputs: List[ExpectedOutput]) -> Tuple[ExitVal,List[MaterializedInput],List[MaterializedOutput]]:
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: Sequence[MaterializedInput], outputs: Sequence[ExpectedOutput]) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
         

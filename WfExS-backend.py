@@ -126,6 +126,7 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
     print(f"\t- Subcommand {args.cache_command} {args.cache_type}")
     
     cH , cPath = wfBackend.getCacheHandler(args.cache_type)
+    assert cPath is not None
     retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
         if logLevel <= logging.INFO:
@@ -203,15 +204,22 @@ def processStagedWorkdirCommand(wB:WfExSBackend, args: argparse.Namespace, logle
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
             for instance_id, nickname, creation, wfSetup, wfInstance in wB.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs, doCleanup=False):
-                print(f'Mounted {instance_id} ({nickname}) at {wfSetup.work_dir}')
+                if wfSetup is not None:
+                    print(f'Mounted {instance_id} ({nickname}) at {wfSetup.work_dir}')
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.List:
         contents = sorted(
             wB.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs),
             key=lambda x: x[2]
         )
         for instance_id, nickname, creation, wfSetup, _ in contents:
-            is_damaged = True  if wfSetup is None  else  wfSetup.is_damaged
-            print(f'{instance_id}\t{nickname}\t{creation.isoformat()}\t{wfSetup.is_encrypted}\t{is_damaged}')
+            is_encrypted : Union[bool, str]
+            if wfSetup is None:
+                is_damaged = True
+                is_encrypted = '(unknown)'
+            else:
+                is_damaged = wfSetup.is_damaged
+                is_encrypted = wfSetup.is_encrypted
+            print(f'{instance_id}\t{nickname}\t{creation.isoformat()}\t{is_encrypted}\t{is_damaged}')
     
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Remove:
         print('\n'.join(map(lambda x: 'Removed: ' + '\t'.join(x), wB.removeStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs))))
@@ -221,7 +229,8 @@ def processStagedWorkdirCommand(wB:WfExSBackend, args: argparse.Namespace, logle
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineExecute:
         if len(args.staged_workdir_command_args) > 0:
             for instance_id, nickname, creation, wfSetup, wfInstance in wB.listStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs, doCleanup=False):
-                if not wfSetup.is_damaged and (wfInstance is not None):
+                is_damaged = True  if wfSetup is None  else  wfSetup.is_damaged
+                if not is_damaged and (wfInstance is not None):
                     try:
                         wfInstance.executeWorkflow(offline=True)
                     except Exception as e:
@@ -232,11 +241,17 @@ def processStagedWorkdirCommand(wB:WfExSBackend, args: argparse.Namespace, logle
         if len(args.staged_workdir_command_args) > 0:
             for instance_id, nickname, creation, wfSetup, mStatus in wB.statusStagedWorkflows(*args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs):
                 is_damaged = True  if wfSetup is None  else  wfSetup.is_damaged
+                if wfSetup is None:
+                    is_damaged = True
+                    is_encrypted = '(unknown)'
+                else:
+                    is_damaged = wfSetup.is_damaged
+                    is_encrypted = wfSetup.is_encrypted
                 print(
 f"""=> Instance {instance_id} ({nickname})
 * Is damaged? {is_damaged}
 * Created: {creation.isoformat()}
-* Secure (encrypted)? {wfSetup.is_encrypted}
+* Secure (encrypted)? {is_encrypted}
 * {repr(mStatus)}
 """)
     

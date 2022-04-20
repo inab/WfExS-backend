@@ -22,7 +22,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Mapping, Tuple, Union
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 import uuid
 
 from .common import AbsPath, RelPath
@@ -112,7 +112,7 @@ class DockerContainerFactory(ContainerFactory):
             
             return d_retval , d_err_v
     
-    def materializeContainers(self, tagList: List[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Union[RelPath, AbsPath] = None, offline: bool = False) -> List[Container]:
+    def materializeContainers(self, tagList: Sequence[ContainerTaggedName], simpleFileNameMethod: ContainerFileNamingMethod, containers_dir: Optional[Union[RelPath, AbsPath]] = None, offline: bool = False) -> Sequence[Container]:
         """
         It is assured the containers are materialized
         """

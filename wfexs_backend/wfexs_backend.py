@@ -34,6 +34,7 @@ import uuid
 
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
 from typing import cast, MutableMapping, Set, Tuple, Type, Union
+from typing import ClassVar, Final
 
 from urllib import parse
 
@@ -47,14 +48,14 @@ try:
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
-import crypt4gh.lib
-import crypt4gh.keys.kdf
-import crypt4gh.keys.c4gh
+import crypt4gh.lib # type: ignore[import]
+import crypt4gh.keys.kdf    # type: ignore[import]
+import crypt4gh.keys.c4gh   # type: ignore[import]
 
 from .common import AbstractWfExSException
 from .common import AbstractWorkflowEngineType
 from .common import AbsPath, RelPath, SymbolicName
-from .common import RepoTag, RepoURL, LicensedURI
+from .common import RemoteRepo, RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, URIType, URIWithMetadata
 from .common import MaterializedContent, WorkflowType
 from .common import SecurityContextConfig, SecurityContextConfigBlock
@@ -94,17 +95,17 @@ class WfExSBackend:
     WfExS-backend setup class
     """
 
-    DEFAULT_PASSPHRASE_LENGTH = 4
+    DEFAULT_PASSPHRASE_LENGTH: Final[int] = 4
 
-    CRYPT4GH_SECTION = 'crypt4gh'
-    CRYPT4GH_PRIVKEY_KEY = 'key'
-    CRYPT4GH_PUBKEY_KEY = 'pub'
-    CRYPT4GH_PASSPHRASE_KEY = 'passphrase'
+    CRYPT4GH_SECTION: Final[str] = 'crypt4gh'
+    CRYPT4GH_PRIVKEY_KEY: Final[str] = 'key'
+    CRYPT4GH_PUBKEY_KEY: Final[str] = 'pub'
+    CRYPT4GH_PASSPHRASE_KEY: Final[str] = 'passphrase'
 
-    ID_JSON_FILENAME = '.id.json'
+    ID_JSON_FILENAME: Final[str] = '.id.json'
 
-    SCHEMAS_REL_DIR = 'schemas'
-    CONFIG_SCHEMA = cast(RelPath, 'config.json')
+    SCHEMAS_REL_DIR: Final[str] = 'schemas'
+    CONFIG_SCHEMA: Final[RelPath] = cast(RelPath, 'config.json')
     
     @classmethod
     def generate_passphrase(cls) -> str:
@@ -260,7 +261,7 @@ class WfExSBackend:
             sys.exit(1)
 
         self.local_config = local_config
-        self.progs : MutableMapping[SymbolicName, Union[RelPath, AbsPath]] = DEFAULT_PROGS.copy()
+        self.progs : Dict[SymbolicName, Union[RelPath, AbsPath]] = DEFAULT_PROGS.copy()
 
         toolSect = local_config.get('tools', {})
         self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
@@ -661,10 +662,11 @@ class WfExSBackend:
         
         return self.encfs_type, self.encfs_cmd, securePassphrase
     
-    def listStagedWorkflows(self, *args, acceptGlob:bool=False, doCleanup:bool=True) -> Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]]:
+    def listStagedWorkflows(self, *args: str, acceptGlob:bool=False, doCleanup:bool=True) -> Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]]:
+        # Removing duplicates
         entries : Set[str] = set(args)
         if entries and acceptGlob:
-            reEntries = translate_glob_args(entries)
+            reEntries = translate_glob_args(list(entries))
         else:
             reEntries = None
         
@@ -838,7 +840,7 @@ class WfExSBackend:
         return repoDir, repoEffectiveCheckout
 
 
-    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = False) -> Tuple[Optional[RepoURL], Optional[RepoTag], Optional[RelPath]]:
+    def guessRepoParams(self, wf_url: Union[URIType, parse.ParseResult], fail_ok: bool = False) -> Optional[RemoteRepo]:
         repoURL = None
         repoTag = None
         repoRelPath = None
@@ -914,8 +916,15 @@ class WfExSBackend:
             raise WfExSBackendException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
 
         self.logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
-
-        return cast(Optional[RepoURL], repoURL), cast(Optional[RepoTag], repoTag), cast(Optional[RelPath], repoRelPath)
+        
+        if repoURL is None:
+            return None
+        
+        return RemoteRepo(
+            repo_url=cast(RepoURL, repoURL),
+            tag=cast(Optional[RepoTag], repoTag),
+            rel_path=cast(Optional[RelPath], repoRelPath)
+        )
 
     def downloadROcrate(self, roCrateURL, offline: bool = False) -> AbsPath:
         """
@@ -941,7 +950,7 @@ class WfExSBackend:
 
         return cast(AbsPath, cachedFilename)
 
-    def downloadContent(self, remote_file: Union[URIType, LicensedURI, List[URIType], List[LicensedURI]], dest: Union[AbsPath,CacheType],
+    def downloadContent(self, remote_file: Union[URIType, LicensedURI, Sequence[URIType], Sequence[LicensedURI]], dest: Union[AbsPath,CacheType],
                           secContext: Optional[SecurityContextConfig] = None, offline: bool = False, ignoreCache:bool=False, registerInCache:bool=True) -> MaterializedContent:
         """
         Download remote file or directory / dataset.

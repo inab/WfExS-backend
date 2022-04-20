@@ -40,7 +40,7 @@ def stringifyFilenameDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint,
 def nullProcessDigest(digestAlgorithm, digest:bytes) -> Union[Fingerprint, bytes]:
     return digest
 
-from rfc6920.methods import generate_nih_from_digest
+from rfc6920.methods import generate_nih_from_digest    # type: ignore[import]
 
 # As of https://datatracker.ietf.org/doc/html/rfc6920#page-17
 # rewrite the names of the algorithms

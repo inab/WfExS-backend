@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from google.cloud import storage
+from google.cloud import storage    # type: ignore[import]
 from urllib.parse import urlparse
 import logging
 import os

@@ -28,10 +28,10 @@ import tempfile
 import venv
 
 from typing import cast, Any, List, Mapping, MutableMapping
-from typing import MutableSequence, Optional, Set, Tuple, Union
+from typing import MutableSequence, Optional, Sequence, Set, Tuple, Union
 
-import jsonpath_ng
-import jsonpath_ng.ext
+import jsonpath_ng  # type: ignore[import]
+import jsonpath_ng.ext  # type: ignore[import]
 import yaml
 
 from .common import AbsPath, RelPath
@@ -41,7 +41,6 @@ from .common import ContainerTaggedName, LocalWorkflow, MaterializedWorkflowEngi
 from .common import EngineMode, EnginePath, EngineVersion
 from .common import ExpectedOutput, ExitVal, Fingerprint, URIType
 from .common import SymbolicParamName
-from . import common
 
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .engine import WorkflowEngine, WorkflowEngineException
@@ -173,7 +172,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
 
     @classmethod
-    def WorkflowType(cls) -> common.WorkflowType:
+    def MyWorkflowType(cls) -> WorkflowType:
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
             shortname='cwl',
@@ -460,8 +459,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                         engineVersion, retVal, cwl_dot_stderr_v)
                     raise WorkflowEngineException(errstr)
 
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: List[MaterializedInput],
-                       outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, matInputs: Sequence[MaterializedInput],
+                       outputs: Sequence[ExpectedOutput]) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
         """
         Method to execute the workflow
         """

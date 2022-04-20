@@ -28,7 +28,7 @@ import socket
 import sys
 import time
 
-import aioftp
+import aioftp   # type: ignore[import]
 
 
 def asyncio_run(tasks):

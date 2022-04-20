@@ -29,7 +29,7 @@ import urllib.parse
 import uuid
 
 from typing import cast, Any, Dict, Iterator, List, Mapping, Set
-from typing import Optional, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
 from .common import AbstractWfExSException
 from .common import AbsPath, RelPath
@@ -74,7 +74,7 @@ class SchemeHandlerCacheHandler:
         return cast(AbsPath, os.path.join(hashDir, metadata_input_file)), cast(RelPath, input_file), cast(AbsPath, os.path.join(hashDir, input_file))
     
     @staticmethod
-    def getHashDir(destdir) -> AbsPath:
+    def getHashDir(destdir: AbsPath) -> AbsPath:
         hashDir = os.path.join(destdir,'uri_hashes')
         if not os.path.exists(hashDir):
             try:
@@ -401,7 +401,7 @@ class SchemeHandlerCacheHandler:
             
             yield licensed_meta_uri, validated, retMetaStructure
     
-    def fetch(self, remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType, List[LicensedURI], List[urllib.parse.ParseResult], List[URIType]], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
+    def fetch(self, remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
         # The directory with the content, whose name is based on sha256
         if not os.path.exists(destdir):
             try:
@@ -417,7 +417,7 @@ class SchemeHandlerCacheHandler:
         # This filename will only be used when content is being fetched
         tempCachedFilename = cast(AbsPath, os.path.join(destdir, 'caching-' + str(uuid.uuid4())))
         # This is an iterative process, where the URI is resolved and peeled until a basic fetching protocol is reached
-        inputKind : Union[LicensedURI, urllib.parse.ParseResult, URIType, List[Union[LicensedURI, urllib.parse.ParseResult, URIType]], ContentKind] = remote_file
+        inputKind = remote_file
         metadata_array = []
         licences : List[URIType] = []
         # The security context could be augmented, so avoid side effects

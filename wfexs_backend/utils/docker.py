@@ -21,7 +21,7 @@ import logging
 from typing import NamedTuple, Optional, Tuple
 import urllib.parse
 
-from dxf import DXF, _schema2_mimetype as DockerManifestV2MIMEType
+from dxf import DXF, _schema2_mimetype as DockerManifestV2MIMEType  # type: ignore[import]
 
 # Needed for proper error handling
 import requests

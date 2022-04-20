@@ -30,13 +30,13 @@ import threading
 import time
 
 from typing import Any, List, Mapping, Optional, Pattern, Sequence
-from typing import cast, TYPE_CHECKING, Tuple, Type, Union
+from typing import cast, Final, TYPE_CHECKING, Tuple, Type, Union
 
 from urllib import parse
 
-from rocrate import rocrate
+from rocrate import rocrate # type: ignore[import]
 from .ro_crate import addInputsResearchObject, addOutputsResearchObject
-import bagit
+import bagit    # type: ignore[import]
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
@@ -50,16 +50,19 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .common import AbstractWfExSException
+from .common import AbstractWorkflowEngineType
 from .common import AbsPath, RelPath, WfExSInstanceId
 from .common import Fingerprint
 from .common import RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, WorkflowType, URIType
-from .common import ExpectedOutput, LocalWorkflow, MaterializedWorkflowEngine
+from .common import ExpectedOutput, MaterializedWorkflowEngine
+from .common import IdentifiedWorkflow, LocalWorkflow
 from .common import GeneratedContent, GeneratedDirectoryContent
 from .common import MaterializedContent, MaterializedInput, MaterializedOutput
 from .common import MarshallingStatus, StagedSetup, EngineVersion
 from .common import SecurityContextConfig, SecurityContextConfigBlock
 from .common import Attribution, DefaultNoLicenceTuple
+from .common import TRS_Workflow_Descriptor, RemoteRepo
 # These imports are needed to properly unmarshall from YAML
 from .common import Container, URIWithMetadata, ExitVal
 
@@ -117,20 +120,20 @@ class WF:
     Workflow enaction class
     """
 
-    TRS_METADATA_FILE = cast(RelPath, 'trs_metadata.json')
-    TRS_QUERY_CACHE_FILE = cast(RelPath, 'trs_result.json')
-    TRS_TOOL_FILES_FILE =  cast(RelPath, 'trs_tool_files.json')
+    TRS_METADATA_FILE: Final[RelPath] = cast(RelPath, 'trs_metadata.json')
+    TRS_QUERY_CACHE_FILE: Final[RelPath] = cast(RelPath, 'trs_result.json')
+    TRS_TOOL_FILES_FILE: Final[RelPath] =  cast(RelPath, 'trs_tool_files.json')
 
-    SECURITY_CONTEXT_SCHEMA=  cast(RelPath, 'security-context.json')
-    STAGE_DEFINITION_SCHEMA=  cast(RelPath, 'stage-definition.json')
+    SECURITY_CONTEXT_SCHEMA: Final[RelPath] =  cast(RelPath, 'security-context.json')
+    STAGE_DEFINITION_SCHEMA: Final[RelPath] =  cast(RelPath, 'stage-definition.json')
 
-    DEFAULT_RO_EXTENSION = ".crate.zip"
-    DEFAULT_TRS_ENDPOINT = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
-    TRS_TOOLS_PATH = 'tools/'
+    DEFAULT_RO_EXTENSION: Final[str] = ".crate.zip"
+    DEFAULT_TRS_ENDPOINT: Final[str] = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
+    TRS_TOOLS_PATH: Final[str] = 'tools/'
     
-    WORKFLOW_ENGINES = list(map(lambda clazz: clazz.WorkflowType(), WORKFLOW_ENGINE_CLASSES))
+    WORKFLOW_ENGINES: Final[List[WorkflowType]] = list(map(lambda clazz: clazz.MyWorkflowType(), WORKFLOW_ENGINE_CLASSES))
 
-    RECOGNIZED_TRS_DESCRIPTORS = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
+    RECOGNIZED_TRS_DESCRIPTORS: Final[Mapping[TRS_Workflow_Descriptor, WorkflowType]] = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
 
     def __init__(self,
                  wfexs: "WfExSBackend",
@@ -403,17 +406,17 @@ class WF:
         self.repoRelPath : Optional[RelPath] = None
         self.repoDir : Optional[AbsPath] = None
         self.repoEffectiveCheckout : Optional[RepoTag] = None
-        self.engine : Optional[WorkflowEngine] = None
+        self.engine : Optional[AbstractWorkflowEngineType] = None
         self.engineVer : Optional[EngineVersion] = None
         self.engineDesc : Optional[WorkflowType] = None
 
-        self.materializedParams : Optional[List[MaterializedInput]] = None
+        self.materializedParams : Optional[Sequence[MaterializedInput]] = None
         self.localWorkflow : Optional[LocalWorkflow] = None
         self.materializedEngine : Optional[MaterializedWorkflowEngine] = None
 
         self.exitVal : Optional[ExitVal] = None
-        self.augmentedInputs : Optional[List[MaterializedInput]] = None
-        self.matCheckOutputs : Optional[List[MaterializedOutput]] = None
+        self.augmentedInputs : Optional[Sequence[MaterializedInput]] = None
+        self.matCheckOutputs : Optional[Sequence[MaterializedOutput]] = None
         self.cacheROCrateFilename : Optional[AbsPath] = None
         
         self.stageMarshalled : Optional[Union[bool, datetime.datetime]] = None
@@ -686,33 +689,47 @@ class WF:
         parsedRepoURL = parse.urlparse(self.id)
 
         # It is not an absolute URL, so it is being an identifier in the workflow
-        repoRelPath : Optional[RelPath]
+        i_workflow : Optional[IdentifiedWorkflow] = None
+        engineDesc : Optional[WorkflowType] = None
+        guessedRepo : Optional[RemoteRepo] = None
         if parsedRepoURL.scheme == '':
             if (self.trs_endpoint is not None) and len(self.trs_endpoint) > 0:
-                engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromTRS(offline=offline)
+                i_workflow = self.getWorkflowRepoFromTRS(offline=offline)
             else:
                 raise WFException('trs_endpoint was not provided')
         else:
             engineDesc = None
 
             # Trying to be smarter
-            guessedRepoURL, guessedRepoTag, guessedRepoRelPath = self.wfexs.guessRepoParams(parsedRepoURL, fail_ok=True)
+            guessedRepo = self.wfexs.guessRepoParams(parsedRepoURL, fail_ok=True)
 
-            if guessedRepoURL is not None:
-                repoURL = guessedRepoURL
-                repoTag = guessedRepoTag if guessedRepoTag is not None else cast(RepoTag, self.version_id)
-                repoRelPath = guessedRepoRelPath
+            if guessedRepo is not None:
+                if guessedRepo.tag is None:
+                    guessedRepo = RemoteRepo(
+                        repo_url=guessedRepo.repo_url,
+                        tag=cast(RepoTag, self.version_id),
+                        rel_path=guessedRepo.rel_path
+                    )
             else:
-                engineDesc, repoURL, repoTag, repoRelPath = self.getWorkflowRepoFromROCrateURL(cast(URIType, self.id), offline=offline)
-
-        if repoURL is None:
+                i_workflow = self.getWorkflowRepoFromROCrateURL(cast(URIType, self.id), offline=offline)
+        
+        if i_workflow is not None:
+            guessedRepo = i_workflow.remote_repo
+            engineDesc = i_workflow.workflow_type
+        
+        if guessedRepo is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
-            repoURL = self.id
-            repoTag = self.version_id
-            repoRelPath = None
+            guessedRepo = RemoteRepo(
+                repo_url=cast(RepoURL, self.id),
+                tag=cast(RepoTag, self.version_id)
+            )
+        
+        repoURL = guessedRepo.repo_url
+        repoTag = guessedRepo.tag
+        repoRelPath = guessedRepo.rel_path
 
-        repoDir = None
-        repoEffectiveCheckout = None
+        repoDir : Optional[AbsPath] = None
+        repoEffectiveCheckout : Optional[RepoTag] = None
         if ':' in repoURL:
             parsedRepoURL = parse.urlparse(repoURL)
             if len(parsedRepoURL.scheme) > 0:
@@ -883,7 +900,7 @@ class WF:
         
         return secContext
     
-    def buildLicensedURI(self, remote_file: Union[URIType, Mapping, List], contextName: Optional[str] = None, licences: Tuple[URIType, ...] = DefaultNoLicenceTuple, attributions: List[Attribution] = []) -> Union[LicensedURI, List[LicensedURI]]:
+    def buildLicensedURI(self, remote_file: Union[URIType, Mapping, Sequence], contextName: Optional[str] = None, licences: Tuple[URIType, ...] = DefaultNoLicenceTuple, attributions: Sequence[Attribution] = []) -> Union[LicensedURI, Sequence[LicensedURI]]:
         if isinstance(remote_file, list):
             retvals = []
             for remote_url in remote_file:
@@ -1627,6 +1644,7 @@ class WF:
         assert self.repoURL is not None
         assert self.augmentedInputs is not None
         assert self.matCheckOutputs is not None
+        assert self.outputsDir is not None
 
         # TODO: implement logic of doMaterializedROCrate
 
@@ -1718,7 +1736,7 @@ class WF:
 
         # TODO error handling
 
-    def getWorkflowRepoFromTRS(self, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+    def getWorkflowRepoFromTRS(self, offline: bool = False) -> IdentifiedWorkflow:
         """
 
         :return:
@@ -1863,22 +1881,29 @@ class WF:
             remote_workflow_entrypoint = trsFilesMeta[0].metadata.get('remote_workflow_entrypoint')
             if remote_workflow_entrypoint is not None:
                 # Give it a chance to identify the original repo of the workflow
-                repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(remote_workflow_entrypoint, fail_ok=True)
+                repo = self.wfexs.guessRepoParams(remote_workflow_entrypoint, fail_ok=True)
 
-                if repoURL is not None:
-                    self.logger.debug("Derived repository {} ({} , rel {}) from {}".format(repoURL, repoTag, repoRelPath, trs_tools_url))
-                    return expectedEngineDesc , repoURL, repoTag, repoRelPath
+                if repo is not None:
+                    self.logger.debug("Derived repository {} ({} , rel {}) from {}".format(repo.repo_url, repo.tag, repo.rel_path, trs_tools_url))
+                    return IdentifiedWorkflow(
+                        workflow_type=expectedEngineDesc,
+                        remote_repo=repo
+                    )
 
             workflow_entrypoint = trsFilesMeta[0].metadata.get('workflow_entrypoint')
             if workflow_entrypoint is not None:
                 self.logger.debug("Using raw files from TRS tool {}".format(trs_tools_url))
-                repoDir = trsFilesDir
-                repoRelPath = workflow_entrypoint
-                return expectedEngineDesc, repoDir, None, repoRelPath
+                return IdentifiedWorkflow(
+                    workflow_type=expectedEngineDesc,
+                    remote_repo=RemoteRepo(
+                        repo_url=cast(RepoURL, trsFilesDir),
+                        rel_path=workflow_entrypoint
+                    )
+                )
 
         raise WFException("Unable to find a workflow in {}".format(trs_tools_url))
 
-    def getWorkflowRepoFromROCrateURL(self, roCrateURL: URIType, expectedEngineDesc: WorkflowType = None, offline: bool = False) -> Tuple[WorkflowType, RepoURL, RepoTag, RelPath]:
+    def getWorkflowRepoFromROCrateURL(self, roCrateURL: URIType, expectedEngineDesc: WorkflowType = None, offline: bool = False) -> IdentifiedWorkflow:
         """
 
         :param roCrateURL:
@@ -1891,7 +1916,7 @@ class WF:
 
         return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
 
-    def getWorkflowRepoFromROCrateFile(self, roCrateFile: AbsPath, expectedEngineDesc: WorkflowType = None) -> Tuple[WorkflowType, RepoURL, Optional[RepoTag], Optional[RelPath]]:
+    def getWorkflowRepoFromROCrateFile(self, roCrateFile: AbsPath, expectedEngineDesc: Optional[WorkflowType] = None) -> IdentifiedWorkflow:
         """
 
         :param roCrateFile:
@@ -1942,7 +1967,7 @@ class WF:
             if (engineDescByUrl is None) and (mainEntityProgrammingLanguageUrl == possibleEngineDesc.url):
                 engineDescByUrl = possibleEngineDesc
 
-        engineDesc = None
+        engineDesc : WorkflowType
         if engineDescById is not None:
             engineDesc = engineDescById
         elif engineDescByUrl is not None:
@@ -1966,15 +1991,19 @@ class WF:
         # fetched content (needed by Nextflow)
 
         # Some RO-Crates might have this value missing or ill-built
+        remote_repo : Optional[RemoteRepo] = None
         if workflowUploadURL is not None:
-            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(workflowUploadURL, fail_ok=True)
+            remote_repo = self.wfexs.guessRepoParams(workflowUploadURL, fail_ok=True)
 
-        if repoURL is None:
-            repoURL, repoTag, repoRelPath = self.wfexs.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=True)
+        if remote_repo is None:
+            remote_repo = self.wfexs.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=True)
 
-        if repoURL is None:
+        if remote_repo is None:
             raise WFException('Unable to guess repository from RO-Crate manifest')
 
         # It must return four elements:
-        return engineDesc, repoURL, repoTag, repoRelPath
+        return IdentifiedWorkflow(
+            workflow_type=engineDesc,
+            remote_repo=remote_repo
+        )
 

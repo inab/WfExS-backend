@@ -26,7 +26,7 @@ from typing import NewType, Optional, Pattern, Sequence, Tuple, Type, Union
 from typing import Iterator, MutableMapping, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rocrate.model.computerlanguage import ComputerLanguage
+    from rocrate.model.computerlanguage import ComputerLanguage # type: ignore[import]
 
 
 # Patching default context in order to load CA certificates from certifi
@@ -57,7 +57,7 @@ DEFAULT_PODMAN_CMD = cast(SymbolicName, 'podman')
 DEFAULT_JAVA_CMD = cast(SymbolicName, 'java')
 DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, 'fusermount')
 
-DEFAULT_PROGS : Dict[SymbolicName, RelPath] = {
+DEFAULT_PROGS : Dict[SymbolicName, Union[RelPath, AbsPath]] = {
     DEFAULT_GIT_CMD: cast(RelPath, DEFAULT_GIT_CMD),
     DEFAULT_DOCKER_CMD: cast(RelPath, DEFAULT_DOCKER_CMD),
     DEFAULT_SINGULARITY_CMD: cast(RelPath, DEFAULT_SINGULARITY_CMD),
@@ -147,7 +147,7 @@ class Attribution(NamedTuple):
     # A unique way to represent this author, either through her/his
     # ORCID or another permanent, representative link
     pid: URIType
-    roles: List[AttributionRole] = []
+    roles: Sequence[AttributionRole] = []
     
     @classmethod
     def ParseRawAttribution(cls, rawAttribution: Mapping[str, Any]) -> "Attribution":
@@ -158,7 +158,7 @@ class Attribution(NamedTuple):
         )
     
     @classmethod
-    def ParseRawAttributions(cls, rawAttributions: Optional[List[Mapping[str, Any]]]) -> "Sequence[Attribution]":
+    def ParseRawAttributions(cls, rawAttributions: Optional[Sequence[Mapping[str, Any]]]) -> "Sequence[Attribution]":
         attributions = []
         if isinstance(rawAttributions, list):
             for rawAttribution in rawAttributions:
@@ -184,7 +184,7 @@ class LicensedURI(NamedTuple):
     # One or more licence URLs, either from a repository, or a site like
     # choosealicense.com or spdx.org/licenses/
     licences: Tuple[URIType, ...] = DefaultNoLicenceTuple
-    attributions: List[Attribution] = []
+    attributions: Sequence[Attribution] = []
     secContext: Optional[SecurityContextConfig] = None
 
 AnyURI = Union[URIType,LicensedURI]
@@ -214,9 +214,9 @@ class MaterializedContent(NamedTuple):
     licensed_uri: LicensedURI
     prettyFilename: RelPath
     kind: ContentKind = ContentKind.File
-    metadata_array: Optional[List[URIWithMetadata]] = None
+    metadata_array: Optional[Sequence[URIWithMetadata]] = None
 
-ProtocolFetcherReturn = Tuple[Union[AnyURI, ContentKind, List[AnyURI]], List[URIWithMetadata], Optional[Tuple[URIType, ...]]]
+ProtocolFetcherReturn = Tuple[Union[AnyURI, ContentKind, Sequence[AnyURI]], Sequence[URIWithMetadata], Optional[Tuple[URIType, ...]]]
 ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], ProtocolFetcherReturn]
 
 
@@ -227,7 +227,7 @@ class MaterializedInput(NamedTuple):
       instances from MaterializedContent
     """
     name: SymbolicParamName
-    values: Union[List[bool], Sequence[str], List[int], List[float], Sequence[MaterializedContent]]
+    values: Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[MaterializedContent]]
     secondaryInputs: Optional[Sequence[MaterializedContent]] = None
 
 
@@ -333,7 +333,7 @@ class MaterializedOutput(NamedTuple):
     name: SymbolicOutputName
     kind: ContentKind
     expectedCardinality: Tuple[int, int]
-    values: Union[List[bool], Sequence[str], List[int], List[float], Sequence[GeneratedContent], Sequence[GeneratedDirectoryContent]]
+    values: Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[AbstractGeneratedContent]]
 
 
 class LocalWorkflow(NamedTuple):
@@ -351,15 +351,37 @@ class LocalWorkflow(NamedTuple):
 
 # This skeleton is here only for type mapping reasons
 class AbstractWorkflowEngineType(abc.ABC):
+    @classmethod
     @abc.abstractmethod
-    def sideContainers(self) -> List[ContainerTaggedName]:
+    def MyWorkflowType(cls) -> "WorkflowType":
+        pass
+
+    @property
+    def workflowType(self) -> "WorkflowType":
+        return self.MyWorkflowType()
+    
+    @abc.abstractmethod
+    def sideContainers(self) -> Sequence[ContainerTaggedName]:
         pass
     
-    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName], containersDir: Union[RelPath, AbsPath], offline: bool = False) -> "List[Container]":
+    def materializeContainers(self, listOfContainerTags: Sequence[ContainerTaggedName], containersDir: Union[RelPath, AbsPath], offline: bool = False) -> "Sequence[Container]":
         pass
     
     @abc.abstractmethod
-    def materializeWorkflow(self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: bool = False) -> "Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]":
+    def materializeEngine(self, localWf: LocalWorkflow,
+                          engineVersion: Optional[EngineVersion] = None) -> "Optional[MaterializedWorkflowEngine]":
+        pass
+    
+    @abc.abstractmethod
+    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
+        """
+        This method should return the effective engine version needed
+        to run it when this workflow engine recognizes the workflow type
+        """
+        pass
+    
+    @abc.abstractmethod
+    def materializeWorkflow(self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: bool = False) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the 
         localWorkflow directory, as well as the list of containers
@@ -370,8 +392,8 @@ class AbstractWorkflowEngineType(abc.ABC):
         pass
     
     @abc.abstractmethod
-    def launchWorkflow(self, matWfEng: "MaterializedWorkflowEngine", inputs: List[MaterializedInput],
-                       outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
+    def launchWorkflow(self, matWfEng: "MaterializedWorkflowEngine", inputs: Sequence[MaterializedInput],
+                       outputs: Sequence[ExpectedOutput]) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
         pass
     
     @classmethod
@@ -410,12 +432,27 @@ class WorkflowType(NamedTuple):
     shortname: str
     name: str
     clazz: Type[AbstractWorkflowEngineType]
-    uriMatch: List[Union[Pattern[str], URIType]]
+    uriMatch: Sequence[Union[Pattern[str], URIType]]
     uriTemplate: URIType
     url: URIType
     trs_descriptor: TRS_Workflow_Descriptor
     rocrate_programming_language: str
 
+
+class RemoteRepo(NamedTuple):
+    """
+    Remote repository description
+    """
+    repo_url: RepoURL
+    tag: Optional[RepoTag] = None
+    rel_path: Optional[RelPath] = None
+
+class IdentifiedWorkflow(NamedTuple):
+    """
+    workflow_type: The identified workflow type
+    """
+    workflow_type: WorkflowType
+    remote_repo: RemoteRepo
 
 class StagedSetup(NamedTuple):
     instance_id: WfExSInstanceId
@@ -499,8 +536,8 @@ class MaterializedWorkflowEngine(NamedTuple):
     engine_path: EnginePath
     workflow: LocalWorkflow
     containers_path: Optional[AbsPath] = None
-    containers: Optional[List[Container]] = None
-    operational_containers: Optional[List[Container]] = None
+    containers: Optional[Sequence[Container]] = None
+    operational_containers: Optional[Sequence[Container]] = None
 
 
 class AbstractWfExSException(Exception):
@@ -562,7 +599,7 @@ class CacheType(StrDocEnum):
 
 
 # Next method has been borrowed from FlowMaps
-def scantree(path: Union[RelPath, AbsPath]) -> Iterator[os.DirEntry[str]]:
+def scantree(path: Union[RelPath, AbsPath]) -> "Iterator[os.DirEntry[str]]":
     """Recursively yield DirEntry objects for given directory."""
 
     hasDirs = False

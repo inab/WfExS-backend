@@ -20,6 +20,7 @@ from __future__ import absolute_import
 import os
 import shutil
 from typing import cast, Any, List, Mapping, Optional, Sequence, Union
+from typing import MutableSequence
 
 from ..common import AbsPath, AbstractGeneratedContent, ContentKind
 from ..common import ExpectedOutput, Fingerprint, GeneratedContent
@@ -115,10 +116,10 @@ def CWLDesc2Content(
     logger,
     expectedOutput: Optional[ExpectedOutput] = None,
     doGenerateSignatures: bool = False
-) -> Union[List[bool], List[str], List[int], List[float], List[GeneratedContent], List[GeneratedDirectoryContent]]:
+) -> Sequence[AbstractGeneratedContent]:
     """
     """
-    matValues = []
+    matValues: List[Union[GeneratedContent, GeneratedDirectoryContent]] = []
 
     if not isinstance(cwlDescs, list):
         cwlDescs = [cwlDescs]
@@ -140,7 +141,7 @@ def CWLDesc2Content(
         else:
             secondaryFiles = None
 
-        matValue : Optional[Union[GeneratedDirectoryContent, GeneratedContent]] = None
+        matValue : Optional[Union[GeneratedContent, GeneratedDirectoryContent]] = None
         if foundKind == ContentKind.Directory:
             theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger, doGenerateSignatures=doGenerateSignatures)
             matValue = GetGeneratedDirectoryContentFromList(
@@ -155,7 +156,7 @@ def CWLDesc2Content(
         elif foundKind == ContentKind.File:
             matValue = GeneratedContent(
                 local=cwlDesc['path'],
-                signature=ComputeDigestFromFile(cwlDesc['path'], repMethod=repMethod),
+                signature=cast(Fingerprint, ComputeDigestFromFile(cwlDesc['path'], repMethod=repMethod)),
                 secondaryFiles=secondaryFiles
             )
         
@@ -163,7 +164,7 @@ def CWLDesc2Content(
             matValues.append(matValue)
             
 
-    return matValues
+    return cast(Sequence[AbstractGeneratedContent], matValues)
 
 def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
     # We should not deal with symlinks

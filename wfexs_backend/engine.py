@@ -25,11 +25,12 @@ import abc
 import glob
 import logging
 
-from typing import cast, Any, Callable, List, Mapping
+from typing import cast, Any, Callable, List, Mapping, MutableSequence
 from typing import Optional, Sequence, Set, Tuple, Type, Union
 
 from .common import AbstractWfExSException, AbstractWorkflowEngineType
 from .common import AbsPath, RelPath
+from .common import AbstractGeneratedContent
 from .common import DEFAULT_CONTAINER_TYPE, DEFAULT_DOCKER_CMD, DEFAULT_ENGINE_MODE
 from .common import Container, ContainerType, ContentKind, EngineMode, StagedSetup
 from .common import EnginePath, EngineVersion, Fingerprint, WFLangVersion
@@ -38,7 +39,6 @@ from .common import ContainerTaggedName, LocalWorkflow, MaterializedOutput
 from .common import ExitVal, ExpectedOutput, SymbolicOutputName, URIType
 from .common import MaterializedInput, MaterializedWorkflowEngine
 from .common import MaterializedContent, SymbolicParamName
-from . import common
 
 from .container import ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
@@ -48,8 +48,8 @@ from .podman_container import PodmanContainerFactory
 from .utils.contents import CWLDesc2Content, GetGeneratedDirectoryContent
 from .utils.digests import ComputeDigestFromFile, nihDigester
 
-from rocrate.rocrate import ROCrate
-from rocrate.model.computerlanguage import ComputerLanguage
+from rocrate.rocrate import ROCrate # type: ignore[import]
+from rocrate.model.computerlanguage import ComputerLanguage # type: ignore[import]
 
 # Constants
 WORKDIR_INPUTS_RELDIR = 'inputs'
@@ -324,15 +324,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     
     @classmethod
     @abc.abstractmethod
-    def WorkflowType(cls) -> common.WorkflowType:
-        pass
-
-    @property
-    def workflowType(self) -> common.WorkflowType:
-        return self.WorkflowType()
-    
-    @classmethod
-    @abc.abstractmethod
     def SupportedContainerTypes(cls) -> Set[ContainerType]:
         pass
 
@@ -444,17 +435,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
         pass
     
-    def materializeContainers(self, listOfContainerTags: List[ContainerTaggedName], containersDir: Union[RelPath, AbsPath], offline: bool = False) -> List[Container]:
+    def materializeContainers(self, listOfContainerTags: Sequence[ContainerTaggedName], containersDir: Union[RelPath, AbsPath], offline: bool = False) -> Sequence[Container]:
         return self.container_factory.materializeContainers(listOfContainerTags, self.simpleContainerFileName, containers_dir=containersDir, offline=offline)
 
     @abc.abstractmethod
-    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput],
-                       outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
+    def launchWorkflow(self, matWfEng: MaterializedWorkflowEngine, inputs: Sequence[MaterializedInput],
+                       outputs: Sequence[ExpectedOutput]) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
         pass
 
     @classmethod
-    def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine, inputs: List[MaterializedInput],
-                        outputs: List[ExpectedOutput]) -> Tuple[ExitVal, List[MaterializedInput], List[MaterializedOutput]]:
+    def ExecuteWorkflow(cls, matWfEng: MaterializedWorkflowEngine, inputs: Sequence[MaterializedInput],
+                        outputs: Sequence[ExpectedOutput]) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
 
         exitVal, augmentedInputs, matOutputs = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
 
@@ -500,7 +491,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         GeneratedContent.__name__: ContentKind.File,
     }
     
-    def identifyMaterializedOutputs(self, matInputs: List[MaterializedInput], expectedOutputs:List[ExpectedOutput], outputsDir:AbsPath, outputsMapping:Mapping[SymbolicOutputName,Any]=None) -> List[MaterializedOutput]:
+    def identifyMaterializedOutputs(self, matInputs: Sequence[MaterializedInput], expectedOutputs: Sequence[ExpectedOutput], outputsDir:AbsPath, outputsMapping: Optional[Mapping[SymbolicOutputName,Any]] = None) -> Sequence[MaterializedOutput]:
         """
         This method is used to identify outputs by either file glob descriptions
         or matching with a mapping
@@ -508,7 +499,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if not isinstance(outputsMapping, dict):
             outputsMapping = {}
         
-        matInputHash : Mapping[SymbolicParamName, Union[List[bool], Sequence[str], List[int], List[float], Sequence[MaterializedContent]]] = {
+        matInputHash : Mapping[SymbolicParamName, Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[MaterializedContent]]] = {
             matInput.name: matInput.values
             for matInput in matInputs
         }
@@ -520,7 +511,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 # Engines like Nextflow
                 iEntry = 0
                 for entry in os.scandir(outputsDir):
-                    matValuesDef : Optional[Union[List[GeneratedContent], List[GeneratedDirectoryContent]]] = None
+                    matValuesDef : Optional[Sequence[AbstractGeneratedContent]] = None
                     guessedOutputKindDef : ContentKind
                     # We are avoiding to enter in loops around '.' and '..'
                     if entry.is_file():
@@ -569,14 +560,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # This is only applied when the expected outputs is specified
         for expectedOutput in expectedOutputs:
             cannotBeEmpty = expectedOutput.cardinality[0] != 0
-            expMatValues : Union[List[str], List[GeneratedContent], List[GeneratedDirectoryContent]] = []
+            expMatValues = cast(Union[MutableSequence[str], MutableSequence[AbstractGeneratedContent], MutableSequence[GeneratedContent], MutableSequence[GeneratedDirectoryContent]], [])
             if expectedOutput.fillFrom is not None:
-                matInputValues : Optional[Union[List[bool], Sequence[str], List[int], List[float], Sequence[MaterializedContent]]] = matInputHash.get(expectedOutput.fillFrom)
+                matInputValues = matInputHash.get(expectedOutput.fillFrom)
                 if matInputValues is not None:
                     for matchedPath in matInputValues:
                         # FIXME: Are these elements always paths??????
                         if isinstance(matchedPath, str):
-                            theContent : Optional[Union[str, GeneratedContent, GeneratedDirectoryContent]]= None
+                            theContent : Optional[Union[str, AbstractGeneratedContent, GeneratedContent, GeneratedDirectoryContent]] = None
                             try:
                                 if expectedOutput.kind == ContentKind.Directory:
                                     theContent = GetGeneratedDirectoryContent(
