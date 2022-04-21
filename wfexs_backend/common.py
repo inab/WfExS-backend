@@ -49,6 +49,8 @@ SymbolicName = NewType('SymbolicName', str)
 RelPath = NewType('RelPath', str)
 # This is an absolute path
 AbsPath = NewType('AbsPath', str)
+# This is either a relative or an absolute path
+AnyPath = Union[RelPath, AbsPath]
 
 DEFAULT_GIT_CMD = cast(SymbolicName, 'git')
 DEFAULT_DOCKER_CMD = cast(SymbolicName, 'docker')
@@ -57,7 +59,7 @@ DEFAULT_PODMAN_CMD = cast(SymbolicName, 'podman')
 DEFAULT_JAVA_CMD = cast(SymbolicName, 'java')
 DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, 'fusermount')
 
-DEFAULT_PROGS : Dict[SymbolicName, Union[RelPath, AbsPath]] = {
+DEFAULT_PROGS : Dict[SymbolicName, AnyPath] = {
     DEFAULT_GIT_CMD: cast(RelPath, DEFAULT_GIT_CMD),
     DEFAULT_DOCKER_CMD: cast(RelPath, DEFAULT_DOCKER_CMD),
     DEFAULT_SINGULARITY_CMD: cast(RelPath, DEFAULT_SINGULARITY_CMD),
@@ -364,7 +366,7 @@ class AbstractWorkflowEngineType(abc.ABC):
     def sideContainers(self) -> Sequence[ContainerTaggedName]:
         pass
     
-    def materializeContainers(self, listOfContainerTags: Sequence[ContainerTaggedName], containersDir: Union[RelPath, AbsPath], offline: bool = False) -> "Sequence[Container]":
+    def materializeContainers(self, listOfContainerTags: Sequence[ContainerTaggedName], containersDir: AnyPath, offline: bool = False) -> "Sequence[Container]":
         pass
     
     @abc.abstractmethod
@@ -400,11 +402,11 @@ class AbstractWorkflowEngineType(abc.ABC):
     @abc.abstractmethod
     def FromStagedSetup(cls,
             staged_setup: "StagedSetup",
-            cache_dir: Optional[Union[RelPath, AbsPath]] = None,
-            cache_workflow_dir: Optional[Union[RelPath, AbsPath]] = None,
-            cache_workflow_inputs_dir: Optional[Union[RelPath, AbsPath]] = None,
+            cache_dir: Optional[AnyPath] = None,
+            cache_workflow_dir: Optional[AnyPath] = None,
+            cache_workflow_inputs_dir: Optional[AnyPath] = None,
             local_config: Optional[Mapping[str, Any]] = None,
-            config_directory: Optional[Union[RelPath, AbsPath]] = None
+            config_directory: Optional[AnyPath] = None
     ) -> "AbstractWorkflowEngineType":
         pass
     
@@ -597,9 +599,20 @@ class CacheType(StrDocEnum):
     TRS = ('ga4gh-trs', 'Cached files from tools described at GA4GH TRS repositories')
     Workflow = ('workflow', 'Cached workflows, which come from a git repository')
 
+# The description of an export action
+class ExportAction(NamedTuple):
+    pass
+
+class MaterializedExportAction(NamedTuple):
+    """
+    The description of an export action which was materialized, so
+    a permanent identifier was obtained, along with some metadata
+    """
+    action: ExportAction
+    pid: URIWithMetadata
 
 # Next method has been borrowed from FlowMaps
-def scantree(path: Union[RelPath, AbsPath]) -> "Iterator[os.DirEntry[str]]":
+def scantree(path: AnyPath) -> "Iterator[os.DirEntry[str]]":
     """Recursively yield DirEntry objects for given directory."""
 
     hasDirs = False
