@@ -754,6 +754,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                         # If we reach this, no value was set up
                         raise WorkflowEngineException(
                             "ERROR: Input {} has value types {} for value of type {}, and this code does not know how to handle it (check types)".format(
-                                name, value_types, value.kind))
+                                name, value_types, value.kind  if isinstance(value, MaterializedContent)  else  value.__class__.__name__)
+                        )
 
         return execInputs
