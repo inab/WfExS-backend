@@ -599,9 +599,28 @@ class CacheType(StrDocEnum):
     TRS = ('ga4gh-trs', 'Cached files from tools described at GA4GH TRS repositories')
     Workflow = ('workflow', 'Cached workflows, which come from a git repository')
 
+
+class ExportItemType(enum.Enum):
+    """
+    Types of items which can be exported as such
+    """
+    Param = 'param'
+    Output = 'output'
+    WorkingDirectory = 'working-directory'
+    StageCrate = 'stage-rocrate'
+    ProvenanceCrate = 'provenance-rocrate'
+    
+class ExportItem(NamedTuple):
+    type: ExportItemType
+    name: Optional[Union[SymbolicParamName, SymbolicOutputName]] = None
+
 # The description of an export action
 class ExportAction(NamedTuple):
-    pass
+    action_id: SymbolicName
+    plugin_id: SymbolicName
+    what: Sequence[ExportItem]
+    context_name: Optional[SymbolicName]
+    setup: Optional[SecurityContextConfig]
 
 class MaterializedExportAction(NamedTuple):
     """
