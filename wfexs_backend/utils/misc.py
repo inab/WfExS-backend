@@ -201,7 +201,7 @@ class ConfigValidationException(AbstractWfExSException):
 
 SCHEMAS_REL_DIR = 'schemas'
 
-def config_validate(configToValidate: Mapping[str, Any], relSchemaFile: RelPath) -> List[Any]:
+def config_validate(configToValidate: Union[Mapping[str, Any], Sequence[Mapping[str, Any]]], relSchemaFile: RelPath) -> List[Any]:
     # Locating the schemas directory, where all the schemas should be placed
     schemaFile = os.path.join(os.path.dirname(__file__), '..', SCHEMAS_REL_DIR, relSchemaFile)
 
