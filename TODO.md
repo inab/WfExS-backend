@@ -21,33 +21,45 @@ references to the inputs, that we are going to use to instantiate the workflows.
   
   - [x] **Step 5.c**: Launch Nextflow workflows in an execution environment.
 
-- [ ] **Step 6**: Integrate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
+  - [ ] **Step 5.d**: Generalize the number of workflows which can share the same working directory, so outputs of one can feed inputs of others.
+
+- [ ] **Step 6**: Integrate or delegate the use of [Crypt4GH](https://crypt4gh.readthedocs.io/en/latest/) into the process when requested, so outputs are encrypted for the researcher, allowing moving them with no data disclose.
 
   - [x] **Step 6.a**: Use Crypt4GH to encrypt the passphrase of FUSE encrypted execution working directories.
 
-  - [ ] **Step 6.b**: Use Crypt4GH to decrypt a secure request to the installation.
+  - [ ] **Step 6.b**: Create a micro CWL workflow which uses Crypt4GH to decrypt one or more files (depends on `5.d`).
 
-  - [ ] **Step 6.c**: Use Crypt4GH to decrypt EGA input files.
+  - [ ] **Step 6.c**: Create a micro CWL workflow which uses Crypt4GH to encrypt one or more files (depends on `5.d`).
 
-- [ ] **Step 7**: Add upload capabilities of results: Nextcloud / B2DROP.
+- [ ] **Step 7**: Add upload capabilities of results, which generate permanent identifiers.
+
+  - [ ] **Step 7.a**: Upload to cache system.
+
+  - [ ] **Step 7.b**: Upload to WebDAV server.
+
+  - [ ] **Step 7.c**: Upload to FTP server.
+
+  - [ ] **Step 7.d**: Upload to SFTP server.
+
+  - [ ] **Step 7.e**: Upload to Nextcloud and generate share link.
+
+  - [ ] **Step 7.f**: Upload workflow to WorkflowHub.
+
+  - [ ] **Step 7.g**: Upload to Zenodo.
+
+  - [ ] **Step 7.h**: Upload to B2SHARE.
+
+  - [ ] **Step 7.i**: Upload to osf.io .
   
-  - [ ] **Step 7.future**: Add upload capabilities of results and metadata (RO-Crate): B2SHARE.
-
 - [ ] **Step 8**: Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
 
 - [ ] **Step 9**: Generate RO-Crate from execution provenance and exported results.
 
-  - [ ] **Step 9.a**: Use Crypt4GH to encrypt with crypt4gh the generated RO-Crate.
-
-  - [x] **Step 9.b**: Generated RO-Crate should be consumable by WorkflowHub.
+  - [x] **Step 9.a**: Generated RO-Crate should be consumable by WorkflowHub.
 
   - [ ] **Step 9.c**: Generated RO-Crate should be consumable by WfExS-backend.
   
   - [ ] **Step 9.d**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate.
-
-- [ ] **Step 10**: Add upload capabilities of metadata (RO-Crate): Nextcloud / B2DROP.
-
-  - [ ] **Step 10.future**: Add upload capabilities of metadata (RO-Crate): B2SHARE.
 
 
 ## Other features
@@ -56,9 +68,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [x] Supporting `file` protocol and lean and mean paths, so WfExS can be used with local routes and paths. The main drawback is that RO-Crate provenance can suffer in these scenarios, as it is not provided a public URL/URI.
 
-- [ ] Supporting post-process steps on inputs, which allow implementing decrypt crypt4gh encrypted files from EGA.
-
-- [ ] Supporting post-process steps on outputs, which allow implementing encrypt as crypt4gh files the designated results.
+- [ ] Support pre and post processing steps through the usage of side workflow executions.
 
 - [ ] Generate an abstract CWL description of a workflow execution. In the case of CWL will be a no-op, in the case of Nextflow it will use execution provenance.
 
