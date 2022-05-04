@@ -17,3 +17,4 @@ rocrate >= 0.5.2
 boto3
 botocore
 google-cloud-storage
+typing_extensions

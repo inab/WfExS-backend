@@ -34,7 +34,8 @@ import uuid
 
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
 from typing import cast, MutableMapping, Set, Tuple, Type, Union
-from typing import ClassVar, Final
+from typing import ClassVar
+from typing_extensions import Final
 
 from urllib import parse
 
