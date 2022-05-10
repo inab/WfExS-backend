@@ -22,14 +22,14 @@
 
 **Description:** WfExS-backend security context file (EOSC-Life Demonstrator 7 JSON Schemas)
 
-| Property             | Pattern | Type        | Deprecated | Definition | Title/Description |
-| -------------------- | ------- | ----------- | ---------- | ---------- | ----------------- |
-| - [^.+$](#pattern1 ) | Yes     | Combination | No         | -          | Security context  |
-|                      |         |             |            |            |                   |
+| Property                  | Pattern | Type        | Deprecated | Definition | Title/Description |
+| ------------------------- | ------- | ----------- | ---------- | ---------- | ----------------- |
+| - [^[^:;]++$](#pattern1 ) | Yes     | Combination | No         | -          | Security context  |
+|                           |         |             |            |            |                   |
 
 ## <a name="pattern1"></a>1. [Optional]Pattern Property `WfExS-backend security context > Security context`
 > All property whose name matches the regular expression 
-```^.+$``` ([Test](https://regex101.com/?regex=%5E.%2B%24))
+```^[^:;]++$``` ([Test](https://regex101.com/?regex=%5E%5B%5E%3A%3B%5D%2B%2B%24))
 must respect the following conditions
 
 **Title:** Security context
@@ -59,11 +59,12 @@ must respect the following conditions
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 |                           |                                                                           |
 
-| Property                                   | Pattern | Type   | Deprecated | Definition | Title/Description                            |
-| ------------------------------------------ | ------- | ------ | ---------- | ---------- | -------------------------------------------- |
-| + [username](#pattern1_oneOf_i0_username ) | No      | string | No         | -          | The user name                                |
-| + [password](#pattern1_oneOf_i0_password ) | No      | string | No         | -          | The user password associated to the username |
-|                                            |         |        |            |            |                                              |
+| Property                                                           | Pattern | Type   | Deprecated | Definition | Title/Description                            |
+| ------------------------------------------------------------------ | ------- | ------ | ---------- | ---------- | -------------------------------------------- |
+| + [username](#pattern1_oneOf_i0_username )                         | No      | string | No         | -          | The user name                                |
+| + [password](#pattern1_oneOf_i0_password )                         | No      | string | No         | -          | The user password associated to the username |
+| - [additionalProperties](#pattern1_oneOf_i0_additionalProperties ) | No      | object | No         | -          | -                                            |
+|                                                                    |         |        |            |            |                                              |
 
 #### <a name="pattern1_oneOf_i0_username"></a>1.1.1. Property `WfExS-backend security context > Security context > oneOf > item 0 > username`
 
@@ -100,11 +101,12 @@ must respect the following conditions
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 |                           |                                                                           |
 
-| Property                                       | Pattern | Type   | Deprecated | Definition | Title/Description |
-| ---------------------------------------------- | ------- | ------ | ---------- | ---------- | ----------------- |
-| + [access_key](#pattern1_oneOf_i1_access_key ) | No      | string | No         | -          | -                 |
-| + [secret_key](#pattern1_oneOf_i1_secret_key ) | No      | string | No         | -          | -                 |
-|                                                |         |        |            |            |                   |
+| Property                                                           | Pattern | Type   | Deprecated | Definition | Title/Description |
+| ------------------------------------------------------------------ | ------- | ------ | ---------- | ---------- | ----------------- |
+| + [access_key](#pattern1_oneOf_i1_access_key )                     | No      | string | No         | -          | -                 |
+| + [secret_key](#pattern1_oneOf_i1_secret_key )                     | No      | string | No         | -          | -                 |
+| - [additionalProperties](#pattern1_oneOf_i1_additionalProperties ) | No      | object | No         | -          | -                 |
+|                                                                    |         |        |            |            |                   |
 
 #### <a name="pattern1_oneOf_i1_access_key"></a>1.2.1. Property `WfExS-backend security context > Security context > oneOf > item 1 > access_key`
 
@@ -137,11 +139,12 @@ must respect the following conditions
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 |                           |                                                                           |
 
-| Property                                           | Pattern | Type   | Deprecated | Definition | Title/Description                                                                    |
-| -------------------------------------------------- | ------- | ------ | ---------- | ---------- | ------------------------------------------------------------------------------------ |
-| + [token](#pattern1_oneOf_i2_token )               | No      | string | No         | -          | The authentication token                                                             |
-| - [token_header](#pattern1_oneOf_i2_token_header ) | No      | string | No         | -          | On HTTP, the authentication token is used to fill-in an 'Authentication: Bearer  ... |
-|                                                    |         |        |            |            |                                                                                      |
+| Property                                                           | Pattern | Type   | Deprecated | Definition | Title/Description                                                                    |
+| ------------------------------------------------------------------ | ------- | ------ | ---------- | ---------- | ------------------------------------------------------------------------------------ |
+| + [token](#pattern1_oneOf_i2_token )                               | No      | string | No         | -          | The authentication token                                                             |
+| - [token_header](#pattern1_oneOf_i2_token_header )                 | No      | string | No         | -          | On HTTP, the authentication token is used to fill-in an 'Authentication: Bearer  ... |
+| - [additionalProperties](#pattern1_oneOf_i2_additionalProperties ) | No      | object | No         | -          | -                                                                                    |
+|                                                                    |         |        |            |            |                                                                                      |
 
 #### <a name="pattern1_oneOf_i2_token"></a>1.3.1. Property `WfExS-backend security context > Security context > oneOf > item 2 > token`
 
@@ -193,4 +196,4 @@ Must be one of:
 **Description:** Custom headers to be used on the request
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-06 at 03:20:33 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-10 at 17:46:40 +0200

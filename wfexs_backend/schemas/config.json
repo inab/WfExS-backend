@@ -203,6 +203,19 @@
 			"description": "Directory where all the working directories are going to be created.\nWhen it is not set, a temporary directory is created, which will be removed when the program finishes (which avoids inspecting the working directory after the program has finished).",
 			"type": "string",
 			"minLength": 1
+		},
+		"fetchers-setup": {
+			"title": "Fetchers parameters setup",
+			"description": "Some fetchers could need customizations at the configuration level, like limiting throughput or setting up some proxy",
+			"type": "object",
+			"patternProperties": {
+				"^[a-z][a-z0-9+.-]*$": {
+					"title": "Scheme fetcher setup",
+					"description": "Some scheme fetchers could need customizations which depend on local WfExS installation environment. This is the place where to pass that",
+					"type": "object"
+				}
+			},
+			"minProperties": 1
 		}
 	},
 	"additionalProperties": false

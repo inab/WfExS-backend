@@ -30,6 +30,8 @@
   - [3.12. [Optional] Property `WfExS-backend config > tools > cwl`](#tools_cwl)
     - [3.12.1. [Optional] Property `WfExS-backend config > tools > cwl > version`](#tools_cwl_version)
 - [4. [Optional] Property `WfExS-backend config > workDir`](#workDir)
+- [5. [Optional] Property `WfExS-backend config > fetchers-setup`](#fetchers-setup)
+  - [5.1. [Optional]Pattern Property `WfExS-backend config > fetchers-setup > Scheme fetcher setup`](#fetchers-setup_pattern1)
 
 **Title:** WfExS-backend config
 
@@ -40,13 +42,14 @@
 
 **Description:** WfExS-backend configuration file (EOSC-Life Demonstrator 7 JSON Schemas)
 
-| Property                 | Pattern | Type   | Deprecated | Definition | Title/Description                  |
-| ------------------------ | ------- | ------ | ---------- | ---------- | ---------------------------------- |
-| - [cacheDir](#cacheDir ) | No      | string | No         | -          | Caching directory                  |
-| - [crypt4gh](#crypt4gh ) | No      | object | No         | -          | Installation Crypt4GH key setup    |
-| - [tools](#tools )       | No      | object | No         | -          | External tools configuration block |
-| - [workDir](#workDir )   | No      | string | No         | -          | Working directory                  |
-|                          |         |        |            |            |                                    |
+| Property                             | Pattern | Type   | Deprecated | Definition | Title/Description                  |
+| ------------------------------------ | ------- | ------ | ---------- | ---------- | ---------------------------------- |
+| - [cacheDir](#cacheDir )             | No      | string | No         | -          | Caching directory                  |
+| - [crypt4gh](#crypt4gh )             | No      | object | No         | -          | Installation Crypt4GH key setup    |
+| - [tools](#tools )                   | No      | object | No         | -          | External tools configuration block |
+| - [workDir](#workDir )               | No      | string | No         | -          | Working directory                  |
+| - [fetchers-setup](#fetchers-setup ) | No      | object | No         | -          | Fetchers parameters setup          |
+|                                      |         |        |            |            |                                    |
 
 ## <a name="cacheDir"></a>1. [Optional] Property `WfExS-backend config > cacheDir`
 
@@ -491,5 +494,35 @@ When it is not set, a temporary directory is created, which will be removed when
 | **Min length** | 1 |
 |                |   |
 
+## <a name="fetchers-setup"></a>5. [Optional] Property `WfExS-backend config > fetchers-setup`
+
+**Title:** Fetchers parameters setup
+
+| Type                      | `object`                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+|                           |                                                                           |
+
+**Description:** Some fetchers could need customizations at the configuration level, like limiting throughput or setting up some proxy
+
+| Property                                           | Pattern | Type   | Deprecated | Definition | Title/Description    |
+| -------------------------------------------------- | ------- | ------ | ---------- | ---------- | -------------------- |
+| - [^[a-z][a-z0-9+.-]*$](#fetchers-setup_pattern1 ) | Yes     | object | No         | -          | Scheme fetcher setup |
+|                                                    |         |        |            |            |                      |
+
+### <a name="fetchers-setup_pattern1"></a>5.1. [Optional]Pattern Property `WfExS-backend config > fetchers-setup > Scheme fetcher setup`
+> All property whose name matches the regular expression 
+```^[a-z][a-z0-9+.-]*$``` ([Test](https://regex101.com/?regex=%5E%5Ba-z%5D%5Ba-z0-9%2B.-%5D%2A%24))
+must respect the following conditions
+
+**Title:** Scheme fetcher setup
+
+| Type                      | `object`                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+|                           |                                                                           |
+
+**Description:** Some scheme fetchers could need customizations which depend on local WfExS installation environment. This is the place where to pass that
+
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-04-06 at 03:20:32 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-10 at 17:46:39 +0200
