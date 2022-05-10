@@ -29,6 +29,7 @@
       - [3.11.4.2. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 1`](#tools_nextflow_maxProcesses_oneOf_i1)
   - [3.12. [Optional] Property `WfExS-backend config > tools > cwl`](#tools_cwl)
     - [3.12.1. [Optional] Property `WfExS-backend config > tools > cwl > version`](#tools_cwl_version)
+  - [3.13. [Optional]Pattern Property `WfExS-backend config > tools > Path to a command`](#tools_pattern1)
 - [4. [Optional] Property `WfExS-backend config > workDir`](#workDir)
 - [5. [Optional] Property `WfExS-backend config > fetchers-setup`](#fetchers-setup)
   - [5.1. [Optional]Pattern Property `WfExS-backend config > fetchers-setup > Scheme fetcher setup`](#fetchers-setup_pattern1)
@@ -160,6 +161,7 @@ When it is not set, a temporary directory is created for the session, being dest
 | - [staticPsCommand](#tools_staticPsCommand )       | No      | string           | No         | -          | Static ps command (used in Nextflow engine executions to assure metrics gatherin ... |
 | - [nextflow](#tools_nextflow )                     | No      | object           | No         | -          | -                                                                                    |
 | - [cwl](#tools_cwl )                               | No      | object           | No         | -          | -                                                                                    |
+| - [^.+Command$](#tools_pattern1 )                  | Yes     | string           | No         | -          | Path to a command                                                                    |
 |                                                    |         |                  |            |            |                                                                                      |
 
 ### <a name="tools_containerType"></a>3.1. [Optional] Property `WfExS-backend config > tools > containerType`
@@ -477,6 +479,25 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 | **Min length** | 1 |
 |                |   |
 
+### <a name="tools_pattern1"></a>3.13. [Optional]Pattern Property `WfExS-backend config > tools > Path to a command`
+> All property whose name matches the regular expression 
+```^.+Command$``` ([Test](https://regex101.com/?regex=%5E.%2BCommand%24))
+must respect the following conditions
+
+**Title:** Path to a command
+
+| Type                      | `string`                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+|                           |                                                                           |
+
+**Description:** This is a wildcard declaration to allow setting up custom paths to commands needed by several parts of the code
+
+| Restrictions   |   |
+| -------------- | - |
+| **Min length** | 1 |
+|                |   |
+
 ## <a name="workDir"></a>4. [Optional] Property `WfExS-backend config > workDir`
 
 **Title:** Working directory
@@ -525,4 +546,4 @@ must respect the following conditions
 **Description:** Some scheme fetchers could need customizations which depend on local WfExS installation environment. This is the place where to pass that
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-10 at 17:46:39 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-10 at 18:07:39 +0200

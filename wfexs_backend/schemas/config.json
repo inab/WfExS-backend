@@ -196,6 +196,14 @@
 					}
 				}
 			},
+			"patternProperties": {
+				"^.+Command$": {
+					"title": "Path to a command",
+					"description": "This is a wildcard declaration to allow setting up custom paths to commands needed by several parts of the code",
+					"type": "string",
+					"minLength": 1
+				}
+			},
 			"additionalProperties": false
 		},
 		"workDir": {
