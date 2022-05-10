@@ -64,6 +64,7 @@ class SchemeHandlerCacheHandler:
         self.addSchemeHandlers(schemeHandlers)
     
     def addSchemeHandlers(self, schemeHandlers:Mapping[str, ProtocolFetcher]) -> None:
+        # No validation is done here about validness of schemes
         if isinstance(schemeHandlers, dict):
             self.schemeHandlers.update(schemeHandlers)
     
@@ -520,6 +521,7 @@ class SchemeHandlerCacheHandler:
                 failed = True
                 for the_remote_file, parsedInputURL, usableSecContext in uncachedInputs:
                     # Content is fetched here
+                    # As of RFC3986, schemes are case insensitive
                     theScheme = parsedInputURL.scheme.lower()
                     schemeHandler = self.schemeHandlers.get(theScheme)
                     
