@@ -565,9 +565,11 @@ class CWLWorkflowEngine(WorkflowEngine):
                             
                             debugFlag = ''
                             if self.logger.getEffectiveLevel() <= logging.DEBUG:
-                                debugFlag = '--debug'
+                                debugFlag = '--debug --leave-tmpdir'
                             elif self.logger.getEffectiveLevel() <= logging.INFO:
-                                debugFlag = '--verbose'
+                                debugFlag = '--verbose --rm-tmpdir'
+                            else:
+                                debugFlag = '--rm-tmpdir'
                             
                             if self.container_factory.containerType == ContainerType.Singularity:
                                 assert matWfEng.containers_path is not None, "The containers path should exist"
