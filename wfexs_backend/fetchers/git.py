@@ -22,21 +22,42 @@ import shutil
 import subprocess
 import tempfile
 from typing import cast, Dict, List, Mapping, Optional, Tuple, Type, Union
+from typing import Any, Sequence
 from urllib import parse
+
+from typing_extensions import Final
 
 from . import AbstractStatefulFetcher, FetcherException
 
-from ..common import AbsPath, RelPath
+from ..common import AbsPath, AnyPath, RelPath
 from ..common import AnyURI, ContentKind, SecurityContextConfig
 from ..common import URIType, URIWithMetadata
-from ..common import DEFAULT_GIT_CMD, RepoURL, RepoTag, SymbolicName
+from ..common import RepoURL, RepoTag, SymbolicName
 from ..common import ProtocolFetcherReturn
 
 class GitFetcher(AbstractStatefulFetcher):
-    def __init__(self, progs: Mapping[SymbolicName, Union[RelPath, AbsPath]]):
-        super().__init__(progs=progs)
+    GIT_PROTO: Final[str] = 'git'
+    GIT_PROTO_PREFIX: Final[str] = GIT_PROTO + '+'
+    DEFAULT_GIT_CMD: Final[SymbolicName] = cast(SymbolicName, 'git')
+    
+    def __init__(self, progs: Mapping[SymbolicName, AnyPath], setup_block: Optional[Mapping[str, Any]] = None):
+        super().__init__(progs=progs, setup_block=setup_block)
         
-        self.git_cmd = self.progs.get(cast(SymbolicName, DEFAULT_GIT_CMD), DEFAULT_GIT_CMD)
+        self.git_cmd = self.progs.get(self.DEFAULT_GIT_CMD, cast(RelPath, self.DEFAULT_GIT_CMD))
+
+    @classmethod
+    def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractStatefulFetcher]]":
+        # These are de-facto schemes supported by pip and git client
+        return {
+            cls.GIT_PROTO: cls,
+            cls.GIT_PROTO_PREFIX + 'https': cls,
+            cls.GIT_PROTO_PREFIX + 'http': cls,
+        }
+
+    @classmethod
+    def GetNeededPrograms(cls) -> Sequence[SymbolicName]:
+        return ( cls.DEFAULT_GIT_CMD, )
+    
 
     def doMaterializeRepo(self, repoURL:RepoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, Dict[str, Union[RepoURL, Optional[RepoTag]]]]:
         """
@@ -159,12 +180,12 @@ class GitFetcher(AbstractStatefulFetcher):
         
         # These are the usual URIs which can be understood by pip
         # See https://pip.pypa.io/en/stable/cli/pip_install/#git
-        if not parsedInputURL.scheme.startswith('git+') and parsedInputURL.scheme != 'git':
-            raise FetcherException()
+        if not parsedInputURL.scheme.startswith(self.GIT_PROTO_PREFIX) and parsedInputURL.scheme != self.GIT_PROTO:
+            raise FetcherException(f"FIXME: Unhandled scheme {parsedInputURL.scheme}")
             
         # Getting the scheme git is going to understand
-        if len(parsedInputURL.scheme) > 3:
-            gitScheme = parsedInputURL.scheme[4:]
+        if len(parsedInputURL.scheme) >= len(self.GIT_PROTO_PREFIX):
+            gitScheme = parsedInputURL.scheme[len(self.GIT_PROTO_PREFIX):]
         else:
             gitScheme = parsedInputURL.scheme
 
@@ -217,9 +238,5 @@ class GitFetcher(AbstractStatefulFetcher):
         ], None
         
 
-# These are de-facto schemes supported by pip and git client
-SCHEME_HANDLERS : Mapping[str, Type[AbstractStatefulFetcher]] = {
-    'git': GitFetcher,
-    'git+https': GitFetcher,
-    'git+http': GitFetcher,
-}
+# See above
+SCHEME_HANDLERS : Mapping[str, Type[AbstractStatefulFetcher]] = GitFetcher.GetSchemeHandlers()
