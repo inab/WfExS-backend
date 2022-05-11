@@ -50,6 +50,7 @@ class WfExS_Commands(StrDocEnum):
     Stage = ('stage', 'Prepare the staging (working) directory for workflow execution, fetching dependencies and contents')
     MountWorkDir = ('mount-workdir', 'Mount the encrypted staging directory on secure staging scenarios')
     StagedWorkDir = ('staged-workdir', 'Staged working directories handling subcommands')
+    Export = ('export', 'Staged working directories export subcommands')
     ExportStage = ('export-stage', 'Export the staging directory as an RO-Crate')
     OfflineExecute = ('offline-execute', 'Execute an already prepared workflow in the staging directory')
     Execute = ('execute', 'Execute the stage + offline-execute + export steps')
@@ -72,11 +73,22 @@ class WfExS_Staged_WorkDir_Commands(StrDocEnum):
     Status = ('status', 'Shows staged instances status')
 #    Validate = 'validate'
 
+class WfExS_Export_Commands(StrDocEnum):
+    List = ('ls', 'List the public identifiers obtained from previous export actions')
+    Run = ('run', 'Run the different export actions, pushing the exported content and gathering the obtained permanent / public identifiers')
+
 DEFAULT_LOCAL_CONFIG_RELNAME = 'wfexs_config.yml'
 LOGGING_FORMAT = '%(asctime)-15s - [%(levelname)s] %(message)s'
 DEBUG_LOGGING_FORMAT = '%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s'
 
-def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, preStageParams:bool=False, postStageParams:bool=False, crateParams:bool=False):
+def genParserSub(
+    sp: argparse._SubParsersAction,
+    command: WfExS_Commands,
+    preStageParams: bool = False,
+    postStageParams: bool = False,
+    crateParams: bool = False,
+    exportParams: bool = False
+) -> argparse.ArgumentParser:
     ap_ = sp.add_parser(
         command.value,
         formatter_class=ArgsDefaultWithRawHelpFormatter,
@@ -91,12 +103,24 @@ def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, preStagePar
             required=True,
             help="Configuration file, describing workflow and inputs"
         )
+    
+    if preStageParams or exportParams:
         ap_.add_argument(
             '-Z',
             '--creds-config',
             dest="securityContextsConfigFilename",
             help="Configuration file, describing security contexts, which hold credentials and similar"
         )
+    
+    if exportParams:
+        ap_.add_argument(
+            '-E',
+            '--exports-config',
+            dest="exportsConfigFilename",
+            help="Configuration file, describing exports which can be done"
+        )
+    
+    if preStageParams:
         ap_.add_argument(
             '-n',
             '--nickname-prefix',
@@ -116,6 +140,7 @@ def genParserSub(sp:argparse.ArgumentParser, command:WfExS_Commands, preStagePar
     if crateParams:
         ap_.add_argument('--full', dest='doMaterializedROCrate', action='store_true',
                     help="Should the RO-Crate contain a copy of the inputs (and outputs)?")
+    
     return ap_
 
 def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLevel) -> int:
@@ -130,14 +155,14 @@ def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLev
     retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
         if logLevel <= logging.INFO:
-            contents = sorted(map(lambda l: l[1], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x['stamp'])
-            for entry in contents:
-                json.dump(entry, sys.stdout, cls=DatetimeEncoder, indent=4, sort_keys=True)
+            contentsI = sorted(map(lambda l: l[1], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x['stamp'])
+            for entryI in contentsI:
+                json.dump(entryI, sys.stdout, cls=DatetimeEncoder, indent=4, sort_keys=True)
                 print()
         else:
-            contents = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x.uri)
-            for entry in contents:
-                print(entry)
+            contentsD = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x.uri)
+            for entryD in contentsD:
+                print(entryD)
             
     elif args.cache_command == WfExS_Cache_Commands.Remove:
         print('\n'.join(map(lambda x: '\t'.join([x[0].uri, x[1]]), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
@@ -258,6 +283,22 @@ f"""=> Instance {instance_id} ({nickname})
     # Thi
     return retval
 
+def processExportCommand(wfInstance: WF, args: argparse.Namespace, loglevel) -> int:
+    """
+    This method processes the export subcommands, and returns the retval
+    to be used with sys.exit
+    """
+    print(f"\t- Subcommand {args.export_contents_command}")
+    
+    retval = 0
+    if args.export_contents_command == WfExS_Export_Commands.List:
+        for mExport in wfInstance.listMaterializedExportActions():
+            print('f{mExport}')
+    elif args.export_contents_command == WfExS_Export_Commands.Run:
+        expval = wfInstance.exportResultsFromFiles(args.exportsConfigFilename, args.securityContextsConfigFilename)
+    
+    return retval
+
 def main():
     wfexs_version = get_WfExS_version()
     if wfexs_version[1] is None:
@@ -306,6 +347,15 @@ def main():
     ap_w.add_argument('staged_workdir_command_args', help='Optional staged working directory element names', nargs='*')
     ap_w.add_argument("-g", "--glob", dest="filesAsGlobs", help='Given staged workflow names are globs', action="store_true", default=False)
     
+    ap_expt = genParserSub(
+        sp,
+        WfExS_Commands.Export,
+        postStageParams=True,
+        exportParams=True
+    )
+    ap_expt.add_argument('export_contents_command', help='raw|Export operations from staged working directory to perform\n\n'+'\n'.join(map(lambda c: f'{c.value:<16}{c.description}', WfExS_Export_Commands)), type=WfExS_Export_Commands.argtype, choices=WfExS_Export_Commands)
+    ap_expt.add_argument('export_contents_command_args', help='Optional export names', nargs='*')
+    
     ap_cv = genParserSub(
         sp,
         WfExS_Commands.ConfigValidate,
@@ -341,7 +391,8 @@ def main():
         sp,
         WfExS_Commands.Execute,
         preStageParams=True,
-        crateParams=True
+        crateParams=True,
+        exportParams=True
     )
     
     ap_er = genParserSub(
@@ -465,7 +516,7 @@ def main():
         sys.exit(processStagedWorkdirCommand(wfBackend, args, logLevel))
     
     wfInstance = None
-    if command in (WfExS_Commands.MountWorkDir, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
+    if command in (WfExS_Commands.MountWorkDir, WfExS_Commands.Export, WfExS_Commands.ExportStage, WfExS_Commands.OfflineExecute, WfExS_Commands.ExportResults, WfExS_Commands.ExportCrate):
         wfInstance = wfBackend.fromWorkDir(args.workflowWorkingDirectory, fail_ok= command!=WfExS_Commands.MountWorkDir)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
@@ -484,11 +535,14 @@ def main():
     print("\t- Working directory will be {}".format(wfSetup.work_dir), file=sys.stderr)
     sys.stderr.flush()
     
+    # Export staged working directory contents commands
+    if command == WfExS_Commands.Export:
+        sys.exit(processExportCommand(wfInstance, args, logLevel))
+    
     if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
         print("\t- Instance {} (nickname '{}') (to be used with -J)".format(wfSetup.instance_id, wfSetup.nickname))
         wfInstance.stageWorkDir()
         
-    
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)
     

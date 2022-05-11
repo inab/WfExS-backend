@@ -52,7 +52,6 @@ AbsPath = NewType('AbsPath', str)
 # This is either a relative or an absolute path
 AnyPath = Union[RelPath, AbsPath]
 
-DEFAULT_GIT_CMD = cast(SymbolicName, 'git')
 DEFAULT_DOCKER_CMD = cast(SymbolicName, 'docker')
 DEFAULT_SINGULARITY_CMD = cast(SymbolicName, 'singularity')
 DEFAULT_PODMAN_CMD = cast(SymbolicName, 'podman')
@@ -60,7 +59,6 @@ DEFAULT_JAVA_CMD = cast(SymbolicName, 'java')
 DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, 'fusermount')
 
 DEFAULT_PROGS : Dict[SymbolicName, AnyPath] = {
-    DEFAULT_GIT_CMD: cast(RelPath, DEFAULT_GIT_CMD),
     DEFAULT_DOCKER_CMD: cast(RelPath, DEFAULT_DOCKER_CMD),
     DEFAULT_SINGULARITY_CMD: cast(RelPath, DEFAULT_SINGULARITY_CMD),
     DEFAULT_PODMAN_CMD: cast(RelPath, DEFAULT_PODMAN_CMD),
@@ -561,7 +559,7 @@ class ArgTypeMixin(enum.Enum):
     def __str__(self) -> str:
         return str(self.value)
 
-class StrDocEnum(str, ArgTypeMixin, enum.Enum):
+class StrDocEnum(str, ArgTypeMixin):
     # Learnt from https://docs.python.org/3.11/howto/enum.html#when-to-use-new-vs-init
     description: str
     def __new__(cls, value: Any, description: str = '') -> "StrDocEnum":
@@ -629,6 +627,7 @@ class MaterializedExportAction(NamedTuple):
     """
     action: ExportAction
     pid: URIWithMetadata
+    when: datetime.datetime = datetime.datetime.now(tz=datetime.timezone.utc)
 
 # Next method has been borrowed from FlowMaps
 def scantree(path: AnyPath) -> "Iterator[os.DirEntry[str]]":

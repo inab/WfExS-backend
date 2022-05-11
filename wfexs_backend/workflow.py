@@ -30,7 +30,10 @@ import threading
 import time
 
 from typing import Any, List, Mapping, Optional, Pattern, Sequence
-from typing import cast, Final, TYPE_CHECKING, Tuple, Type, Union
+from typing import cast, TYPE_CHECKING, Tuple, Type, Union
+from typing import MutableSequence
+
+from typing_extensions import Final
 
 from urllib import parse
 
@@ -51,8 +54,8 @@ except ImportError:
 
 from .common import AbstractWfExSException
 from .common import AbstractWorkflowEngineType
-from .common import AbsPath, RelPath, WfExSInstanceId
-from .common import Fingerprint
+from .common import AbsPath, RelPath, AnyPath, WfExSInstanceId
+from .common import Fingerprint, SymbolicName
 from .common import RepoTag, RepoURL, LicensedURI
 from .common import CacheType, ContentKind, WorkflowType, URIType
 from .common import ExpectedOutput, MaterializedWorkflowEngine
@@ -63,6 +66,8 @@ from .common import MarshallingStatus, StagedSetup, EngineVersion
 from .common import SecurityContextConfig, SecurityContextConfigBlock
 from .common import Attribution, DefaultNoLicenceTuple
 from .common import TRS_Workflow_Descriptor, RemoteRepo
+from .common import ExportItem, ExportItemType
+from .common import ExportAction, MaterializedExportAction
 # These imports are needed to properly unmarshall from YAML
 from .common import Container, URIWithMetadata, ExitVal
 
@@ -126,6 +131,7 @@ class WF:
 
     SECURITY_CONTEXT_SCHEMA: Final[RelPath] =  cast(RelPath, 'security-context.json')
     STAGE_DEFINITION_SCHEMA: Final[RelPath] =  cast(RelPath, 'stage-definition.json')
+    EXPORT_ACTIONS_SCHEMA: Final[RelPath] =  cast(RelPath, 'export-actions.json')
 
     DEFAULT_RO_EXTENSION: Final[str] = ".crate.zip"
     DEFAULT_TRS_ENDPOINT: Final[str] = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
@@ -143,6 +149,7 @@ class WF:
                  trs_endpoint=DEFAULT_TRS_ENDPOINT,
                  params=None,
                  outputs=None,
+                 default_actions=None,
                  workflow_config=None,
                  creds_config: Optional[SecurityContextConfigBlock] =None,
                  instanceId: Optional[WfExSInstanceId] = None,
@@ -207,6 +214,7 @@ class WF:
             workflow_config = {}
         
         self.outputs : Optional[List[ExpectedOutput]]
+        self.default_actions : Optional[Sequence[ExportAction]]
         if workflow_id is not None:
             workflow_meta = {
                 'workflow_id': workflow_id
@@ -260,6 +268,7 @@ class WF:
             self.descriptor_type = descriptor_type
             self.params = params
             self.outputs = self.parseExpectedOutputs(outputs)
+            self.default_actions = self.parseExportActions(default_actions)
 
             # The endpoint should always end with a slash
             if isinstance(trs_endpoint, str):
@@ -418,6 +427,8 @@ class WF:
         self.augmentedInputs : Optional[Sequence[MaterializedInput]] = None
         self.matCheckOutputs : Optional[Sequence[MaterializedOutput]] = None
         self.cacheROCrateFilename : Optional[AbsPath] = None
+        
+        self.runExportActions : Optional[MutableSequence[MaterializedExportAction]] = None
         
         self.stageMarshalled : Optional[Union[bool, datetime.datetime]] = None
         self.executionMarshalled : Optional[Union[bool, datetime.datetime]] = None
@@ -589,7 +600,7 @@ class WF:
         return cls(wfexs, instanceId=instanceId, nickname=nickname, rawWorkDir=rawWorkDir, creation=creation, fail_ok=fail_ok)
     
     @classmethod
-    def ReadSecurityContextFile(cls, securityContextsConfigFilename: Union[RelPath, AbsPath]) -> SecurityContextConfigBlock:
+    def ReadSecurityContextFile(cls, securityContextsConfigFilename: AnyPath) -> SecurityContextConfigBlock:
         with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
             creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
             
@@ -646,6 +657,7 @@ class WF:
             trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
             outputs=workflow_meta.get('outputs', {}),
+            default_actions=workflow_meta.get('default_actions'),
             workflow_config=workflow_meta.get('workflow_config'),
             nickname=workflow_meta.get('nickname'),
             creds_config=creds_config,
@@ -672,6 +684,7 @@ class WF:
             descriptor_type=workflow_meta.get('workflow_type'),
             trs_endpoint=workflow_meta.get('trs_endpoint', cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get('params', {}),
+            default_actions=workflow_meta.get('default_actions'),
             workflow_config=workflow_meta.get('workflow_config'),
             nickname=workflow_meta.get('nickname'),
             paranoid_mode=paranoidMode
@@ -890,7 +903,7 @@ class WF:
         )
         self.materializedParams = theParams
     
-    def getContext(self, remote_file, contextName: Optional[str]):
+    def getContext(self, remote_file: str, contextName: Optional[str]):
         secContext = None
         if contextName is not None:
             secContext = self.creds_config.get(contextName)
@@ -1227,6 +1240,53 @@ class WF:
             expectedOutputs.append(eOutput)
 
         return expectedOutputs
+    
+    def parseExportActions(self, raw_actions: Sequence[Mapping[str, Any]]) -> Sequence[ExportAction]:
+        assert self.outputs is not None
+        
+        valErrors = config_validate(raw_actions, self.EXPORT_ACTIONS_SCHEMA)
+        if len(valErrors) > 0:
+            errstr = f'ERROR in export actions definition block: {valErrors}'
+            self.logger.error(errstr)
+            raise WFException(errstr)
+            
+        actions : MutableSequence[ExportAction] = []
+        for actionDesc in raw_actions:
+            actionId = cast(SymbolicName, actionDesc['id'])
+            pluginId = cast(SymbolicName, actionDesc['plugin'])
+            
+            whatToExport = []
+            for encoded_name in actionDesc['what']:
+                colPos = encoded_name.find(':')
+                assert colPos >= 0
+                
+                if colPos == 0:
+                    if encoded_name[-1] != ':':
+                        raise WFException(f'Unexpected element to export {encoded_name}')
+                    rawItemType = encoded_name[1:-1]
+                    whatName = None
+                else:
+                    rawItemType = encoded_name[0:colPos]
+                    whatName = encoded_name[colPos+1:]
+                    assert len(whatName) > 0
+                
+                whatToExport.append(
+                    ExportItem(
+                        type=ExportItemType(rawItemType),
+                        name=whatName
+                    )
+                )
+            
+            action = ExportAction(
+                action_id=actionId,
+                plugin_id=pluginId,
+                what=whatToExport,
+                context_name=actionDesc.get('security-context'),
+                setup=actionDesc.get('setup'),
+            )
+            actions.append(action)
+
+        return actions
 
     def executeWorkflow(self, offline: bool = False):
         self.unmarshallStage(offline=offline)
@@ -1249,12 +1309,59 @@ class WF:
 
         # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute()
-
-    def exportResults(self):
-        self.unmarshallExecute(offline=True)
-
+    
+    def listMaterializedExportActions(self) -> Sequence[MaterializedExportAction]:
+        self.unmarshallExport(offline=True)
+        """
+        This method should return the pids generated from the contents
+        """
+        assert self.runExportActions is not None
+        
+        return self.runExportActions
+    
+    def exportResultsFromFiles(self, exportActionsFile: Optional[AnyPath], securityContextFile: Optional[AnyPath]) -> Sequence[MaterializedExportAction]:
+        if exportActionsFile is not None:
+            with open(exportActionsFile, mode="r", encoding="utf-8") as eaf:
+                raw_actions = unmarshall_namedtuple(yaml.load(eaf, Loader=YAMLLoader))
+            
+            actions = self.parseExportActions(raw_actions)
+        else:
+            actions = None
+            
+        
+        if securityContextFile is not None:
+            creds_config = self.ReadSecurityContextFile(securityContextFile)
+            
+            valErrors = config_validate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
+            if len(valErrors) > 0:
+                errstr = f'ERROR in security context block: {valErrors}'
+                self.logger.error(errstr)
+                raise WFException(errstr)
+        else:
+            creds_config = None
+        
+        self.exportResults(actions, creds_config)
+    
+    def exportResults(self, actions: Optional[Sequence[ExportAction]] = None, creds_config: Optional[SecurityContextConfigBlock] = None) -> Sequence[MaterializedExportAction]:
+        matActions = []
+        # The precondition
+        if self.unmarshallExport(offline=True) is None:
+            # TODO
+            raise WFException("FIXME")
+        
+        # If actions is None, then try using embedded ones
+        
         # TODO
-        self.marshallExport()
+        
+        # Last, save the metadata we have gathered
+        if self.runExportActions is None:
+            self.runExportActions = list(matActions)
+        else:
+            self.runExportActions.extend(matActions)
+        
+        self.marshallExport(overwrite=len(matActions) > 0)
+        
+        return matActions
 
 
     def marshallConfig(self, overwrite: bool = False) -> Union[bool, datetime.datetime]:
@@ -1285,6 +1392,8 @@ class WF:
                     if self.outputs is not None:
                         outputs = {output.name: output for output in self.outputs}
                         workflow_meta['outputs'] = outputs
+                    if self.default_actions is not None:
+                        workflow_meta['default_actions'] = self.default_actions
 
                     yaml.dump(marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper)
             
@@ -1332,6 +1441,7 @@ class WF:
                     self.trs_endpoint = workflow_meta.get('trs_endpoint')
                     self.workflow_config = workflow_meta.get('workflow_config')
                     self.params = workflow_meta.get('params')
+                    
                     outputsM = workflow_meta.get('outputs')
                     if isinstance(outputsM, dict):
                         outputs = list(outputsM.values())
@@ -1341,6 +1451,16 @@ class WF:
                             self.outputs = self.parseExpectedOutputs(outputsM)
                     else:
                         self.outputs = None
+                    
+                    defaultActionsM = workflow_meta.get('default_actions')
+                    if isinstance(defaultActionsM, dict):
+                        default_actions = list(defaultActionsM.values())
+                        if len(default_actions) == 0 or isinstance(default_actions[0], ExportAction):
+                            self.default_actions = default_actions
+                        else:
+                            self.default_actions = self.parseExportActions(default_actions)
+                    else:
+                        self.default_actions = None
             except IOError as ioe:
                 config_unmarshalled = False
                 self.logger.debug("Marshalled config file {} I/O errors".format(workflow_meta_filename))
@@ -1553,7 +1673,7 @@ class WF:
     def marshallExport(self, exist_ok: bool = True, overwrite: bool = False) -> Optional[Union[bool, datetime.datetime]]:
         if overwrite or (self.exportMarshalled is None):
             # Do not even try saving the state
-            if self.marshallExecute(exist_ok=exist_ok, overwrite=overwrite) is None:
+            if self.marshallStage(exist_ok=exist_ok, overwrite=overwrite) is None:
                 return None
 
             assert self.metaDir is not None, "The metadata directory should be available"
@@ -1568,13 +1688,12 @@ class WF:
                 exportAlreadyMarshalled = True
             
             if not exportAlreadyMarshalled or overwrite:
-                exported_results : Mapping[str, Any] = {
-                    # TODO
-                }
+                if self.runExportActions is None:
+                    self.runExportActions = []
 
                 self.logger.debug("Creating marshalled export results file {}".format(marshalled_export_file))
                 with open(marshalled_export_file, mode='w', encoding='utf-8') as msF:
-                    yaml.dump(marshall_namedtuple(exported_results), msF, Dumper=YAMLDumper)
+                    yaml.dump(marshall_namedtuple(self.runExportActions), msF, Dumper=YAMLDumper)
 
             self.exportMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc)
         elif not exist_ok:
@@ -1584,8 +1703,8 @@ class WF:
 
     def unmarshallExport(self, offline: bool = True, fail_ok: bool = False) -> Optional[Union[bool, datetime.datetime]]:
         if self.exportMarshalled is None:
-            # If execute state does not work, even do not try
-            retval = self.unmarshallExecute(offline=offline, fail_ok=fail_ok)
+            # If state does not work, even do not try
+            retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
             if not retval:
                 return None
 
@@ -1604,9 +1723,8 @@ class WF:
             try:
                 with open(marshalled_export_file, mode='r', encoding='utf-8') as meF:
                     marshalled_export = yaml.load(meF, Loader=YAMLLoader)
-                    exported_results = unmarshall_namedtuple(marshalled_export, globals())
-
-                    # TODO
+                    self.runExportActions = unmarshall_namedtuple(marshalled_export, globals())
+                    
             except Exception as e:
                 errmsg = f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}"
                 self.logger.debug(e)

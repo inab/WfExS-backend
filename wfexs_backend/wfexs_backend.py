@@ -24,6 +24,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -33,7 +34,7 @@ import types
 import uuid
 
 from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
-from typing import cast, MutableMapping, Set, Tuple, Type, Union
+from typing import cast, MutableMapping, Pattern, Set, Tuple, Type, Union
 from typing import ClassVar
 from typing_extensions import Final
 
@@ -62,7 +63,7 @@ from .common import MaterializedContent, WorkflowType
 from .common import SecurityContextConfig, SecurityContextConfigBlock
 from .common import ExitVal, ProtocolFetcher, WfExSInstanceId
 from .common import MarshallingStatus, StagedSetup
-from .common import DEFAULT_FUSERMOUNT_CMD, DEFAULT_GIT_CMD, DEFAULT_PROGS
+from .common import DEFAULT_FUSERMOUNT_CMD, DEFAULT_PROGS
 
 from .encrypted_fs import DEFAULT_ENCRYPTED_FS_TYPE, \
   DEFAULT_ENCRYPTED_FS_CMD, DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT, \
@@ -79,12 +80,13 @@ from .utils.passphrase_wrapper import generate_nickname, generate_passphrase
 
 from .fetchers import AbstractStatefulFetcher
 from .fetchers import DEFAULT_SCHEME_HANDLERS
-from .fetchers.git import SCHEME_HANDLERS as GIT_SCHEME_HANDLERS, GitFetcher
+from .fetchers.git import GitFetcher
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
 from .fetchers.trs_files import SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
 from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
+from .fetchers.fasp import FASPFetcher
 
 from .workflow import WF
 
@@ -262,11 +264,22 @@ class WfExSBackend:
             sys.exit(1)
 
         self.local_config = local_config
+        # This is an updatable copy, as it is going to be augmented
+        # through the needs of the stateful fetchers
         self.progs : Dict[SymbolicName, Union[RelPath, AbsPath]] = DEFAULT_PROGS.copy()
 
         toolSect = local_config.get('tools', {})
-        self.git_cmd = toolSect.get('gitCommand', DEFAULT_GIT_CMD)
-        self.progs[DEFAULT_GIT_CMD] = self.git_cmd
+        # Populating paths
+        for keyC, pathC in toolSect.items():
+            # Skipping what this section is not going to manage and store
+            if keyC.endswith("Command") and not keyC.startswith('static'):
+                progKey = keyC[0:-len("Command")]
+                abs_cmd = shutil.which(pathC)
+                if abs_cmd is None:
+                    self.logger.critical(f'{progKey} command {pathC}, could not be reached relatively or through PATH {os.environ["PATH"]} (core: {progKey in self.progs})')
+                else:
+                    self.logger.info(f'Setting up {progKey} to {abs_cmd} (derived from {pathC}) (core: {progKey in self.progs})')
+                    self.progs[progKey] = abs_cmd
 
         encfsSect = toolSect.get('encrypted_fs', {})
         encfs_type = encfsSect.get('type', DEFAULT_ENCRYPTED_FS_TYPE)
@@ -365,17 +378,19 @@ class WfExSBackend:
         # cacheHandler is created on first use
         self._sngltn : MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher] = dict()
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, dict())
-
+        
+        fetchers_setup_block = local_config.get('fetchers-setup')
         # All the custom ones should be added here
-        self.cacheHandler.addSchemeHandlers(PRIDE_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(DRS_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(S3_SCHEME_HANDLERS)
-        self.cacheHandler.addSchemeHandlers(GS_SCHEME_HANDLERS)
+        self.addSchemeHandlers(PRIDE_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(DRS_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(S3_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(GS_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addStatefulSchemeHandlers(FASPFetcher, fetchers_setup_block)
 
         # These ones should have prevalence over other custom ones
-        self.addSchemeHandlers(GIT_SCHEME_HANDLERS)
-        self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS)
+        self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
+        self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS, fetchers_setup_block)
 
     @property
     def cacheWorkflowDir(self) -> AbsPath:
@@ -396,7 +411,7 @@ class WfExSBackend:
     def getCacheHandler(self, cache_type:CacheType) -> Tuple[SchemeHandlerCacheHandler, Optional[AbsPath]]:
         return self.cacheHandler, self.cachePathMap.get(cache_type)
 
-    def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher]) -> Optional[AbstractStatefulFetcher]:
+    def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher], setup_block: Optional[Mapping[str, Any]] = None) -> Optional[AbstractStatefulFetcher]:
         """
         Method to instantiate stateful fetchers once
         """
@@ -405,22 +420,52 @@ class WfExSBackend:
             if issubclass(statefulFetcher, AbstractStatefulFetcher):
                 instStatefulFetcher = self._sngltn.get(statefulFetcher)
                 if instStatefulFetcher is None:
-                    instStatefulFetcher = statefulFetcher(progs=self.progs)
+                    # Let's augment the list of needed progs by this
+                    # stateful fetcher
+                    instStatefulFetcher = statefulFetcher(progs=self.progs, setup_block=setup_block)
                     self._sngltn[statefulFetcher] = instStatefulFetcher
 
         return instStatefulFetcher
-
-    def addSchemeHandlers(self, schemeHandlers:Mapping[str, Union[ProtocolFetcher, Type[AbstractStatefulFetcher]]]) -> None:
+    
+    def addStatefulSchemeHandlers(self, statefulSchemeHandler: Type[AbstractStatefulFetcher], fetchers_setup_block: Optional[Mapping[str, Mapping[str, Any]]] = None) -> None:
+        """
+        This method adds scheme handlers (aka "fetchers") from
+        a given stateful fetcher, also adding the needed programs
+        """
+        
+        # Get the scheme handlers from this fetcher
+        schemeHandlers = statefulSchemeHandler.GetSchemeHandlers()
+        
+        # Setting the default list of programs
+        for prog in statefulSchemeHandler.GetNeededPrograms():
+            self.progs.setdefault(prog, cast(RelPath, prog))
+        
+        self.addSchemeHandlers(schemeHandlers, fetchers_setup_block=fetchers_setup_block)
+        
+    # This pattern is used to validate the schemes
+    SCHEME_PAT : Final[Pattern[str]] = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*$")
+    def addSchemeHandlers(self, schemeHandlers:Mapping[str, Union[ProtocolFetcher, Type[AbstractStatefulFetcher]]], fetchers_setup_block: Optional[Mapping[str, Mapping[str, Any]]] = None) -> None:
         """
         This method adds scheme handlers (aka "fetchers")
         or instantiates stateful scheme handlers (aka "stateful fetchers")
         """
         if isinstance(schemeHandlers, dict):
             instSchemeHandlers = dict()
+            if fetchers_setup_block is None:
+                fetchers_setup_block = dict()
             for scheme, schemeHandler in schemeHandlers.items():
+                if self.SCHEME_PAT.search(scheme) is None:
+                    self.logger.warning(f"Fetcher associated to scheme {scheme} has been skipped, as the scheme does not comply with RFC3986")
+                    continue
+                
+                lScheme = scheme.lower()
+                # When no setup block is available for the scheme fetcher,
+                # provide an empty one
+                setup_block = fetchers_setup_block.get(lScheme, dict())
+                
                 instSchemeHandler = None
                 if inspect.isclass(schemeHandler):
-                    instSchemeInstance = self.instantiateStatefulFetcher(schemeHandler)
+                    instSchemeInstance = self.instantiateStatefulFetcher(schemeHandler, setup_block=setup_block)
                     if instSchemeInstance is not None:
                         instSchemeHandler = instSchemeInstance.fetch
                 elif callable(schemeHandler):
@@ -428,7 +473,9 @@ class WfExSBackend:
 
                 # Only the ones which have overcome the sanity checks
                 if instSchemeHandler is not None:
-                    instSchemeHandlers[scheme] = instSchemeHandler
+                    # Schemes are case insensitive, so register only
+                    # the lowercase version
+                    instSchemeHandlers[lScheme] = instSchemeHandler
 
             self.cacheHandler.addSchemeHandlers(instSchemeHandlers)
 
