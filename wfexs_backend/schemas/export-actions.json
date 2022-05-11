@@ -1,0 +1,79 @@
+{
+	"$id": "https://www.eosc-life.eu/d7/WfExS-backend/Export-Actions",
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"title": "WfExS-backend exports definition",
+	"description": "WfExS-backend stage definition file (EOSC-Life Demonstrator 7 JSON Schemas)",
+	"$defs": {
+		"ExportAction": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"title": "A unique, symbolic name for this export action",
+					"type": "string",
+					"minLength": 1
+				},
+				"plugin": {
+					"title": "The plugin to be used to export the contents, and obtain a permanent / public identifier",
+					"type": "string",
+					"minLength": 1
+				},
+				"what": {
+					"title": "What output(s) to export",
+					"type": "array",
+					"items": {
+						"oneOf": [
+							{
+								"type": "string",
+								"enum": [
+									":working-directory:",
+									":stage-rocrate:",
+									":provenance-rocrate:"
+								]
+							},
+							{
+								"type": "string",
+								"pattern": "^(param|output):[^:;]+$"
+							}
+						]
+					},
+					"minItems": 1,
+					"uniqueItems": true
+				},
+				"security-context": {
+					"documentation": "The name of the most of the time required security context to be used to authenticate in order to export the resource",
+					"type": "string",
+					"pattern": "^[^:;]+$",
+					"minLength": 1
+				},
+				"setup": {
+					"documentation": "Optional parameters to be passed to set up the export plugin, containing details like the server to connect to",
+					"type": "object",
+					"minProperties": 1
+				}
+			},
+			"required": [
+				"id",
+				"plugin",
+				"what"
+			]
+		},
+		"ExportsBlock": {
+			"type": "array",
+			"items": {
+				"$ref": "#/$defs/ExportAction"
+			},
+			"uniqueItems": true,
+			"minItems": 1
+		}
+	},
+	"type": "object",
+	"properties": {
+		"exports": {
+			"$ref": "#/$defs/ExportsBlock"
+		}
+	},
+	"required": [
+		"exports"
+	],
+	"additionalProperties": false
+}
