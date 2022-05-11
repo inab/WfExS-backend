@@ -62,8 +62,7 @@
 			"items": {
 				"$ref": "#/$defs/ExportAction"
 			},
-			"uniqueItems": true,
-			"minItems": 1
+			"uniqueItems": true
 		}
 	},
 	"type": "object",

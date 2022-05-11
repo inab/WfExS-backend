@@ -149,7 +149,7 @@ class WF:
                  trs_endpoint=DEFAULT_TRS_ENDPOINT,
                  params=None,
                  outputs=None,
-                 default_actions=None,
+                 default_actions: Optional[Sequence[Any]] = None,
                  workflow_config=None,
                  creds_config: Optional[SecurityContextConfigBlock] =None,
                  instanceId: Optional[WfExSInstanceId] = None,
@@ -268,7 +268,7 @@ class WF:
             self.descriptor_type = descriptor_type
             self.params = params
             self.outputs = self.parseExpectedOutputs(outputs)
-            self.default_actions = self.parseExportActions(dict() if default_actions is None else default_actions)
+            self.default_actions = self.parseExportActions({'exports':[] if default_actions is None else default_actions})
 
             # The endpoint should always end with a slash
             if isinstance(trs_endpoint, str):
@@ -1251,7 +1251,7 @@ class WF:
             raise WFException(errstr)
             
         actions : MutableSequence[ExportAction] = []
-        for actionDesc in raw_actions:
+        for actionDesc in raw_actions['exports']:
             actionId = cast(SymbolicName, actionDesc['id'])
             pluginId = cast(SymbolicName, actionDesc['plugin'])
             
