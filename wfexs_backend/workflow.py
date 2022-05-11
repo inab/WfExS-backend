@@ -268,7 +268,7 @@ class WF:
             self.descriptor_type = descriptor_type
             self.params = params
             self.outputs = self.parseExpectedOutputs(outputs)
-            self.default_actions = self.parseExportActions(default_actions)
+            self.default_actions = self.parseExportActions(dict() if default_actions is None else default_actions)
 
             # The endpoint should always end with a slash
             if isinstance(trs_endpoint, str):
