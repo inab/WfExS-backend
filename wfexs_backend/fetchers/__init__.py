@@ -30,6 +30,7 @@ import shutil
 import stat
 
 from typing import cast, Any, Dict, List, Mapping, Optional, Tuple, Union
+from typing import MutableMapping, Sequence, Type
 
 from urllib import request, parse
 import urllib.error
@@ -48,12 +49,13 @@ class AbstractStatefulFetcher(abc.ABC):
     """
     Abstract class to model stateful fetchers
     """
-    def __init__(self, progs: Mapping[SymbolicName, Union[RelPath, AbsPath]]):
+    def __init__(self, progs: Mapping[SymbolicName, Union[RelPath, AbsPath]], setup_block: Optional[Mapping[str, Any]] = None):
         import inspect
         
         self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
         # This is used to resolve program names
         self.progs = progs
+        self.setup_block = setup_block  if isinstance(setup_block, dict)  else dict()
     
     @abc.abstractmethod
     def fetch(self, remote_file:URIType, cachedFilename: AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
@@ -61,6 +63,40 @@ class AbstractStatefulFetcher(abc.ABC):
         This is the method to be implemented by the stateful fetcher
         """
         pass
+    
+    @classmethod
+    @abc.abstractmethod
+    def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractStatefulFetcher]]":
+        return dict()
+    
+    @classmethod
+    @abc.abstractmethod
+    def GetNeededPrograms(cls) -> Sequence[SymbolicName]:
+        return tuple()
+    
+    @staticmethod
+    def ParseAndRemoveCredentials(remote_file: URIType) -> Tuple[parse.ParseResult, URIType]:
+        parsedInputURL = parse.urlparse(remote_file)
+        if parsedInputURL.username is not None:
+            assert parsedInputURL.hostname is not None
+            netloc = parsedInputURL.hostname
+            if parsedInputURL.port is not None:
+                netloc += ':' + str(parsedInputURL.port)
+            # Now the credentials are properly removed
+            remote_file = cast(URIType,
+                parse.urlunparse(
+                    (
+                        parsedInputURL.scheme,
+                        netloc,
+                        parsedInputURL.path,
+                        parsedInputURL.params,
+                        parsedInputURL.query,
+                        parsedInputURL.fragment
+                    )
+                )
+            )
+        
+        return parsedInputURL, remote_file
 
 class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
     
@@ -97,40 +133,53 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
     :param secContext:
     """
     
-    headers = {}
-    method = None
+    
+    # This is needed to remove possible embedded credentials,
+    # which should not be stored in the cache
     orig_remote_file = remote_file
-    opener = request.urlopen
+    parsedInputURL, remote_file = AbstractStatefulFetcher.ParseAndRemoveCredentials(orig_remote_file)
+    # Now the credentials are properly removed from remote_file
+    # we get them from the parsed url
+    username = parsedInputURL.username
+    password = parsedInputURL.password
+    
     if isinstance(secContext, dict):
         headers = secContext.get('headers', {}).copy()
         token = secContext.get('token')
         token_header = secContext.get('token_header')
-        username = secContext.get('username')
-        password = secContext.get('password')
+        username = secContext.get('username', username)
+        password = secContext.get('password', password)
         
-        if token is not None:
-            if token_header is not None:
-                headers[token_header] = token
-            else:
-                headers['Authorization'] = f'Bearer {token}'
-        elif username is not None:
-            if password is None:
-                password = ''
-            
-            opener = get_opener_with_auth(remote_file, username, password).open
-            
-            # # Time to set up user and password in URL
-            # parsedInputURL = parse.urlparse(remote_file)
-            # 
-            # netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
-            #                                                             safe='') + '@' + parsedInputURL.hostname
-            # if parsedInputURL.port is not None:
-            #     netloc += ':' + str(parsedInputURL.port)
-            # 
-            # # Now the credentials are properly set up
-            # remote_file = cast(URIType, parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
-            #                                 parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
         method = secContext.get('method')
+    else:
+        headers = {}
+        method = None
+        token = None
+        token_header = None
+        
+    opener = request.urlopen
+    if token is not None:
+        if token_header is not None:
+            headers[token_header] = token
+        else:
+            headers['Authorization'] = f'Bearer {token}'
+    elif username is not None:
+        if password is None:
+            password = ''
+        
+        opener = get_opener_with_auth(remote_file, username, password).open
+        
+        # # Time to set up user and password in URL
+        # parsedInputURL = parse.urlparse(remote_file)
+        # 
+        # netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
+        #                                                             safe='') + '@' + parsedInputURL.hostname
+        # if parsedInputURL.port is not None:
+        #     netloc += ':' + str(parsedInputURL.port)
+        # 
+        # # Now the credentials are properly set up
+        # remote_file = cast(URIType, parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
+        #                                 parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
     
     # Preparing where it is going to be written
     download_file : Union[io.TextIOBase, io.BufferedIOBase, io.RawIOBase, io.IOBase, io.BufferedWriter]
@@ -144,7 +193,10 @@ def fetchClassicURL(remote_file:URIType, cachedFilename:Union[AbsPath, io.BytesI
         req_remote = request.Request(remote_file, headers=headers, method=method)
         with opener(req_remote) as url_response:
             
-            uri_with_metadata = URIWithMetadata(url_response.url, dict(url_response.headers.items()))
+            uri_with_metadata = URIWithMetadata(
+                uri=url_response.url,
+                metadata=dict(url_response.headers.items())
+            )
             
             while True:
                 try:
@@ -174,7 +226,13 @@ def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
     :param secContext:
     """
     
-    parsedInputURL = parse.urlparse(remote_file)
+    orig_remote_file = remote_file
+    parsedInputURL, remote_file = AbstractStatefulFetcher.ParseAndRemoveCredentials(orig_remote_file)
+    # Now the credentials are properly removed from remote_file
+    # we get them from the parsed url
+    username = parsedInputURL.username
+    password = parsedInputURL.password
+    
     kind = None
     connParams : Dict[str, Optional[Union[int, str]]] = {
         'HOST': parsedInputURL.hostname,
@@ -186,11 +244,13 @@ def fetchFTPURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
         # There could be some corner cases where an empty
         # dictionary, or a dictionary without the needed keys
         # has been provided
-        username = secContext.get('username')
-        password = secContext.get('password')
-        if (username is not None) and (password is not None):
-            connParams['USER'] = username
-            connParams['PASSWORD'] = password
+        username = secContext.get('username', username)
+        password = secContext.get('password', password)
+    
+    # Setting credentials only when it is set
+    if (username is not None):
+        connParams['USER'] = username
+        connParams['PASSWORD'] = password  if password is not None  else  ''
     
     ftp_client = FTPDownloader(**connParams)
     retval = ftp_client.download(download_path=parsedInputURL.path, upload_path=cachedFilename)
@@ -208,43 +268,51 @@ def sftpCopy(sftp:paramiko.SFTPClient, sshPath:AbsPath, localPath:AbsPath, sshSt
     # Trios
     transTrios = []
     recur : List[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]] = []
-    kind = None
-    if stat.S_ISREG(sshStat.st_mode):
-        transTrios.append((sshPath, sshStat, localPath))
-        kind = ContentKind.File
-    elif stat.S_ISDIR(sshStat.st_mode):
-        # Recursive
-        os.makedirs(localPath, exist_ok=True)
-        recur = []
-        # List of remote files
-        for filename in sftp.listdir(sshPath):
-            rPath = cast(AbsPath, os.path.join(sshPath, filename))
-            lPath = cast(AbsPath, os.path.join(localPath, filename))
-            rStat = sftp.stat(rPath)
-            
-            if rStat.st_mode is not None:
-                if stat.S_ISREG(rStat.st_mode):
-                    transTrios.append((rPath, rStat, lPath))
-                elif stat.S_ISDIR(rStat.st_mode):
-                    recur.append((rPath, rStat, lPath))
-            else:
-                logging.warning(f"Corner case where either paramiko or server {sftp.get_channel().getpeername()} is not providing stats for {rPath}")
-        kind = ContentKind.Directory
+    kind : Optional[ContentKind] = None
+    if sshStat.st_mode is not None:
+        if stat.S_ISREG(sshStat.st_mode):
+            transTrios.append((sshPath, sshStat, localPath))
+            kind = ContentKind.File
+        elif stat.S_ISDIR(sshStat.st_mode):
+            # Recursive
+            os.makedirs(localPath, exist_ok=True)
+            recur = []
+            # List of remote files
+            for filename in sftp.listdir(sshPath):
+                rPath = cast(AbsPath, os.path.join(sshPath, filename))
+                lPath = cast(AbsPath, os.path.join(localPath, filename))
+                rStat = sftp.stat(rPath)
+                
+                if rStat.st_mode is not None:
+                    if stat.S_ISREG(rStat.st_mode):
+                        transTrios.append((rPath, rStat, lPath))
+                    elif stat.S_ISDIR(rStat.st_mode):
+                        recur.append((rPath, rStat, lPath))
+                else:
+                    sftp_channel = sftp.get_channel()
+                    server_name = None  if  sftp_channel is None  else  sftp_channel.getpeername()
+                    logging.warning(f"Corner case where either paramiko or server {server_name} is not providing stats for {rPath}")
+            kind = ContentKind.Directory
+    
+    numCopied : Union[bool, int]
+    if kind is None:
+        numCopied = False
     else:
-        return False, None
-    
-    # Now, transfer these
-    numCopied = 0
-    for remotePath, rStat, filename in transTrios:
-        sftp.get(remotePath, filename)
-        os.utime(filename, (rStat.st_atime, rStat.st_mtime))
-        numCopied += 1
-    
-    # And recurse on these
-    for rDir, rStat, lDir in recur:
-        subNumCopied , _ = sftpCopy(sftp, rDir, lDir, sshStat=rStat)
-        if isinstance(subNumCopied, int):
-            numCopied += subNumCopied
+        # Now, transfer these
+        numCopied = 0
+        for remotePath, rStat, filename in transTrios:
+            sftp.get(remotePath, filename)
+            # Only set it when it is possible
+            if rStat.st_mtime is not None:
+                st_atime = rStat.st_mtime  if rStat.st_atime is None  else  rStat.st_atime
+                os.utime(filename, (st_atime, rStat.st_mtime))
+            numCopied += 1
+        
+        # And recurse on these
+        for rDir, rStat, lDir in recur:
+            subNumCopied , _ = sftpCopy(sftp, rDir, lDir, sshStat=rStat)
+            if isinstance(subNumCopied, int):
+                numCopied += subNumCopied
     
     return numCopied, kind
 
@@ -258,27 +326,35 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
     :param secContext: The security context containing the credentials
     """
     
+    orig_remote_file = remote_file
+    parsedInputURL, remote_file = AbstractStatefulFetcher.ParseAndRemoveCredentials(orig_remote_file)
+    # Now the credentials are properly removed from remote_file
+    # we get them from the parsed url
+    username = parsedInputURL.username
+    password = parsedInputURL.password
+    
     # Sanitizing possible ill-formed inputs
     if not isinstance(secContext, dict):
         secContext = {}
     
-    parsedInputURL = parse.urlparse(remote_file)
-    # Although username and password could be obtained from URL, they are
-    # intentionally ignore in favour of security context
-    username = secContext.get('username')
-    password = secContext.get('password')
+    # Although username and password could be obtained from URL,
+    # security context takes precedence
+    username = secContext.get('username', username)
+    password = secContext.get('password', password)
     sshKey = secContext.get('key')
     if (username is None) or ((password is None) and (sshKey is None)):
         raise FetcherException("Cannot download content from {} without credentials".format(remote_file))
+    elif not isinstance(password, str) and not isinstance(sshKey, str):
+        raise FetcherException("Cannot download content from {} with crippled credentials".format(remote_file))
     
-    connBlock = {
+    connBlock : MutableMapping[str, Union[paramiko.pkey.PKey, str]] = {
         'username': username,
     }
     
     if sshKey is not None:
         pKey = paramiko.pkey.PKey(data=sshKey)
         connBlock['pkey'] = pKey
-    else:
+    elif isinstance(password, str):
         connBlock['password'] = password
     
     sshHost = parsedInputURL.hostname
