@@ -24,11 +24,12 @@ import shutil
 import subprocess
 import tempfile
 from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import cast
 from urllib import parse
 import uuid
 
-from .common import AbsPath, RelPath
-from .common import Container, ContainerType
+from .common import AbsPath, RelPath, URIType
+from .common import Container, ContainerType, Fingerprint
 from .common import ContainerFileNamingMethod, ContainerTaggedName
 from .common import DEFAULT_SINGULARITY_CMD
 
@@ -99,10 +100,10 @@ class SingularityContainerFactory(ContainerFactory):
             parsedTag = parse.urlparse(tag)
             singTag = 'docker://' + tag  if parsedTag.scheme == ''  else tag
             
-            containerFilename = simpleFileNameMethod(tag)
+            containerFilename = simpleFileNameMethod(cast(URIType, tag))
             containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
-            localContainerPath = os.path.join(self.engineContainersSymlinkDir, containerFilename)
-            localContainerPathMeta = os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta)
+            localContainerPath = cast(AbsPath, os.path.join(self.engineContainersSymlinkDir, containerFilename))
+            localContainerPathMeta = cast(AbsPath, os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta))
             
             self.logger.info("downloading singularity container: {} => {}".format(tag, localContainerPath))
             # First, let's materialize the container image
@@ -171,7 +172,7 @@ class SingularityContainerFactory(ContainerFactory):
                         if not os.path.exists(tmpContainerPath):
                             raise ContainerFactoryException("FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(tag, tmpContainerPath))
                         
-                        imageSignature = ComputeDigestFromFile(tmpContainerPath)
+                        imageSignature = cast(Fingerprint, ComputeDigestFromFile(tmpContainerPath))
                         # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
                         canonicalContainerPath = os.path.join(self.containersCacheDir, imageSignature.replace('=','~').replace('/','-').replace('+','_'))
                         if os.path.exists(canonicalContainerPath):
@@ -219,7 +220,7 @@ STDERR
             if tmpContainerPathMeta is not None:
                 if canonicalContainerPath is None:
                     canonicalContainerPath = os.path.normpath(os.path.join(self.engineContainersSymlinkDir, os.readlink(localContainerPath)))
-                canonicalContainerPathMeta = canonicalContainerPath + self.META_JSON_POSTFIX
+                canonicalContainerPathMeta = cast(AbsPath, canonicalContainerPath + self.META_JSON_POSTFIX)
                 shutil.move(tmpContainerPathMeta, canonicalContainerPathMeta)
             
             if canonicalContainerPathMeta is not None:
@@ -230,12 +231,12 @@ STDERR
             
             # Then, compute the signature
             if imageSignature is None:
-                imageSignature = ComputeDigestFromFile(localContainerPath, repMethod=nihDigester)
+                imageSignature = cast(Fingerprint, ComputeDigestFromFile(localContainerPath, repMethod=nihDigester))
             
             # Hardlink or copy the container and its metadata
             if containers_dir is not None:
-                containerPath = os.path.join(containers_dir, containerFilename)
-                containerPathMeta = os.path.join(containers_dir, containerFilenameMeta)
+                containerPath = cast(AbsPath, os.path.join(containers_dir, containerFilename))
+                containerPathMeta = cast(AbsPath, os.path.join(containers_dir, containerFilenameMeta))
                 
                 # Do not allow overwriting in offline mode
                 if not offline or not os.path.exists(containerPath):
@@ -248,7 +249,7 @@ STDERR
             containersList.append(
                 Container(
                     origTaggedName=tag,
-                    taggedName=singTag,
+                    taggedName=cast(URIType, singTag),
                     signature=imageSignature,
                     fingerprint=repo + '@' + partial_fingerprint,
                     type=self.containerType,
