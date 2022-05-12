@@ -1106,13 +1106,20 @@ class WF:
                             
                             if not isinstance(remote_files, list):  # more than one input file
                                 remote_files = [ remote_files ]
-                            remote_pairs, lastInput = self._fetchRemoteFiles(remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
+                            remote_pairs, lastInputMain = self._fetchRemoteFiles(remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
                             
                             if secondary_remote_files is not None:
                                 secondary_remote_files = [ secondary_remote_files ]
-                                secondary_remote_pairs, lastInput = self._fetchRemoteFiles(secondary_remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
+                                secondary_remote_pairs, lastInputSecondaries = self._fetchRemoteFiles(secondary_remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
                             else:
                                 secondary_remote_pairs = None
+                                lastInputSecondaries = lastInputMain
+                            
+                            # Now, set the highest one
+                            if lastInputMain >= lastInputSecondaries:
+                                lastInput = lastInputMain
+                            else:
+                                lastInput = lastInputSecondaries
                             
                             theInputs.append(
                                 MaterializedInput(
