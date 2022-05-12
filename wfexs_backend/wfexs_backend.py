@@ -794,6 +794,7 @@ class WfExSBackend:
                     self.logger.info(f'Running {command} at {instance_id} ({nickname})')
                     # Setting a custom symbol
                     theEnv['PROMPT_COMMAND'] = f"echo \"(WfExS '{nickname}')\""
+                    theEnv['PROMPT_DIRTRIM'] = '2'
 
                     cp = subprocess.run(command, cwd=wfSetup.work_dir, stdin=stdin, stdout=stdout, stderr=stderr, env=theEnv)
                     retval = cast(ExitVal, cp.returncode)
