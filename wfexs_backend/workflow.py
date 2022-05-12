@@ -268,7 +268,7 @@ class WF:
             self.descriptor_type = descriptor_type
             self.params = params
             self.outputs = self.parseExpectedOutputs(outputs)
-            self.default_actions = self.parseExportActions({'exports':[] if default_actions is None else default_actions})
+            self.default_actions = self.parseExportActions([] if default_actions is None else default_actions)
 
             # The endpoint should always end with a slash
             if isinstance(trs_endpoint, str):
@@ -956,82 +956,88 @@ class WF:
             secContext=secContext
         )
     
-    def _fetchRemoteFiles(self, remote_files: Sequence[Union[URIType, Mapping, List]], contextName: Optional[str], offline:bool, storeDir: Union[AbsPath,CacheType], cacheable: bool, inputDestDir:AbsPath, globExplode: Optional[str], lastInput: int = 0) -> Tuple[Sequence[MaterializedContent], int]:
-        remote_pairs = []
+    def _fetchRemoteFile(self,
+        remote_file: Union[URIType, Mapping, List],
+        contextName: Optional[str],
+        offline: bool,
+        storeDir: Union[AbsPath,CacheType],
+        cacheable: bool,
+        inputDestDir:AbsPath,
+        globExplode: Optional[str],
+        prefix: str = '',
+        hardenPrettyLocal: bool = True
+    ) -> Sequence[MaterializedContent]:
+        
         # Embedding the context
-        alt_remote_files = [ self.buildLicensedURI(remote_file, contextName=contextName) for remote_file in remote_files ]
-        for alt_remote_file in alt_remote_files:
-            matContent = self.wfexs.downloadContent(
-                alt_remote_file,
-                dest=storeDir,
-                offline=offline,
-                ignoreCache=not cacheable,
-                registerInCache=cacheable
-            )
+        alt_remote_file = self.buildLicensedURI(remote_file, contextName=contextName)
+        matContent = self.wfexs.downloadContent(
+            alt_remote_file,
+            dest=storeDir,
+            offline=offline,
+            ignoreCache=not cacheable,
+            registerInCache=cacheable
+        )
+        
+        # Now, time to create the symbolic link
+        prettyLocal = cast(AbsPath, os.path.join(inputDestDir, matContent.prettyFilename))
 
-            # Now, time to create the symbolic link
-            lastInput += 1
+        # As Nextflow has some issues when two inputs of a process
+        # have the same basename, harden by default
+        if not hardenPrettyLocal:
+            if os.path.islink(prettyLocal):
+                oldLocal = os.readlink(prettyLocal)
+            
+                hardenPrettyLocal = oldLocal != matContent.local
+            elif os.path.exists(prettyLocal):
+                hardenPrettyLocal = True
 
-            prettyLocal = cast(AbsPath, os.path.join(inputDestDir, matContent.prettyFilename))
+        if hardenPrettyLocal:
+            # Trying to avoid collisions on input naming
+            prettyLocal = cast(AbsPath, os.path.join(inputDestDir,
+                                       prefix + matContent.prettyFilename))
 
-            # As Nextflow has some issues when two inputs of a process
-            # have the same basename, harden by default
-            hardenPrettyLocal = True
-            # hardenPrettyLocal = False
-            # if os.path.islink(prettyLocal):
-            #     oldLocal = os.readlink(prettyLocal)
-            #
-            #     hardenPrettyLocal = oldLocal != matContent.local
-            # elif os.path.exists(prettyLocal):
-            #     hardenPrettyLocal = True
-
-            if hardenPrettyLocal:
-                # Trying to avoid collisions on input naming
-                prettyLocal = cast(AbsPath, os.path.join(inputDestDir,
-                                           str(lastInput) + '_' + matContent.prettyFilename))
-
-            if not os.path.exists(prettyLocal):
-                # We are either hardlinking or copying here
-                link_or_copy(matContent.local, prettyLocal)
-
-            if globExplode is not None:
-                prettyLocalPath = pathlib.Path(prettyLocal)
-                matParse = parse.urlparse(matContent.licensed_uri.uri)
-                for exp in prettyLocalPath.glob(globExplode):
-                    relPath = exp.relative_to(prettyLocalPath)
-                    relName = cast(RelPath, str(relPath))
-                    relExpPath = matParse.path
-                    if relExpPath[-1] != '/':
-                        relExpPath += '/'
-                    relExpPath += '/'.join(map(lambda part: parse.quote_plus(part), relPath.parts))
-                    expUri = parse.urlunparse((matParse.scheme, matParse.netloc, relExpPath, matParse.params, matParse.query, matParse.fragment))
-                    
-                    # TODO: enrich outputs to add licensing features?
-                    lic_expUri = LicensedURI(
-                        uri=cast(URIType, expUri),
-                        licences=matContent.licensed_uri.licences
-                    )
-                    remote_pairs.append(
-                        MaterializedContent(
-                            local=cast(AbsPath, str(exp)),
-                            licensed_uri=lic_expUri,
-                            prettyFilename=relName,
-                            metadata_array=matContent.metadata_array,
-                            kind=ContentKind.Directory if exp.is_dir() else ContentKind.File
-                        )
-                    )
-            else:
+        if not os.path.exists(prettyLocal):
+            # We are either hardlinking or copying here
+            link_or_copy(matContent.local, prettyLocal)
+        
+        remote_pairs = []
+        if globExplode is not None:
+            prettyLocalPath = pathlib.Path(prettyLocal)
+            matParse = parse.urlparse(matContent.licensed_uri.uri)
+            for exp in prettyLocalPath.glob(globExplode):
+                relPath = exp.relative_to(prettyLocalPath)
+                relName = cast(RelPath, str(relPath))
+                relExpPath = matParse.path
+                if relExpPath[-1] != '/':
+                    relExpPath += '/'
+                relExpPath += '/'.join(map(lambda part: parse.quote_plus(part), relPath.parts))
+                expUri = parse.urlunparse((matParse.scheme, matParse.netloc, relExpPath, matParse.params, matParse.query, matParse.fragment))
+                
+                # TODO: enrich outputs to add licensing features?
+                lic_expUri = LicensedURI(
+                    uri=cast(URIType, expUri),
+                    licences=matContent.licensed_uri.licences
+                )
                 remote_pairs.append(
                     MaterializedContent(
-                        local=prettyLocal,
-                        licensed_uri=matContent.licensed_uri,
-                        prettyFilename=matContent.prettyFilename,
-                        kind=matContent.kind,
-                        metadata_array=matContent.metadata_array
+                        local=cast(AbsPath, str(exp)),
+                        licensed_uri=lic_expUri,
+                        prettyFilename=relName,
+                        metadata_array=matContent.metadata_array,
+                        kind=ContentKind.Directory if exp.is_dir() else ContentKind.File
                     )
                 )
+        else:
+            remote_pair = MaterializedContent(
+                local=prettyLocal,
+                licensed_uri=matContent.licensed_uri,
+                prettyFilename=matContent.prettyFilename,
+                kind=matContent.kind,
+                metadata_array=matContent.metadata_array
+            )
+            remote_pairs.append(remote_pair)
         
-        return remote_pairs, lastInput
+        return remote_pairs
     
     def fetchInputs(self, params: Union[Mapping, Sequence], workflowInputs_destdir: AbsPath,
                     prefix:str='', lastInput:int=0, offline: bool = False) -> Tuple[List[MaterializedInput], int]:
@@ -1106,20 +1112,44 @@ class WF:
                             
                             if not isinstance(remote_files, list):  # more than one input file
                                 remote_files = [ remote_files ]
-                            remote_pairs, lastInputMain = self._fetchRemoteFiles(remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
                             
+                            remote_pairs : MutableSequence[MaterializedContent] = []
+                            for remote_file in remote_files:
+                                lastInput += 1
+                                t_remote_pairs = self._fetchRemoteFile(
+                                    remote_file,
+                                    contextName,
+                                    offline,
+                                    storeDir,
+                                    cacheable,
+                                    inputDestDir,
+                                    globExplode,
+                                    prefix=str(lastInput) + '_'
+                                )
+                                remote_pairs.extend(t_remote_pairs)
+                            
+                            secondary_remote_pairs : Optional[MutableSequence[MaterializedContent]]
                             if secondary_remote_files is not None:
-                                secondary_remote_files = [ secondary_remote_files ]
-                                secondary_remote_pairs, lastInputSecondaries = self._fetchRemoteFiles(secondary_remote_files, contextName, offline, storeDir, cacheable, inputDestDir, globExplode, lastInput)
+                                if not isinstance(secondary_remote_files, list):  # more than one secondary input file
+                                    secondary_remote_files = [ secondary_remote_files ]
+                                
+                                secondary_remote_pairs = []
+                                for secondary_remote_file in secondary_remote_files:
+                                    # The last fetched content prefix is the one used
+                                    # for all the secondaries
+                                    t_secondary_remote_pairs = self._fetchRemoteFile(
+                                        remote_file,
+                                        contextName,
+                                        offline,
+                                        storeDir,
+                                        cacheable,
+                                        inputDestDir,
+                                        globExplode,
+                                        prefix=str(lastInput) + '_'
+                                    )
+                                    secondary_remote_pairs.extend(t_secondary_remote_pairs)
                             else:
                                 secondary_remote_pairs = None
-                                lastInputSecondaries = lastInputMain
-                            
-                            # Now, set the highest one
-                            if lastInputMain >= lastInputSecondaries:
-                                lastInput = lastInputMain
-                            else:
-                                lastInput = lastInputSecondaries
                             
                             theInputs.append(
                                 MaterializedInput(
@@ -1251,14 +1281,17 @@ class WF:
     def parseExportActions(self, raw_actions: Sequence[Mapping[str, Any]]) -> Sequence[ExportAction]:
         assert self.outputs is not None
         
-        valErrors = config_validate(raw_actions, self.EXPORT_ACTIONS_SCHEMA)
+        o_raw_actions = {
+            "exports": raw_actions
+        }
+        valErrors = config_validate(o_raw_actions, self.EXPORT_ACTIONS_SCHEMA)
         if len(valErrors) > 0:
             errstr = f'ERROR in export actions definition block: {valErrors}'
             self.logger.error(errstr)
             raise WFException(errstr)
             
         actions : MutableSequence[ExportAction] = []
-        for actionDesc in raw_actions['exports']:
+        for actionDesc in raw_actions:
             actionId = cast(SymbolicName, actionDesc['id'])
             pluginId = cast(SymbolicName, actionDesc['plugin'])
             
@@ -1331,7 +1364,7 @@ class WF:
             with open(exportActionsFile, mode="r", encoding="utf-8") as eaf:
                 raw_actions = unmarshall_namedtuple(yaml.load(eaf, Loader=YAMLLoader))
             
-            actions = self.parseExportActions(raw_actions)
+            actions = self.parseExportActions(raw_actions['exports'])
         else:
             actions = None
             
@@ -1347,10 +1380,10 @@ class WF:
         else:
             creds_config = None
         
-        self.exportResults(actions, creds_config)
+        return self.exportResults(actions, creds_config)
     
     def exportResults(self, actions: Optional[Sequence[ExportAction]] = None, creds_config: Optional[SecurityContextConfigBlock] = None) -> Sequence[MaterializedExportAction]:
-        matActions = []
+        matActions : MutableSequence[MaterializedExportAction] = []
         # The precondition
         if self.unmarshallExport(offline=True) is None:
             # TODO
