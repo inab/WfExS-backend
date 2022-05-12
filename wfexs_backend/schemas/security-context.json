@@ -5,7 +5,7 @@
 	"description": "WfExS-backend security context file (EOSC-Life Demonstrator 7 JSON Schemas)",
 	"type": "object",
 	"patternProperties": {
-		"^[^:;]++$": {
+		"^[^:;]+$": {
 			"title": "Security context",
 			"type": "object",
 			"oneOf": [
