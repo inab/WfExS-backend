@@ -163,12 +163,17 @@
 									]
 								},
 								"url": {
-									"description": "The URL(s) where this input is available",
+									"description": "The URL(s) / URI(s) where this input is available",
 									"$ref": "#/definitions/InputURI"
 								},
 								"secondary-urls": {
-									"description": "Secondary URLs are URLs pointing to contents which will feed secondary inputs (CWL concept)",
+									"description": "Secondary URLs / URIs are pointing to contents which will feed secondary inputs (CWL concept)",
 									"$ref": "#/definitions/InputURI"
+								},
+								"preferred-name": {
+									"description": "Preferred base name / relative path for this input, instead of the derived one from the URL",
+									"type": "string",
+									"minLength": 1
 								},
 								"security-context": {
 									"type": "string",

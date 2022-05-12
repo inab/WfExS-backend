@@ -965,7 +965,8 @@ class WF:
         inputDestDir:AbsPath,
         globExplode: Optional[str],
         prefix: str = '',
-        hardenPrettyLocal: bool = False
+        hardenPrettyLocal: bool = False,
+        prettyRelname: Optional[RelPath] = None
     ) -> Sequence[MaterializedContent]:
         
         # Embedding the context
@@ -978,11 +979,21 @@ class WF:
             registerInCache=cacheable
         )
         
-        # Now, time to create the symbolic link
-        prettyLocal = cast(AbsPath, os.path.join(inputDestDir, matContent.prettyFilename))
-
-        # As Nextflow has some issues when two inputs of a process
-        # have the same basename, harden by default
+        # Now, time to create the link
+        if prettyRelname is None:
+            prettyRelname = matContent.prettyFilename
+        
+        prettyLocal = cast(AbsPath, os.path.join(inputDestDir, prettyRelname))
+        
+        # Protection against misbehaviours which could hijack the
+        # execution environment
+        realPrettyLocal = os.path.realpath(prettyLocal)
+        realInputDestDir = os.path.realpath(inputDestDir)
+        if not realPrettyLocal.startswith(realInputDestDir):
+            prettyRelname = cast(RelPath, os.path.basename(realPrettyLocal))
+            prettyLocal = cast(AbsPath, os.path.join(inputDestDir, prettyRelname))
+        
+        # Checking whether local name hardening is needed
         if not hardenPrettyLocal:
             if os.path.islink(prettyLocal):
                 oldLocal = os.readlink(prettyLocal)
@@ -994,7 +1005,7 @@ class WF:
         if hardenPrettyLocal:
             # Trying to avoid collisions on input naming
             prettyLocal = cast(AbsPath, os.path.join(inputDestDir,
-                                       prefix + matContent.prettyFilename))
+                                       prefix + prettyRelname))
 
         if not os.path.exists(prettyLocal):
             # We are either hardlinking or copying here
@@ -1031,7 +1042,7 @@ class WF:
             remote_pair = MaterializedContent(
                 local=prettyLocal,
                 licensed_uri=matContent.licensed_uri,
-                prettyFilename=matContent.prettyFilename,
+                prettyFilename=prettyRelname,
                 kind=matContent.kind,
                 metadata_array=matContent.metadata_array
             )
@@ -1104,6 +1115,7 @@ class WF:
                             contextName = inputs.get('security-context')
                             
                             secondary_remote_files = inputs.get('secondary-urls')
+                            pretty_relname = inputs.get('preferred-name')
                             
                             cacheable = not self.paranoidMode if inputs.get('cache', True) else False
 
@@ -1124,7 +1136,8 @@ class WF:
                                     cacheable,
                                     inputDestDir,
                                     globExplode,
-                                    prefix=str(lastInput) + '_'
+                                    prefix=str(lastInput) + '_',
+                                    prettyRelname=pretty_relname
                                 )
                                 remote_pairs.extend(t_remote_pairs)
                             

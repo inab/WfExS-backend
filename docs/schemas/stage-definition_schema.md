@@ -56,10 +56,11 @@
                   - [8.1.5.1.3.3.1.3.1.1. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > url > oneOf > item 2 > item 2 items > oneOf > item 2 > item 2 items > oneOf > LicensedURI`](#params_pattern1_oneOf_i4_oneOf_i0_url_oneOf_i2_items_oneOf_i2_items_oneOf_i0)
                   - [8.1.5.1.3.3.1.3.1.2. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > url > oneOf > item 2 > item 2 items > oneOf > item 2 > item 2 items > oneOf > PlainURI`](#params_pattern1_oneOf_i4_oneOf_i0_url_oneOf_i2_items_oneOf_i2_items_oneOf_i1)
         - [8.1.5.1.4. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > secondary-urls`](#params_pattern1_oneOf_i4_oneOf_i0_secondary-urls)
-        - [8.1.5.1.5. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > security-context`](#params_pattern1_oneOf_i4_oneOf_i0_security-context)
-        - [8.1.5.1.6. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > globExplode`](#params_pattern1_oneOf_i4_oneOf_i0_globExplode)
-        - [8.1.5.1.7. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoFill`](#params_pattern1_oneOf_i4_oneOf_i0_autoFill)
-        - [8.1.5.1.8. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoPrefix`](#params_pattern1_oneOf_i4_oneOf_i0_autoPrefix)
+        - [8.1.5.1.5. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > preferred-name`](#params_pattern1_oneOf_i4_oneOf_i0_preferred-name)
+        - [8.1.5.1.6. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > security-context`](#params_pattern1_oneOf_i4_oneOf_i0_security-context)
+        - [8.1.5.1.7. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > globExplode`](#params_pattern1_oneOf_i4_oneOf_i0_globExplode)
+        - [8.1.5.1.8. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoFill`](#params_pattern1_oneOf_i4_oneOf_i0_autoFill)
+        - [8.1.5.1.9. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoPrefix`](#params_pattern1_oneOf_i4_oneOf_i0_autoPrefix)
       - [8.1.5.2. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > Params`](#params_pattern1_oneOf_i4_oneOf_i1)
 - [9. [Optional] Property `WfExS-backend stage definition > outputs`](#outputs)
   - [9.1. [Optional]Pattern Property `WfExS-backend stage definition > outputs > ^[^:;]+$`](#outputs_pattern1)
@@ -449,8 +450,9 @@ must respect the following conditions
 | Property                                                                   | Pattern | Type             | Deprecated | Definition                                             | Title/Description                                                                    |
 | -------------------------------------------------------------------------- | ------- | ---------------- | ---------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
 | + [c-l-a-s-s](#params_pattern1_oneOf_i4_oneOf_i0_c-l-a-s-s )               | No      | enum (of string) | No         | -                                                      | -                                                                                    |
-| - [url](#params_pattern1_oneOf_i4_oneOf_i0_url )                           | No      | object           | No         | In #/definitions/InputURI                              | The URL(s) where this input is available                                             |
-| - [secondary-urls](#params_pattern1_oneOf_i4_oneOf_i0_secondary-urls )     | No      | object           | No         | Same as [url](#params_pattern1_oneOf_i4_oneOf_i0_url ) | Secondary URLs are URLs pointing to contents which will feed secondary inputs (C ... |
+| - [url](#params_pattern1_oneOf_i4_oneOf_i0_url )                           | No      | object           | No         | In #/definitions/InputURI                              | The URL(s) / URI(s) where this input is available                                    |
+| - [secondary-urls](#params_pattern1_oneOf_i4_oneOf_i0_secondary-urls )     | No      | object           | No         | Same as [url](#params_pattern1_oneOf_i4_oneOf_i0_url ) | Secondary URLs / URIs are pointing to contents which will feed secondary inputs  ... |
+| - [preferred-name](#params_pattern1_oneOf_i4_oneOf_i0_preferred-name )     | No      | string           | No         | -                                                      | Preferred base name / relative path for this input, instead of the derived one f ... |
 | - [security-context](#params_pattern1_oneOf_i4_oneOf_i0_security-context ) | No      | string           | No         | -                                                      | -                                                                                    |
 | - [globExplode](#params_pattern1_oneOf_i4_oneOf_i0_globExplode )           | No      | string           | No         | -                                                      | When this is set, and the class is directory, it helps filtering in what it shou ... |
 | - [autoFill](#params_pattern1_oneOf_i4_oneOf_i0_autoFill )                 | No      | boolean          | No         | -                                                      | When this key is true, the directory or file is considered an output one             |
@@ -519,7 +521,7 @@ Must be one of:
 | **Defined in**            | #/definitions/InputURI                                                    |
 |                           |                                                                           |
 
-**Description:** The URL(s) where this input is available
+**Description:** The URL(s) / URI(s) where this input is available
 
 | One of(Option)                                                 |
 | -------------------------------------------------------------- |
@@ -821,9 +823,23 @@ Must be one of:
 | **Same definition as**    | [url](#params_pattern1_oneOf_i4_oneOf_i0_url)                             |
 |                           |                                                                           |
 
-**Description:** Secondary URLs are URLs pointing to contents which will feed secondary inputs (CWL concept)
+**Description:** Secondary URLs / URIs are pointing to contents which will feed secondary inputs (CWL concept)
 
-##### <a name="params_pattern1_oneOf_i4_oneOf_i0_security-context"></a>8.1.5.1.5. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > security-context`
+##### <a name="params_pattern1_oneOf_i4_oneOf_i0_preferred-name"></a>8.1.5.1.5. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > preferred-name`
+
+| Type                      | `string`                                                                  |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+|                           |                                                                           |
+
+**Description:** Preferred base name / relative path for this input, instead of the derived one from the URL
+
+| Restrictions   |   |
+| -------------- | - |
+| **Min length** | 1 |
+|                |   |
+
+##### <a name="params_pattern1_oneOf_i4_oneOf_i0_security-context"></a>8.1.5.1.6. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > security-context`
 
 | Type                      | `string`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -835,7 +851,7 @@ Must be one of:
 | **Min length** | 1 |
 |                |   |
 
-##### <a name="params_pattern1_oneOf_i4_oneOf_i0_globExplode"></a>8.1.5.1.6. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > globExplode`
+##### <a name="params_pattern1_oneOf_i4_oneOf_i0_globExplode"></a>8.1.5.1.7. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > globExplode`
 
 | Type                      | `string`                                                                  |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -844,7 +860,7 @@ Must be one of:
 
 **Description:** When this is set, and the class is directory, it helps filtering in what it should be included
 
-##### <a name="params_pattern1_oneOf_i4_oneOf_i0_autoFill"></a>8.1.5.1.7. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoFill`
+##### <a name="params_pattern1_oneOf_i4_oneOf_i0_autoFill"></a>8.1.5.1.8. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoFill`
 
 | Type                      | `boolean`                                                                 |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -854,7 +870,7 @@ Must be one of:
 
 **Description:** When this key is true, the directory or file is considered an output one
 
-##### <a name="params_pattern1_oneOf_i4_oneOf_i0_autoPrefix"></a>8.1.5.1.8. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoPrefix`
+##### <a name="params_pattern1_oneOf_i4_oneOf_i0_autoPrefix"></a>8.1.5.1.9. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > oneOf > item 0 > autoPrefix`
 
 | Type                      | `boolean`                                                                 |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -1061,4 +1077,4 @@ Must be one of:
 |                      |                    |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-12 at 17:33:28 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-12 at 19:33:31 +0200
