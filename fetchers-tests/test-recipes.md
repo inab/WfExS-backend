@@ -25,8 +25,22 @@
     python -m pyftpdlib -u wfexs -P 123.qwe -d /etc
     ```
 
-    and in a WfExS profilenext command to fetch the test copy:
+    and in a WfExS profile next command to fetch the test copy:
 
     ```bash
     python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache fetch input ftp://127.0.0.1:2121/hosts fetchers-tests/tests.wfex.ctxt localtest
+    ```
+
+4. Testing FASP auth with EGA:
+
+    First, obtain IBM Aspera client, install it and add it to PATH. For instance:
+
+    ```bash
+    PATH="$HOME/.aspera/connect/bin:$PATH"
+    ```
+
+    Then, next command should work, fetching the test file from EGA.
+
+    ```bash
+    python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache fetch input fasp://xfer.ega-archive.org/file fetchers-tests/tests.wfex.ctxt fasp-ega
     ```

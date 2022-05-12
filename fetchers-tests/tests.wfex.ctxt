@@ -1,3 +1,6 @@
 localtest:
   username: wfexs
   password: 123.qwe
+fasp-ega:
+  username: test
+  password: just-testing-connectivity
