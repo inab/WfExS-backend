@@ -965,7 +965,7 @@ class WF:
         inputDestDir:AbsPath,
         globExplode: Optional[str],
         prefix: str = '',
-        hardenPrettyLocal: bool = True
+        hardenPrettyLocal: bool = False
     ) -> Sequence[MaterializedContent]:
         
         # Embedding the context
