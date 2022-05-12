@@ -401,6 +401,10 @@
 					]
 				}
 			}
+		},
+		"default_actions": {
+			"type": "array",
+			"$comment": "It should be '$ref': 'https://www.eosc-life.eu/d7/WfExS-backend/Export-Actions#/$defs/ExportsBlock', but the documentation generator complains"
 		}
 	},
 	"required": [

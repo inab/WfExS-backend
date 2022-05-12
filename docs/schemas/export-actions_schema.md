@@ -27,7 +27,7 @@
 
 |                      | Array restrictions |
 | -------------------- | ------------------ |
-| **Min items**        | 1                  |
+| **Min items**        | N/A                |
 | **Max items**        | N/A                |
 | **Items unicity**    | True               |
 | **Additional items** | False              |
@@ -48,4 +48,4 @@
 |                           |                                                                           |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-10 at 17:46:39 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-12 at 17:31:20 +0200

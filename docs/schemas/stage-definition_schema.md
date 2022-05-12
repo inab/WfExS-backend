@@ -73,6 +73,7 @@
     - [9.1.3. [Optional] Property `WfExS-backend stage definition > outputs > ^[^:;]+$ > preferredName`](#outputs_pattern1_preferredName)
     - [9.1.4. [Optional] Property `WfExS-backend stage definition > outputs > ^[^:;]+$ > fillFrom`](#outputs_pattern1_fillFrom)
     - [9.1.5. [Optional] Property `WfExS-backend stage definition > outputs > ^[^:;]+$ > glob`](#outputs_pattern1_glob)
+- [10. [Optional] Property `WfExS-backend stage definition > default_actions`](#default_actions)
 
 **Title:** WfExS-backend stage definition
 
@@ -94,6 +95,7 @@
 | - [workflow_config](#workflow_config ) | No      | object            | No         | -                         | -                                              |
 | - [params](#params )                   | No      | object            | No         | In #/definitions/Params   | -                                              |
 | - [outputs](#outputs )                 | No      | object            | No         | -                         | -                                              |
+| - [default_actions](#default_actions ) | No      | array             | No         | -                         | -                                              |
 |                                        |         |                   |            |                           |                                                |
 
 ## <a name="trs_endpoint"></a>1. [Optional] Property `WfExS-backend stage definition > trs_endpoint`
@@ -1042,5 +1044,21 @@ Must be one of:
 | **Min length** | 1 |
 |                |   |
 
+## <a name="default_actions"></a>10. [Optional] Property `WfExS-backend stage definition > default_actions`
+
+| Type                      | `array`                                                                   |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+|                           |                                                                           |
+
+|                      | Array restrictions |
+| -------------------- | ------------------ |
+| **Min items**        | N/A                |
+| **Max items**        | N/A                |
+| **Items unicity**    | False              |
+| **Additional items** | False              |
+| **Tuple validation** | N/A                |
+|                      |                    |
+
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-10 at 17:46:41 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-12 at 17:33:28 +0200

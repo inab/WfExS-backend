@@ -22,14 +22,14 @@
 
 **Description:** WfExS-backend security context file (EOSC-Life Demonstrator 7 JSON Schemas)
 
-| Property                  | Pattern | Type        | Deprecated | Definition | Title/Description |
-| ------------------------- | ------- | ----------- | ---------- | ---------- | ----------------- |
-| - [^[^:;]++$](#pattern1 ) | Yes     | Combination | No         | -          | Security context  |
-|                           |         |             |            |            |                   |
+| Property                 | Pattern | Type        | Deprecated | Definition | Title/Description |
+| ------------------------ | ------- | ----------- | ---------- | ---------- | ----------------- |
+| - [^[^:;]+$](#pattern1 ) | Yes     | Combination | No         | -          | Security context  |
+|                          |         |             |            |            |                   |
 
 ## <a name="pattern1"></a>1. [Optional]Pattern Property `WfExS-backend security context > Security context`
 > All property whose name matches the regular expression 
-```^[^:;]++$``` ([Test](https://regex101.com/?regex=%5E%5B%5E%3A%3B%5D%2B%2B%24))
+```^[^:;]+$``` ([Test](https://regex101.com/?regex=%5E%5B%5E%3A%3B%5D%2B%24))
 must respect the following conditions
 
 **Title:** Security context
@@ -196,4 +196,4 @@ Must be one of:
 **Description:** Custom headers to be used on the request
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-10 at 17:46:40 +0200
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2022-05-12 at 17:31:21 +0200
