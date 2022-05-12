@@ -1078,12 +1078,26 @@ class WF:
                     if inputClass in ("File", "Directory"):  # input files
                         inputDestDir = workflowInputs_destdir
                         globExplode = None
+
+                        path_tokens = linearKey.split('.')
+                        # Filling in the defaults
+                        assert len(path_tokens) >= 1
+                        if len(path_tokens) >= 1:
+                            pretty_relname = path_tokens[-1]
+                            if len(path_tokens) > 1:
+                                relative_dir = os.path.join(*path_tokens[0:-1])
+                            else:
+                                relative_dir = None
+                        else:
+                            pretty_relname = None
+                            relative_dir = None
+                        
                         if inputClass == 'Directory':
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
                             if inputs.get('autoFill', False):
                                 if inputs.get('autoPrefix', True):
-                                    autoFilledDir = os.path.join(self.outputsDir, *linearKey.split('.'))
+                                    autoFilledDir = os.path.join(self.outputsDir, *path_tokens)
                                 else:
                                     autoFilledDir = self.outputsDir
 
@@ -1091,14 +1105,10 @@ class WF:
                                 continue
 
                             globExplode = inputs.get('globExplode')
-
-                            # This is to nest the directory where to place the different files
-                            inputDestDir = cast(AbsPath, os.path.join(inputDestDir, *linearKey.split('.')))
-                            os.makedirs(inputDestDir, exist_ok=True)
                         elif inputClass == 'File' and inputs.get('autoFill', False):
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
-                            autoFilledFile = os.path.join(self.outputsDir, *linearKey.split('.'))
+                            autoFilledFile = os.path.join(self.outputsDir, path_tokens)
                             autoFilledDir = os.path.dirname(autoFilledFile)
                             # This is needed to assure the path exists
                             if autoFilledDir != self.outputsDir:
@@ -1115,10 +1125,28 @@ class WF:
                             contextName = inputs.get('security-context')
                             
                             secondary_remote_files = inputs.get('secondary-urls')
-                            pretty_relname = inputs.get('preferred-name')
+                            preferred_name_conf = inputs.get('preferred-name')
+                            if isinstance(preferred_name_conf, str):
+                                pretty_relname = preferred_name_conf
+                            elif not preferred_name_conf:
+                                # Remove the pre-computed relative dir
+                                pretty_relname = None
                             
                             cacheable = not self.paranoidMode if inputs.get('cache', True) else False
 
+                            # Setting up the relative dir preference
+                            reldir_conf = inputs.get('relative-dir')
+                            if isinstance(reldir_conf, str):
+                                relative_dir = reldir_conf
+                            elif not reldir_conf:
+                                # Remove the pre-computed relative dir
+                                relative_dir = None
+                            
+                            if relative_dir is not None:
+                                newInputDestDir = os.path.realpath(os.path.join(inputDestDir, relative_dir))
+                                if newInputDestDir.startswith(os.path.realpath(inputDestDir)):
+                                    inputDestDir = cast(AbsPath, newInputDestDir)
+                            
                             # The storage dir depends on whether it can be cached or not
                             storeDir : Union[CacheType, AbsPath] = CacheType.Input if cacheable else workflowInputs_destdir
                             

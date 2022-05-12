@@ -172,7 +172,14 @@
 								},
 								"preferred-name": {
 									"description": "Preferred base name / relative path for this input, instead of the derived one from the URL",
-									"type": "string",
+									"type": ["boolean", "string"],
+									"default": false,
+									"minLength": 1
+								},
+								"relative-dir": {
+									"description": "Put contents fetched for this input in this relative directory. This option does not affect preferred-name",
+									"type": ["boolean", "string"],
+									"default": false,
 									"minLength": 1
 								},
 								"security-context": {

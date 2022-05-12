@@ -541,7 +541,10 @@ def main():
     
     if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
         print("\t- Instance {} (nickname '{}') (to be used with -J)".format(wfSetup.instance_id, wfSetup.nickname))
-        wfInstance.stageWorkDir()
+        stagedSetup = wfInstance.stageWorkDir()
+        if command == WfExS_Commands.Stage:
+            print("\t- Instance {} (nickname '{}') is {} ready".format(wfSetup.instance_id, wfSetup.nickname, 'NOT'  if stagedSetup.is_damaged  else 'now'))
+            
         
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)
