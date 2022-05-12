@@ -1138,7 +1138,7 @@ class WF:
                                     # The last fetched content prefix is the one used
                                     # for all the secondaries
                                     t_secondary_remote_pairs = self._fetchRemoteFile(
-                                        remote_file,
+                                        secondary_remote_file,
                                         contextName,
                                         offline,
                                         storeDir,
