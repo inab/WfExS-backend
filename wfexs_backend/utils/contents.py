@@ -174,10 +174,20 @@ def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
     # are in the same filesystem
     # as of https://unix.stackexchange.com/a/44250
     dest_exists = os.path.exists(dest)
-    if dest_exists:
-        dest_st_dev = os.lstat(dest).st_dev
-    else:
-        dest_st_dev = os.lstat(os.path.dirname(dest)).st_dev
+    dest_or_ancestor_exists = dest_exists
+    dest_or_ancestor = dest
+    while not dest_or_ancestor_exists:
+        dest_or_ancestor = os.path.dirname(dest_or_ancestor)
+        dest_or_ancestor_exists = os.path.exists(dest_or_ancestor)
+    dest_st_dev = os.lstat(dest_or_ancestor).st_dev
+    
+    # It could be a subtree of not existing directories
+    if not dest_exists:
+        dest_parent = os.path.dirname(dest)
+        if not os.path.isdir(dest_parent):
+            os.makedirs(dest_parent)
+    
+    # Now, link or copy
     if os.lstat(src).st_dev == dest_st_dev:
         if os.path.isfile(src):
             if dest_exists:
