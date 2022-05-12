@@ -25,6 +25,7 @@ from typing import MutableSequence
 from ..common import AbsPath, AbstractGeneratedContent, ContentKind
 from ..common import ExpectedOutput, Fingerprint, GeneratedContent
 from ..common import GeneratedDirectoryContent, LicensedURI, RelPath
+from ..common import AnyPath
 
 from .digests import nihDigester, ComputeDigestFromDirectory
 from .digests import ComputeDigestFromFile, ComputeDigestFromGeneratedContentList
@@ -166,9 +167,10 @@ def CWLDesc2Content(
 
     return cast(Sequence[AbstractGeneratedContent], matValues)
 
-def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
+def link_or_copy(src: AnyPath, dest: AnyPath):
     # We should not deal with symlinks
     src = cast(AbsPath, os.path.realpath(src))
+    dest = cast(AbsPath, os.path.realpath(dest))
     
     # First, check whether inputs and content
     # are in the same filesystem
@@ -177,7 +179,7 @@ def link_or_copy(src: Union[RelPath, AbsPath], dest: Union[RelPath, AbsPath]):
     dest_or_ancestor_exists = dest_exists
     dest_or_ancestor = dest
     while not dest_or_ancestor_exists:
-        dest_or_ancestor = os.path.dirname(dest_or_ancestor)
+        dest_or_ancestor = cast(AbsPath, os.path.dirname(dest_or_ancestor))
         dest_or_ancestor_exists = os.path.exists(dest_or_ancestor)
     dest_st_dev = os.lstat(dest_or_ancestor).st_dev
     
