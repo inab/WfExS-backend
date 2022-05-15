@@ -167,7 +167,7 @@ def CWLDesc2Content(
 
     return cast(Sequence[AbstractGeneratedContent], matValues)
 
-def link_or_copy(src: AnyPath, dest: AnyPath):
+def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
     # We should not deal with symlinks
     src = cast(AbsPath, os.path.realpath(src))
     dest = cast(AbsPath, os.path.realpath(dest))
@@ -190,7 +190,7 @@ def link_or_copy(src: AnyPath, dest: AnyPath):
             os.makedirs(dest_parent)
     
     # Now, link or copy
-    if os.lstat(src).st_dev == dest_st_dev:
+    if os.lstat(src).st_dev == dest_st_dev and not force_copy:
         if os.path.isfile(src):
             if dest_exists:
                 os.unlink(dest)
