@@ -205,7 +205,7 @@ class MaterializedContent(NamedTuple):
     local: Local absolute path of the content which was materialized. It
       can be either a path in the cached inputs directory, or an absolute
       path in the inputs directory of the execution
-    uri: Either an URL or a CURIE of the content which was materialized,
+    licensed_uri: Either an URL or a CURIE of the content which was materialized,
       needed for the provenance
     prettyFilename: The preferred filename to use in the inputs directory
       of the execution environment
@@ -295,7 +295,7 @@ class GeneratedContent(AbstractGeneratedContent, NamedTuple):
     preferredFilename: The preferred relative filename to use when it is
       uploaded from the computational environment
     """
-    local: AbsPath
+    local: AnyPath
     signature: Fingerprint
     uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
@@ -314,13 +314,14 @@ class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
     preferredFilename: The preferred relative filename to use when it is
       uploaded from the computational environment
     """
-    local: AbsPath
+    local: AnyPath
     values: Sequence[AbstractGeneratedContent]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
     uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
     signature: Optional[Fingerprint] = None
     secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None
 
+AnyContent = Union[MaterializedContent, GeneratedContent, GeneratedDirectoryContent]
 
 class MaterializedOutput(NamedTuple):
     """
@@ -619,6 +620,8 @@ class ExportAction(NamedTuple):
     what: Sequence[ExportItem]
     context_name: Optional[SymbolicName]
     setup: Optional[SecurityContextConfig]
+    preferred_scheme: Optional[str]
+    preferred_id: Optional[str]
 
 class MaterializedExportAction(NamedTuple):
     """
@@ -626,6 +629,7 @@ class MaterializedExportAction(NamedTuple):
     a permanent identifier was obtained, along with some metadata
     """
     action: ExportAction
+    elems: Sequence[AnyContent]
     pid: URIWithMetadata
     when: datetime.datetime = datetime.datetime.now(tz=datetime.timezone.utc)
 
