@@ -40,6 +40,7 @@ from ..common import AbsPath, RelPath, ContentKind, SecurityContextConfig
 from ..common import SymbolicName, URIType, URIWithMetadata
 from ..common import ProtocolFetcher, ProtocolFetcherReturn
 
+from ..utils.contents import link_or_copy
 from ..utils.ftp_downloader import FTPDownloader
 
 class FetcherException(AbstractWfExSException):
@@ -386,7 +387,8 @@ def fetchSSHURL(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional
 
 def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
     """
-    Method to fetch contents from local contents
+    Method to fetch contents from local contents, optionally impersonating
+    the original CURIE (useful for cache exports)
 
     :param remote_file:
     :param cachedFilename: Destination filename for the fetched content
@@ -394,21 +396,35 @@ def fetchFile(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[S
     """
     
     parsedInputURL = parse.urlparse(remote_file)
-    localPath = parsedInputURL.path
+    localPath = cast(AbsPath, parsedInputURL.path)
     if not os.path.exists(localPath):
         raise FetcherException("Local path {} is not available".format(localPath))
     
     kind = None
     if os.path.isdir(localPath):
-        shutil.copytree(localPath, cachedFilename)
         kind = ContentKind.Directory
     elif os.path.isfile(localPath):
-        shutil.copy2(localPath, cachedFilename)
         kind = ContentKind.File
     else:
         raise FetcherException("Local path {} is neither a file nor a directory".format(localPath))
+    # Efficient linking of data
+    force_copy = parsedInputURL.fragment=="copy"
+    metadata = {}
+    the_remote_file = remote_file
+    # Only impersonate under very specific conditions
+    if parsedInputURL.query:
+        qP = parse.parse_qs(parsedInputURL.query)
+        new_remote_file = qP.get('inject_as')
+        if new_remote_file:
+            nP = parse.urlparse(new_remote_file[0])
+            if nP.scheme:
+                the_remote_file = cast(URIType, new_remote_file[0])
+                force_copy = True
+                metadata['injected'] = True
+                metadata['impersonated'] = True
+    link_or_copy(localPath, cachedFilename, force_copy=force_copy)
     
-    return kind, [ URIWithMetadata(remote_file, {}) ], None
+    return kind, [ URIWithMetadata(the_remote_file, metadata) ], None
 
 DEFAULT_SCHEME_HANDLERS : Mapping[str, ProtocolFetcher] = {
     'http': fetchClassicURL,
