@@ -32,12 +32,24 @@
 							},
 							{
 								"type": "string",
-								"pattern": "^(param|output):[^:;]+$"
+								"pattern": "^(param|output):[^:;]*$"
 							}
 						]
 					},
 					"minItems": 1,
 					"uniqueItems": true
+				},
+				"preferred-pid": {
+					"type": "Preferred permanent id to be assigned",
+					"documentation": "Some export plugins are able to (or even have to) choose the permanent identifier to assign. Others will ignore this",
+					"type": "string",
+					"minLength": 1
+				},
+				"preferred-scheme": {
+					"type": "Preferred scheme to be used",
+					"documentation": "Very few export plugins are able to provide permanent ids in several schemes. Even fewer have to know it. Most of them will ignore this",
+					"type": "string",
+					"minLength": 1
 				},
 				"security-context": {
 					"documentation": "The name of the most of the time required security context to be used to authenticate in order to export the resource",
