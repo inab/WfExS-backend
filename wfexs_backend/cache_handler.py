@@ -128,7 +128,13 @@ class SchemeHandlerCacheHandler:
         
         return metaStructure
     
-    def list(self, destdir:AbsPath, *args: str, acceptGlob:bool=False, cascade:bool=False) -> Iterator[Tuple[LicensedURI, Mapping[str,Any]]]:
+    def list(
+        self,
+        destdir: AbsPath,
+        *args: str,
+        acceptGlob:bool = False,
+        cascade:bool = False
+    ) -> Iterator[Tuple[LicensedURI, Mapping[str,Any]]]:
         """
         This method iterates over the list of metadata entries,
         using glob patterns if requested
@@ -218,7 +224,14 @@ class SchemeHandlerCacheHandler:
             
             cascadeEntries = newCascadeEntries
     
-    def remove(self, destdir:AbsPath, *args, doRemoveFiles:bool=False, acceptGlob:bool=False, cascade:bool=False) -> Iterator[Tuple[LicensedURI, AbsPath, Optional[AbsPath]]]:
+    def remove(
+        self,
+        destdir: AbsPath,
+        *args,
+        doRemoveFiles: bool = False,
+        acceptGlob: bool = False,
+        cascade: bool = False
+    ) -> Iterator[Tuple[LicensedURI, AbsPath, Optional[AbsPath]]]:
         """
         This method iterates elements from metadata entries,
         and optionally the cached value
@@ -261,7 +274,15 @@ class SchemeHandlerCacheHandler:
                 
                 yield licensed_meta_uri, metaFile, removeCachedCopyPath
     
-    def inject(self, destdir:AbsPath, the_remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType], fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath, List[AbsPath]]]=None) -> Tuple[Optional[AbsPath], Optional[Fingerprint]]:
+    def inject(
+        self,
+        destdir: AbsPath,
+        the_remote_file: Union[LicensedURI, urllib.parse.ParseResult, URIType],
+        fetched_metadata_array: Optional[List[URIWithMetadata]] = None,
+        finalCachedFilename: Optional[AbsPath] = None,
+        tempCachedFilename: Optional[AbsPath] = None,
+        inputKind: Optional[Union[ContentKind, AbsPath, List[AbsPath]]] = None
+    ) -> Tuple[Optional[AbsPath], Optional[Fingerprint]]:
         return self._inject(
             self.getHashDir(destdir),
             the_remote_file,
@@ -272,7 +293,16 @@ class SchemeHandlerCacheHandler:
             inputKind=inputKind
         )
     
-    def _inject(self, hashDir:AbsPath, the_remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType], destdir:AbsPath, fetched_metadata_array:Optional[List[URIWithMetadata]]=None, finalCachedFilename:Optional[AbsPath]=None, tempCachedFilename:Optional[AbsPath]=None, inputKind:Optional[Union[ContentKind, AbsPath, List[AbsPath]]]=None) -> Tuple[Optional[AbsPath], Optional[Fingerprint]]:
+    def _inject(
+        self,
+        hashDir: AbsPath,
+        the_remote_file: Union[LicensedURI, urllib.parse.ParseResult, URIType],
+        destdir: AbsPath,
+        fetched_metadata_array: Optional[List[URIWithMetadata]] = None,
+        finalCachedFilename: Optional[AbsPath] = None,
+        tempCachedFilename: Optional[AbsPath] = None,
+        inputKind: Optional[Union[ContentKind, AbsPath, List[AbsPath]]] = None
+    ) -> Tuple[Optional[AbsPath], Optional[Fingerprint]]:
         """
         This method has been created to be able to inject a cached metadata entry
         """
@@ -360,7 +390,14 @@ class SchemeHandlerCacheHandler:
         
         return finalCachedFilename, fingerprint
     
-    def validate(self, destdir:AbsPath, *args, acceptGlob:bool=False, cascade:bool=False) -> Iterator[Tuple[LicensedURI, bool, Optional[Mapping]]]:
+    def validate(
+        self,
+        destdir:AbsPath,
+        *args,
+        acceptGlob:bool=False,
+        cascade:bool=False
+    ) -> Iterator[Tuple[LicensedURI, bool, Optional[Mapping]]]:
+        
         hashDir = self.getHashDir(destdir)
         
         retMetaStructure : Optional[Mapping]
@@ -402,7 +439,16 @@ class SchemeHandlerCacheHandler:
             
             yield licensed_meta_uri, validated, retMetaStructure
     
-    def fetch(self, remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]], destdir:AbsPath, offline:bool, ignoreCache:bool=False, registerInCache:bool=True, secContext:Optional[SecurityContextConfig]=None) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
+    def fetch(
+        self,
+        remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]],
+        destdir:AbsPath,
+        offline:bool,
+        ignoreCache:bool=False,
+        registerInCache:bool=True,
+        secContext:Optional[SecurityContextConfig]=None
+    ) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
+        
         # The directory with the content, whose name is based on sha256
         if not os.path.exists(destdir):
             try:
