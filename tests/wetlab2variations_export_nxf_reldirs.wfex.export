@@ -1,0 +1,8 @@
+exports:
+  - id: vcfs
+    plugin: cache
+    what:
+      - param:BSQR.files
+      - param:BSQR.indexes
+    preferred-scheme: rogue
+    preferred-pid: one

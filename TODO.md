@@ -31,9 +31,9 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
   - [ ] **Step 6.c**: Create a micro CWL workflow which uses Crypt4GH to encrypt one or more files (depends on `5.d`).
 
-- [ ] **Step 7**: Add upload capabilities of results, which generate permanent identifiers.
+- [x] **Step 7**: Add upload capabilities of results, which generate permanent identifiers.
 
-  - [ ] **Step 7.a**: Upload to cache system.
+  - [x] **Step 7.a**: Upload to cache system.
 
   - [ ] **Step 7.b**: Upload to WebDAV server.
 

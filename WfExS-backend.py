@@ -23,7 +23,7 @@ import os
 import sys
 import shutil
 import tempfile
-from typing import Type, Union
+from typing import cast, Sequence, Type, Union
 
 import yaml
 
@@ -41,6 +41,7 @@ from wfexs_backend.workflow import WF
 from wfexs_backend import get_WfExS_version
 from wfexs_backend.common import StrDocEnum, ArgsDefaultWithRawHelpFormatter
 from wfexs_backend.common import CacheType as WfExS_CacheType
+from wfexs_backend.common import SymbolicName
 from wfexs_backend.utils.misc import DatetimeEncoder
 
 class WfExS_Commands(StrDocEnum):
@@ -143,7 +144,7 @@ def genParserSub(
     
     return ap_
 
-def processCacheCommand(wfBackend:WfExSBackend, args: argparse.Namespace, logLevel) -> int:
+def processCacheCommand(wfBackend: WfExSBackend, args: argparse.Namespace, logLevel) -> int:
     """
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
@@ -293,9 +294,14 @@ def processExportCommand(wfInstance: WF, args: argparse.Namespace, loglevel) -> 
     retval = 0
     if args.export_contents_command == WfExS_Export_Commands.List:
         for mExport in wfInstance.listMaterializedExportActions():
-            print('f{mExport}')
+            print(f'{mExport}')
     elif args.export_contents_command == WfExS_Export_Commands.Run:
-        expval = wfInstance.exportResultsFromFiles(args.exportsConfigFilename, args.securityContextsConfigFilename)
+        expval = wfInstance.exportResultsFromFiles(
+            args.exportsConfigFilename,
+            args.securityContextsConfigFilename,
+            action_ids=cast(Sequence[SymbolicName], args.export_contents_command_args)
+        )
+        print(f'{expval}')
     
     return retval
 
