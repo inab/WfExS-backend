@@ -30,7 +30,7 @@ import threading
 import time
 
 from typing import Any, List, Mapping, Optional, Pattern, Sequence
-from typing import cast, TYPE_CHECKING, Tuple, Type, Union
+from typing import cast, Iterable, TYPE_CHECKING, Tuple, Type, Union
 from typing import MutableSequence
 
 from typing_extensions import Final
@@ -70,6 +70,7 @@ from .common import ExportItem, ExportItemType
 from .common import ExportAction, MaterializedExportAction
 # These imports are needed to properly unmarshall from YAML
 from .common import Container, URIWithMetadata, ExitVal
+from .common import AnyContent, SymbolicParamName, SymbolicOutputName
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
@@ -117,6 +118,9 @@ def _wakeupEncDir(cond: threading.Condition, workDir: AbsPath, logger: logging.L
 
 
 class WFException(AbstractWfExSException):
+    pass
+
+class ExportActionException(AbstractWfExSException):
     pass
 
 
@@ -1364,6 +1368,8 @@ class WF:
                 what=whatToExport,
                 context_name=actionDesc.get('security-context'),
                 setup=actionDesc.get('setup'),
+                preferred_scheme=actionDesc.get('preferred-scheme'),
+                preferred_id=actionDesc.get('preferred-pid'),
             )
             actions.append(action)
 
@@ -1392,15 +1398,23 @@ class WF:
         self.marshallExecute()
     
     def listMaterializedExportActions(self) -> Sequence[MaterializedExportAction]:
-        self.unmarshallExport(offline=True)
         """
         This method should return the pids generated from the contents
         """
+        self.unmarshallExport(offline=True)
+        
         assert self.runExportActions is not None
         
         return self.runExportActions
     
-    def exportResultsFromFiles(self, exportActionsFile: Optional[AnyPath], securityContextFile: Optional[AnyPath]) -> Sequence[MaterializedExportAction]:
+    def exportResultsFromFiles(
+        self,
+        exportActionsFile: Optional[AnyPath] = None,
+        securityContextFile: Optional[AnyPath] = None,
+        action_ids: Sequence[SymbolicName] = [],
+        fail_ok: bool = False
+    ) -> Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]:
+        
         if exportActionsFile is not None:
             with open(exportActionsFile, mode="r", encoding="utf-8") as eaf:
                 raw_actions = unmarshall_namedtuple(yaml.load(eaf, Loader=YAMLLoader))
@@ -1421,18 +1435,95 @@ class WF:
         else:
             creds_config = None
         
-        return self.exportResults(actions, creds_config)
+        return self.exportResults(actions, creds_config, action_ids, fail_ok=fail_ok)
     
-    def exportResults(self, actions: Optional[Sequence[ExportAction]] = None, creds_config: Optional[SecurityContextConfigBlock] = None) -> Sequence[MaterializedExportAction]:
-        matActions : MutableSequence[MaterializedExportAction] = []
+    def exportResults(
+        self,
+        actions: Optional[Sequence[ExportAction]] = None,
+        creds_config: Optional[SecurityContextConfigBlock] = None,
+        action_ids: Sequence[SymbolicName] = [],
+        fail_ok: bool = False
+    ) -> Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]:
+        
         # The precondition
-        if self.unmarshallExport(offline=True) is None:
+        if self.unmarshallExport(offline=True, fail_ok=True) is None:
             # TODO
             raise WFException("FIXME")
         
-        # If actions is None, then try using embedded ones
+        # If actions is None, then try using default ones
+        matActions : MutableSequence[MaterializedExportAction] = []
+        actionErrors : MutableSequence[Tuple[ExportAction, Exception]] = []
+        if actions is None:
+            actions = self.default_actions
+            
+            # Corner case
+            if actions is None:
+                return matActions, actionErrors
         
-        # TODO
+        filtered_actions : Sequence[ExportAction]
+        if len(action_ids) > 0:
+            action_ids_set = set(action_ids)
+            filtered_actions = list(filter(lambda action: action.action_id in action_ids_set, actions))
+        else:
+            filtered_actions = actions
+        
+        # First, let's check all the requested actions are viable
+        for action in filtered_actions:
+            try:
+                # check the export items are available
+                elems = self.locateExportItems(action.what)
+                
+                # check the security context is available
+                a_setup_block : Optional[SecurityContextConfig] = action.setup
+                if a_setup_block is not None:
+                    # Clone it
+                    a_setup_block = a_setup_block.copy()
+                
+                if action.context_name is None:
+                    pass
+                elif creds_config is not None:
+                    setup_block = creds_config.get(action.context_name)
+                    if setup_block is None:
+                        raise ExportActionException(f"No configuration found for context {action.context_name} (action {action.action_id})")
+                    # Merging both setup blocks
+                    if a_setup_block is None:
+                        a_setup_block = setup_block
+                    else:
+                        a_setup_block.update(setup_block)
+                else:
+                    raise ExportActionException(f"Missing security context block with requested context {action.context_name} (action {action.action_id})")
+                
+                # check whether plugin is available
+                export_p = self.wfexs.instantiateExportPlugin(self, action.plugin_id, a_setup_block)
+                
+                # Export the contents and obtain a PID
+                new_pid = export_p.push(
+                    elems,
+                    preferred_scheme=action.preferred_scheme,
+                    preferred_id=action.preferred_id
+                )
+                
+                # Last, register the PID
+                matAction = MaterializedExportAction(
+                    action=action,
+                    elems=elems,
+                    pid=new_pid
+                )
+                
+                matActions.append(matAction)
+            except Exception as e:
+                self.logger.exception(f"Export action {action.action_id} (plugin {action.plugin_id}) failed")
+                actionErrors.append((action, e))
+        
+        if len(actionErrors) > 0:
+            errmsg = "There were errors in actions {0}, skipping:\n{1}".format(
+                ",".join(map(lambda err: err[0].action_id, actionErrors)),
+                "\n".join(map(lambda err: str(err[1]), actionErrors))
+            )
+                
+            self.logger.error(errmsg)
+            if not fail_ok:
+                raise ExportActionException(errmsg)
         
         # Last, save the metadata we have gathered
         if self.runExportActions is None:
@@ -1440,9 +1531,10 @@ class WF:
         else:
             self.runExportActions.extend(matActions)
         
+        # And record them
         self.marshallExport(overwrite=len(matActions) > 0)
         
-        return matActions
+        return matActions, actionErrors
 
 
     def marshallConfig(self, overwrite: bool = False) -> Union[bool, datetime.datetime]:
@@ -1817,7 +1909,88 @@ class WF:
             self.exportMarshalled = datetime.datetime.fromtimestamp(os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc)
         
         return self.exportMarshalled
-
+    
+    def locateExportItems(self, items: Sequence[ExportItem]) -> Sequence[AnyContent]:
+        """
+        The located paths in the contents should be relative to the working directory
+        """
+        retval : MutableSequence[AnyContent] = []
+        
+        materializedParamsDict : Mapping[SymbolicParamName, MaterializedInput] = dict()
+        matCheckOutputsDict : Mapping[SymbolicOutputName, MaterializedOutput] = dict()
+        for item in items:
+            if item.type == ExportItemType.Param:
+                if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
+                    raise WFException(f"Cannot export inputs from {self.stagedSetup.instance_id} until the workflow has been properly staged")
+                
+                assert self.materializedParams is not None
+                assert self.stagedSetup.inputs_dir is not None
+                if item.name is not None:
+                    if not materializedParamsDict:
+                        materializedParamsDict = dict(map(lambda mp: (mp.name, mp), self.materializedParams))
+                    materializedParam = materializedParamsDict.get(cast(SymbolicParamName, item.name))
+                    if materializedParam is None:
+                        raise KeyError(f'Param {item.name} to be exported does not exist')
+                    retval.extend(cast(Iterable[MaterializedContent], filter(lambda mpc: isinstance(mpc, MaterializedContent), materializedParam.values)))
+                    if materializedParam.secondaryInputs:
+                        retval.extend(materializedParam.secondaryInputs)
+                else:
+                    # The whole input directory
+                    prettyFilename = cast(RelPath, os.path.basename(self.stagedSetup.inputs_dir))
+                    retval.append(
+                        MaterializedContent(
+                            local=cast(AbsPath, self.stagedSetup.inputs_dir),
+                            licensed_uri=LicensedURI(
+                                uri=cast(URIType, 'wfexs:' + self.stagedSetup.instance_id + '/' + prettyFilename)
+                            ),
+                            prettyFilename=prettyFilename,
+                            kind=ContentKind.Directory
+                        )
+                    )
+            elif item.type == ExportItemType.Output:
+                if not isinstance(self.getMarshallingStatus().execution, datetime.datetime):
+                    raise WFException(f"Cannot export outputs from {self.stagedSetup.instance_id} until the workflow has been executed at least once")
+                
+                assert self.matCheckOutputs is not None
+                assert self.stagedSetup.outputs_dir is not None
+                if item.name is not None:
+                    if not matCheckOutputsDict:
+                        matCheckOutputsDict = dict(map(lambda ao: (ao.name, ao), self.matCheckOutputs))
+                    matCheckOutput = matCheckOutputsDict.get(cast(SymbolicOutputName, item.name))
+                    if matCheckOutput is None:
+                        raise KeyError(f'Output {item.name} to be exported does not exist')
+                    retval.extend(cast(Iterable[Union[GeneratedContent, GeneratedDirectoryContent]], filter(lambda aoc: isinstance(aoc, (GeneratedContent, GeneratedDirectoryContent)), matCheckOutput.values)))
+                else:
+                    # The whole output directory
+                    prettyFilename = cast(RelPath, os.path.basename(self.stagedSetup.outputs_dir))
+                    retval.append(
+                        MaterializedContent(
+                            local=cast(AbsPath, self.stagedSetup.outputs_dir),
+                            licensed_uri=LicensedURI(
+                                uri=cast(URIType, 'wfexs:' + self.stagedSetup.instance_id + '/' + prettyFilename)
+                            ),
+                            prettyFilename=prettyFilename,
+                            kind=ContentKind.Directory
+                        )
+                    )
+            elif item.type == ExportItemType.WorkingDirectory:
+                    # The whole working directory
+                    retval.append(
+                        MaterializedContent(
+                            local=cast(AbsPath, self.stagedSetup.work_dir),
+                            licensed_uri=LicensedURI(
+                                uri=cast(URIType, 'wfexs:' + self.stagedSetup.instance_id)
+                            ),
+                            prettyFilename=prettyFilename,
+                            kind=ContentKind.Directory
+                        )
+                    )
+            else:
+                # TODO
+                raise LookupError(f'Unimplemented management of item type {item.type}')
+        
+        return retval
+    
     def createStageResearchObject(self, doMaterializedROCrate: bool = False):
         """
         Create RO-crate from stage provenance.
