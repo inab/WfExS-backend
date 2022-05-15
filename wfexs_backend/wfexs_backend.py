@@ -88,6 +88,9 @@ from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
 from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
 from .fetchers.fasp import FASPFetcher
 
+from .pushers import AbstractExportPlugin
+from .pushers.cache_export import CacheExportPlugin
+
 from .workflow import WF
 
 class WfExSBackendException(AbstractWfExSException):
@@ -391,6 +394,10 @@ class WfExSBackend:
         # These ones should have prevalence over other custom ones
         self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
         self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS, fetchers_setup_block)
+        
+        # Registry of export plugins is created here
+        self._export_plugins : MutableMapping[SymbolicName, Type[AbstractExportPlugin]] = dict()
+        self.addExportPlugin(CacheExportPlugin)
 
     @property
     def cacheWorkflowDir(self) -> AbsPath:
@@ -426,6 +433,27 @@ class WfExSBackend:
                     self._sngltn[statefulFetcher] = instStatefulFetcher
 
         return instStatefulFetcher
+    
+    def addExportPlugin(self, exportClazz: Type[AbstractExportPlugin]) -> None:
+        self._export_plugins[exportClazz.PluginName()] = exportClazz
+    
+    def instantiateExportPlugin(self, wfInstance: WF, plugin_id: SymbolicName, sec_context: Optional[SecurityContextConfig]) -> AbstractExportPlugin:
+        """
+        This method instantiates an stateful export plugin
+        """
+        
+        if plugin_id not in self._export_plugins:
+            raise KeyError(f"Unavailable plugin {plugin_id}")
+        
+        stagedSetup = wfInstance.getStagedSetup()
+        
+        if stagedSetup.work_dir is None:
+            raise ValueError(f'Staged setup from {stagedSetup.instance_id} is corrupted')
+        
+        if stagedSetup.is_damaged:
+            raise ValueError(f'Staged setup from {stagedSetup.instance_id} is damaged')
+        
+        return self._export_plugins[plugin_id](wfInstance, setup_block=sec_context)
     
     def addStatefulSchemeHandlers(self, statefulSchemeHandler: Type[AbstractStatefulFetcher], fetchers_setup_block: Optional[Mapping[str, Mapping[str, Any]]] = None) -> None:
         """
