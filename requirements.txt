@@ -18,3 +18,4 @@ boto3
 botocore
 google-cloud-storage
 typing_extensions
+nextcloud-api-wrapper

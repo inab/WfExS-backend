@@ -90,6 +90,7 @@ from .fetchers.fasp import FASPFetcher
 
 from .pushers import AbstractExportPlugin
 from .pushers.cache_export import CacheExportPlugin
+from .pushers.nextcloud_export import NextcloudExportPlugin
 
 from .workflow import WF
 
@@ -398,6 +399,7 @@ class WfExSBackend:
         # Registry of export plugins is created here
         self._export_plugins : MutableMapping[SymbolicName, Type[AbstractExportPlugin]] = dict()
         self.addExportPlugin(CacheExportPlugin)
+        self.addExportPlugin(NextcloudExportPlugin)
 
     @property
     def cacheWorkflowDir(self) -> AbsPath:

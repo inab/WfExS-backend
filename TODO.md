@@ -41,7 +41,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
   - [ ] **Step 7.d**: Upload to SFTP server.
 
-  - [ ] **Step 7.e**: Upload to Nextcloud and generate share link.
+  - [x] **Step 7.e**: Upload to Nextcloud and generate share link.
 
   - [ ] **Step 7.f**: Upload workflow to WorkflowHub.
 

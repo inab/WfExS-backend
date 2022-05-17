@@ -61,10 +61,10 @@ python WfExS-backend.py --full-help
 ```
 usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
                         [--full-help]
-                        {init,cache,staged-workdir,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+                        {init,cache,staged-workdir,export,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.4.13-4-g8b97a32 (8b97a328d3163cb4295a09dae6def45341e2acca)
+WfExS (workflow execution service) backend 0.4.99-1-g867f25a (867f25a57a67e2c085af32801ac2635df664803e)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -83,10 +83,11 @@ optional arguments:
 commands:
   Command to run. It must be one of these
 
-  {init,cache,staged-workdir,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+  {init,cache,staged-workdir,export,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
     init                Init local setup
     cache               Cache handling subcommands
     staged-workdir      Staged working directories handling subcommands
+    export              Staged working directories export subcommands
     config-validate     Validate the configuration files to be used for staging and execution
     stage               Prepare the staging (working) directory for workflow execution, fetching dependencies and contents
     mount-workdir       Mount the encrypted staging directory on secure staging scenarios
@@ -159,6 +160,27 @@ optional arguments:
   -h, --help            show this help message and exit
   -g, --glob            Given staged workflow names are globs (default: False)
 
+Subparser 'export'
+usage: WfExS-backend.py export [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME] -J WORKFLOWWORKINGDIRECTORY
+                               {ls,run} [export_contents_command_args [export_contents_command_args ...]]
+
+positional arguments:
+  {ls,run}              Export operations from staged working directory to perform
+                        
+                        ls              List the public identifiers obtained from previous export actions
+                        run             Run the different export actions, pushing the exported content and gathering the obtained permanent / public identifiers
+  export_contents_command_args
+                        Optional export names (default: None)
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
+                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+  -E EXPORTSCONFIGFILENAME, --exports-config EXPORTSCONFIGFILENAME
+                        Configuration file, describing exports which can be done (default: None)
+  -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
+                        Already staged job directory (default: None)
+
 Subparser 'config-validate'
 usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX]
 
@@ -209,7 +231,8 @@ optional arguments:
                         Already staged job directory (default: None)
 
 Subparser 'execute'
-usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX] [--full]
+usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME]
+                                [-n NICKNAME_PREFIX] [--full]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -217,6 +240,8 @@ optional arguments:
                         Configuration file, describing workflow and inputs (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
                         Configuration file, describing security contexts, which hold credentials and similar (default: None)
+  -E EXPORTSCONFIGFILENAME, --exports-config EXPORTSCONFIGFILENAME
+                        Configuration file, describing exports which can be done (default: None)
   -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
                         Nickname prefix to be used on staged workdir creation (default: None)
   --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
@@ -311,6 +336,6 @@ The program uses three different types of configuration files:
 * Security contexts file: YAML formatted file which holds the `user`/`password` pairs, security tokens or keys needed on different steps, like input fetching. ([Nextflow example](tests/wetlab2variations_credentials_nxf.wfex.ctxt), [CWL example](tests/wetlab2variations_credentials_cwl.wfex.ctxt)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/security-context.json](wfexs_backend/schemas/security-context.json) and there is also automatically generated documentation (see [security-context_schema.md](docs/schemas/security-context_schema.md)).
 
 ## License
-* © 2020-2021 Barcelona Supercomputing Center (BSC), ES
+* © 2020-2022 Barcelona Supercomputing Center (BSC), ES
 
 Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE.txt` for details.
