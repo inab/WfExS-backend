@@ -49,7 +49,7 @@ class AbstractExportPlugin(abc.ABC):
         self.setup_block = setup_block  if isinstance(setup_block, dict)  else dict()
     
     @abc.abstractmethod
-    def push(self, items: Sequence[AnyContent], preferred_scheme: Optional[str] = None, preferred_id: Optional[str] = None) -> URIWithMetadata:
+    def push(self, items: Sequence[AnyContent], preferred_scheme: Optional[str] = None, preferred_id: Optional[str] = None) -> Sequence[URIWithMetadata]:
         """
         This is the method to be implemented by the stateful pusher
         """

@@ -1497,7 +1497,7 @@ class WF:
                 export_p = self.wfexs.instantiateExportPlugin(self, action.plugin_id, a_setup_block)
                 
                 # Export the contents and obtain a PID
-                new_pid = export_p.push(
+                new_pids = export_p.push(
                     elems,
                     preferred_scheme=action.preferred_scheme,
                     preferred_id=action.preferred_id
@@ -1507,7 +1507,7 @@ class WF:
                 matAction = MaterializedExportAction(
                     action=action,
                     elems=elems,
-                    pid=new_pid
+                    pids=new_pids
                 )
                 
                 matActions.append(matAction)

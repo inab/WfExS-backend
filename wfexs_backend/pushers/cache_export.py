@@ -47,7 +47,7 @@ class CacheExportPlugin(AbstractExportPlugin):
     def __init__(self, wfInstance: "WF", setup_block: Optional[SecurityContextConfig] = None):
         super().__init__(wfInstance, setup_block)
     
-    def push(self, items: Sequence[AnyContent], preferred_scheme: Optional[str] = None, preferred_id: Optional[str] = None) -> URIWithMetadata:
+    def push(self, items: Sequence[AnyContent], preferred_scheme: Optional[str] = None, preferred_id: Optional[str] = None) -> Sequence[URIWithMetadata]:
         """
         These contents will be included in the cache
         """
@@ -63,7 +63,6 @@ class CacheExportPlugin(AbstractExportPlugin):
         if (preferred_id is None) or len(preferred_id) == 0:
             raise ValueError("This plugin needs a preferred_id to generate a PID")
         
-        # TODO
         # Create temporary destination directory (if needed)
         tmpdir = None
         source = None
@@ -113,4 +112,4 @@ class CacheExportPlugin(AbstractExportPlugin):
             if tmpdir is not None:
                 shutil.rmtree(tmpdir)
         
-        return metadata[0]
+        return metadata

@@ -630,7 +630,7 @@ class MaterializedExportAction(NamedTuple):
     """
     action: ExportAction
     elems: Sequence[AnyContent]
-    pid: URIWithMetadata
+    pids: Sequence[URIWithMetadata]
     when: datetime.datetime = datetime.datetime.now(tz=datetime.timezone.utc)
 
 # Next method has been borrowed from FlowMaps
