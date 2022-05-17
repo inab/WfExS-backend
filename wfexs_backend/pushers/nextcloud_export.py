@@ -28,7 +28,7 @@ import uuid
 
 import nextcloud    # type: ignore[import]
 from nextcloud.codes import ShareType  # type: ignore[import]
-import nextcloud.codes
+import nextcloud.codes  # type: ignore[import]
 
 from ..common import AbsPath, RelPath, ExportItem, SymbolicName
 from ..common import SecurityContextConfig, URIWithMetadata
@@ -215,6 +215,7 @@ class NextcloudContentExporter:
             _ , retval_reldir, retval_relreldir = self.create_remote_path()
         
         for mapping in contents_to_process:
+            assert retval_relreldir is not None
             local_filename = mapping.local_filename
             remote_dirname = cast(RelPath, os.path.join(retval_relreldir, mapping.remote_dirname.lstrip('/')))
             remote_basename = mapping.remote_basename
