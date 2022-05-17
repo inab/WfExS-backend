@@ -95,6 +95,7 @@ def downloadContentFromDRS(remote_file:URIType, cachedFilename:AbsPath, secConte
     metadata_array : MutableSequence[URIWithMetadata] = [ ]
     
     # Detecting compact version of DRS
+    # https://ga4gh.github.io/data-repository-service-schemas/preview/release/drs-1.1.0/docs/#_appendix_compact_identifier_based_uris
     colon_index = parsedInputURL.netloc.find(':')
     if colon_index != -1 and parsedInputURL.path == '':
         # As the element on the right side of ':' could not be an integer
