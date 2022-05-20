@@ -2009,7 +2009,7 @@ class WF:
         Create RO-crate from execution provenance.
         """
         # TODO: implement deserialization
-        self.unmarshallExport(offline=True)
+        self.unmarshallExecute(fail_ok=True)
         
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
@@ -2046,7 +2046,7 @@ class WF:
             matWf = self.materializedEngine.workflow
             
             assert matWf.effectiveCheckout is not None, "The effective checkout should be available"
-            
+
             parsed_repo_url = parse.urlparse(self.repoURL)
             if parsed_repo_url.netloc == 'github.com':
                 parsed_repo_path = parsed_repo_url.path.split('/')
@@ -2065,6 +2065,22 @@ class WF:
                 
                 wf_entrypoint_url = parse.urlunparse(
                     ('https', 'raw.githubusercontent.com', '/'.join(wf_entrypoint_path), '', '', ''))
+
+            elif 'gitlab' in parsed_repo_url.netloc:
+                parsed_repo_path = parsed_repo_url.path.split('/')
+                repo_name = parsed_repo_path[2]
+                if repo_name.endswith('.git'):
+                    repo_name = repo_name[:-4]
+                wf_entrypoint_path = [
+                    parsed_repo_path[1],
+                    repo_name
+                ]
+                if self.localWorkflow.relPath is not None:
+                    wf_entrypoint_path.append('-/raw/' + self.repoTag + '/' + self.localWorkflow.relPath)
+
+                wf_entrypoint_url = parse.urlunparse(
+                    (parsed_repo_url.scheme, parsed_repo_url.netloc, '/'.join(wf_entrypoint_path), '', '', ''))
+
             else:
                 raise WFException("FIXME: Unsupported http(s) git repository {}".format(self.repoURL))
 
