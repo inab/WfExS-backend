@@ -85,6 +85,7 @@ from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, ni
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import config_validate
 
+from .fetchers.git import guess_repo_params
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX
 
 from .nextflow_engine import NextflowWorkflowEngine
@@ -718,7 +719,7 @@ class WF:
             engineDesc = None
 
             # Trying to be smarter
-            guessedRepo = self.wfexs.guessRepoParams(parsedRepoURL, fail_ok=True)
+            guessedRepo = guess_repo_params(parsedRepoURL, logger=self.logger, fail_ok=True)
 
             if guessedRepo is not None:
                 if guessedRepo.tag is None:
@@ -2009,7 +2010,7 @@ class WF:
         Create RO-crate from execution provenance.
         """
         # TODO: implement deserialization
-        self.unmarshallExecute(fail_ok=True)
+        self.unmarshallExecute(offline=True, fail_ok=True)
         
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
@@ -2051,11 +2052,13 @@ class WF:
             if parsed_repo_url.netloc == 'github.com':
                 parsed_repo_path = parsed_repo_url.path.split('/')
                 repo_name = parsed_repo_path[2]
+                # TODO: should we urldecode repo_name?
                 if repo_name.endswith('.git'):
                     repo_name = repo_name[:-4]
                 wf_entrypoint_path = [
                     '',  # Needed to prepend a slash
                     parsed_repo_path[1],
+                    # TODO: should we urlencode repo_name?
                     repo_name,
                     matWf.effectiveCheckout
                 ]
@@ -2068,6 +2071,7 @@ class WF:
 
             elif 'gitlab' in parsed_repo_url.netloc:
                 parsed_repo_path = parsed_repo_url.path.split('/')
+                # FIXME: cover the case of nested groups
                 repo_name = parsed_repo_path[2]
                 if repo_name.endswith('.git'):
                     repo_name = repo_name[:-4]
@@ -2076,7 +2080,8 @@ class WF:
                     repo_name
                 ]
                 if self.localWorkflow.relPath is not None:
-                    wf_entrypoint_path.append('-/raw/' + self.repoTag + '/' + self.localWorkflow.relPath)
+                    # TODO: should we urlencode self.repoTag?
+                    wf_entrypoint_path.extend(['-','raw', self.repoTag, self.localWorkflow.relPath])
 
                 wf_entrypoint_url = parse.urlunparse(
                     (parsed_repo_url.scheme, parsed_repo_url.netloc, '/'.join(wf_entrypoint_path), '', '', ''))
@@ -2269,7 +2274,7 @@ class WF:
             remote_workflow_entrypoint = trsFilesMeta[0].metadata.get('remote_workflow_entrypoint')
             if remote_workflow_entrypoint is not None:
                 # Give it a chance to identify the original repo of the workflow
-                repo = self.wfexs.guessRepoParams(remote_workflow_entrypoint, fail_ok=True)
+                repo = guess_repo_params(remote_workflow_entrypoint, logger=self.logger, fail_ok=True)
 
                 if repo is not None:
                     self.logger.debug("Derived repository {} ({} , rel {}) from {}".format(repo.repo_url, repo.tag, repo.rel_path, trs_tools_url))
@@ -2381,10 +2386,10 @@ class WF:
         # Some RO-Crates might have this value missing or ill-built
         remote_repo : Optional[RemoteRepo] = None
         if workflowUploadURL is not None:
-            remote_repo = self.wfexs.guessRepoParams(workflowUploadURL, fail_ok=True)
+            remote_repo = guess_repo_params(workflowUploadURL, logger=self.logger, fail_ok=True)
 
         if remote_repo is None:
-            remote_repo = self.wfexs.guessRepoParams(roCrateObj.root_dataset['isBasedOn'], fail_ok=True)
+            remote_repo = guess_repo_params(roCrateObj.root_dataset['isBasedOn'], logger=self.logger, fail_ok=True)
 
         if remote_repo is None:
             raise WFException('Unable to guess repository from RO-Crate manifest')

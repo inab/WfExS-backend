@@ -17,13 +17,14 @@
 
 import atexit
 import hashlib
+import logging
 import os
 import shutil
 import subprocess
 import tempfile
 from typing import cast, Dict, List, Mapping, Optional, Tuple, Type, Union
 from typing import Any, Sequence
-from urllib import parse
+from urllib import parse, request
 
 from typing_extensions import Final
 
@@ -31,9 +32,9 @@ from . import AbstractStatefulFetcher, FetcherException
 
 from ..common import AbsPath, AnyPath, RelPath
 from ..common import AnyURI, ContentKind, SecurityContextConfig
-from ..common import URIType, URIWithMetadata
+from ..common import RemoteRepo, URIType, URIWithMetadata
 from ..common import RepoURL, RepoTag, SymbolicName
-from ..common import ProtocolFetcherReturn
+from ..common import ProtocolFetcherReturn, RepoType
 
 class GitFetcher(AbstractStatefulFetcher):
     GIT_PROTO: Final[str] = 'git'
@@ -164,7 +165,8 @@ class GitFetcher(AbstractStatefulFetcher):
         self.logger.debug(f'Running "{" ".join(gitrevparse_params)}"')
         with subprocess.Popen(gitrevparse_params, stdout=subprocess.PIPE, encoding='iso-8859-1',
                               cwd=repo_tag_destdir) as revproc:
-            repo_effective_checkout = cast(RepoTag, revproc.stdout.read().rstrip())
+            if revproc.stdout is not None:
+                repo_effective_checkout = cast(RepoTag, revproc.stdout.read().rstrip())
             
         metadata = {
             'repo': repoURL,
@@ -173,7 +175,59 @@ class GitFetcher(AbstractStatefulFetcher):
         }
 
         return repo_tag_destdir, repo_effective_checkout, metadata
-
+    
+    
+    def find_repo_in_uri(self, remote_file: URIType) -> Tuple[Optional[RepoType], Optional[URIType], Optional[Sequence[str]]]:
+        """
+        This method helps identifying the repo root and repo type from an URL
+        """
+        
+        parsedInputURL = parse.urlparse(remote_file)
+        sp_path = parsedInputURL.path.split('/')
+        
+        shortest_pre_path : Optional[URIType] = None
+        longest_post_path : Optional[Sequence[str]] = None
+        repo_type : Optional[RepoType] = None
+        for pos in range(len(sp_path), 0, -1):
+            pre_path = '/'.join(sp_path[:pos])
+            if pre_path == '':
+                pre_path = '/'
+            remote_uri_anc = parse.urlunparse(parsedInputURL._replace(path=pre_path))
+            
+            git_lsremote_params = [
+                self.git_cmd, 'ls-remote', remote_uri_anc
+            ]
+            
+            retval = subprocess.call(
+                git_lsremote_params,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            
+            # It is considered a git repo!
+            if retval == 0:
+                shortest_pre_path = cast(URIType, pre_path)
+                longest_post_path = sp_path[pos:]
+                if repo_type is None:
+                    # Metadata is all we really need
+                    req = request.Request(remote_uri_anc, method='HEAD')
+                    try:
+                        with request.urlopen(req) as resp:
+                            # Is it gitlab?
+                            if list(filter(lambda c: 'gitlab' in c, resp.headers.get_all('Set-Cookie'))):
+                                repo_type = RepoType.GitLab
+                            elif list(filter(lambda c: 'github.com' in c, resp.headers.get_all('Set-Cookie'))):
+                                repo_type = RepoType.GitHub
+                            elif list(filter(lambda c: 'bitbucket' in c, resp.headers.get_all('X-View-Name'))):
+                                repo_type = RepoType.BitBucket
+                            else:
+                                repo_type = RepoType.Other
+                    except Exception as e:
+                        pass
+        
+        return repo_type, shortest_pre_path, longest_post_path
+                
 
     def fetch(self, remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
         parsedInputURL = parse.urlparse(remote_file)
@@ -192,7 +246,7 @@ class GitFetcher(AbstractStatefulFetcher):
         # Getting the tag or branch
         repoTag : Optional[RepoTag]
         if '@' in parsedInputURL.path:
-            gitPath, repoTag = parsedInputURL.path.split('@', 1)
+            gitPath, repoTag = cast(Tuple[str, RepoTag], tuple(parsedInputURL.path.split('@', 1)))
         else:
             gitPath = parsedInputURL.path
             repoTag = None
@@ -210,7 +264,7 @@ class GitFetcher(AbstractStatefulFetcher):
         repoURL = cast(RepoURL, parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, '', '', '')))
         
         repo_tag_destdir , repo_effective_checkout, metadata = self.doMaterializeRepo(repoURL, repoTag=repoTag)
-        metadata['relpath'] = repoRelPath
+        metadata['relpath'] = cast(RelPath, repoRelPath)
         
         preferredName : Optional[RelPath]
         if repoRelPath is not None:
@@ -237,6 +291,96 @@ class GitFetcher(AbstractStatefulFetcher):
             )
         ], None
         
+def guess_repo_params(wf_url: Union[URIType, parse.ParseResult], logger: logging.Logger, fail_ok: bool = False) -> Optional[RemoteRepo]:
+    repoURL = None
+    repoTag = None
+    repoRelPath = None
+    repoType : Optional[RepoType] = None
+
+    # Deciding which is the input
+    if isinstance(wf_url, parse.ParseResult):
+        parsed_wf_url = wf_url
+    else:
+        parsed_wf_url = parse.urlparse(wf_url)
+
+    # These are the usual URIs which can be understood by pip
+    # See https://pip.pypa.io/en/stable/cli/pip_install/#git
+    if parsed_wf_url.scheme.startswith(GitFetcher.GIT_PROTO_PREFIX) or parsed_wf_url.scheme == GitFetcher.GIT_PROTO:
+        # Getting the scheme git is going to understand
+        if len(parsed_wf_url.scheme) >= len(GitFetcher.GIT_PROTO_PREFIX):
+            gitScheme = parsed_wf_url.scheme[len(GitFetcher.GIT_PROTO_PREFIX):]
+        else:
+            gitScheme = parsed_wf_url.scheme
+
+        # Getting the tag or branch
+        if '@' in parsed_wf_url.path:
+            gitPath, repoTag = parsed_wf_url.path.split('@', 1)
+        else:
+            gitPath = parsed_wf_url.path
+
+        # Getting the repoRelPath (if available)
+        if len(parsed_wf_url.fragment) > 0:
+            frag_qs = parse.parse_qs(parsed_wf_url.fragment)
+            subDirArr = frag_qs.get('subdirectory', [])
+            if len(subDirArr) > 0:
+                repoRelPath = subDirArr[0]
+
+        # Now, reassemble the repoURL
+        repoURL = parse.urlunparse((gitScheme, parsed_wf_url.netloc, gitPath, '', '', ''))
+        repoType = RepoType.Raw
+    # TODO handling other popular cases, like bitbucket
+    elif parsed_wf_url.netloc == 'github.com':
+        wf_path = parsed_wf_url.path.split('/')
+
+        if len(wf_path) >= 3:
+            repoGitPath = wf_path[:3]
+            if not repoGitPath[-1].endswith('.git'):
+                repoGitPath[-1] += '.git'
+
+            # Rebuilding repo git path
+            repoURL = parse.urlunparse(
+                (parsed_wf_url.scheme, parsed_wf_url.netloc, '/'.join(repoGitPath), '', '', ''))
+
+            # And now, guessing the tag and the relative path
+            if len(wf_path) >= 5 and (wf_path[3] in ('blob', 'tree')):
+                repoTag = wf_path[4]
+
+                if len(wf_path) >= 6:
+                    repoRelPath = '/'.join(wf_path[5:])
+        repoType = RepoType.GitHub
+    elif parsed_wf_url.netloc == 'raw.githubusercontent.com':
+        wf_path = parsed_wf_url.path.split('/')
+        if len(wf_path) >= 3:
+            # Rebuilding it
+            repoGitPath = wf_path[:3]
+            repoGitPath[-1] += '.git'
+
+            # Rebuilding repo git path
+            repoURL = parse.urlunparse(
+                ('https', 'github.com', '/'.join(repoGitPath), '', '', ''))
+
+            # And now, guessing the tag/checkout and the relative path
+            if len(wf_path) >= 4:
+                repoTag = wf_path[3]
+
+                if len(wf_path) >= 5:
+                    repoRelPath = '/'.join(wf_path[4:])
+        repoType = RepoType.GitHub
+    elif not fail_ok:
+        raise FetcherException("FIXME: Unsupported http(s) git repository {}".format(wf_url))
+
+    logger.debug("From {} was derived {} {} {}".format(wf_url, repoURL, repoTag, repoRelPath))
+    
+    if repoURL is None:
+        return None
+    
+    return RemoteRepo(
+        repo_url=cast(RepoURL, repoURL),
+        tag=cast(Optional[RepoTag], repoTag),
+        rel_path=cast(Optional[RelPath], repoRelPath),
+        repo_type=repoType
+    )
+
 
 # See above
 SCHEME_HANDLERS : Mapping[str, Type[AbstractStatefulFetcher]] = GitFetcher.GetSchemeHandlers()
