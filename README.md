@@ -1,4 +1,5 @@
-# ![WfExS-backend:](docs/logo/WfExS-logo-final_paths.svg) Workflow Execution Service backend
+# <img src="docs/logo/WfExS-logo-final_paths.svg" alt="WfExS-backend:" height="48"> Workflow Execution Service backend [![DOI](https://zenodo.org/badge/301434294.svg)](https://zenodo.org/badge/latestdoi/301434294)
+
 
 WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") project aims to automate next steps:
 
