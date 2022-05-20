@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 # limitations under the License.
 
 __author__ = 'Laura Rodriguez-Navas <https://orcid.org/0000-0003-4929-1219>, José M. Fernández <https://orcid.org/0000-0002-4806-5140>'
-__copyright__ = '© 2020-2021 Barcelona Supercomputing Center (BSC), ES'
+__copyright__ = '© 2020-2022 Barcelona Supercomputing Center (BSC), ES'
 __license__ = 'Apache 2.0'
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = '0.4.13'
+__version__ = '0.5.0'
 
 def describeGitRepo(repo):
     """Describe the repository version.
