@@ -31,7 +31,7 @@ def addInputsResearchObject(crate, inputs):
     :param crate: Research Object
     :type crate: ROCrate object
     :param inputs: List of inputs to add
-    :type inputs: list
+    :type inputs: Sequence[MaterializedInput]
     """
     for in_item in inputs:
         if isinstance(in_item, MaterializedInput):
@@ -63,7 +63,7 @@ def addOutputsResearchObject(crate, outputs):
     :param crate: Research Object
     :type crate: ROCrate object
     :param outputs: List of outputs to add
-    :type outputs: list
+    :type outputs: Sequence[MaterializedOutput]
     """
     for out_item in outputs:
         if isinstance(out_item, MaterializedOutput):
