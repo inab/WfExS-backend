@@ -439,6 +439,12 @@ class WorkflowType(NamedTuple):
     trs_descriptor: TRS_Workflow_Descriptor
     rocrate_programming_language: str
 
+class RepoType(enum.Enum):
+    GitHub = 'github'
+    GitLab = 'gitlab'
+    BitBucket = 'bitbucket'
+    Raw = 'raw'
+    Other = 'other'
 
 class RemoteRepo(NamedTuple):
     """
@@ -447,6 +453,7 @@ class RemoteRepo(NamedTuple):
     repo_url: RepoURL
     tag: Optional[RepoTag] = None
     rel_path: Optional[RelPath] = None
+    repo_type: Optional[RepoType] = None
 
 class IdentifiedWorkflow(NamedTuple):
     """
