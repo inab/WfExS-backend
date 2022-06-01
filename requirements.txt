@@ -18,4 +18,4 @@ boto3
 botocore
 google-cloud-storage
 typing_extensions
-pyncclient-ext
+pyncclient-ext >= 0.1.1
