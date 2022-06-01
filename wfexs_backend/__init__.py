@@ -102,6 +102,7 @@ def describeGitRepo(repo):
 def get_WfExS_version():
     import os
     import sys
+    import dulwich.errors
 
     vertuple = __version__ , None
     executable = os.path.basename(sys.argv[0])
