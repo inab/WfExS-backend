@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2021 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,12 @@
 # limitations under the License.
 
 # Code from this class is an iteration of
+#
 # https://github.com/bigpe/FtpDownloader/blob/891bee35566078531b6f1ed3975627e29b935a97/ftp_downloader/FTPDownloader.py
+#
+# which was following MIT license
+#
+# https://github.com/bigpe/ftp-downloader/blob/891bee35566078531b6f1ed3975627e29b935a97/LICENSE.txt
 
 import asyncio
 import datetime
