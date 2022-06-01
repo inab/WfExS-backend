@@ -110,8 +110,10 @@ def get_WfExS_version():
     if executable.startswith('WfExS-'):
         wfexs_dirname = os.path.dirname(os.path.abspath(sys.argv[0]))
         
-        vertuple = describeGitRepo(wfexs_dirname)
-    #except:
-    #    pass
+        try:
+            vertuple = describeGitRepo(wfexs_dirname)
+        except dulwich.errors.NotGitRepository as de:
+            # This can happen when WfExS-backend is installed using pip
+            pass
     
     return vertuple
