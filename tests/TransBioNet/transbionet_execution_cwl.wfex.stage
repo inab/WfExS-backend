@@ -1,0 +1,92 @@
+workflow_id: git+https://gitlab.bsc.es/lrodrig1/structuralvariants_poc.git@1.0.7#subdirectory=structuralvariants/cwl/workflow.cwl
+workflow_config:
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  fastq1:
+    c-l-a-s-s: File
+    url:
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA06985/sequence_read/SRR709972_1.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA06994/sequence_read/SRR070528_1.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA06994/sequence_read/SRR070819_1.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA07056/sequence_read/SRR764718_1.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA07357/sequence_read/SRR764689_1.filt.fastq.gz
+  fastq2:
+    c-l-a-s-s: File
+    url:
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA06985/sequence_read/SRR709972_2.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA06994/sequence_read/SRR070528_2.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA06994/sequence_read/SRR070819_2.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA07056/sequence_read/SRR764718_2.filt.fastq.gz
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/data/NA07357/sequence_read/SRR764689_2.filt.fastq.gz
+  reference_fasta:
+    c-l-a-s-s: File
+    url:
+      - ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz
+  bed:
+    c-l-a-s-s: File
+    url:
+      - https://nextcloud.bsc.es/index.php/s/ioJNmHF8ADiWg6i/download/gencode.v19.genes.v7_model.patched_contigs.gtf.bed.gz
+    secondary-urls:
+        - https://nextcloud.bsc.es/index.php/s/3H2CaXAjm43WjXx/download/gencode.v19.genes.v7_model.patched_contigs.gtf.bed.gz.tbi
+  samples:
+    c-l-a-s-s: File
+    url:
+      - https://nextcloud.bsc.es/index.php/s/85nC4Kogp8eKyXn/download/samples_test.txt
+  blacklist:
+    c-l-a-s-s: File
+    url:
+      - https://nextcloud.bsc.es/index.php/s/7BcTeKPo2XS8JDz/download/hg19-blacklist.v2.num.bed.gz
+  generate_bwa_indexes: true
+  threads_fastqc: 1
+  threads_fastp: 1
+  threads_bwa_mem: 1
+  threads_samtools: 1
+  min_mapping_quality: 10
+  bits_set: 4
+  manta_exome: true
+  manta_min_len: "50"
+  manta_max_len: "1500000"
+  manta_min_q: "20"
+  gridss_min_len: "100"
+  gridss_max_len: "1500000"
+  gridss_min_q: "999"
+  exomeDepth_min_len: "0.1"
+  exomeDepth_max_len: "200"
+  exomeDepth_min_bf: "5.5"
+  chromosome: "22"
+  codex_min_len: "0.1"
+  codex_max_len: "200"
+  codex_min_lratio: "40"
+  enable_manta: true
+  enable_gridss: false
+  enable_exomeDepth: false
+  enable_codex: false
+outputs:
+  fastqc_raw_zip:
+    c-l-a-s-s: File
+    glob: "*_fastqc.zip"
+  fastqc_raw_html:
+    c-l-a-s-s: File
+    glob: "*_fastqc.html"
+  html_report:
+    c-l-a-s-s: File
+    glob: "*.fastp.html"
+  json_report:
+    c-l-a-s-s: File
+    glob: "*.fastp.json"
+  fastqc_paired_zip:
+    c-l-a-s-s: File
+    glob: "*.trimmed_fastqc.zip"
+  fastqc_paired_html:
+    c-l-a-s-s: File
+    glob: "*.trimmed_fastqc.html"
+  output_bam_filtering:
+    c-l-a-s-s: File
+    glob: "*.sorted.dedup.filtered.bam*"
+  output_manta:
+    c-l-a-s-s: File
+    preferredName: manta.all.filtered.sorted.merged.bed
+  output_all:
+    c-l-a-s-s: File
+    preferredName: all.all.filtered.sorted.merged.bed
