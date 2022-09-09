@@ -36,7 +36,7 @@ import urllib.error
 import yaml
 
 # This is needed to have proper pylint validation in python 3.6
-# pylint: ignore-next=unused-import
+# pylint: disable-next=unused-import
 from typing import (
     Type,
     Union,

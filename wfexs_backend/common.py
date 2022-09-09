@@ -40,7 +40,7 @@ from typing import (
     Union,
 )
 
-# pylint: ignore-next=unused-import
+# pylint: disable-next=unused-import
 from typing import (
     Iterator,
 )
