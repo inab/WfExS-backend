@@ -29,11 +29,21 @@ from typing_extensions import Final
 
 from . import AbstractStatefulFetcher, FetcherException
 
-from ..common import AbsPath, RelPath, AnyPath
-from ..common import AnyURI, ContentKind, SecurityContextConfig
-from ..common import URIType, URIWithMetadata
-from ..common import RepoURL, RepoTag, SymbolicName
-from ..common import ProtocolFetcherReturn
+from ..common import (
+    AbsPath,
+    AnyPath,
+    AnyURI,
+    ContentKind,
+    ProgsMapping,
+    ProtocolFetcherReturn,
+    RelPath,
+    RepoURL,
+    RepoTag,
+    SecurityContextConfig,
+    SymbolicName,
+    URIType,
+    URIWithMetadata,
+)
 
 
 class FASPFetcher(AbstractStatefulFetcher):
@@ -41,7 +51,7 @@ class FASPFetcher(AbstractStatefulFetcher):
     DEFAULT_LIMIT_THROUGHPUT: Final[str] = '100m'
     DEFAULT_ASPERA_CMD: Final[SymbolicName] = cast(SymbolicName, 'ascp')
     
-    def __init__(self, progs: Mapping[SymbolicName, AnyPath], setup_block: Optional[Mapping[str, Any]] = None):
+    def __init__(self, progs: ProgsMapping, setup_block: Optional[Mapping[str, Any]] = None):
         super().__init__(progs=progs, setup_block=setup_block)
         
         self.ascp_cmd = self.progs.get(self.DEFAULT_ASPERA_CMD, cast(RelPath, self.DEFAULT_ASPERA_CMD))

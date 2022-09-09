@@ -58,7 +58,9 @@ DEFAULT_PODMAN_CMD = cast(SymbolicName, 'podman')
 DEFAULT_JAVA_CMD = cast(SymbolicName, 'java')
 DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, 'fusermount')
 
-DEFAULT_PROGS : Dict[SymbolicName, AnyPath] = {
+ProgsMapping = MutableMapping[SymbolicName, AnyPath]
+
+DEFAULT_PROGS : ProgsMapping = {
     DEFAULT_DOCKER_CMD: cast(RelPath, DEFAULT_DOCKER_CMD),
     DEFAULT_SINGULARITY_CMD: cast(RelPath, DEFAULT_SINGULARITY_CMD),
     DEFAULT_PODMAN_CMD: cast(RelPath, DEFAULT_PODMAN_CMD),

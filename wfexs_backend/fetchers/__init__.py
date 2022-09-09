@@ -35,10 +35,19 @@ from typing import MutableMapping, Sequence, Type
 from urllib import request, parse
 import urllib.error
 
-from ..common import AbstractWfExSException
-from ..common import AbsPath, RelPath, ContentKind, SecurityContextConfig
-from ..common import SymbolicName, URIType, URIWithMetadata
-from ..common import ProtocolFetcher, ProtocolFetcherReturn
+from ..common import (
+    AbstractWfExSException,
+    AbsPath,
+    ContentKind,
+    ProgsMapping,
+    ProtocolFetcher,
+    ProtocolFetcherReturn,
+    RelPath,
+    SecurityContextConfig,
+    SymbolicName,
+    URIType,
+    URIWithMetadata,
+)
 
 from ..utils.contents import link_or_copy
 from ..utils.ftp_downloader import FTPDownloader
@@ -46,11 +55,17 @@ from ..utils.ftp_downloader import FTPDownloader
 class FetcherException(AbstractWfExSException):
     pass
 
+class InvalidFetcherException(FetcherException):
+    pass
+
+class FetcherInstanceException(FetcherException):
+    pass
+
 class AbstractStatefulFetcher(abc.ABC):
     """
     Abstract class to model stateful fetchers
     """
-    def __init__(self, progs: Mapping[SymbolicName, Union[RelPath, AbsPath]], setup_block: Optional[Mapping[str, Any]] = None):
+    def __init__(self, progs: ProgsMapping = dict(), setup_block: Optional[Mapping[str, Any]] = None):
         import inspect
         
         self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)

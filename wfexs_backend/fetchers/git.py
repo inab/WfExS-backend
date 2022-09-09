@@ -30,18 +30,31 @@ from typing_extensions import Final
 
 from . import AbstractStatefulFetcher, FetcherException
 
-from ..common import AbsPath, AnyPath, RelPath
-from ..common import AnyURI, ContentKind, SecurityContextConfig
-from ..common import RemoteRepo, URIType, URIWithMetadata
-from ..common import RepoURL, RepoTag, SymbolicName
-from ..common import ProtocolFetcherReturn, RepoType
+from ..common import (
+    AbsPath,
+    AnyPath,
+    AnyURI,
+    ContentKind,
+    MutableMapping,
+    ProgsMapping,
+    ProtocolFetcherReturn,
+    RelPath,
+    RemoteRepo,
+    RepoTag,
+    RepoType,
+    RepoURL,
+    SecurityContextConfig,
+    SymbolicName,
+    URIType,
+    URIWithMetadata,
+)
 
 class GitFetcher(AbstractStatefulFetcher):
     GIT_PROTO: Final[str] = 'git'
     GIT_PROTO_PREFIX: Final[str] = GIT_PROTO + '+'
     DEFAULT_GIT_CMD: Final[SymbolicName] = cast(SymbolicName, 'git')
     
-    def __init__(self, progs: Mapping[SymbolicName, AnyPath], setup_block: Optional[Mapping[str, Any]] = None):
+    def __init__(self, progs: ProgsMapping, setup_block: Optional[Mapping[str, Any]] = None):
         super().__init__(progs=progs, setup_block=setup_block)
         
         self.git_cmd = self.progs.get(self.DEFAULT_GIT_CMD, cast(RelPath, self.DEFAULT_GIT_CMD))
@@ -60,7 +73,7 @@ class GitFetcher(AbstractStatefulFetcher):
         return ( cls.DEFAULT_GIT_CMD, )
     
 
-    def doMaterializeRepo(self, repoURL:RepoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, Dict[str, Union[RepoURL, Optional[RepoTag]]]]:
+    def doMaterializeRepo(self, repoURL:RepoURL, repoTag: Optional[RepoTag] = None, repo_tag_destdir: Optional[AbsPath] = None, base_repo_destdir: Optional[AbsPath] = None, doUpdate: Optional[bool] = True) -> Tuple[AbsPath, RepoTag, MutableMapping[str, Union[RepoURL, Optional[RepoTag], RelPath, AbsPath]]]:
         """
 
         :param repoURL:
@@ -168,7 +181,7 @@ class GitFetcher(AbstractStatefulFetcher):
             if revproc.stdout is not None:
                 repo_effective_checkout = cast(RepoTag, revproc.stdout.read().rstrip())
             
-        metadata = {
+        metadata: MutableMapping[str, Union[RepoURL, Optional[RepoTag], RelPath, AbsPath]] = {
             'repo': repoURL,
             'tag': repoTag,
             'checkout': repo_effective_checkout,
