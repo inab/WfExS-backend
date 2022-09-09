@@ -38,7 +38,6 @@ from typing import (
     cast,
     Any,
     ClassVar,
-    Dict,
     Iterator,
     List,
     Mapping,
@@ -59,11 +58,10 @@ from typing_extensions import Final
 # should fallback to default implementations when C ones are not present
 import yaml
 YAMLLoader: Type[Union[yaml.Loader, yaml.CLoader]]
-YAMLDumper: Type[Union[yaml.Dumper, yaml.CDumper]]
 try:
-    from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
+    from yaml import CLoader as YAMLLoader
 except ImportError:
-    from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
+    from yaml import Loader as YAMLLoader
 
 import crypt4gh.lib # type: ignore[import]
 import crypt4gh.keys.kdf    # type: ignore[import]
@@ -84,7 +82,6 @@ from .common import (
     ProgsMapping,
     ProtocolFetcher,
     RelPath,
-    RemoteRepo,
     RepoTag,
     RepoURL,
     SecurityContextConfig,
@@ -97,10 +94,13 @@ from .common import (
     WorkflowType,
 )
 
-from .encrypted_fs import DEFAULT_ENCRYPTED_FS_TYPE, \
-  DEFAULT_ENCRYPTED_FS_CMD, DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT, \
-  ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS, EncryptedFSType
-from .engine import WorkflowEngine
+from .encrypted_fs import (
+    DEFAULT_ENCRYPTED_FS_CMD,
+    DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT,
+    DEFAULT_ENCRYPTED_FS_TYPE,
+    ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS,
+    EncryptedFSType,
+)
 
 
 from .cache_handler import SchemeHandlerCacheHandler

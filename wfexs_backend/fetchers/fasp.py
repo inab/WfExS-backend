@@ -15,15 +15,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import atexit
-import hashlib
 import os
-import shutil
 import subprocess
 import tempfile
-from typing import cast, Dict, List, Mapping, Optional, Tuple, Type, Union
-from typing import Any, Sequence
-from urllib import parse
+from typing import (
+    cast,
+    Any,
+    Mapping,
+    Optional,
+    Sequence,
+    Type,
+)
 
 from typing_extensions import Final
 
@@ -31,14 +33,10 @@ from . import AbstractStatefulFetcher, FetcherException
 
 from ..common import (
     AbsPath,
-    AnyPath,
-    AnyURI,
     ContentKind,
     ProgsMapping,
     ProtocolFetcherReturn,
     RelPath,
-    RepoURL,
-    RepoTag,
     SecurityContextConfig,
     SymbolicName,
     URIType,

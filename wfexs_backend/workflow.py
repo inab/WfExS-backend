@@ -52,25 +52,57 @@ try:
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
-from .common import AbstractWfExSException
-from .common import AbstractWorkflowEngineType
-from .common import AbsPath, RelPath, AnyPath, WfExSInstanceId
-from .common import Fingerprint, SymbolicName
-from .common import RepoTag, RepoURL, LicensedURI
-from .common import CacheType, ContentKind, WorkflowType, URIType
-from .common import ExpectedOutput, MaterializedWorkflowEngine
-from .common import IdentifiedWorkflow, LocalWorkflow
-from .common import GeneratedContent, GeneratedDirectoryContent
-from .common import MaterializedContent, MaterializedInput, MaterializedOutput
-from .common import MarshallingStatus, StagedSetup, EngineVersion
-from .common import SecurityContextConfig, SecurityContextConfigBlock
-from .common import Attribution, DefaultNoLicenceTuple
-from .common import TRS_Workflow_Descriptor, RemoteRepo
-from .common import ExportItem, ExportItemType
-from .common import ExportAction, MaterializedExportAction
+from .common import (
+    AbsPath,
+    AbstractWfExSException,
+    AbstractWorkflowEngineType,
+    AnyPath,
+    Attribution,
+    CacheType,
+    ContentKind,
+    DefaultNoLicenceTuple,
+    EngineVersion,
+    ExpectedOutput,
+    ExportItem,
+    ExportItemType,
+    ExportAction,
+    GeneratedContent,
+    GeneratedDirectoryContent,
+    IdentifiedWorkflow,
+    LicensedURI,
+    LocalWorkflow,
+    MarshallingStatus,
+    MaterializedContent,
+    MaterializedInput,
+    MaterializedOutput,
+    MaterializedExportAction,
+    MaterializedWorkflowEngine,
+    RelPath,
+    RemoteRepo,
+    RepoTag,
+    RepoURL,
+    SecurityContextConfig,
+    SecurityContextConfigBlock,
+    StagedSetup,
+    SymbolicName,
+    TRS_Workflow_Descriptor,
+    URIType,
+    WfExSInstanceId,
+    WorkflowType,
+)
+
 # These imports are needed to properly unmarshall from YAML
-from .common import Container, URIWithMetadata, ExitVal
-from .common import AnyContent, SymbolicParamName, SymbolicOutputName
+
+# pylint: disable-next=unused-import
+from .common import (
+    AnyContent,
+    Container,
+    ExitVal,
+    Fingerprint,
+    SymbolicParamName,
+    SymbolicOutputName,
+    URIWithMetadata,
+)
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
@@ -81,7 +113,6 @@ from .engine import WORKDIR_INPUTS_RELDIR, WORKDIR_INTERMEDIATE_RELDIR, WORKDIR_
     WORKDIR_ENGINE_TWEAKS_RELDIR, WORKDIR_WORKFLOW_RELDIR, WORKDIR_CONTAINERS_RELDIR
 
 from .utils.contents import link_or_copy
-from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, nihDigester
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import config_validate
 

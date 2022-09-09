@@ -20,20 +20,30 @@ from __future__ import absolute_import
 import os
 import shutil
 import tempfile
-from typing import Any, Mapping, Optional, Sequence, TYPE_CHECKING, Union
-from typing import cast
-from typing_extensions import Final
+from typing import (
+    cast,
+    Mapping,
+    Optional,
+    Sequence,
+    TYPE_CHECKING,
+)
 import urllib.parse
 
-from ..common import AbsPath, RelPath, ExportItem, SymbolicName
-from ..common import SecurityContextConfig, URIWithMetadata
-from ..common import MaterializedInput, MaterializedOutput
-from ..common import AnyContent, MaterializedContent
-from ..common import CacheType, URIType
+from ..common import (
+    AbsPath,
+    AnyContent,
+    CacheType,
+    MaterializedContent,
+    RelPath,
+    SecurityContextConfig,
+    SymbolicName,
+    URIType,
+    URIWithMetadata,
+)
 
 from ..utils.contents import link_or_copy
 
-from . import AbstractExportPlugin, ExportPluginException
+from . import AbstractExportPlugin
 
 if TYPE_CHECKING:
     from ..workflow import WF

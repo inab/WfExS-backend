@@ -19,14 +19,19 @@ from google.cloud import storage    # type: ignore[import]
 from urllib.parse import urlparse
 import logging
 import os
-from typing import List, Mapping, Optional, Tuple, Union
+from typing import List, Mapping, Optional
 
 from . import FetcherException
 
-from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
-from ..common import URIType, URIWithMetadata
-from ..common import ProtocolFetcher, ProtocolFetcherReturn
-
+from ..common import (
+    AbsPath,
+    ContentKind,
+    ProtocolFetcher,
+    ProtocolFetcherReturn,
+    SecurityContextConfig,
+    URIType,
+    URIWithMetadata,
+)
 
 logger = logging.getLogger()
 

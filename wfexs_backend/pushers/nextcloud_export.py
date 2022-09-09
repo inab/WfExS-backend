@@ -20,19 +20,32 @@ from __future__ import absolute_import
 import datetime
 import logging
 import os
-from typing import Any, Mapping, Optional, Sequence, TYPE_CHECKING, Union
-from typing import cast, MutableSet, NamedTuple, Tuple
-from typing_extensions import Final
+from typing import (
+    cast,
+    Any,
+    Mapping,
+    MutableSet,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    TYPE_CHECKING,
+)
 import urllib.parse
 import uuid
 
 from extended_nc_client.extended_nc_client import ExtendedNextcloudClient
 
-from ..common import AbsPath, RelPath, ExportItem, SymbolicName
-from ..common import SecurityContextConfig, URIWithMetadata
-from ..common import MaterializedInput, MaterializedOutput
-from ..common import AnyContent, MaterializedContent
-from ..common import CacheType, URIType
+from ..common import (
+    AbsPath,
+    AnyContent,
+    MaterializedContent,
+    RelPath,
+    SecurityContextConfig,
+    SymbolicName,
+    URIType,
+    URIWithMetadata,
+)
 
 from . import AbstractExportPlugin, ExportPluginException
 

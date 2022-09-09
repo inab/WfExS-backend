@@ -20,16 +20,22 @@ from botocore import UNSIGNED
 from botocore.client import Config
 import botocore.exceptions
 from urllib.parse import urlparse
-from typing import List, Mapping, Optional, Tuple, Union
+from typing import List, Mapping, Optional
 import os
 import shutil
 import logging
 
 from . import FetcherException
 
-from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
-from ..common import URIType, URIWithMetadata
-from ..common import ProtocolFetcher, ProtocolFetcherReturn
+from ..common import (
+    AbsPath,
+    ContentKind,
+    ProtocolFetcher,
+    ProtocolFetcherReturn,
+    SecurityContextConfig,
+    URIType,
+    URIWithMetadata,
+)
 
 # Logger of this module
 logger = logging.getLogger(__name__)

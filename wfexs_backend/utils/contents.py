@@ -19,13 +19,28 @@ from __future__ import absolute_import
 
 import os
 import shutil
-from typing import cast, Any, List, Mapping, Optional, Sequence, Union
-from typing import MutableSequence
+from typing import (
+    cast,
+    Any,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
+)
 
-from ..common import AbsPath, AbstractGeneratedContent, ContentKind
-from ..common import ExpectedOutput, Fingerprint, GeneratedContent
-from ..common import GeneratedDirectoryContent, LicensedURI, RelPath
-from ..common import AnyPath
+from ..common import (
+    AbsPath,
+    AbstractGeneratedContent,
+    AnyPath,
+    ContentKind,
+    ExpectedOutput,
+    Fingerprint,
+    GeneratedContent,
+    GeneratedDirectoryContent,
+    LicensedURI,
+    RelPath,
+)
 
 from .digests import nihDigester, ComputeDigestFromDirectory
 from .digests import ComputeDigestFromFile, ComputeDigestFromGeneratedContentList

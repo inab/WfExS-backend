@@ -22,7 +22,7 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Mapping, Optional, Sequence, Tuple, Union
 from typing import cast
 import uuid
 
@@ -33,7 +33,7 @@ from .common import DEFAULT_PODMAN_CMD
 
 from .container import ContainerFactory, ContainerFactoryException
 from .utils.contents import link_or_copy
-from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject, nihDigester
+from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject
 
 DOCKER_PROTO = 'docker://'
 

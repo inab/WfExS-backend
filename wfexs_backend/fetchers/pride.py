@@ -20,16 +20,25 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import cast, List, Mapping, Optional, Tuple, Union
+from typing import (
+    cast,
+    Mapping,
+    Optional,
+)
 
-from urllib import request, parse
+from urllib import parse
 import urllib.error
 
 from . import fetchClassicURL, FetcherException
 
-from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
-from ..common import ProtocolFetcher, ProtocolFetcherReturn
-from ..common import URIType, URIWithMetadata
+from ..common import (
+    AbsPath,
+    ProtocolFetcher,
+    ProtocolFetcherReturn,
+    SecurityContextConfig,
+    URIType,
+    URIWithMetadata,
+)
 
 
 PRIDE_PROJECTS_REST='https://www.ebi.ac.uk/pride/ws/archive/v2/projects/'

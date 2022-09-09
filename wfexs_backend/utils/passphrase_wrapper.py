@@ -16,15 +16,12 @@
 # limitations under the License.
 from __future__ import absolute_import
 
-import functools
 import os
 import random
-import subprocess
 import tempfile
 from typing import (
     cast,
     ClassVar,
-    List,
     Mapping,
     MutableMapping,
     NamedTuple,

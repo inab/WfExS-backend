@@ -37,12 +37,9 @@ from wiktionary_fetcher import store_terms
 
 from ..common import (
     AbsPath,
-    AnyPath,
-    AnyURI,
     ContentKind,
     ProgsMapping,
     ProtocolFetcherReturn,
-    RelPath,
     SecurityContextConfig,
     SymbolicName,
     URIType,

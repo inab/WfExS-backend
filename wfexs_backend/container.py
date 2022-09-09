@@ -24,12 +24,16 @@ import abc
 import logging
 import inspect
 
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Dict, Optional, Sequence, Union
 
-from .common import AbstractWfExSException
-from .common import AbsPath, RelPath
-from .common import ContainerFileNamingMethod, ContainerTaggedName
-from .common import Container
+from .common import (
+    AbstractWfExSException,
+    AbsPath,
+    Container,
+    ContainerFileNamingMethod,
+    ContainerTaggedName,
+    RelPath,
+)
 from . import common
 
 

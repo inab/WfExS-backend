@@ -20,10 +20,17 @@ from __future__ import absolute_import
 import io
 import json
 
-from typing import cast, List, Mapping, Optional, Tuple, Union
-from typing import MutableSequence, Sequence, Type, TYPE_CHECKING
+from typing import (
+    cast,
+    Mapping,
+    MutableSequence,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
-from urllib import request, parse
+from urllib import parse
 import urllib.error
 
 # We have preference for the C based loader and dumper, but the code
@@ -38,9 +45,15 @@ except ImportError:
 
 from . import fetchClassicURL, FetcherException
 
-from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
-from ..common import LicensedURI, URIType, URIWithMetadata
-from ..common import ProtocolFetcher, ProtocolFetcherReturn
+from ..common import (
+    AbsPath,
+    LicensedURI,
+    ProtocolFetcher,
+    ProtocolFetcherReturn,
+    SecurityContextConfig,
+    URIType,
+    URIWithMetadata,
+)
 
 DRS_SCHEME = 'drs'
 N2T_NET_SERVICE = 'https://n2t.net/'

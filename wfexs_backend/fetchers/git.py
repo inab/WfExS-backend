@@ -22,8 +22,16 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import cast, Dict, List, Mapping, Optional, Tuple, Type, Union
-from typing import Any, Sequence
+from typing import (
+    cast,
+    Any,
+    Mapping,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    Sequence,
+)
 from urllib import parse, request
 
 from typing_extensions import Final
@@ -32,8 +40,6 @@ from . import AbstractStatefulFetcher, FetcherException
 
 from ..common import (
     AbsPath,
-    AnyPath,
-    AnyURI,
     ContentKind,
     MutableMapping,
     ProgsMapping,

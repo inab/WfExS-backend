@@ -19,19 +19,29 @@ from __future__ import absolute_import
 import json
 import os
 import os.path
-import re
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Optional, Sequence, Tuple, Union
-from typing import cast
+from typing import (
+    cast,
+    Optional,
+    Sequence,
+    Union,
+)
 from urllib import parse
 import uuid
 
-from .common import AbsPath, RelPath, URIType
-from .common import Container, ContainerType, Fingerprint
-from .common import ContainerFileNamingMethod, ContainerTaggedName
-from .common import DEFAULT_SINGULARITY_CMD
+from .common import (
+    AbsPath,
+    Container,
+    ContainerFileNamingMethod,
+    ContainerTaggedName,
+    ContainerType,
+    DEFAULT_SINGULARITY_CMD,
+    Fingerprint,
+    RelPath,
+    URIType,
+)
 
 from .container import ContainerFactory, ContainerFactoryException
 

@@ -22,18 +22,30 @@ import os
 import shutil
 import subprocess
 import tempfile
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
-from typing import cast
+from typing import (
+    cast,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 import uuid
 
-from .common import AbsPath, RelPath, URIType
-from .common import Container, ContainerType
-from .common import ContainerFileNamingMethod, ContainerTaggedName
-from .common import DEFAULT_DOCKER_CMD
+from .common import (
+    AbsPath,
+    Container,
+    ContainerFileNamingMethod,
+    ContainerTaggedName,
+    ContainerType,
+    DEFAULT_DOCKER_CMD,
+    RelPath,
+    URIType,
+)
 
 from .container import ContainerFactory, ContainerFactoryException
 from .utils.contents import link_or_copy
-from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject, nihDigester
+from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject
 
 DOCKER_PROTO = 'docker://'
 

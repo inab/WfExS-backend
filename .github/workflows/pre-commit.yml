@@ -1,0 +1,36 @@
+name: pre-commit
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.7", "3.8", "3.9", "3.10" ]
+    name: Pre-commit python ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+      - uses: pre-commit/action@v3.0.0
+  pre-commit_3-6:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.6" ]
+    name: Pre-commit python ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+      - uses: pre-commit/action@v3.0.0
+        with:
+          extra_args: --all -c .pre-commit-config-3.6.yaml

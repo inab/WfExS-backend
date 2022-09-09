@@ -21,16 +21,26 @@ import io
 import json
 import os
 
-from typing import cast, List, Mapping, Optional, Tuple, Union
+from typing import (
+    cast,
+    Mapping,
+    Optional,
+)
 
-from urllib import request, parse
+from urllib import parse
 import urllib.error
 
 from . import fetchClassicURL, FetcherException
 
-from ..common import AbsPath, AnyURI, ContentKind, SecurityContextConfig
-from ..common import URIType, URIWithMetadata
-from ..common import ProtocolFetcher, ProtocolFetcherReturn
+from ..common import (
+    AbsPath,
+    ContentKind,
+    ProtocolFetcher,
+    ProtocolFetcherReturn,
+    SecurityContextConfig,
+    URIType,
+    URIWithMetadata,
+)
 
 
 INTERNAL_TRS_SCHEME_PREFIX = 'wfexs.trs.files'
