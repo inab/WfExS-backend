@@ -21,9 +21,29 @@ import abc
 import datetime
 import enum
 import os
-from typing import cast, Any, Callable, Dict, List, Mapping, NamedTuple
-from typing import NewType, Optional, Pattern, Sequence, Tuple, Type, Union
-from typing import Iterator, MutableMapping, TYPE_CHECKING
+from typing import (
+    cast,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    NewType,
+    Optional,
+    Pattern,
+    Sequence,
+    Tuple,
+    Type,
+    TYPE_CHECKING,
+    Union,
+)
+
+# pylint: ignore-next=unused-import
+from typing import (
+    Iterator,
+)
 
 if TYPE_CHECKING:
     from rocrate.model.computerlanguage import ComputerLanguage # type: ignore[import]

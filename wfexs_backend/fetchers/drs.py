@@ -26,8 +26,6 @@ from typing import (
     MutableSequence,
     Optional,
     Tuple,
-    Type,
-    Union,
 )
 
 from urllib import parse
@@ -37,6 +35,12 @@ import urllib.error
 # should fallback to default implementations when C ones are not present
 import yaml
 
+# This is needed to have proper pylint validation in python 3.6
+# pylint: ignore-next=unused-import
+from typing import (
+    Type,
+    Union,
+)
 YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
 try:
     from yaml import CLoader as YAMLLoader

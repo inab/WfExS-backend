@@ -22,7 +22,6 @@ import shutil
 import tempfile
 from typing import (
     cast,
-    Mapping,
     Optional,
     Sequence,
     TYPE_CHECKING,
