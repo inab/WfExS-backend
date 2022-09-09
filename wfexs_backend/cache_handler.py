@@ -19,39 +19,85 @@ from __future__ import absolute_import
 
 import datetime
 import hashlib
+import inspect
 import json
 import logging
 import os
 import os.path
 import shutil
 import traceback
+import types
 import urllib.parse
 import uuid
 
-from typing import cast, Any, Dict, Iterator, List, Mapping, Set
-from typing import Optional, Sequence, Tuple, Union
+from typing import (
+    cast,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
 
-from .common import AbstractWfExSException
-from .common import AbsPath, RelPath
-from .common import Attribution, DefaultNoLicenceTuple
-from .common import ContentKind, LicensedURI, ProtocolFetcher, URIWithMetadata
-from .common import Fingerprint, SecurityContextConfig, URIType
+from .common import (
+    AbsPath,
+    AbstractWfExSException,
+    Attribution,
+    ContentKind,
+    DefaultNoLicenceTuple,
+    Fingerprint,
+    LicensedURI,
+    ProgsMapping,
+    ProtocolFetcher,
+    RelPath,
+    SecurityContextConfig,
+    URIType,
+    URIWithMetadata,
+)
 
-from .fetchers import FetcherException
+from .fetchers import (
+    AbstractStatefulFetcher,
+    DEFAULT_SCHEME_HANDLERS,
+    FetcherException,
+    FetcherInstanceException,
+    InvalidFetcherException,
+)
 
-from .utils.digests import ComputeDigestFromDirectory, ComputeDigestFromFile, stringifyFilenameDigest
-from .utils.misc import config_validate
-from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
+from .utils.contents import link_or_copy
+from .utils.digests import (
+    ComputeDigestFromDirectory,
+    ComputeDigestFromFile,
+    stringifyFilenameDigest,
+)
+from .utils.misc import (
+    config_validate,
+    DatetimeEncoder,
+    jsonFilterDecodeFromStream,
+    translate_glob_args,
+)
 
 META_JSON_POSTFIX = '_meta.json'
 
 class CacheHandlerException(AbstractWfExSException):
     pass
 
+class CacheOfflineException(CacheHandlerException):
+    pass
+
+class CacheHandlerSchemeException(CacheHandlerException):
+    pass
+
 class SchemeHandlerCacheHandler:
     CACHE_METADATA_SCHEMA = cast(RelPath, 'cache-metadata.json')
     
-    def __init__(self, cacheDir, schemeHandlers:Mapping[str,ProtocolFetcher]):
+    def __init__(self, cacheDir: AbsPath, schemeHandlers:Mapping[str,ProtocolFetcher] = DEFAULT_SCHEME_HANDLERS):
         # Getting a logger focused on specific classes
         import inspect
         
@@ -59,14 +105,60 @@ class SchemeHandlerCacheHandler:
         
         # TODO: create caching database
         self.cacheDir = cacheDir
-        self.schemeHandlers : Dict[str, ProtocolFetcher] = dict()
+        self.schemeHandlers : MutableMapping[str, ProtocolFetcher] = dict()
         
-        self.addSchemeHandlers(schemeHandlers)
+        self.addRawSchemeHandlers(schemeHandlers)
     
-    def addSchemeHandlers(self, schemeHandlers:Mapping[str, ProtocolFetcher]) -> None:
+    def addRawSchemeHandlers(self, schemeHandlers:Mapping[str, ProtocolFetcher]) -> None:
         # No validation is done here about validness of schemes
         if isinstance(schemeHandlers, dict):
             self.schemeHandlers.update(schemeHandlers)
+        else:
+            raise InvalidFetcherException("Unable to add raw scheme handlers")
+    
+    def addSchemeHandler(self, scheme: str, handler: Union[Type[AbstractStatefulFetcher], ProtocolFetcher], progs: ProgsMapping = dict(), setup_block: Optional[Mapping[str, Any]] = None) -> None:
+        """
+
+        :param scheme:
+        :param handler:
+        """
+        the_handler: ProtocolFetcher
+        if inspect.isclass(handler):
+            inst_handler = self.instantiateStatefulFetcher(handler, progs=progs, setup_block=setup_block)
+            the_handler = inst_handler.fetch
+        elif isinstance(handler, (
+                types.FunctionType, types.LambdaType, types.MethodType, types.BuiltinFunctionType,
+                types.BuiltinMethodType)):
+            the_handler = handler
+        else:
+            raise InvalidFetcherException('Trying to set for scheme {} a invalid handler'.format(scheme))
+
+        self.schemeHandlers[scheme.lower()] = the_handler
+
+    def addSchemeHandlers(self, schemeHandlers:Mapping[str, ProtocolFetcher]) -> None:
+        # No validation is done here about validness of schemes
+        if isinstance(schemeHandlers, dict):
+            for scheme, clazz in schemeHandlers.items():
+                self.addSchemeHandler(scheme, clazz)
+        else:
+            raise InvalidFetcherException("Unable to instantiate to add scheme handlers")
+    
+    def instantiateStatefulFetcher(self, statefulFetcher: Type[AbstractStatefulFetcher], progs: ProgsMapping = dict(), setup_block: Optional[Mapping[str, Any]] = None) -> AbstractStatefulFetcher:
+        """
+        Method to instantiate stateful fetchers
+        """
+        instStatefulFetcher = None
+        if inspect.isclass(statefulFetcher):
+            if issubclass(statefulFetcher, AbstractStatefulFetcher):
+                try:
+                    instStatefulFetcher = statefulFetcher(progs=progs, setup_block=setup_block)
+                except Exception as e:
+                    raise FetcherInstanceException(f"Error while instantiating {statefulFetcher.__name__}") from e
+        
+        if instStatefulFetcher is None:
+            raise InvalidFetcherException("Unable to instantiate something which is not a class inheriting from AbstractStatefulFetcher")
+        
+        return instStatefulFetcher
     
     def _genUriMetaCachedFilename(self, hashDir:AbsPath, the_remote_file: URIType) -> Tuple[AbsPath, RelPath, AbsPath]:
         input_file = hashlib.sha1(the_remote_file.encode('utf-8')).hexdigest()
@@ -130,8 +222,8 @@ class SchemeHandlerCacheHandler:
     
     def list(
         self,
-        destdir: AbsPath,
         *args: str,
+        destdir: Optional[AbsPath] = None,
         acceptGlob:bool = False,
         cascade:bool = False
     ) -> Iterator[Tuple[LicensedURI, Mapping[str,Any]]]:
@@ -139,6 +231,9 @@ class SchemeHandlerCacheHandler:
         This method iterates over the list of metadata entries,
         using glob patterns if requested
         """
+        if destdir is None:
+            destdir = self.cacheDir
+        
         entries = set(args)
         if entries and acceptGlob:
             reEntries = translate_glob_args(list(entries))
@@ -226,8 +321,8 @@ class SchemeHandlerCacheHandler:
     
     def remove(
         self,
-        destdir: AbsPath,
         *args,
+        destdir: Optional[AbsPath] = None,
         doRemoveFiles: bool = False,
         acceptGlob: bool = False,
         cascade: bool = False
@@ -236,9 +331,12 @@ class SchemeHandlerCacheHandler:
         This method iterates elements from metadata entries,
         and optionally the cached value
         """
+        if destdir is None:
+            destdir = self.cacheDir
+        
         if len(args) > 0:
             hashDir = self.getHashDir(destdir)
-            for licensed_meta_uri, metaStructure in self.list(destdir, *args, acceptGlob=acceptGlob, cascade=cascade):
+            for licensed_meta_uri, metaStructure in self.list(*args, destdir=destdir, acceptGlob=acceptGlob, cascade=cascade):
                 removeCachedCopyPath : Optional[AbsPath] = None
                 for meta in metaStructure['metadata_array']:
                     if doRemoveFiles and not meta['metadata'].get('injected'):
@@ -276,14 +374,20 @@ class SchemeHandlerCacheHandler:
     
     def inject(
         self,
-        destdir: AbsPath,
         the_remote_file: Union[LicensedURI, urllib.parse.ParseResult, URIType],
+        destdir: Optional[AbsPath] = None,
         fetched_metadata_array: Optional[List[URIWithMetadata]] = None,
         finalCachedFilename: Optional[AbsPath] = None,
         tempCachedFilename: Optional[AbsPath] = None,
         inputKind: Optional[Union[ContentKind, AbsPath, List[AbsPath]]] = None
     ) -> Tuple[Optional[AbsPath], Optional[Fingerprint]]:
-        return self._inject(
+        if destdir is None:
+            destdir = self.cacheDir
+        
+        # At least one of the should exist
+        assert (finalCachedFilename is not None) or (tempCachedFilename is not None)
+        
+        newFinalCachedFilename, fingerprint = self._inject(
             self.getHashDir(destdir),
             the_remote_file,
             destdir=destdir,
@@ -292,6 +396,24 @@ class SchemeHandlerCacheHandler:
             tempCachedFilename=tempCachedFilename,
             inputKind=inputKind
         )
+        assert newFinalCachedFilename is not None
+        
+        # Now, removing a possible previous copy
+        # (which should not be needed in the future)
+        if tempCachedFilename is not None:
+            do_copy = True
+            if (finalCachedFilename is not None) and os.path.exists(finalCachedFilename):
+                do_copy = not os.path.samefile(tempCachedFilename, finalCachedFilename)
+                if do_copy:
+                    if os.path.isfile(finalCachedFilename):
+                        os.unlink(finalCachedFilename)
+                    elif os.path.isdir(finalCachedFilename):
+                        shutil.rmtree(finalCachedFilename)
+            
+            if do_copy:
+                link_or_copy(tempCachedFilename, newFinalCachedFilename)
+        
+        return newFinalCachedFilename , fingerprint
     
     def _inject(
         self,
@@ -306,6 +428,8 @@ class SchemeHandlerCacheHandler:
         """
         This method has been created to be able to inject a cached metadata entry
         """
+        assert (finalCachedFilename is not None) or (tempCachedFilename is not None)
+        
         the_licences : Tuple[URIType, ...] = tuple()
         if isinstance(the_remote_file, LicensedURI):
             the_remote_uri = the_remote_file.uri
@@ -392,16 +516,18 @@ class SchemeHandlerCacheHandler:
     
     def validate(
         self,
-        destdir:AbsPath,
         *args,
-        acceptGlob:bool=False,
-        cascade:bool=False
+        destdir: Optional[AbsPath] = None,
+        acceptGlob: bool = False,
+        cascade: bool = False
     ) -> Iterator[Tuple[LicensedURI, bool, Optional[Mapping]]]:
+        if destdir is None:
+            destdir = self.cacheDir
         
         hashDir = self.getHashDir(destdir)
         
         retMetaStructure : Optional[Mapping]
-        for licensed_meta_uri, metaStructure in self.list(destdir, *args, acceptGlob=acceptGlob, cascade=cascade):
+        for licensed_meta_uri, metaStructure in self.list(*args, destdir=destdir, acceptGlob=acceptGlob, cascade=cascade):
             inputKind = metaStructure.get('kind')
             validated = False
             retMetaStructure = metaStructure
@@ -442,12 +568,14 @@ class SchemeHandlerCacheHandler:
     def fetch(
         self,
         remote_file:Union[LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]],
-        destdir:AbsPath,
         offline:bool,
+        destdir: Optional[AbsPath] = None,
         ignoreCache:bool=False,
         registerInCache:bool=True,
         secContext:Optional[SecurityContextConfig]=None
     ) -> Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]:
+        if destdir is None:
+            destdir = self.cacheDir
         
         # The directory with the content, whose name is based on sha256
         if not os.path.exists(destdir):
@@ -464,7 +592,7 @@ class SchemeHandlerCacheHandler:
         # This filename will only be used when content is being fetched
         tempCachedFilename = cast(AbsPath, os.path.join(destdir, 'caching-' + str(uuid.uuid4())))
         # This is an iterative process, where the URI is resolved and peeled until a basic fetching protocol is reached
-        inputKind = remote_file
+        inputKind: Union[ContentKind, LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]] = remote_file
         metadata_array = []
         licences : List[URIType] = []
         # The security context could be augmented, so avoid side effects
@@ -528,7 +656,9 @@ class SchemeHandlerCacheHandler:
                     else:
                         # Additional checks
                         inputKind = ContentKind(inputKindRaw)
-                        relFinalCachedFilename = metaStructure.get('path', {}).get('relative', os.readlink(absUriCachedFilename))
+                        relFinalCachedFilename = metaStructure.get('path', {}).get('relative')
+                        if relFinalCachedFilename is None:
+                            relFinalCachedFilename = os.readlink(absUriCachedFilename)
                         finalCachedFilename = cast(AbsPath, os.path.normpath(os.path.join(hashDir, relFinalCachedFilename)))
                         
                         if not os.path.exists(finalCachedFilename):
@@ -559,11 +689,11 @@ class SchemeHandlerCacheHandler:
                 the_licences = metaStructure.get('licences', [])
             elif offline:
                 # As this is a handler for online resources, comply with offline mode
-                raise CacheHandlerException(f"Cannot download content in offline mode from {remote_file} to {uriCachedFilename}")
+                raise CacheOfflineException(f"Cannot download content in offline mode from {remote_file} to {uriCachedFilename}")
             else:
                 # Cache miss
                 # As this is a handler for online resources, comply with offline mode
-                nested_exception = None
+                nested_exception: Optional[BaseException] = None
                 failed = True
                 for the_remote_file, parsedInputURL, usableSecContext in uncachedInputs:
                     # Content is fetched here
@@ -575,11 +705,15 @@ class SchemeHandlerCacheHandler:
                         if schemeHandler is None:
                             errmsg = f'No {theScheme} scheme handler for {the_remote_file} (while processing {remote_file}). Was this data injected in the cache?'
                             self.logger.error(errmsg)
-                            raise CacheHandlerException(errmsg) from nested_exception
+                            che = CacheHandlerException(errmsg)
+                            if nested_exception is not None:
+                                raise che from nested_exception
+                            else:
+                                raise che
 
                         try:
                             # Content is fetched here
-                            inputKind, fetched_metadata_array, fetched_licences = schemeHandler(the_remote_file, tempCachedFilename, secContext=usableSecContext if usableSecContext else None)
+                            inputKind, fetched_metadata_array, fetched_licences = schemeHandler(the_remote_file, tempCachedFilename, secContext=usableSecContext if usableSecContext else None) # type: ignore
                             
                             # Overwrite the licence if it is explicitly returned
                             if fetched_licences is not None:
@@ -616,11 +750,17 @@ class SchemeHandlerCacheHandler:
                             
                             os.symlink(next_input_file, absUriCachedFilename)
                         except FetcherException as che:
-                            raise che from nested_exception
+                            if nested_exception is not None:
+                                raise che from nested_exception
+                            else:
+                                raise che
                         except Exception as e:
                             errmsg = "Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(the_remote_file, uriCachedFilename, remote_file, tempCachedFilename, e)
                             self.logger.exception(errmsg)
-                            raise CacheHandlerException(errmsg) from nested_exception
+                            if nested_exception is not None:
+                                raise CacheHandlerException(errmsg) from nested_exception
+                            else:
+                                raise CacheHandlerException(errmsg)
                     except FetcherException as wfe:
                         # Keeping the newest element of the chain
                         nested_exception = wfe
@@ -633,12 +773,17 @@ class SchemeHandlerCacheHandler:
                 # No one of the URIs could be fetched or resolved
                 if failed:
                     if len(uncachedInputs) > 1:
-                        raise CacheHandlerException(f"{len(uncachedInputs)} alternate URIs have failed (see nested reasons)") from nested_exception
-                    else:
+                        if nested_exception is not None:
+                            raise CacheHandlerException(f"{len(uncachedInputs)} alternate URIs have failed (see nested reasons)") from nested_exception
+                        else:
+                            raise CacheHandlerException(f"{len(uncachedInputs)} alternate URIs have failed (see nested reasons)")
+                    elif nested_exception is not None:
                         raise nested_exception
             
             # Store the metadata
             metadata_array.extend(fetched_metadata_array)
             licences.extend(the_licences)
-
+        
+        assert finalCachedFilename is not None
+        
         return inputKind, finalCachedFilename, metadata_array, tuple(licences)
