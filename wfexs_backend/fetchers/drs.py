@@ -51,7 +51,7 @@ def query_n2t(scheme: str, the_id: str, remote_file: URIType, metadata_array: Mu
 
     n2t_io = io.BytesIO()
     _ , meta_n2t_io, _ = fetchClassicURL(query_url, n2t_io)
-    answer = yaml.load(n2t_io.getvalue().decode('utf-8'), Loader=YAMLLoader)
+    answer = yaml.safe_load(n2t_io.getvalue().decode('utf-8'), Loader=YAMLLoader)
 
     gathered_meta['payload'] = answer
     metadata_array.append(URIWithMetadata(remote_file, gathered_meta))

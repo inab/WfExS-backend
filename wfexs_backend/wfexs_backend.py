@@ -686,7 +686,7 @@ class WfExSBackend:
         self.logger.info(f'Validating {workflowMetaFilename}')
 
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf, Loader=YAMLLoader))
 
         if not isinstance(workflow_meta, dict):
             workflow_meta = {}

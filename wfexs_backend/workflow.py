@@ -607,7 +607,7 @@ class WF:
     @classmethod
     def ReadSecurityContextFile(cls, securityContextsConfigFilename: AnyPath) -> SecurityContextConfigBlock:
         with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
-            creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+            creds_config = unmarshall_namedtuple(yaml.safe_load(scf, Loader=YAMLLoader))
             
         return creds_config
     
@@ -618,7 +618,7 @@ class WF:
         """
         
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf, Loader=YAMLLoader))
             
         # Should we prepend the nickname prefix?
         if nickname_prefix is not None:
@@ -1418,7 +1418,7 @@ class WF:
         
         if exportActionsFile is not None:
             with open(exportActionsFile, mode="r", encoding="utf-8") as eaf:
-                raw_actions = unmarshall_namedtuple(yaml.load(eaf, Loader=YAMLLoader))
+                raw_actions = unmarshall_namedtuple(yaml.safe_load(eaf, Loader=YAMLLoader))
             
             actions = self.parseExportActions(raw_actions['exports'])
         else:
@@ -1596,7 +1596,7 @@ class WF:
             workflow_meta = None
             try:
                 with open(workflow_meta_filename, mode="r", encoding="utf-8") as wcf:
-                    workflow_meta = unmarshall_namedtuple(yaml.load(wcf, Loader=YAMLLoader))
+                    workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf, Loader=YAMLLoader))
                     
                     # If the file decodes to None, fail fast
                     if workflow_meta is None:
@@ -1665,7 +1665,7 @@ class WF:
                 # creds_file = os.path.join(self.metaDir, WORKDIR_SECURITY_CONTEXT_FILE)
                 # if os.path.exists(creds_file):
                 #     with open(creds_file, mode="r", encoding="utf-8") as scf:
-                #         self.creds_config = unmarshall_namedtuple(yaml.load(scf, Loader=YAMLLoader))
+                #         self.creds_config = unmarshall_namedtuple(yaml.safe_load(scf, Loader=YAMLLoader))
                 # else:
                 #     self.creds_config = {}
                 # 
