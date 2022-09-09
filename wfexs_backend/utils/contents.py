@@ -191,26 +191,37 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
     
     # Now, link or copy
     if os.lstat(src).st_dev == dest_st_dev and not force_copy:
+        try:
+            if os.path.isfile(src):
+                if dest_exists:
+                    os.unlink(dest)
+                os.link(src, dest)
+            else:
+                # Recursively hardlinking
+                # as of https://stackoverflow.com/a/10778930
+                if dest_exists:
+                    shutil.rmtree(dest)
+                shutil.copytree(src, dest, copy_function=os.link)
+        except OSError as ose:
+            # Even when we are detecting whether it is the same
+            # device, it can happen both paths are in different
+            # bind mounts, which forbid hard links
+            if ose.errno != 18:
+                raise ose
+            
+            force_copy = True
+    
+    if force_copy:
         if os.path.isfile(src):
+            # Copying the content
+            # as it is in a separated filesystem
             if dest_exists:
                 os.unlink(dest)
-            os.link(src, dest)
+            shutil.copy2(src, dest)
         else:
-            # Recursively hardlinking
-            # as of https://stackoverflow.com/a/10778930
+            # Recursively copying the content
+            # as it is in a separated filesystem
             if dest_exists:
                 shutil.rmtree(dest)
-            shutil.copytree(src, dest, copy_function=os.link)
-    elif os.path.isfile(src):
-        # Copying the content
-        # as it is in a separated filesystem
-        if dest_exists:
-            os.unlink(dest)
-        shutil.copy2(src, dest)
-    else:
-        # Recursively copying the content
-        # as it is in a separated filesystem
-        if dest_exists:
-            shutil.rmtree(dest)
-        shutil.copytree(src, dest)
-        
+            shutil.copytree(src, dest)
+    
