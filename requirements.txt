@@ -4,7 +4,6 @@ jsonschema[format_nongpl] >= 3.0.0
 paramiko[ed25519]
 certifi
 crypt4gh
-pwgen-passphrase
 bagit
 aioftp
 openpyxl
@@ -19,3 +18,6 @@ botocore
 google-cloud-storage
 typing_extensions
 pyncclient-ext >= 0.1.1
+wiktionary-term-fetcher >= 0.1.1
+funny-passphrase >= 0.2.3
+pyxdg

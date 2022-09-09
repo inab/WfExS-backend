@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 
 import atexit
+import copy
 import datetime
 import hashlib
 import inspect
@@ -33,12 +34,26 @@ import tempfile
 import types
 import uuid
 
-from typing import Any, Dict, Iterator, List, Mapping, Optional, Sequence
-from typing import cast, MutableMapping, Pattern, Set, Tuple, Type, Union
-from typing import ClassVar
-from typing_extensions import Final
-
+from typing import (
+    cast,
+    Any,
+    ClassVar,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Pattern,
+    Sequence,
+    Set,
+    Tuple,
+    Type,
+    Union,
+)
 from urllib import parse
+
+from typing_extensions import Final
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
@@ -54,16 +69,33 @@ import crypt4gh.lib # type: ignore[import]
 import crypt4gh.keys.kdf    # type: ignore[import]
 import crypt4gh.keys.c4gh   # type: ignore[import]
 
-from .common import AbstractWfExSException
-from .common import AbstractWorkflowEngineType
-from .common import AbsPath, RelPath, SymbolicName
-from .common import RemoteRepo, RepoTag, RepoURL, LicensedURI
-from .common import CacheType, ContentKind, URIType, URIWithMetadata
-from .common import MaterializedContent, WorkflowType
-from .common import SecurityContextConfig, SecurityContextConfigBlock
-from .common import ExitVal, ProtocolFetcher, WfExSInstanceId
-from .common import MarshallingStatus, StagedSetup
-from .common import DEFAULT_FUSERMOUNT_CMD, DEFAULT_PROGS
+from .common import (
+    AbstractWfExSException,
+    AbstractWorkflowEngineType,
+    AbsPath,
+    CacheType,
+    ContentKind,
+    DEFAULT_FUSERMOUNT_CMD,
+    DEFAULT_PROGS,
+    ExitVal,
+    LicensedURI,
+    MaterializedContent,
+    MarshallingStatus,
+    ProgsMapping,
+    ProtocolFetcher,
+    RelPath,
+    RemoteRepo,
+    RepoTag,
+    RepoURL,
+    SecurityContextConfig,
+    SecurityContextConfigBlock,
+    StagedSetup,
+    SymbolicName,
+    URIType,
+    URIWithMetadata,
+    WfExSInstanceId,
+    WorkflowType,
+)
 
 from .encrypted_fs import DEFAULT_ENCRYPTED_FS_TYPE, \
   DEFAULT_ENCRYPTED_FS_CMD, DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT, \
@@ -75,8 +107,15 @@ from .cache_handler import SchemeHandlerCacheHandler
 
 from .utils.marshalling_handling import unmarshall_namedtuple
 from .utils.misc import config_validate
-from .utils.misc import DatetimeEncoder, jsonFilterDecodeFromStream, translate_glob_args
-from .utils.passphrase_wrapper import generate_nickname, generate_passphrase
+from .utils.misc import (
+    DatetimeEncoder,
+    jsonFilterDecodeFromStream,
+    translate_glob_args,
+)
+from .utils.passphrase_wrapper import (
+    WfExSPassGenSingleton,
+    WfExSPassphraseGenerator,
+)
 
 from .fetchers import AbstractStatefulFetcher
 from .fetchers import DEFAULT_SCHEME_HANDLERS
@@ -113,10 +152,19 @@ class WfExSBackend:
 
     SCHEMAS_REL_DIR: Final[str] = 'schemas'
     CONFIG_SCHEMA: Final[RelPath] = cast(RelPath, 'config.json')
+    _PassGen: ClassVar[Optional[WfExSPassphraseGenerator]] = None
+    
+    @classmethod
+    def GetPassGen(cls) -> WfExSPassphraseGenerator:
+        if cls._PassGen is None:
+            cls._PassGen = WfExSPassGenSingleton()
+            assert cls._PassGen is not None
+        
+        return cls._PassGen
     
     @classmethod
     def generate_passphrase(cls) -> str:
-        return generate_passphrase(passphrase_length=cls.DEFAULT_PASSPHRASE_LENGTH)
+        return cls.GetPassGen().generate_passphrase_random(passphrase_length=cls.DEFAULT_PASSPHRASE_LENGTH)
 
     @classmethod
     def bootstrap(cls, local_config: MutableMapping[str, Any], config_directory: Optional[Union[RelPath,AbsPath]] = None, key_prefix: Optional[str] = None) -> Tuple[bool, MutableMapping[str, Any]]:
@@ -270,7 +318,7 @@ class WfExSBackend:
         self.local_config = local_config
         # This is an updatable copy, as it is going to be augmented
         # through the needs of the stateful fetchers
-        self.progs : Dict[SymbolicName, Union[RelPath, AbsPath]] = DEFAULT_PROGS.copy()
+        self.progs : ProgsMapping = copy.copy(DEFAULT_PROGS)
 
         toolSect = local_config.get('tools', {})
         # Populating paths
@@ -424,15 +472,12 @@ class WfExSBackend:
         """
         Method to instantiate stateful fetchers once
         """
-        instStatefulFetcher = None
-        if inspect.isclass(statefulFetcher):
-            if issubclass(statefulFetcher, AbstractStatefulFetcher):
-                instStatefulFetcher = self._sngltn.get(statefulFetcher)
-                if instStatefulFetcher is None:
-                    # Let's augment the list of needed progs by this
-                    # stateful fetcher
-                    instStatefulFetcher = statefulFetcher(progs=self.progs, setup_block=setup_block)
-                    self._sngltn[statefulFetcher] = instStatefulFetcher
+        instStatefulFetcher = self._sngltn.get(statefulFetcher)
+        if instStatefulFetcher is None:
+            # Let's augment the list of needed progs by this
+            # stateful fetcher
+            instStatefulFetcher = self.cacheHandler.instantiateStatefulFetcher(statefulFetcher, progs=self.progs, setup_block=setup_block)
+            self._sngltn[statefulFetcher] = instStatefulFetcher
 
         return instStatefulFetcher
     
@@ -507,7 +552,7 @@ class WfExSBackend:
                     # the lowercase version
                     instSchemeHandlers[lScheme] = instSchemeHandler
 
-            self.cacheHandler.addSchemeHandlers(instSchemeHandlers)
+            self.cacheHandler.addRawSchemeHandlers(instSchemeHandlers)
 
     def newSetup(self,
                  workflow_id,
@@ -531,9 +576,9 @@ class WfExSBackend:
         """
         instanceId = cast(WfExSInstanceId, str(uuid.uuid4()))
         if nickname_prefix is None:
-            nickname = generate_nickname()
+            nickname = self.GetPassGen().generate_nickname()
         else:
-            nickname = nickname_prefix + generate_nickname()
+            nickname = nickname_prefix + self.GetPassGen().generate_nickname()
         
         return self.getOrCreateRawWorkDirFromInstanceId(instanceId, nickname=nickname, create_ok=True)
     
@@ -561,7 +606,7 @@ class WfExSBackend:
             if instanceId is None:
                 instanceId = cast(WfExSInstanceId, os.path.basename(uniqueRawWorkDir))
             if nickname is None:
-                nickname = generate_nickname()
+                nickname = self.GetPassGen().generate_nickname()
             creation = datetime.datetime.now(tz=datetime.timezone.utc)
             with open(id_json_path, mode='w', encoding='utf-8') as idF:
                 idNick = {
@@ -851,8 +896,8 @@ class WfExSBackend:
         """
         return self.cacheHandler.fetch(
             remote_file,
-            self.cachePathMap[cacheType],
-            offline,
+            destdir=self.cachePathMap[cacheType],
+            offline=offline,
             ignoreCache=ignoreCache,
             registerInCache=registerInCache,
             secContext=secContext
@@ -880,7 +925,7 @@ class WfExSBackend:
                 types.BuiltinMethodType)):
             raise WfExSBackendException('Trying to set for scheme {} a invalid handler'.format(scheme))
 
-        self.cacheHandler.addSchemeHandlers({scheme.lower(): handler})
+        self.cacheHandler.addRawSchemeHandlers({scheme.lower(): handler})
 
     def doMaterializeRepo(self, repoURL: RepoURL, repoTag: Optional[RepoTag] = None, doUpdate: bool = True) -> Tuple[AbsPath, RepoTag]:
         """
@@ -904,8 +949,8 @@ class WfExSBackend:
             remote_url += '@' + repoTag
 
         self.cacheHandler.inject(
-            self.cacheWorkflowDir,
             cast(URIType, remote_url),
+            destdir=self.cacheWorkflowDir,
             fetched_metadata_array=[
                 URIWithMetadata(
                     uri=cast(URIType, remote_url),
@@ -932,7 +977,11 @@ class WfExSBackend:
         """
 
         try:
-            roCK, roCrateFile, _, _ = self.cacheHandler.fetch(roCrateURL, self.cacheROCrateDir, offline)
+            roCK, roCrateFile, _, _ = self.cacheHandler.fetch(
+                roCrateURL,
+                destdir=self.cacheROCrateDir,
+                offline=offline
+            )
         except Exception as e:
             raise WfExSBackendException("Cannot download RO-Crate from {}, {}".format(roCrateURL, e)) from e
 
@@ -992,7 +1041,13 @@ class WfExSBackend:
 
         self.logger.info("downloading workflow input: {}".format(' or '.join(remote_uris)))
 
-        inputKind, cachedFilename, metadata_array, cachedLicences = self.cacheHandler.fetch(remote_file, workflowInputs_destdir, offline, ignoreCache, registerInCache, secContext)
+        inputKind, cachedFilename, metadata_array, cachedLicences = self.cacheHandler.fetch(
+            remote_file,
+            destdir=workflowInputs_destdir,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            registerInCache=registerInCache,
+            secContext=secContext)
         downloaded_uri = remote_file.uri  if isinstance(remote_file, LicensedURI)  else  remote_file
         self.logger.info("downloaded workflow input: {} => {}".format(downloaded_uri, cachedFilename))
 

@@ -17,46 +17,168 @@
 from __future__ import absolute_import
 
 import functools
+import os
 import random
 import subprocess
-from typing import List, Optional
+import tempfile
+from typing import (
+    cast,
+    ClassVar,
+    List,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Union,
+)
+import urllib.parse
 
-DEFAULT_PASSPHRASE_LENGTH = 6
+from typing_extensions import Final
 
-@functools.lru_cache()
-def _get_wordlist_tags() -> List[str]:
-	"""
-	This method learns the available list of wordlists, in order
-	to choose one of them randomly
-	"""
-	import re
-	wordlistPat = re.compile(r'\[-w \{([^}]+)\}')
-	wordlists_tags = None
-	with subprocess.Popen(['pwgen-passphrase', '-h'], encoding='utf-8', stdout=subprocess.PIPE) as p:
-		for line in p.stdout:
-			matched = wordlistPat.search(line)
-			if matched:
-				wordlists_tags = matched.group(1).split(',')
+from funny_passphrase.generator import FunnyPassphraseGenerator
+from funny_passphrase.indexer import CompressedIndexedText
+
+import xdg.BaseDirectory    # type: ignore[import]
+
+from ..cache_handler import (
+    CacheOfflineException,
+    SchemeHandlerCacheHandler,
+)
+from ..common import (
+    AbsPath,
+    URIType,
+)
+from ..fetchers.wiktionary import WiktionaryFetcher
+
+class RemoteWordlistResource(NamedTuple):
+    uri: str
+    substart: int = 0
+    subend: Optional[int] = None
+
+class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
+    DEFAULT_PASSPHRASE_LENGTH: Final[int] = 6
+    WFEXS_PASSPHRASE_SCHEME: Final[str] = 'wfexs.funny-passphrase'
 	
-	return wordlists_tags
-
-def generate_passphrase(chosen_wordlist:Optional[str] = None, passphrase_length:int = DEFAULT_PASSPHRASE_LENGTH) -> str:
-	"""
-	This method is needed to avoid future legal issues using a GPL-3.0
-	library from within an Apache 2.0 licenced code
-	"""
-	wordlists_tags = _get_wordlist_tags()
-	if chosen_wordlist not in wordlists_tags:
-		chosen_wordlist = wordlists_tags[random.randrange(len(wordlists_tags))]
-
-	with subprocess.Popen(['pwgen-passphrase', '-w', chosen_wordlist, '-l', str(passphrase_length)], encoding='utf-8', stdout=subprocess.PIPE) as pg:
-		for line in pg.stdout:
-			return line.rstrip()
-
-def generate_nickname() -> str:
-	"""
-	This method generates random nicknames using two specific
-	wordlists (if available)
-	"""
-	return generate_passphrase('eff-long', 1) + ' ' + generate_passphrase('diceware', 1) 
+    DEFAULT_WORD_SETS: Mapping[str, Sequence[RemoteWordlistResource]] = {
+        'eff-long': [
+            RemoteWordlistResource('https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt', substart=8)
+        ],
+        'cain': [
+            # https://wiki.skullsecurity.org/index.php/Passwords
+            RemoteWordlistResource('http://downloads.skullsecurity.org/passwords/cain.txt.bz2'),
+        ],
+        'adjectives': [
+            RemoteWordlistResource('wfexs.wiktionary:Spanish/adjectives'),
+            RemoteWordlistResource('wfexs.wiktionary:Catalan/adjectives'),
+            RemoteWordlistResource('wfexs.wiktionary:English/adjectives'),
+        ],
+        'nouns': [
+            RemoteWordlistResource('wfexs.wiktionary:Spanish/nouns'),
+            RemoteWordlistResource('wfexs.wiktionary:Catalan/nouns'),
+            RemoteWordlistResource('wfexs.wiktionary:English/nouns'),
+        ],
+    }
 	
+    def __init__(self, cacheHandler: SchemeHandlerCacheHandler, cacheDir: Optional[AbsPath] = None, word_sets: Mapping[str, Sequence[RemoteWordlistResource]] = DEFAULT_WORD_SETS):
+        # The cache is an integral part, as it is where the
+        # different components are going to be fetched
+        self.cacheHandler = cacheHandler
+        self.cacheDir = cacheDir
+        
+        cindex_sets = self._materialize_word_sets(word_sets)
+        print("hola")
+        
+        super().__init__(**cindex_sets)
+
+    def _materialize_word_sets(self, raw_word_sets: Mapping[str, Sequence[RemoteWordlistResource]]) -> Mapping[str, CompressedIndexedText]:
+        """
+        Download and index each one of the components of the word sets
+        """
+        word_sets: MutableMapping[str, CompressedIndexedText] = dict()
+        for wordlist_tag, word_set_uris in raw_word_sets.items():
+            indexed_filenames = []
+            for remote_wordlist in word_set_uris:
+                word_set_uri = remote_wordlist.uri
+                wordlist_internal_uri = URIType(f'{self.WFEXS_PASSPHRASE_SCHEME}:{urllib.parse.quote(word_set_uri, safe="")}')
+                indexed_filename = None
+                try:
+                    i_kind , indexed_filename , _ , _ = self.cacheHandler.fetch(wordlist_internal_uri, destdir=self.cacheDir, offline=True)
+                    
+                    # This if should be superfluous
+                    if not os.path.exists(indexed_filename):
+                        indexed_filename = None
+                except CacheOfflineException:
+                    pass
+                    
+                if indexed_filename is None:
+                    # Time to fetch the wordlist
+                    input_kind, cached_filename, metadata_array, licences_t = self.cacheHandler.fetch(URIType(word_set_uri), destdir=self.cacheDir, offline=False)
+                    
+                    # Prepare the compressed index
+                    with tempfile.NamedTemporaryFile() as tmp_indexed_filename:
+                        CompressedIndexedText.IndexTextFile(cached_filename, tmp_indexed_filename.name, substart=remote_wordlist.substart, subend=remote_wordlist.subend)
+                        # And inject it in the cache
+                        indexed_filename , _ = self.cacheHandler.inject(
+                            wordlist_internal_uri,
+                            destdir=self.cacheDir,
+                            tempCachedFilename=cast(AbsPath, tmp_indexed_filename.name)
+                        )
+                
+                assert indexed_filename is not None
+                
+                indexed_filenames.append(indexed_filename)
+            
+            word_sets[wordlist_tag] = CompressedIndexedText(cfiles=indexed_filenames)
+        
+        return word_sets
+    
+    def generate_passphrase_random(self, chosen_wordlist:Optional[Union[str, int, Sequence[Union[str, int]]]] = None, passphrase_length:int = DEFAULT_PASSPHRASE_LENGTH) -> str:
+        """
+        This method is needed to hook into the funny passphrase library
+        """
+        get_random = 1 if chosen_wordlist is None else 0
+        
+        wordlists_tags = self.word_set_tags()
+        if get_random == 0:
+            if not isinstance(chosen_wordlist, list):
+                chosen_wordlist = [ cast(Union[str, int], chosen_wordlist) ]
+            
+            # Validating the wordlist
+            for chosen in chosen_wordlist:
+                if chosen not in wordlists_tags:
+                    get_random = len(chosen_wordlist)
+                    break
+        
+        
+        if get_random > 0:
+            chosen_wordlist = [ wordlists_tags[random.randrange(len(wordlists_tags))]  for _ in range(get_random) ]
+        
+        return self.generate_passphrase(num=passphrase_length, subset=cast(Sequence[Union[str, int]], chosen_wordlist))
+
+    def generate_nickname(self) -> str:
+        """
+        This method generates random nicknames using two specific
+        wordlists (if available)
+        """
+        return self.generate_passphrase_random('adjectives', 1) + ' ' + self.generate_passphrase_random('nouns', 1) 
+
+
+class WfExSPassGenSingleton(WfExSPassphraseGenerator):
+    __instance: ClassVar[Optional[WfExSPassphraseGenerator]] = None
+    
+    def __new__(cls):
+        if cls.__instance is None:
+            cachePath = cast(AbsPath, xdg.BaseDirectory.save_cache_path('es.elixir.WfExSPassGenSingleton'))
+            
+            # Private cache handler instance
+            # with Wiktionary
+            cacheHandler = SchemeHandlerCacheHandler(cachePath)
+            for scheme, clazz in WiktionaryFetcher.GetSchemeHandlers().items():
+                cacheHandler.addSchemeHandler(scheme, clazz)
+            cls.__instance = WfExSPassphraseGenerator(cacheHandler)
+        
+        return cls.__instance
+    
+    def __init__(self):
+        pass
