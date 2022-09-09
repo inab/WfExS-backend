@@ -156,17 +156,17 @@ def processCacheCommand(wfBackend: WfExSBackend, args: argparse.Namespace, logLe
     retval = 0
     if args.cache_command == WfExS_Cache_Commands.List:
         if logLevel <= logging.INFO:
-            contentsI = sorted(map(lambda l: l[1], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x['stamp'])
+            contentsI = sorted(map(lambda l: l[1], cH.list(*args.cache_command_args, destdir=cPath, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x['stamp'])
             for entryI in contentsI:
                 json.dump(entryI, sys.stdout, cls=DatetimeEncoder, indent=4, sort_keys=True)
                 print()
         else:
-            contentsD = sorted(map(lambda l: l[0], cH.list(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x.uri)
+            contentsD = sorted(map(lambda l: l[0], cH.list(*args.cache_command_args, destdir=cPath, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade)), key=lambda x: x.uri)
             for entryD in contentsD:
                 print(entryD)
             
     elif args.cache_command == WfExS_Cache_Commands.Remove:
-        print('\n'.join(map(lambda x: '\t'.join([x[0].uri, x[1]]), cH.remove(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
+        print('\n'.join(map(lambda x: '\t'.join([x[0].uri, x[1]]), cH.remove(*args.cache_command_args, destdir=cPath, acceptGlob=args.filesAsGlobs, doRemoveFiles=args.doCacheRecursively, cascade=args.doCacheCascade))))
     elif args.cache_command == WfExS_Cache_Commands.Inject:
         if len(args.cache_command_args) == 2:
             injected_uri = args.cache_command_args[0]
@@ -174,12 +174,12 @@ def processCacheCommand(wfBackend: WfExSBackend, args: argparse.Namespace, logLe
             # # First, remove old occurrence
             # cH.remove(cPath, injected_uri)
             # Then, inject new occurrence
-            cH.inject(cPath, injected_uri, finalCachedFilename=finalCachedFilename)
+            cH.inject(injected_uri, destdir=cPath, finalCachedFilename=finalCachedFilename)
         else:
             print(f"ERROR: subcommand {args.cache_command} takes two positional parameters: the URI to be injected, and the path to the local content to be associated to that URI", file=sys.stderr)
             retval = 1
     elif args.cache_command == WfExS_Cache_Commands.Validate:
-        for metaUri, validated, metaStructure in cH.validate(cPath, *args.cache_command_args, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade):
+        for metaUri, validated, metaStructure in cH.validate(*args.cache_command_args, destdir=cPath, acceptGlob=args.filesAsGlobs, cascade=args.doCacheCascade):
             print(f"\t- {metaUri.uri} {validated}")
     #    pass
     elif args.cache_command == WfExS_Cache_Commands.Fetch:

@@ -2146,11 +2146,11 @@ class WF:
         trsMetadataCache = os.path.join(self.metaDir, self.TRS_METADATA_FILE)
 
         try:
-            metaContentKind, cachedTRSMetaFile, trsMetaMeta, trsMetaLicences = cacheHandler.fetch(trs_endpoint_v2_meta_url, self.metaDir, offline)
+            metaContentKind, cachedTRSMetaFile, trsMetaMeta, trsMetaLicences = cacheHandler.fetch(trs_endpoint_v2_meta_url, destdir=self.metaDir, offline=offline)
             trs_endpoint_meta_url = trs_endpoint_v2_meta_url
         except WFException as wfe:
             try:
-                metaContentKind, cachedTRSMetaFile, trsMetaMeta, trsMetaLicences = cacheHandler.fetch(trs_endpoint_v2_beta2_meta_url, self.metaDir, offline)
+                metaContentKind, cachedTRSMetaFile, trsMetaMeta, trsMetaLicences = cacheHandler.fetch(trs_endpoint_v2_beta2_meta_url, destdir=self.metaDir, offline=offline)
                 trs_endpoint_meta_url = trs_endpoint_v2_beta2_meta_url
             except WFException as wfebeta:
                 raise WFException("Unable to fetch metadata from {} in order to identify whether it is a working GA4GH TRSv2 endpoint. Exceptions:\n{}\n{}".format(self.trs_endpoint, wfe, wfebeta))
@@ -2174,7 +2174,7 @@ class WF:
         trs_tools_url = parse.urljoin(self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe=''))
 
         trsQueryCache = os.path.join(self.metaDir, self.TRS_QUERY_CACHE_FILE)
-        _, cachedTRSQueryFile, _, _ = cacheHandler.fetch(trs_tools_url, self.metaDir, offline)
+        _, cachedTRSQueryFile, _, _ = cacheHandler.fetch(trs_tools_url, destdir=self.metaDir, offline=offline)
         # Giving a friendly name
         if not os.path.exists(trsQueryCache):
             os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
