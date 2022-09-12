@@ -2,11 +2,5 @@ pylint
 pyflakes
 mypy
 json-schema-for-humans
-
-# typing libraries, needed by mypy
-types-boto3
-types-certifi
-types-jsonschema
-types-paramiko
-types-PyYAML
-types-requests
+pre-commit
+black

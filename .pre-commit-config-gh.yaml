@@ -1,0 +1,25 @@
+fail_fast: true
+
+repos:
+  - repo: https://github.com/PyCQA/pylint
+    rev: v2.15.2
+    hooks:
+      - id: pylint
+        args: [--disable=all, --enable=unused-import]
+
+  - repo: https://github.com/jmfernandez/pre-commit_mirrors-mypy
+    rev: v0.971
+    hooks:
+      - id: mypy
+        exclude: ^tests/
+#        args: [--strict]
+        additional_dependencies:
+          - -rrequirements.txt
+          - -rmypy-requirements.txt
+
+#  - repo: https://github.com/ambv/black
+#    rev: 22.6.0
+#    hooks:
+#      - id: black
+#        args: [--diff, --check]
+

@@ -58,11 +58,11 @@ if [ -z "$doForce" ] ; then
 fi
 
 # First, be sure the environment is ready to be used
-"$wfexsDir"/installer.bash
+source "$wfexsDir"/basic-installer.bash
 
 # Second, let's load the environment in order to install
 # singularity in the python profile
-envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
+envDir="$(python -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
 if [ -z "${envDir}" ] ; then
 	envDir="${wfexsDir}/.pyWEenv"
 

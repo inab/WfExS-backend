@@ -2,7 +2,15 @@
 
 ## "Easy" setup of core and main software dependencies
 
-There is an automated installer at [installer.bash](installer.bash), which assumes both essential build dependencies (package `build-essential` in Ubuntu), curl, python3 and its pip and venv counterparts are properly installed. The automated installer installs both core dependencies and it fetches and installs:
+There is an automated installer at [full-installer.bash](full-installer.bash):
+
+```bash
+./full-installer.bash
+```
+
+which assumes both essential build dependencies
+(package `build-essential` in Ubuntu), `curl`, `python3` and its `pip` and `venv` counterparts are properly installed.
+The automated installer installs both core dependencies and it fetches and installs:
 
   * OpenJDK: needed by Nextflow.
   * gocryptfs: needed by secure directories feature.
@@ -30,13 +38,10 @@ This workflow execution service backend is written for Python 3.6 and later.
 	- `venv` is also available in many Linux distributions (Ubuntu package `python3-venv`). In some of them is integrated into the Python 3.5 (or later) installation.
 	- Essential build dependencies (gcc, make, ...) are provided in Ubuntu with `build-essential` package.
 
-* The creation of a virtual environment where to install WfExS backend dependencies is done running:
+* The creation of a virtual environment where to install WfExS backend dependencies can be done running:
   
 ```bash
-python3 -m venv .pyWEenv
-source .pyWEenv/bin/activate
-pip install --upgrade pip wheel
-pip install -r requirements.txt
+./basic-installer.bash
 ```
 
 * If you upgrade your Python installation (from version 3.6 to 3.7, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.
@@ -71,8 +76,46 @@ Currently, both Nextflow and cwltool support secure and paranoid working directo
 
 * When [Docker](https://www.docker.com/) or [Podman](https://podman.io/) are set up, there is no support for secure or paranoid working directories due technical and architectural limitations.
 
+# Development tips
 
-## License
-* © 2020-2021 Barcelona Supercomputing Center (BSC), ES
+All the development dependencies are declared at [dev-requirements.txt](dev-requirements.txt) and [mypy-requirements.txt](mypy-requirements.txt).
+
+```bash
+python3 -m venv .pyWEenv
+source .pyWEenv/bin/activate
+pip install --upgrade pip wheel
+pip install -r requirements.txt
+pip install -r dev-requirements.txt
+```
+
+One of these dependencies is [pre-commit](https://pre-commit.com/), whose rules are declared at [.pre-commit-config.yaml](.pre-commit-config.yaml) (there are special versions of these rules for GitHub).
+
+The rules run both [pylint](https://pypi.org/project/pylint/) and
+[mypy](http://mypy-lang.org/), and [black](https://black.readthedocs.io/en/stable/) in the near future.
+
+The pre-commit development hook which runs these tools before any commit is installed just running:
+
+```bash
+pre-commit install
+```
+
+If you want to explicitly run the hooks at any moment, even before doing the commit itself, you only have to run:
+
+```bash
+pre-commit run -a
+```
+
+As these checks are applied only to the python version currently being used in the development,
+there is a GitHub workflow at [.github/workflows/pre-commit.yml](.github/workflows/pre-commit.yml)
+which runs them on several Python versions.
+
+If you have lots of cores, fast disks and docker installed, you can locally run the pre-commit GitHub workflow using [act](https://github.com/nektos/act):
+
+```bash
+act -j pre-commit
+```
+
+# License
+* © 2020-2022 Barcelona Supercomputing Center (BSC), ES
 
 Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE.txt` for details.

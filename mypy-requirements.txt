@@ -1,0 +1,8 @@
+# typing libraries, needed by mypy
+types-boto3
+types-certifi
+types-jsonschema
+types-mypy-extensions
+types-paramiko
+types-PyYAML
+types-requests

@@ -7,16 +7,20 @@ repos:
       - id: pylint
         args: [--disable=all, --enable=unused-import]
 
-#  - repo: https://github.com/ambv/black
-#    rev: 22.6.0
-#    hooks:
-#      - id: black
-#        args: [--diff, --check]
+  - repo: local
+    hooks:
+      - id: mypy
+        name: Local MyPy
+        language: system
+        types: [file, python]
+#        files: \.py$
+        exclude: "^[^/]*env/"
+        require_serial: true
+        entry: ./basic-installer.bash mypy --strict
 
-#  - repo: https://github.com/jmfernandez/pre-commit_mirrors-mypy
-#    rev: v0.971
-#    hooks:
-#      - id: mypy
-#        exclude: ^tests/
-#        args: [--strict]
+  - repo: https://github.com/ambv/black
+    rev: 22.6.0
+    hooks:
+      - id: black
+        args: [--diff, --check]
 
