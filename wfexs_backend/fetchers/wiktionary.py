@@ -52,53 +52,58 @@ from . import (
     FetcherException,
 )
 
+
 class WiktionaryFetcher(AbstractStatefulFetcher):
-    WIKTIONARY_PROTO: Final[str] = 'wfexs.wiktionary'
-    
-    def __init__(self, progs: ProgsMapping, setup_block: Optional[Mapping[str, Any]] = None):
+    WIKTIONARY_PROTO: Final[str] = "wfexs.wiktionary"
+
+    def __init__(
+        self, progs: ProgsMapping, setup_block: Optional[Mapping[str, Any]] = None
+    ):
         super().__init__(progs=progs, setup_block=setup_block)
-    
+
     @classmethod
     def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractStatefulFetcher]]":
         # These are de-facto schemes supported by pip and git client
         return {
             cls.WIKTIONARY_PROTO: cls,
         }
-    
+
     @classmethod
     def GetNeededPrograms(cls) -> Sequence[SymbolicName]:
         return tuple()
 
-    def fetch(self, remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
+    def fetch(
+        self,
+        remote_file: URIType,
+        cachedFilename: AbsPath,
+        secContext: Optional[SecurityContextConfig] = None,
+    ) -> ProtocolFetcherReturn:
         parsedInputURL = urllib.parse.urlparse(remote_file)
-        
+
         if parsedInputURL.scheme != self.WIKTIONARY_PROTO:
-            raise FetcherException(f"Unhandled scheme {parsedInputURL.scheme}, only understands {self.WIKTIONARY_PROTO}")
-        
+            raise FetcherException(
+                f"Unhandled scheme {parsedInputURL.scheme}, only understands {self.WIKTIONARY_PROTO}"
+            )
+
         # It is expected that both the language and the terms are represented
         # in the path
-        path_comp = parsedInputURL.path.split('/')
+        path_comp = parsedInputURL.path.split("/")
         if len(path_comp) < 2:
-            raise FetcherException(f"Expecting the language and term type to fetch from Wiktionary (e.g. 'English/verbs') but not enough components: {path_comp}")
-        
+            raise FetcherException(
+                f"Expecting the language and term type to fetch from Wiktionary (e.g. 'English/verbs') but not enough components: {path_comp}"
+            )
+
         lang = path_comp[0]
         term_type = path_comp[1]
         with open(cachedFilename, mode="w", encoding="utf-8") as wH:
             store_terms(lang, term_type, wH)
-        
+
         # This fetcher generates single files
         kind = ContentKind.File
         # Metadata about the language and fetched term type
         metadata = {
-            'lang': lang,
-            'terms': term_type,
+            "lang": lang,
+            "terms": term_type,
         }
-        
-        return kind, [
-            URIWithMetadata(
-                uri=remote_file,
-                metadata=metadata
-            )
-        ], None
-        
-    
+
+        return kind, [URIWithMetadata(uri=remote_file, metadata=metadata)], None

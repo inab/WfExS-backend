@@ -3,6 +3,8 @@ types-boto3
 types-certifi
 types-jsonschema
 types-mypy-extensions
+types-openpyxl
 types-paramiko
 types-PyYAML
 types-requests
+types-setuptools

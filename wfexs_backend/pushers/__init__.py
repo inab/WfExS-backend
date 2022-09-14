@@ -31,30 +31,45 @@ from ..common import AnyContent
 if TYPE_CHECKING:
     from ..workflow import WF
 
+
 class ExportPluginException(Exception):
     pass
+
 
 class AbstractExportPlugin(abc.ABC):
     """
     Abstract class to model stateful export plugins
     """
-    PLUGIN_NAME : SymbolicName = cast(SymbolicName, "")
-    def __init__(self, wfInstance: "WF", setup_block: Optional[SecurityContextConfig] = None):
+
+    PLUGIN_NAME: SymbolicName = cast(SymbolicName, "")
+
+    def __init__(
+        self, wfInstance: "WF", setup_block: Optional[SecurityContextConfig] = None
+    ):
         import inspect
-        
-        self.logger = logging.getLogger(dict(inspect.getmembers(self))['__module__'] + '::' + self.__class__.__name__)
+
+        self.logger = logging.getLogger(
+            dict(inspect.getmembers(self))["__module__"]
+            + "::"
+            + self.__class__.__name__
+        )
         # This is used to resolve paths
         self.wfInstance = wfInstance
         self.refdir = wfInstance.getStagedSetup().work_dir
-        self.setup_block = setup_block  if isinstance(setup_block, dict)  else dict()
-    
+        self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+
     @abc.abstractmethod
-    def push(self, items: Sequence[AnyContent], preferred_scheme: Optional[str] = None, preferred_id: Optional[str] = None) -> Sequence[URIWithMetadata]:
+    def push(
+        self,
+        items: Sequence[AnyContent],
+        preferred_scheme: Optional[str] = None,
+        preferred_id: Optional[str] = None,
+    ) -> Sequence[URIWithMetadata]:
         """
         This is the method to be implemented by the stateful pusher
         """
         pass
-    
+
     @classmethod
     def PluginName(cls) -> SymbolicName:
         return cls.PLUGIN_NAME

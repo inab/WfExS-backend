@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import abc
+from dataclasses import dataclass
 import datetime
 import enum
 import os
@@ -45,42 +46,54 @@ from typing import (
     Iterator,
 )
 
+from mypy_extensions import DefaultNamedArg
+
 if TYPE_CHECKING:
-    from rocrate.model.computerlanguage import ComputerLanguage # type: ignore[import]
+    from rocrate.model.computerlanguage import ComputerLanguage  # type: ignore[import]
 
 
 # Patching default context in order to load CA certificates from certifi
 import certifi
 import ssl
 
-def create_augmented_context(purpose: ssl.Purpose = ssl.Purpose.SERVER_AUTH, *, cafile: Optional[str] = None, capath: Optional[str] = None, cadata: Optional[Union[str, bytes]] = None) -> ssl.SSLContext:
-    context = ssl.create_default_context(purpose=purpose, cafile=cafile, capath=capath, cadata=cadata)
-    
+
+def create_augmented_context(
+    purpose: ssl.Purpose = ssl.Purpose.SERVER_AUTH,
+    *,
+    cafile: Optional[str] = None,
+    capath: Optional[str] = None,
+    cadata: Optional[Union[str, bytes]] = None,
+) -> ssl.SSLContext:
+    context = ssl.create_default_context(
+        purpose=purpose, cafile=cafile, capath=capath, cadata=cadata
+    )
+
     context.load_verify_locations(cafile=certifi.where())
-    
+
     return context
+
 
 if ssl._create_default_https_context != create_augmented_context:
     ssl._create_default_https_context = create_augmented_context
 
 # Abstraction of names
-SymbolicName = NewType('SymbolicName', str)
+SymbolicName = NewType("SymbolicName", str)
 # This is a relative path
-RelPath = NewType('RelPath', str)
+RelPath = NewType("RelPath", str)
 # This is an absolute path
-AbsPath = NewType('AbsPath', str)
+AbsPath = NewType("AbsPath", str)
 # This is either a relative or an absolute path
 AnyPath = Union[RelPath, AbsPath]
 
-DEFAULT_DOCKER_CMD = cast(SymbolicName, 'docker')
-DEFAULT_SINGULARITY_CMD = cast(SymbolicName, 'singularity')
-DEFAULT_PODMAN_CMD = cast(SymbolicName, 'podman')
-DEFAULT_JAVA_CMD = cast(SymbolicName, 'java')
-DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, 'fusermount')
+DEFAULT_DOCKER_CMD = cast(SymbolicName, "docker")
+DEFAULT_SINGULARITY_CMD = cast(SymbolicName, "singularity")
+DEFAULT_PODMAN_CMD = cast(SymbolicName, "podman")
+DEFAULT_JAVA_CMD = cast(SymbolicName, "java")
+DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, "fusermount")
 
 ProgsMapping = MutableMapping[SymbolicName, AnyPath]
 
-DEFAULT_PROGS : ProgsMapping = {
+DEFAULT_PROGS: ProgsMapping = {
     DEFAULT_DOCKER_CMD: cast(RelPath, DEFAULT_DOCKER_CMD),
     DEFAULT_SINGULARITY_CMD: cast(RelPath, DEFAULT_SINGULARITY_CMD),
     DEFAULT_PODMAN_CMD: cast(RelPath, DEFAULT_PODMAN_CMD),
@@ -90,47 +103,60 @@ DEFAULT_PROGS : ProgsMapping = {
 
 
 class EngineMode(enum.Enum):
-    Local = 'local'
-    Docker = 'docker'
+    Local = "local"
+    Docker = "docker"
 
 
 DEFAULT_ENGINE_MODE = EngineMode.Local
 
-WfExSInstanceId = NewType('WfExSInstanceId', str)
+WfExSInstanceId = NewType("WfExSInstanceId", str)
 
 # Abstraction of input params and output names
-SymbolicParamName = NewType('SymbolicParamName', SymbolicName)
-SymbolicOutputName = NewType('SymbolicOutputName', SymbolicName)
+SymbolicParamName = NewType("SymbolicParamName", SymbolicName)
+SymbolicOutputName = NewType("SymbolicOutputName", SymbolicName)
 
 # The tagged name of a container
-ContainerTaggedName = NewType('ContainerTaggedName', str)
+ContainerTaggedName = NewType("ContainerTaggedName", str)
 
-URIType = NewType('URIType', str)
+URIType = NewType("URIType", str)
 # The URL of a git repository containing at least one workflow
-RepoURL = NewType('RepoURL', URIType)
+RepoURL = NewType("RepoURL", URIType)
 # The tag, branch or hash of a workflow in a git repository
-RepoTag = NewType('RepoTag', str)
+RepoTag = NewType("RepoTag", str)
 # This is also an absolute path
-EnginePath = NewType('EnginePath', AbsPath)
+EnginePath = NewType("EnginePath", AbsPath)
 
 # This is a workflow engine version
-EngineVersion = NewType('EngineVersion', str)
+EngineVersion = NewType("EngineVersion", str)
 
 # This is a workflow language version
-WFLangVersion = NewType('WFLangVersion', str)
+WFLangVersion = NewType("WFLangVersion", str)
 
 # This represents a fingerprint from an installation, a docker image, etc...
 # It should follow next format
 # {0}={1}
 # where {0} is the name of the digest (sha256, for instance)
 # and {1} is the base64 encoding of the binary digest
-Fingerprint = NewType('Fingerprint', str)
+Fingerprint = NewType("Fingerprint", str)
 
 # Exit value from any kind of execution
-ExitVal = NewType('ExitVal', int)
+ExitVal = NewType("ExitVal", int)
 
 SecurityContextConfig = Dict[str, Any]
 SecurityContextConfigBlock = MutableMapping[str, SecurityContextConfig]
+
+# TODO: study using TypedDict
+LocalConfig = Mapping[str, Any]
+ContainerLocalConfig = Mapping[str, Any]
+EngineLocalConfig = Mapping[str, Any]
+WorkflowConfigBlock = Mapping[str, Any]
+WorkflowMetaConfigBlock = Mapping[str, Any]
+WritableWorkflowMetaConfigBlock = MutableMapping[str, Any]
+WfExSConfigBlock = Mapping[str, Any]
+WritableWfExSConfigBlock = MutableMapping[str, Any]
+ExportActionBlock = Mapping[str, Any]
+ParamsBlock = Mapping[str, Any]
+OutputsBlock = Mapping[str, Any]
 
 # As each workflow engine can have its own naming convention, leave them to
 # provide it
@@ -139,29 +165,32 @@ ContainerFileNamingMethod = Callable[[URIType], RelPath]
 
 ## BEWARE!!!! The names of these keys MUST NOT CHANGE
 class ContentKind(enum.Enum):
-    File = 'file'
-    Directory = 'dir'
-    Value = 'val'
+    File = "file"
+    Directory = "dir"
+    Value = "val"
+
 
 class AttributionRole(enum.Enum):
     """
     The valid roles come from CASRAI CRediT, and can be visited through
     http://credit.niso.org/contributor-roles/{term}/
     """
-    Conceptualization = 'conceptualization'
-    DataCuration = 'data-curation'
-    FormalAnalysis = 'formal-analysis'
-    FundingAcquisition = 'funding-acquisition'
-    Investigation = 'investigation'
-    Methodology = 'methodology'
-    ProjectAdministration = 'project-administration'
-    Resources = 'resources'
-    Software = 'software'
-    Supervision = 'supervision'
-    Validation = 'validation'
-    Visualization = 'visualization'
-    WritingOriginalDraft = 'writing-original-draft'
-    WritingReviewEditing = 'writing-review-editing'
+
+    Conceptualization = "conceptualization"
+    DataCuration = "data-curation"
+    FormalAnalysis = "formal-analysis"
+    FundingAcquisition = "funding-acquisition"
+    Investigation = "investigation"
+    Methodology = "methodology"
+    ProjectAdministration = "project-administration"
+    Resources = "resources"
+    Software = "software"
+    Supervision = "supervision"
+    Validation = "validation"
+    Visualization = "visualization"
+    WritingOriginalDraft = "writing-original-draft"
+    WritingReviewEditing = "writing-review-editing"
+
 
 class Attribution(NamedTuple):
     # Author
@@ -170,27 +199,30 @@ class Attribution(NamedTuple):
     # ORCID or another permanent, representative link
     pid: URIType
     roles: Sequence[AttributionRole] = []
-    
+
     @classmethod
     def ParseRawAttribution(cls, rawAttribution: Mapping[str, Any]) -> "Attribution":
         return cls(
-            name=rawAttribution['name'],
-            pid=rawAttribution['pid'],
-            roles=[ AttributionRole(rawRole) for rawRole in rawAttribution['roles'] ]
+            name=rawAttribution["name"],
+            pid=rawAttribution["pid"],
+            roles=[AttributionRole(rawRole) for rawRole in rawAttribution["roles"]],
         )
-    
+
     @classmethod
-    def ParseRawAttributions(cls, rawAttributions: Optional[Sequence[Mapping[str, Any]]]) -> "Sequence[Attribution]":
+    def ParseRawAttributions(
+        cls, rawAttributions: Optional[Sequence[Mapping[str, Any]]]
+    ) -> "Sequence[Attribution]":
         attributions = []
         if isinstance(rawAttributions, list):
             for rawAttribution in rawAttributions:
                 attributions.append(cls.ParseRawAttribution(rawAttribution))
-        
-        return attributions
-        
 
-NoLicence : URIType = cast(URIType, 'https://choosealicense.com/no-permission/')
-DefaultNoLicenceTuple : Tuple[URIType, ...] = (NoLicence, )
+        return attributions
+
+
+NoLicence: URIType = cast(URIType, "https://choosealicense.com/no-permission/")
+DefaultNoLicenceTuple: Tuple[URIType, ...] = (NoLicence,)
+
 
 class LicensedURI(NamedTuple):
     """
@@ -202,6 +234,7 @@ class LicensedURI(NamedTuple):
     has to be accessed. This is useful for use cases like DRS, where
     it can provide the authentication metadata
     """
+
     uri: URIType
     # One or more licence URLs, either from a repository, or a site like
     # choosealicense.com or spdx.org/licenses/
@@ -209,7 +242,9 @@ class LicensedURI(NamedTuple):
     attributions: Sequence[Attribution] = []
     secContext: Optional[SecurityContextConfig] = None
 
-AnyURI = Union[URIType,LicensedURI]
+
+AnyURI = Union[URIType, LicensedURI]
+
 
 class URIWithMetadata(NamedTuple):
     """
@@ -218,9 +253,11 @@ class URIWithMetadata(NamedTuple):
     preferredName: A pretty way to name this resource. Workflow
         execution can decide whether to honour it or not
     """
+
     uri: URIType
-    metadata: Mapping[str,Any]
+    metadata: Mapping[str, Any]
     preferredName: Optional[RelPath] = None
+
 
 class MaterializedContent(NamedTuple):
     """
@@ -232,14 +269,32 @@ class MaterializedContent(NamedTuple):
     prettyFilename: The preferred filename to use in the inputs directory
       of the execution environment
     """
+
     local: AbsPath
     licensed_uri: LicensedURI
     prettyFilename: RelPath
     kind: ContentKind = ContentKind.File
     metadata_array: Optional[Sequence[URIWithMetadata]] = None
 
-ProtocolFetcherReturn = Tuple[Union[AnyURI, ContentKind, Sequence[AnyURI]], Sequence[URIWithMetadata], Optional[Tuple[URIType, ...]]]
-ProtocolFetcher = Callable[[URIType, AbsPath, Optional[SecurityContextConfig]], ProtocolFetcherReturn]
+
+ProtocolFetcherReturn = Tuple[
+    Union[AnyURI, ContentKind, Sequence[AnyURI]],
+    Sequence[URIWithMetadata],
+    Optional[Tuple[URIType, ...]],
+]
+ProtocolFetcher = Callable[
+    [URIType, AbsPath, DefaultNamedArg(Optional[SecurityContextConfig], "secContext")],
+    ProtocolFetcherReturn,
+]
+
+
+MaterializedInputValues = Union[
+    Sequence[bool],
+    Sequence[str],
+    Sequence[int],
+    Sequence[float],
+    Sequence[MaterializedContent],
+]
 
 
 class MaterializedInput(NamedTuple):
@@ -248,12 +303,13 @@ class MaterializedInput(NamedTuple):
     values: list of associated values, which can be literal ones or
       instances from MaterializedContent
     """
+
     name: SymbolicParamName
-    values: Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[MaterializedContent]]
+    values: MaterializedInputValues
     secondaryInputs: Optional[Sequence[MaterializedContent]] = None
 
 
-GlobPattern = NewType('GlobPattern', str)
+GlobPattern = NewType("GlobPattern", str)
 
 
 class ExpectedOutput(NamedTuple):
@@ -270,44 +326,45 @@ class ExpectedOutput(NamedTuple):
       names to label the outputs, this is the filename pattern to capture the
       local path, based on the output / working directory.
     """
+
     name: SymbolicOutputName
     kind: ContentKind
     preferredFilename: Optional[RelPath]
     cardinality: Tuple[int, int]
     fillFrom: Optional[SymbolicParamName] = None
     glob: Optional[GlobPattern] = None
-    
+
     def _marshall(self) -> MutableMapping[str, Any]:
         mD = {
-            'c-l-a-s-s': self.kind.name,
-            'cardinality': list(self.cardinality),
+            "c-l-a-s-s": self.kind.name,
+            "cardinality": list(self.cardinality),
         }
-        
+
         if self.preferredFilename is not None:
-            mD['preferredName'] = self.preferredFilename
+            mD["preferredName"] = self.preferredFilename
         if self.glob is not None:
-            mD['glob'] = self.glob
+            mD["glob"] = self.glob
         if self.fillFrom is not None:
-            mD['fillFrom'] = self.fillFrom
-        
+            mD["fillFrom"] = self.fillFrom
+
         return mD
-    
+
     @classmethod
     def _unmarshall(cls, **obj: Any) -> "ExpectedOutput":
         return cls(
-            name=obj['name'],
-            kind=ContentKind(obj['c-l-a-s-s'])  if 'c-l-a-s-s' in obj  else  ContentKind.File,
-            preferredFilename=obj.get('preferredName'),
-            fillFrom=obj.get('fillFrom'),
-            glob=obj.get('glob'),
-            cardinality=cast(Tuple[int, int], tuple(obj['cardinality']))
+            name=obj["name"],
+            kind=ContentKind(obj["c-l-a-s-s"])
+            if "c-l-a-s-s" in obj
+            else ContentKind.File,
+            preferredFilename=obj.get("preferredName"),
+            fillFrom=obj.get("fillFrom"),
+            glob=obj.get("glob"),
+            cardinality=cast(Tuple[int, int], tuple(obj["cardinality"])),
         )
 
 
-class AbstractGeneratedContent(object):
-    pass
-
-class GeneratedContent(AbstractGeneratedContent, NamedTuple):
+@dataclass
+class AbstractGeneratedContent(abc.ABC):
     """
     local: Local absolute path of the content which was generated. It
       is an absolute path in the outputs directory of the execution.
@@ -317,14 +374,31 @@ class GeneratedContent(AbstractGeneratedContent, NamedTuple):
     preferredFilename: The preferred relative filename to use when it is
       uploaded from the computational environment
     """
+
     local: AnyPath
-    signature: Fingerprint
+    signature: Optional[Fingerprint] = None
     uri: Optional[LicensedURI] = None
     preferredFilename: Optional[RelPath] = None
+
+
+@dataclass
+class GeneratedContent(AbstractGeneratedContent):
+    """
+    local: Local absolute path of the content which was generated. It
+      is an absolute path in the outputs directory of the execution.
+    uri: A putative URL or a CURIE of the content which was generated,
+      needed for the provenance and upload matters.
+    signature: Computed checksum from the file
+    preferredFilename: The preferred relative filename to use when it is
+      uploaded from the computational environment
+    """
+
+    # This was done because it is not possible to refer to itself
     secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None
 
 
-class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
+@dataclass
+class GeneratedDirectoryContent(AbstractGeneratedContent):
     """
     local: Local absolute path of the content which was generated. It
       is an absolute path in the outputs directory of the execution.
@@ -336,14 +410,15 @@ class GeneratedDirectoryContent(AbstractGeneratedContent, NamedTuple):
     preferredFilename: The preferred relative filename to use when it is
       uploaded from the computational environment
     """
-    local: AnyPath
-    values: Sequence[AbstractGeneratedContent]  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
-    uri: Optional[LicensedURI] = None
-    preferredFilename: Optional[RelPath] = None
-    signature: Optional[Fingerprint] = None
+
+    values: Optional[
+        Sequence[AbstractGeneratedContent]
+    ] = None  # It should be List[Union[GeneratedContent, GeneratedDirectoryContent]]
     secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None
 
-AnyContent = Union[MaterializedContent, GeneratedContent, GeneratedDirectoryContent]
+
+AnyContent = Union[MaterializedContent, AbstractGeneratedContent]
+
 
 class MaterializedOutput(NamedTuple):
     """
@@ -353,10 +428,17 @@ class MaterializedOutput(NamedTuple):
     local: Local absolute path of the output
     prettyFilename: Relative "pretty" name to be used in provenance
     """
+
     name: SymbolicOutputName
     kind: ContentKind
     expectedCardinality: Tuple[int, int]
-    values: Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[AbstractGeneratedContent]]
+    values: Union[
+        Sequence[bool],
+        Sequence[str],
+        Sequence[int],
+        Sequence[float],
+        Sequence[AbstractGeneratedContent],
+    ]
 
 
 class LocalWorkflow(NamedTuple):
@@ -366,6 +448,7 @@ class LocalWorkflow(NamedTuple):
     effectiveCheckout: hex hash of the materialized checkout
     langVersion: workflow language version / revision
     """
+
     dir: AbsPath
     relPath: Optional[RelPath]
     effectiveCheckout: Optional[RepoTag]
@@ -382,58 +465,76 @@ class AbstractWorkflowEngineType(abc.ABC):
     @property
     def workflowType(self) -> "WorkflowType":
         return self.MyWorkflowType()
-    
+
     @abc.abstractmethod
     def sideContainers(self) -> Sequence[ContainerTaggedName]:
         pass
-    
-    def materializeContainers(self, listOfContainerTags: Sequence[ContainerTaggedName], containersDir: AnyPath, offline: bool = False) -> "Sequence[Container]":
+
+    def materializeContainers(
+        self,
+        listOfContainerTags: Sequence[ContainerTaggedName],
+        containersDir: AnyPath,
+        offline: bool = False,
+    ) -> "Sequence[Container]":
         pass
-    
+
     @abc.abstractmethod
-    def materializeEngine(self, localWf: LocalWorkflow,
-                          engineVersion: Optional[EngineVersion] = None) -> "Optional[MaterializedWorkflowEngine]":
+    def materializeEngine(
+        self, localWf: LocalWorkflow, engineVersion: Optional[EngineVersion] = None
+    ) -> "Optional[MaterializedWorkflowEngine]":
         pass
-    
+
     @abc.abstractmethod
-    def identifyWorkflow(self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
+    def identifyWorkflow(
+        self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None
+    ) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
         """
         pass
-    
+
     @abc.abstractmethod
-    def materializeWorkflow(self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: bool = False) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
+    def materializeWorkflow(
+        self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: bool = False
+    ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
-        Method to ensure the workflow has been materialized. It returns the 
+        Method to ensure the workflow has been materialized. It returns the
         localWorkflow directory, as well as the list of containers
-        
+
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
 
         pass
-    
+
     @abc.abstractmethod
-    def launchWorkflow(self, matWfEng: "MaterializedWorkflowEngine", inputs: Sequence[MaterializedInput],
-                       outputs: Sequence[ExpectedOutput]) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
+    def launchWorkflow(
+        self,
+        matWfEng: "MaterializedWorkflowEngine",
+        inputs: Sequence[MaterializedInput],
+        outputs: Sequence[ExpectedOutput],
+    ) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
         pass
-    
+
     @classmethod
     @abc.abstractmethod
-    def FromStagedSetup(cls,
-            staged_setup: "StagedSetup",
-            cache_dir: Optional[AnyPath] = None,
-            cache_workflow_dir: Optional[AnyPath] = None,
-            cache_workflow_inputs_dir: Optional[AnyPath] = None,
-            local_config: Optional[Mapping[str, Any]] = None,
-            config_directory: Optional[AnyPath] = None
+    def FromStagedSetup(
+        cls,
+        staged_setup: "StagedSetup",
+        cache_dir: Optional[AnyPath] = None,
+        cache_workflow_dir: Optional[AnyPath] = None,
+        cache_workflow_inputs_dir: Optional[AnyPath] = None,
+        local_config: Optional[EngineLocalConfig] = None,
+        config_directory: Optional[AnyPath] = None,
     ) -> "AbstractWorkflowEngineType":
         pass
-    
+
     @abc.abstractmethod
-    def getEmptyCrateAndComputerLanguage(self, langVersion: Optional[Union[EngineVersion, WFLangVersion]]) -> "ComputerLanguage":
+    def getEmptyCrateAndComputerLanguage(
+        self, langVersion: Optional[Union[EngineVersion, WFLangVersion]]
+    ) -> "ComputerLanguage":
         pass
+
 
 TRS_Workflow_Descriptor = str
 
@@ -451,6 +552,7 @@ class WorkflowType(NamedTuple):
     trs_descriptor: The string used in GA4GH TRSv2 specification to define this workflow type
     rocrate_programming_language: Traditional internal id in RO-Crate implementations used for this workflow type (to be deprecated)
     """
+
     engineName: str
     shortname: str
     name: str
@@ -461,28 +563,34 @@ class WorkflowType(NamedTuple):
     trs_descriptor: TRS_Workflow_Descriptor
     rocrate_programming_language: str
 
+
 class RepoType(enum.Enum):
-    GitHub = 'github'
-    GitLab = 'gitlab'
-    BitBucket = 'bitbucket'
-    Raw = 'raw'
-    Other = 'other'
+    GitHub = "github"
+    GitLab = "gitlab"
+    BitBucket = "bitbucket"
+    Raw = "raw"
+    Other = "other"
+
 
 class RemoteRepo(NamedTuple):
     """
     Remote repository description
     """
+
     repo_url: RepoURL
     tag: Optional[RepoTag] = None
     rel_path: Optional[RelPath] = None
     repo_type: Optional[RepoType] = None
 
+
 class IdentifiedWorkflow(NamedTuple):
     """
     workflow_type: The identified workflow type
     """
+
     workflow_type: WorkflowType
     remote_repo: RemoteRepo
+
 
 class StagedSetup(NamedTuple):
     instance_id: WfExSInstanceId
@@ -503,13 +611,16 @@ class StagedSetup(NamedTuple):
     is_encrypted: bool
     is_damaged: bool
 
+
 import datetime
+
+
 class MarshallingStatus(NamedTuple):
     config: Optional[Union[bool, datetime.datetime]]
     stage: Optional[Union[bool, datetime.datetime]]
     execution: Optional[Union[bool, datetime.datetime]]
     export: Optional[Union[bool, datetime.datetime]]
-    
+
     def __repr__(self) -> str:
         return f"""Marshalling date status:
 - config: {"(never done)" if self.config is None  else  self.config.isoformat()  if isinstance(self.config, datetime.datetime)  else  "(failed/not done yet)"}
@@ -518,12 +629,13 @@ class MarshallingStatus(NamedTuple):
 - export: {"(never done)" if self.export is None  else  self.export.isoformat()  if isinstance(self.export, datetime.datetime)  else  "(failed/not done yet)"}
 """
 
+
 class ContainerType(enum.Enum):
-    Singularity = 'singularity'
-    Docker = 'docker'
-    UDocker = 'udocker'
-    Podman = 'podman'
-    NoContainer = 'none'
+    Singularity = "singularity"
+    Docker = "docker"
+    UDocker = "udocker"
+    Podman = "podman"
+    NoContainer = "none"
 
 
 DEFAULT_CONTAINER_TYPE = ContainerType.Singularity
@@ -541,6 +653,7 @@ class Container(NamedTuple):
     fingerprint: Server fingerprint of the container.
         Mainly from docker registries.
     """
+
     origTaggedName: str
     taggedName: URIType
     type: ContainerType
@@ -560,6 +673,7 @@ class MaterializedWorkflowEngine(NamedTuple):
     containers: List of Container instances (needed by workflow)
     operational_containers: List of Container instances (needed by engine)
     """
+
     instance: AbstractWorkflowEngineType
     version: EngineVersion
     fingerprint: Union[Fingerprint, str]
@@ -577,30 +691,34 @@ class AbstractWfExSException(Exception):
 # Adapted from https://gist.github.com/ptmcg/23ba6e42d51711da44ba1216c53af4ea
 # in order to show the value instead of the class name
 import argparse
+
+
 class ArgTypeMixin(enum.Enum):
     @classmethod
     def argtype(cls, s: str) -> enum.Enum:
         try:
             return cls(s)
         except:
-            raise argparse.ArgumentTypeError(
-                f"{s!r} is not a valid {cls.__name__}")
-    
+            raise argparse.ArgumentTypeError(f"{s!r} is not a valid {cls.__name__}")
+
     def __str__(self) -> str:
         return str(self.value)
+
 
 class StrDocEnum(str, ArgTypeMixin):
     # Learnt from https://docs.python.org/3.11/howto/enum.html#when-to-use-new-vs-init
     description: str
-    def __new__(cls, value: Any, description: str = '') -> "StrDocEnum":
+
+    def __new__(cls, value: Any, description: str = "") -> "StrDocEnum":
         obj = str.__new__(cls, value)
         obj._value_ = value
         obj.description = description
-        
+
         return obj
-    
+
     def __str__(self) -> str:
         return str(self.value)
+
 
 class ArgsDefaultWithRawHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
     # Conditionally treat descriptions as raw
@@ -614,7 +732,7 @@ class ArgsDefaultWithRawHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
         :return: argparse.HelpFormatter._split_lines function
         with new split text argument.
         """
-        if text.startswith('raw|'):
+        if text.startswith("raw|"):
             return text[4:].splitlines()
         return super()._split_lines(text, width)
 
@@ -622,25 +740,28 @@ class ArgsDefaultWithRawHelpFormatter(argparse.ArgumentDefaultsHelpFormatter):
 # These cache types are needed to return the right paths
 # from an WF instance
 class CacheType(StrDocEnum):
-    Input = ('input', 'Cached or injected inputs')
-    ROCrate = ('ro-crate', 'Cached RO-Crates (usually from WorkflowHub)')
-    TRS = ('ga4gh-trs', 'Cached files from tools described at GA4GH TRS repositories')
-    Workflow = ('workflow', 'Cached workflows, which come from a git repository')
+    Input = ("input", "Cached or injected inputs")
+    ROCrate = ("ro-crate", "Cached RO-Crates (usually from WorkflowHub)")
+    TRS = ("ga4gh-trs", "Cached files from tools described at GA4GH TRS repositories")
+    Workflow = ("workflow", "Cached workflows, which come from a git repository")
 
 
 class ExportItemType(enum.Enum):
     """
     Types of items which can be exported as such
     """
-    Param = 'param'
-    Output = 'output'
-    WorkingDirectory = 'working-directory'
-    StageCrate = 'stage-rocrate'
-    ProvenanceCrate = 'provenance-rocrate'
-    
+
+    Param = "param"
+    Output = "output"
+    WorkingDirectory = "working-directory"
+    StageCrate = "stage-rocrate"
+    ProvenanceCrate = "provenance-rocrate"
+
+
 class ExportItem(NamedTuple):
     type: ExportItemType
     name: Optional[Union[SymbolicParamName, SymbolicOutputName]] = None
+
 
 # The description of an export action
 class ExportAction(NamedTuple):
@@ -652,15 +773,18 @@ class ExportAction(NamedTuple):
     preferred_scheme: Optional[str]
     preferred_id: Optional[str]
 
+
 class MaterializedExportAction(NamedTuple):
     """
     The description of an export action which was materialized, so
     a permanent identifier was obtained, along with some metadata
     """
+
     action: ExportAction
     elems: Sequence[AnyContent]
     pids: Sequence[URIWithMetadata]
     when: datetime.datetime = datetime.datetime.now(tz=datetime.timezone.utc)
+
 
 # Next method has been borrowed from FlowMaps
 def scantree(path: AnyPath) -> "Iterator[os.DirEntry[str]]":
@@ -670,7 +794,7 @@ def scantree(path: AnyPath) -> "Iterator[os.DirEntry[str]]":
     for entry in os.scandir(path):
         # We are avoiding to enter in loops around '.' and '..'
         if entry.is_dir(follow_symlinks=False):
-            if entry.name[0] != '.':
+            if entry.name[0] != ".":
                 hasDirs = True
         else:
             yield entry
@@ -679,6 +803,6 @@ def scantree(path: AnyPath) -> "Iterator[os.DirEntry[str]]":
     if hasDirs:
         for entry in os.scandir(path):
             # We are avoiding to enter in loops around '.' and '..'
-            if entry.is_dir(follow_symlinks=False) and entry.name[0] != '.':
+            if entry.is_dir(follow_symlinks=False) and entry.name[0] != ".":
                 yield entry
                 yield from scantree(cast(AbsPath, entry.path))

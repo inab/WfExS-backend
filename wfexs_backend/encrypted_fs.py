@@ -22,45 +22,59 @@ import tempfile
 
 from typing import cast
 
-from .common import AbstractWfExSException, RelPath
+from .common import (
+    AbsPath,
+    AbstractWfExSException,
+    AnyPath,
+    RelPath,
+)
+
 
 class EncryptedFSException(AbstractWfExSException):
     pass
 
+
 # This is needed to support different FUSE encryption filesystem implementations
 class EncryptedFSType(enum.Enum):
-    EncFS = 'encfs'
-    GoCryptFS = 'gocryptfs'
+    EncFS = "encfs"
+    GoCryptFS = "gocryptfs"
+
 
 DEFAULT_ENCRYPTED_FS_TYPE = EncryptedFSType.EncFS
 DEFAULT_ENCRYPTED_FS_CMD = {
-    EncryptedFSType.EncFS: cast(RelPath, 'encfs'),
-    EncryptedFSType.GoCryptFS: cast(RelPath, 'gocryptfs'),
+    EncryptedFSType.EncFS: cast(RelPath, "encfs"),
+    EncryptedFSType.GoCryptFS: cast(RelPath, "gocryptfs"),
 }
 
 # Idle timeout, in minutes
 DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT = 5
 
-def _mountEncFS(encfs_cmd, encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPass:str, allowOther:bool = False):
+
+def _mountEncFS(
+    encfs_cmd: AnyPath,
+    encfs_idleMinutes: int,
+    uniqueEncWorkDir: AbsPath,
+    uniqueWorkDir: AbsPath,
+    uniqueRawWorkDir: AbsPath,
+    clearPass: str,
+    allowOther: bool = False,
+) -> None:
     with tempfile.NamedTemporaryFile() as encfs_init_stdout, tempfile.NamedTemporaryFile() as encfs_init_stderr:
-        
+
         encfsCommand = [
             encfs_cmd,
-            '-i',str(encfs_idleMinutes),
-            '--stdinpass',
-            '--standard',
+            "-i",
+            str(encfs_idleMinutes),
+            "--stdinpass",
+            "--standard",
             uniqueEncWorkDir,
-            uniqueWorkDir
+            uniqueWorkDir,
         ]
-        
+
         # This parameter can be a security hole
         if allowOther:
-            encfsCommand.extend([
-                '--',
-                '-o',
-                'allow_other'
-            ])
-        
+            encfsCommand.extend(["--", "-o", "allow_other"])
+
         efs = subprocess.Popen(
             encfsCommand,
             stdin=subprocess.PIPE,
@@ -68,29 +82,36 @@ def _mountEncFS(encfs_cmd, encfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, u
             stderr=encfs_init_stderr,
             cwd=uniqueRawWorkDir,
         )
-        efs.communicate(input=clearPass.encode('utf-8'))
+        efs.communicate(input=clearPass.encode("utf-8"))
         retval = efs.wait()
-            
+
         # Reading the output and error for the report
         if retval != 0:
-            with open(encfs_init_stdout.name,"r") as c_stF:
+            with open(encfs_init_stdout.name, "r") as c_stF:
                 encfs_init_stdout_v = c_stF.read()
-            with open(encfs_init_stderr.name,"r") as c_stF:
+            with open(encfs_init_stderr.name, "r") as c_stF:
                 encfs_init_stderr_v = c_stF.read()
-            
-            errstr = "Could not init/mount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(encfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
+
+            errstr = "Could not init/mount encfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                retval, " ".join(encfsCommand), encfs_init_stdout_v, encfs_init_stderr_v
+            )
             raise EncryptedFSException(errstr)
 
-def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniqueWorkDir, uniqueRawWorkDir, clearPass:str, allowOther:bool = False):
+
+def _mountGoCryptFS(
+    gocryptfs_cmd: AnyPath,
+    gocryptfs_idleMinutes: int,
+    uniqueEncWorkDir: AbsPath,
+    uniqueWorkDir: AbsPath,
+    uniqueRawWorkDir: AbsPath,
+    clearPass: str,
+    allowOther: bool = False,
+) -> None:
     with tempfile.NamedTemporaryFile() as gocryptfs_init_stdout, tempfile.NamedTemporaryFile() as gocryptfs_init_stderr:
-        
+
         # First, detect whether there is an already created filesystem
-        gocryptfsInfo = [
-            gocryptfs_cmd,
-            '-info',
-            uniqueEncWorkDir
-        ]
-        
+        gocryptfsInfo = [gocryptfs_cmd, "-info", uniqueEncWorkDir]
+
         retval = subprocess.call(
             gocryptfsInfo,
             stdin=subprocess.DEVNULL,
@@ -98,17 +119,13 @@ def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniq
             stderr=subprocess.DEVNULL,
             cwd=uniqueRawWorkDir,
         )
-        
+
         if retval != 0:
             # Let's try creating it!
-            gocryptfsInit = [
-                gocryptfs_cmd,
-                '-init',
-                uniqueEncWorkDir
-            ]
-            
+            gocryptfsInit = [gocryptfs_cmd, "-init", uniqueEncWorkDir]
+
             gocryptfsCommand = gocryptfsInit
-            
+
             efs = subprocess.Popen(
                 gocryptfsInit,
                 stdin=subprocess.PIPE,
@@ -116,26 +133,24 @@ def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniq
                 stderr=gocryptfs_init_stderr,
                 cwd=uniqueRawWorkDir,
             )
-            efs.communicate(input=clearPass.encode('utf-8'))
+            efs.communicate(input=clearPass.encode("utf-8"))
             retval = efs.wait()
-        
+
         if retval == 0:
             # And now, let's mount it
             gocryptfsMount = [
                 gocryptfs_cmd,
-                '-i',str(gocryptfs_idleMinutes)+'m',
+                "-i",
+                str(gocryptfs_idleMinutes) + "m",
             ]
-            
+
             if allowOther:
-                gocryptfsMount.append('-allow_other')
-            
-            gocryptfsMount.extend([
-                uniqueEncWorkDir,
-                uniqueWorkDir
-            ])
-            
+                gocryptfsMount.append("-allow_other")
+
+            gocryptfsMount.extend([uniqueEncWorkDir, uniqueWorkDir])
+
             gocryptfsCommand = gocryptfsMount
-            
+
             efs = subprocess.Popen(
                 gocryptfsMount,
                 stdin=subprocess.PIPE,
@@ -143,18 +158,24 @@ def _mountGoCryptFS(gocryptfs_cmd, gocryptfs_idleMinutes, uniqueEncWorkDir, uniq
                 stderr=gocryptfs_init_stdout,
                 cwd=uniqueRawWorkDir,
             )
-            efs.communicate(input=clearPass.encode('utf-8'))
+            efs.communicate(input=clearPass.encode("utf-8"))
             retval = efs.wait()
-            
+
         # Reading the output and error for the report
         if retval != 0:
-            with open(gocryptfs_init_stdout.name,"r") as c_stF:
+            with open(gocryptfs_init_stdout.name, "r") as c_stF:
                 encfs_init_stdout_v = c_stF.read()
-            with open(gocryptfs_init_stderr.name,"r") as c_stF:
+            with open(gocryptfs_init_stderr.name, "r") as c_stF:
                 encfs_init_stderr_v = c_stF.read()
-            
-            errstr = "Could not init/mount gocryptfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(retval,' '.join(gocryptfsCommand),encfs_init_stdout_v,encfs_init_stderr_v)
+
+            errstr = "Could not init/mount gocryptfs (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                retval,
+                " ".join(gocryptfsCommand),
+                encfs_init_stdout_v,
+                encfs_init_stderr_v,
+            )
             raise EncryptedFSException(errstr)
+
 
 ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS = {
     EncryptedFSType.EncFS: _mountEncFS,

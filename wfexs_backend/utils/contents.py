@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+import logging
 import os
 import shutil
 from typing import (
@@ -24,6 +25,7 @@ from typing import (
     Any,
     List,
     Mapping,
+    MutableSequence,
     Optional,
     Sequence,
     Union,
@@ -42,53 +44,67 @@ from ..common import (
     RelPath,
 )
 
-from .digests import nihDigester, ComputeDigestFromDirectory
-from .digests import ComputeDigestFromFile, ComputeDigestFromGeneratedContentList
+from .digests import (
+    nihDigester,
+    ComputeDigestFromDirectory,
+    ComputeDigestFromFile,
+    ComputeDigestFromGeneratedContentList,
+    FingerprintMethod,
+)
+
 
 def GetGeneratedDirectoryContent(
     thePath: AbsPath,
     uri: Optional[LicensedURI] = None,
     preferredFilename: Optional[RelPath] = None,
-    signatureMethod = None
+    signatureMethod: Optional[FingerprintMethod] = None,
 ) -> GeneratedDirectoryContent:
     """
     The signatureMethod tells whether to generate a signature and fill-in
     the new signature element from GeneratedDirectoryContent tuple
     """
-    theValues : List[Union[AbstractGeneratedContent, GeneratedContent, GeneratedDirectoryContent]] = []
+    theValues: MutableSequence[AbstractGeneratedContent] = []
     with os.scandir(thePath) as itEntries:
         for entry in itEntries:
             # Hidden files are skipped by default
-            if not entry.name.startswith('.'):
-                theValue : Optional[Union[AbstractGeneratedContent, GeneratedContent, GeneratedDirectoryContent]] = None
+            if not entry.name.startswith("."):
+                theValue: Optional[AbstractGeneratedContent] = None
                 if entry.is_file():
                     entry_path = cast(AbsPath, entry.path)
                     theValue = GeneratedContent(
                         local=entry_path,
-                        # uri=None, 
-                        signature=cast(Fingerprint, ComputeDigestFromFile(entry_path, repMethod=signatureMethod))
+                        # uri=None,
+                        signature=cast(
+                            Fingerprint,
+                            ComputeDigestFromFile(
+                                entry_path, repMethod=signatureMethod
+                            ),
+                        ),
                     )
                 elif entry.is_dir():
                     entry_path = cast(AbsPath, entry.path)
-                    theValue = GetGeneratedDirectoryContent(entry_path, signatureMethod=signatureMethod)
+                    theValue = GetGeneratedDirectoryContent(
+                        entry_path, signatureMethod=signatureMethod
+                    )
 
                 if theValue is not None:
                     theValues.append(theValue)
-    
+
     # As this is a heavy operation, do it only when it is requested
-    signature : Optional[Fingerprint]
+    signature: Optional[Fingerprint]
     if callable(signatureMethod):
-        signature = cast(Fingerprint, ComputeDigestFromDirectory(thePath, repMethod=signatureMethod))
+        signature = ComputeDigestFromDirectory(thePath, repMethod=signatureMethod)
     else:
         signature = None
-    
+
     return GeneratedDirectoryContent(
         local=thePath,
         uri=uri,
         preferredFilename=preferredFilename,
-        values=cast(Sequence[AbstractGeneratedContent], theValues),
-        signature=signature
+        values=theValues,
+        signature=signature,
     )
+
 
 def GetGeneratedDirectoryContentFromList(
     thePath: AbsPath,
@@ -96,97 +112,114 @@ def GetGeneratedDirectoryContentFromList(
     uri: Optional[LicensedURI] = None,
     preferredFilename: Optional[RelPath] = None,
     secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None,
-    signatureMethod = None
+    signatureMethod: Optional[FingerprintMethod] = None,
 ) -> GeneratedDirectoryContent:
     """
     The signatureMethod tells whether to generate a signature and fill-in
     the new signature element from GeneratedDirectoryContent tuple
     """
-    
+
     # As this is a heavy operation, do it only when it is requested
-    signature : Optional[Fingerprint]
+    signature: Optional[Fingerprint]
     if callable(signatureMethod):
-        signature = cast(Fingerprint, ComputeDigestFromGeneratedContentList(thePath, theValues, repMethod=signatureMethod))
+        signature = ComputeDigestFromGeneratedContentList(
+            thePath, theValues, repMethod=signatureMethod
+        )
     else:
         signature = None
-    
+
     return GeneratedDirectoryContent(
         local=thePath,
         uri=uri,
         preferredFilename=preferredFilename,
         values=theValues,
         signature=signature,
-        secondaryFiles=secondaryFiles
+        secondaryFiles=secondaryFiles,
     )
 
 
 CWLClass2WfExS = {
-    'Directory': ContentKind.Directory,
-    'File': ContentKind.File
+    "Directory": ContentKind.Directory,
+    "File": ContentKind.File
     # '???': ContentKind.Value
 }
 
 
 def CWLDesc2Content(
     cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]],
-    logger,
+    logger: logging.Logger,
     expectedOutput: Optional[ExpectedOutput] = None,
-    doGenerateSignatures: bool = False
+    doGenerateSignatures: bool = False,
 ) -> Sequence[AbstractGeneratedContent]:
-    """
-    """
-    matValues: List[Union[GeneratedContent, GeneratedDirectoryContent]] = []
+    """ """
+    matValues: MutableSequence[AbstractGeneratedContent] = []
 
     if not isinstance(cwlDescs, list):
         cwlDescs = [cwlDescs]
-    
+
     if doGenerateSignatures:
         repMethod = nihDigester
     else:
         repMethod = None
-    
+
     for cwlDesc in cwlDescs:
-        foundKind = CWLClass2WfExS.get(cwlDesc['class'])
+        foundKind = CWLClass2WfExS.get(cwlDesc["class"])
         if (expectedOutput is not None) and foundKind != expectedOutput.kind:
-            logger.warning("For output {} obtained kind does not match ({} vs {})".format(expectedOutput.name, expectedOutput.kind, foundKind))
-        
+            logger.warning(
+                "For output {} obtained kind does not match ({} vs {})".format(
+                    expectedOutput.name, expectedOutput.kind, foundKind
+                )
+            )
+
         # What to do with auxiliary/secondary files?
-        secondaryFilesRaw = cwlDesc.get('secondaryFiles')
+        secondaryFilesRaw = cwlDesc.get("secondaryFiles")
+        secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None
         if secondaryFilesRaw:
-            secondaryFiles = CWLDesc2Content(secondaryFilesRaw, logger, doGenerateSignatures=doGenerateSignatures)
+            secondaryFiles = CWLDesc2Content(
+                secondaryFilesRaw, logger, doGenerateSignatures=doGenerateSignatures
+            )
         else:
             secondaryFiles = None
 
-        matValue : Optional[Union[GeneratedContent, GeneratedDirectoryContent]] = None
+        matValue: Optional[AbstractGeneratedContent] = None
         if foundKind == ContentKind.Directory:
-            theValues = CWLDesc2Content(cwlDesc['listing'], logger=logger, doGenerateSignatures=doGenerateSignatures)
+            theValues = CWLDesc2Content(
+                cwlDesc["listing"],
+                logger=logger,
+                doGenerateSignatures=doGenerateSignatures,
+            )
             matValue = GetGeneratedDirectoryContentFromList(
-                cwlDesc['path'],
+                cwlDesc["path"],
                 theValues,
                 # TODO: Generate URIs when it is advised
                 # uri=None,
-                preferredFilename=None if expectedOutput is None else expectedOutput.preferredFilename,
+                preferredFilename=None
+                if expectedOutput is None
+                else expectedOutput.preferredFilename,
                 secondaryFiles=secondaryFiles,
-                signatureMethod=repMethod
+                signatureMethod=repMethod,
             )
         elif foundKind == ContentKind.File:
             matValue = GeneratedContent(
-                local=cwlDesc['path'],
-                signature=cast(Fingerprint, ComputeDigestFromFile(cwlDesc['path'], repMethod=repMethod)),
-                secondaryFiles=secondaryFiles
+                local=cwlDesc["path"],
+                signature=cast(
+                    Fingerprint,
+                    ComputeDigestFromFile(cwlDesc["path"], repMethod=repMethod),
+                ),
+                secondaryFiles=secondaryFiles,
             )
-        
+
         if matValue is not None:
             matValues.append(matValue)
-            
 
-    return cast(Sequence[AbstractGeneratedContent], matValues)
+    return matValues
+
 
 def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
     # We should not deal with symlinks
     src = cast(AbsPath, os.path.realpath(src))
     dest = cast(AbsPath, os.path.realpath(dest))
-    
+
     # First, check whether inputs and content
     # are in the same filesystem
     # as of https://unix.stackexchange.com/a/44250
@@ -197,13 +230,13 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
         dest_or_ancestor = cast(AbsPath, os.path.dirname(dest_or_ancestor))
         dest_or_ancestor_exists = os.path.exists(dest_or_ancestor)
     dest_st_dev = os.lstat(dest_or_ancestor).st_dev
-    
+
     # It could be a subtree of not existing directories
     if not dest_exists:
         dest_parent = os.path.dirname(dest)
         if not os.path.isdir(dest_parent):
             os.makedirs(dest_parent)
-    
+
     # Now, link or copy
     if os.lstat(src).st_dev == dest_st_dev and not force_copy:
         try:
@@ -223,9 +256,9 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
             # bind mounts, which forbid hard links
             if ose.errno != 18:
                 raise ose
-            
+
             force_copy = True
-    
+
     if force_copy:
         if os.path.isfile(src):
             # Copying the content
@@ -239,4 +272,3 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
             if dest_exists:
                 shutil.rmtree(dest)
             shutil.copytree(src, dest)
-    

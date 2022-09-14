@@ -12,14 +12,14 @@ repos:
     hooks:
       - id: mypy
         exclude: ^tests/
-#        args: [--strict]
+        args: [--strict]
         additional_dependencies:
           - -rrequirements.txt
           - -rmypy-requirements.txt
 
-#  - repo: https://github.com/ambv/black
-#    rev: 22.6.0
-#    hooks:
-#      - id: black
-#        args: [--diff, --check]
+  - repo: https://github.com/ambv/black
+    rev: 22.6.0
+    hooks:
+      - id: black
+        args: [--diff, --check]
 

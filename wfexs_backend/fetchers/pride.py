@@ -41,9 +41,14 @@ from ..common import (
 )
 
 
-PRIDE_PROJECTS_REST='https://www.ebi.ac.uk/pride/ws/archive/v2/projects/'
+PRIDE_PROJECTS_REST = "https://www.ebi.ac.uk/pride/ws/archive/v2/projects/"
 
-def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Optional[SecurityContextConfig]=None) -> ProtocolFetcherReturn:
+
+def fetchPRIDEProject(
+    remote_file: URIType,
+    cachedFilename: AbsPath,
+    secContext: Optional[SecurityContextConfig] = None,
+) -> ProtocolFetcherReturn:
     """
     Method to resolve contents from PRIDE project ids
 
@@ -51,39 +56,47 @@ def fetchPRIDEProject(remote_file:URIType, cachedFilename:AbsPath, secContext:Op
     :param cachedFilename: Destination filename for the fetched content
     :param secContext: The security context containing the credentials
     """
-    
+
     parsedInputURL = parse.urlparse(remote_file)
     projectId = parsedInputURL.path
     metadata_url = cast(URIType, parse.urljoin(PRIDE_PROJECTS_REST, projectId))
-    
-    gathered_meta = {'fetched': metadata_url}
-    metadata_array = [
-        URIWithMetadata(remote_file, gathered_meta)
-    ]
+
+    gathered_meta = {"fetched": metadata_url}
+    metadata_array = [URIWithMetadata(remote_file, gathered_meta)]
     metadata = None
     try:
         metaio = io.BytesIO()
-        _ , metametaio, _ = fetchClassicURL(metadata_url, metaio)
-        metadata = json.loads(metaio.getvalue().decode('utf-8'))
-        gathered_meta['payload'] = metadata
+        _, metametaio, _ = fetchClassicURL(metadata_url, metaio)
+        metadata = json.loads(metaio.getvalue().decode("utf-8"))
+        gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
     except urllib.error.HTTPError as he:
-        raise FetcherException("Error fetching PRIDE metadata for {} : {} {}".format(projectId, he.code, he.reason))
-    
+        raise FetcherException(
+            "Error fetching PRIDE metadata for {} : {} {}".format(
+                projectId, he.code, he.reason
+            )
+        )
+
     try:
-        for addAtt in metadata['additionalAttributes']:
-            if addAtt.get('@type') == 'CvParam' and addAtt.get('accession') == 'PRIDE:0000411':
-                pride_project_url = addAtt.get('value')
+        for addAtt in metadata["additionalAttributes"]:
+            if (
+                addAtt.get("@type") == "CvParam"
+                and addAtt.get("accession") == "PRIDE:0000411"
+            ):
+                pride_project_url = addAtt.get("value")
                 if pride_project_url is not None:
                     break
         else:
-            pride_project_url = metadata['_links']['datasetFtpUrl']['href']
+            pride_project_url = metadata["_links"]["datasetFtpUrl"]["href"]
     except Exception as e:
-        raise FetcherException("Error processing PRIDE project metadata for {} : {}".format(remote_file, e))
-    
+        raise FetcherException(
+            "Error processing PRIDE project metadata for {} : {}".format(remote_file, e)
+        )
+
     return pride_project_url, metadata_array, None
 
+
 # These are schemes from identifiers.org
-SCHEME_HANDLERS : Mapping[str, ProtocolFetcher] = {
-    'pride.project': fetchPRIDEProject,
+SCHEME_HANDLERS: Mapping[str, ProtocolFetcher] = {
+    "pride.project": fetchPRIDEProject,
 }
