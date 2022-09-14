@@ -96,7 +96,6 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
         self.cacheDir = cacheDir
 
         cindex_sets = self._materialize_word_sets(word_sets)
-        print("hola")
 
         super().__init__(**cindex_sets)
 
