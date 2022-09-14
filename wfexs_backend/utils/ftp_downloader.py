@@ -371,7 +371,7 @@ class FTPDownloader:
         if hasattr(asyncio, "current_task"):
             task = asyncio.current_task(asyncio.get_running_loop())
         else:
-            task = asyncio.Task.current_task()
+            task = asyncio.current_task()
 
         if task is not None:
             task.cancel()
