@@ -56,7 +56,7 @@ def asyncio_run(tasks: Tuple[Coroutine[Any, Any, CT], ...]) -> CT:
     Helper method which abstracts differences from
     Python 3.7 and before about coroutines
     """
-    if hasattr(asyncio, "run"):
+    if sys.version_info >= (3, 7):
         done, _ = asyncio.run(asyncio.wait(tasks))
     else:
         loop = asyncio.new_event_loop()
@@ -371,7 +371,7 @@ class FTPDownloader:
         if sys.version_info >= (3, 7):
             task = asyncio.current_task()
         else:
-            task = asyncio.Task.current_task(asyncio.get_running_loop())
+            task = asyncio.Task.current_task()
 
         if task is not None:
             task.cancel()
