@@ -1,3 +1,4 @@
+wheel
 pylint
 pyflakes
 mypy
