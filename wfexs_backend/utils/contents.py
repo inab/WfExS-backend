@@ -258,6 +258,9 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
                 raise ose
 
             force_copy = True
+    else:
+        # Be sure to enable to copy, to avoid a no-op
+        force_copy = True
 
     if force_copy:
         if os.path.isfile(src):
