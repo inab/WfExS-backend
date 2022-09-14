@@ -3,17 +3,8 @@
 set -e
 
 # Getting the installation directory
-wfexsDir="$(dirname "$0")"
-case "${wfexsDir}" in
-	/*)
-		# Path is absolute
-		true
-		;;
-	*)
-		# Path is relative
-		wfexsDir="$(readlink -f "${wfexsDir}")"
-		;;
-esac
+wfexsDir="$(dirname "$0")"/..
+wfexsDir="$(readlink -f "${wfexsDir}")"
 
 if [ $# -gt 0 ] ; then
 	case "$1" in

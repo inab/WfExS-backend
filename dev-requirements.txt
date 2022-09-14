@@ -5,3 +5,4 @@ mypy
 json-schema-for-humans
 pre-commit
 black
+cffconvert

@@ -14,7 +14,7 @@ repos:
         language: system
         types: [file, python]
 #        files: \.py$
-        exclude: "^[^/]*env/"
+        exclude: "^[^/]*env/|dev-[^/]*/"
         require_serial: true
         entry: ./basic-installer.bash mypy --strict
 
@@ -22,5 +22,14 @@ repos:
     rev: 22.6.0
     hooks:
       - id: black
+        exclude: "^[^/]*env/|dev-[^/]*/"
         args: [--diff, --check]
 
+  - repo: local
+    hooks:
+      - id: citation.cff
+        name: CITATION.CFF checker
+        always_run: true
+        language: system
+        files: "^CITATION.cff$"
+        entry: ./basic-installer.bash python dev-scripts/cff-ver-validate.py
