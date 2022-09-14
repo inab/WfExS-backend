@@ -30,6 +30,7 @@ repos:
       - id: citation.cff
         name: CITATION.CFF checker
         always_run: true
+        pass_filenames: false
         language: system
         files: "^CITATION.cff$"
-        entry: ./basic-installer.bash python dev-scripts/cff-ver-validate.py
+        entry: ./basic-installer.bash python dev-scripts/cff-ver-validate.py CITATION.cff

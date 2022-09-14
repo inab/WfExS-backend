@@ -21,6 +21,11 @@ jobs:
           architecture: x64
       - run: pip install wheel
       - run: pip install -r requirements.txt -r dev-requirements.txt -r mypy-requirements.txt
+      - name: MyPy cache
+        uses: actions/cache@v3
+        with:
+          path: .mypy_cache/${{ env.py-semver }}
+          key: mypy-${{ env.py-semver }}
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh.yaml
@@ -39,6 +44,11 @@ jobs:
           architecture: x64
       - run: pip install wheel
       - run: pip install -r requirements.txt -r requirements-additional-3.6.txt -r dev-requirements.txt -r mypy-requirements.txt
+      - name: MyPy cache
+        uses: actions/cache@v3
+        with:
+          path: .mypy_cache/${{ env.py-semver }}
+          key: mypy-${{ env.py-semver }}
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh-3.6.yaml
