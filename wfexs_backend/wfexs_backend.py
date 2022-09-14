@@ -385,7 +385,7 @@ class WfExSBackend:
                     self.logger.info(
                         f"Setting up {progKey} to {abs_cmd} (derived from {pathC}) (core: {progKey in self.progs})"
                     )
-                    self.progs[progKey] = abs_cmd
+                    self.progs[progKey] = cast(AbsPath, abs_cmd)
 
         encfsSect = toolSect.get("encrypted_fs", {})
         encfs_type = encfsSect.get("type", DEFAULT_ENCRYPTED_FS_TYPE)
