@@ -161,7 +161,7 @@ DEBUG_LOGGING_FORMAT = (
 
 
 def genParserSub(
-    sp: argparse._SubParsersAction[argparse.ArgumentParser],
+    sp: "argparse._SubParsersAction[argparse.ArgumentParser]",
     command: WfExS_Commands,
     preStageParams: bool = False,
     postStageParams: bool = False,
