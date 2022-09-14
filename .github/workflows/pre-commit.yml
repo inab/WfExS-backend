@@ -47,8 +47,8 @@ jobs:
       - name: MyPy cache
         uses: actions/cache@v3
         with:
-          path: .mypy_cache/${{ env.py-semver }}
-          key: mypy-${{ env.py-semver }}
+          path: .mypy_cache/${{ matrix.python-version }}
+          key: mypy-${{ matrix.python-version }}
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh-3.6.yaml
