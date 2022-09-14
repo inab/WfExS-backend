@@ -369,9 +369,9 @@ class FTPDownloader:
         # This line should be asyncio.current_task(asyncio.get_running_loop())
         # when it is migrated to python 3.7 and later
         if hasattr(asyncio, "current_task"):
-            task = asyncio.current_task(asyncio.get_running_loop())
-        else:
             task = asyncio.current_task()
+        else:
+            task = asyncio.Task.current_task(asyncio.get_running_loop())
 
         if task is not None:
             task.cancel()
