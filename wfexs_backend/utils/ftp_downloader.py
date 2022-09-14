@@ -368,7 +368,7 @@ class FTPDownloader:
     def clear_tasks() -> None:
         # This line should be asyncio.current_task(asyncio.get_running_loop())
         # when it is migrated to python 3.7 and later
-        if hasattr(asyncio, "current_task"):
+        if sys.version_info >= (3, 7):
             task = asyncio.current_task()
         else:
             task = asyncio.Task.current_task(asyncio.get_running_loop())
