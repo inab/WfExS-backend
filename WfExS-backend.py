@@ -446,7 +446,22 @@ def processStagedWorkdirCommand(
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
                     try:
-                        wfInstance.executeWorkflow(offline=True)
+                        assert wfSetup is not None
+                        print(
+                            "\t- Instance {} (nickname '{}') is being run\n".format(
+                                wfSetup.instance_id,
+                                wfSetup.nickname,
+                            )
+                        )
+                        exit_val = wfInstance.executeWorkflow(offline=True)
+                        print(
+                            "\t- Instance {} (nickname '{}') exit value: {} ({})\n".format(
+                                wfSetup.instance_id,
+                                wfSetup.nickname,
+                                exit_val,
+                                "FAILED" if exit_val != 0 else "DONE",
+                            )
+                        )
                     except Exception as e:
                         logging.exception(
                             f"Error while executing {instance_id} ({nickname})"

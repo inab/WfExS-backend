@@ -97,7 +97,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
 
-    DEFAULT_CWLTOOL_VERSION = cast(EngineVersion, "3.1.20220204090313")
+    DEFAULT_CWLTOOL_VERSION = cast(EngineVersion, "3.1.20220913185150")
 
     DEVEL_CWLTOOL_PACKAGE = f"git+{CWLTOOL_REPO}.git"
     # Set this constant to something meaningful only when a hotfix
