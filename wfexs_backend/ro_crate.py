@@ -28,7 +28,7 @@ from typing import (
     Sequence,
 )
 
-import rocrate  # type:ignore
+from rocrate import rocrate  # type:ignore
 
 from .utils.digests import (
     nihDigester,
