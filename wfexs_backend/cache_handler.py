@@ -835,6 +835,8 @@ class SchemeHandlerCacheHandler:
                         )
                     else:
                         parsed_remote_file.append(a_remote_file)
+
+                inputKind = parsed_remote_file
             else:
                 raise ValueError(
                     "When fetch is requested, at least one URI should be passed"
