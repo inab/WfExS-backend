@@ -128,7 +128,8 @@ def get_WfExS_version() -> Tuple[str, Optional[str]]:
     import sys
     import dulwich.errors
 
-    vertuple: Tuple[str, Optional[str]] = __version__, None
+    vertuple: Tuple[str, Optional[str]]
+    vertuple = __version__, None
     executable = os.path.basename(sys.argv[0])
     # try:
 
