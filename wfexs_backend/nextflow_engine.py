@@ -951,7 +951,7 @@ STDERR
             for line in wfH:
                 contMatchE = self.ContScriptPat.search(line)
                 if contMatchE:
-                    containerTags.add(cast(ContainerTaggedName, contMatch.group(1)))
+                    containerTags.add(cast(ContainerTaggedName, contMatchE.group(1)))
 
         return matWorkflowEngine, list(containerTags)
 

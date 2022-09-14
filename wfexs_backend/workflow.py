@@ -1712,7 +1712,7 @@ class WF:
 
         return actions
 
-    def executeWorkflow(self, offline: bool = False) -> None:
+    def executeWorkflow(self, offline: bool = False) -> ExitVal:
         self.unmarshallStage(offline=offline)
 
         assert self.materializedEngine is not None
@@ -1733,6 +1733,9 @@ class WF:
 
         # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute()
+
+        # And last, report the exit value
+        return exitVal
 
     def listMaterializedExportActions(self) -> Sequence[MaterializedExportAction]:
         """

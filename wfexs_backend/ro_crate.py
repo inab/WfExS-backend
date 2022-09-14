@@ -97,6 +97,10 @@ def addOutputsResearchObject(
     :type outputs: Sequence[MaterializedOutput]
     """
     for out_item in outputs:
+        # This can happen when there is no output, like when a workflow has failed
+        if len(out_item.values) == 0:
+            continue
+
         itemOutValues = out_item.values[0]
 
         assert isinstance(itemOutValues, (GeneratedContent, GeneratedDirectoryContent))

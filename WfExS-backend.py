@@ -873,7 +873,23 @@ def main() -> None:
         wfInstance.createStageResearchObject(args.doMaterializedROCrate)
 
     if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
-        wfInstance.executeWorkflow(offline=command == WfExS_Commands.OfflineExecute)
+        print(
+            "\t- Instance {} (nickname '{}') is being run".format(
+                wfSetup.instance_id,
+                wfSetup.nickname,
+            )
+        )
+        exit_val = wfInstance.executeWorkflow(
+            offline=command == WfExS_Commands.OfflineExecute
+        )
+        print(
+            "\t- Instance {} (nickname '{}') exit value: {} ({})".format(
+                wfSetup.instance_id,
+                wfSetup.nickname,
+                exit_val,
+                "FAILED" if exit_val != 0 else "DONE",
+            )
+        )
 
     if command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
         wfInstance.exportResults()
