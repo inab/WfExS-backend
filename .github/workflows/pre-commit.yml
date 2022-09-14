@@ -14,10 +14,12 @@ jobs:
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v3
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+          cache: 'pip'
           architecture: x64
+      - run: pip install -r requirements.txt dev-requirements.txt pypy-requirements.txt
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh.yaml
