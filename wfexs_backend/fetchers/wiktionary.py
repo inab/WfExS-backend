@@ -19,11 +19,14 @@ from __future__ import absolute_import
 
 from typing import (
     Any,
-    Final,
     Mapping,
     Optional,
     Sequence,
     TYPE_CHECKING,
+)
+
+from typing_extensions import (
+    Final,
 )
 
 if TYPE_CHECKING:
