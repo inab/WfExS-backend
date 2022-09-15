@@ -20,7 +20,20 @@ jobs:
           cache: 'pip'
           architecture: x64
       - run: pip install --upgrade pip wheel
-      - run: pip install -r requirements.txt -r dev-requirements.txt -r mypy-requirements.txt
+      - run: |
+          pip install -r requirements.txt
+          pip freeze > requirements-all.txt
+      - name: Check transitive dependencies licences
+        id: license_check_report
+        uses: pilosus/action-pip-license-checker@v0.6.2
+        with:
+          requirements: 'requirements-all.txt'
+          fail: 'StrongCopyleft'
+          exclude: 'pylint.*'
+      - name: Print licences report
+        if: ${{ always() }}
+        run: echo "${{ steps.license_check_report.outputs.report }}"
+      - run: pip install -r dev-requirements.txt -r mypy-requirements.txt
       - name: MyPy cache
         uses: actions/cache@v3
         with:
@@ -43,7 +56,20 @@ jobs:
           cache: 'pip'
           architecture: x64
       - run: pip install wheel
-      - run: pip install -r requirements.txt -r requirements-additional-3.6.txt -r dev-requirements.txt -r mypy-requirements.txt
+      - run: |
+          pip install -r requirements.txt -r requirements-additional-3.6.txt
+          pip freeze > requirements-all.txt
+      - name: Check transitive dependencies licences
+        id: license_check_report
+        uses: pilosus/action-pip-license-checker@v0.6.2
+        with:
+          requirements: 'requirements-all.txt'
+          fail: 'StrongCopyleft'
+          exclude: 'pylint.*'
+      - name: Print licences report
+        if: ${{ always() }}
+        run: echo "${{ steps.license_check_report.outputs.report }}"
+      - run: pip install -r dev-requirements.txt -r mypy-requirements.txt
       - name: MyPy cache
         uses: actions/cache@v3
         with:
