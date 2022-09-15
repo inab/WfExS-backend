@@ -1,8 +1,8 @@
 wheel
-pylint
-pyflakes
-mypy
-json-schema-for-humans
-pre-commit
-black
-cffconvert
+pylint >= 2.13.9
+pyflakes >= 2.5.0
+mypy >= 0.971
+json-schema-for-humans >= 0.41.8
+pre-commit >= 2.20.0
+black >= 22.8.0
+cffconvert >= 2.0.0
