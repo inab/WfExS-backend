@@ -66,6 +66,11 @@ setuptools.setup(
     url="https://github.com/inab/WfExS-backend",
     packages=setuptools.find_packages(),
     install_requires=requirements,
+    entry_points={
+        "console_scripts": [
+            "WfExS-backend=wfexs_backend.__main__:main",
+        ],
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "Development Status :: 3 - Alpha",
