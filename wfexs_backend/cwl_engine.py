@@ -714,8 +714,10 @@ class CWLWorkflowEngine(WorkflowEngine):
                                     "CWL_SINGULARITY_CACHE"
                                 ] = matWfEng.containers_path
                                 instEnv["SINGULARITY_CONTAIN"] = "1"
+                                instEnv["APPTAINER_CONTAIN"] = "1"
                                 if self.writable_containers:
                                     instEnv["SINGULARITY_WRITABLE"] = "1"
+                                    instEnv["APPTAINER_WRITABLE"] = "1"
                             elif (
                                 self.container_factory.containerType
                                 == ContainerType.Docker
