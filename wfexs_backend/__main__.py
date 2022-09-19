@@ -20,6 +20,7 @@ import atexit
 import json
 import logging
 import os
+import os.path
 import sys
 import shutil
 import tempfile
@@ -534,6 +535,10 @@ def main() -> None:
     if defaultLocalConfigFilename is None:
         defaultLocalConfigFilename = os.path.join(
             os.getcwd(), DEFAULT_LOCAL_CONFIG_RELNAME
+        )
+    elif not os.path.isabs(defaultLocalConfigFilename):
+        defaultLocalConfigFilename = os.path.join(
+            os.getcwd(), defaultLocalConfigFilename
         )
     ap = argparse.ArgumentParser(
         description="WfExS (workflow execution service) backend " + verstr,
