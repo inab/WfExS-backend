@@ -176,9 +176,7 @@ class DockerHelper(abc.ABC):
         if parsedTag.scheme == "":
             docker_tag = "docker://" + tag
             parsedTag = urllib.parse.urlparse(docker_tag)
-        elif parsedTag.scheme == "" or (
-            parsedTag.scheme not in ("http", "https", "ftp", "docker")
-        ):
+        elif parsedTag.scheme not in ("http", "https", "ftp", "docker"):
             docker_tag = f"docker://{self.DEFAULT_DOCKER_REGISTRY}/{tag}"
             parsedTag = urllib.parse.urlparse(docker_tag)
         else:
@@ -189,24 +187,37 @@ class DockerHelper(abc.ABC):
             raise DockerHelperException(f"Unable to parse {tag} as a Docker tag")
 
         # Deciding the partial repo and alias
-        splitPos = parsedTag.path.find("@sha256:")
-        if splitPos == -1:
-            splitPos = parsedTag.path.find(":")
-        if splitPos != -1:
-            repo = parsedTag.path[0:splitPos]
-            alias = parsedTag.path[splitPos + 1 :]
+        if parsedTag.path == "":
+            pathToParse = parsedTag.netloc
         else:
-            repo = parsedTag.path
+            pathToParse = parsedTag.netloc + parsedTag.path
+
+        splitSep = "@sha256:"
+        splitPos = pathToParse.find(splitSep)
+        if splitPos == -1:
+            splitSep = ":"
+            splitPos = pathToParse.find(splitSep)
+
+        if splitPos != -1:
+            repo = pathToParse[0:splitPos]
+            alias = pathToParse[splitPos + len(splitSep) :]
+        else:
+            repo = pathToParse
             alias = self.DEFAULT_ALIAS
 
         # Deciding the registry server and finishing adjustment of repo
         registry = None
-        if "." not in parsedTag.netloc:
+        if "." not in repo:
             registry = self.DEFAULT_DOCKER_REGISTRY
-            repo = parsedTag.netloc + repo
         else:
-            registry = parsedTag.netloc
-            repo = repo[1:]
+            if repo[0] == "/":
+                repo = repo[1:]
+
+            if "/" in repo:
+                registry, repo = repo.split("/", 1)
+            else:
+                # FIXME!!!!
+                registry = self.DEFAULT_DOCKER_REGISTRY
 
         # Last repo adjustment, in case it is a 'library' one
         if "/" not in repo:
