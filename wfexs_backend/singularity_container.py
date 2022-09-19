@@ -26,10 +26,13 @@ from typing import (
     cast,
     Optional,
     Sequence,
+    Set,
     Union,
 )
 from urllib import parse
 import uuid
+
+from typing_extensions import Final
 
 from .common import (
     AbsPath,
@@ -53,6 +56,16 @@ from .utils.docker import DockerHelper
 
 
 class SingularityContainerFactory(ContainerFactory):
+    ACCEPTED_SING_SCHEMES: Final[Set[str]] = {
+        "library",
+        "docker",
+        "shub",
+        "oras",
+        "http",
+        "https",
+        "ftp",
+    }
+
     def __init__(
         self,
         cacheDir: Optional[AnyPath] = None,
@@ -76,6 +89,8 @@ class SingularityContainerFactory(ContainerFactory):
 
         self._environment.update(
             {
+                "APPTAINER_TMPDIR": self.tempDir,
+                "APPTAINER_CACHEDIR": singularityCacheDir,
                 "SINGULARITY_TMPDIR": self.tempDir,
                 "SINGULARITY_CACHEDIR": singularityCacheDir,
             }
@@ -132,7 +147,10 @@ class SingularityContainerFactory(ContainerFactory):
         for tag in tagList:
             # It is not an absolute URL, we are prepending the docker://
             parsedTag = parse.urlparse(tag)
-            singTag = "docker://" + tag if parsedTag.scheme == "" else tag
+            if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
+                singTag = tag
+            else:
+                singTag = cast(ContainerTaggedName, "docker://" + tag)
 
             containerFilename = simpleFileNameMethod(cast(URIType, tag))
             containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
