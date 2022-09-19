@@ -31,22 +31,26 @@ from dxf import DXF, _schema2_mimetype as DockerManifestV2MIMEType  # type: igno
 # Needed for proper error handling
 import requests
 
+from typing_extensions import Final
+
 
 class DockerHelperException(Exception):
     pass
 
 
 class Credentials(NamedTuple):
-    domain: Optional[str]
-    username: str
-    password: str
+    domain: Optional[str] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
 
 
 # This is needed to obtain the remote repo digest
 class DXFFat(DXF):  # type: ignore
     # See https://docs.docker.com/registry/spec/manifest-v2-2/ for
     # "fat" manifest description
-    FAT_schema2_mimetype = "application/vnd.docker.distribution.manifest.list.v2+json"
+    FAT_schema2_mimetype: Final[
+        str
+    ] = "application/vnd.docker.distribution.manifest.list.v2+json"
 
     def get_fat_manifest_and_response(
         self, alias: str, http_method: str = "get"
@@ -129,16 +133,16 @@ class DXFFat(DXF):  # type: ignore
 
 
 class DockerHelper(abc.ABC):
-    DEFAULT_DOCKER_REGISTRY = "docker.io"
-    DOCKER_REGISTRY = "registry-1.docker.io"
+    DEFAULT_DOCKER_REGISTRY: Final[str] = "docker.io"
+    DOCKER_REGISTRY: Final[str] = "registry-1.docker.io"
 
-    DEFAULT_ALIAS = "latest"
+    DEFAULT_ALIAS: Final[str] = "latest"
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         # Default credentials are no credentials
         self.creds: MutableMapping[Optional[str], Credentials] = {
-            None: Credentials(None, "", "")
+            None: Credentials(None, None, None)
         }
 
         # These credentials are used only when querying
