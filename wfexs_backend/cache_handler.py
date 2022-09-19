@@ -825,6 +825,8 @@ class SchemeHandlerCacheHandler:
         inputKind: Union[ContentKind, AnyURI, Sequence[AnyURI]]
         if isinstance(remote_file, urllib.parse.ParseResult):
             inputKind = cast(URIType, urllib.parse.urlunparse(remote_file))
+        elif isinstance(remote_file, LicensedURI):
+            inputKind = remote_file
         elif isinstance(remote_file, (list, tuple)):
             if len(remote_file) > 0:
                 parsed_remote_file: MutableSequence[AnyURI] = []
