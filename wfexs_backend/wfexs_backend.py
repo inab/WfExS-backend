@@ -1082,8 +1082,7 @@ class WfExSBackend:
                 # This is needed to trigger the cascade of
                 # state unmarshalling and validations
                 if wfInstance is not None:
-                    wfInstance.unmarshallExport(offline=True, fail_ok=True)
-                    mStatus = wfInstance.getMarshallingStatus()
+                    mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
 
                 yield instance_id, nickname, creation, wfSetup, mStatus
 

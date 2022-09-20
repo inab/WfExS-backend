@@ -735,7 +735,11 @@ class WF:
     def getStagedSetup(self) -> StagedSetup:
         return self.stagedSetup
 
-    def getMarshallingStatus(self) -> MarshallingStatus:
+    def getMarshallingStatus(self, reread_stats: bool = False) -> MarshallingStatus:
+        if reread_stats:
+            self.unmarshallExecute(offline=True, fail_ok=True)
+            self.unmarshallExport(offline=True, fail_ok=True)
+
         return MarshallingStatus(
             config=self.configMarshalled,
             stage=self.stageMarshalled,
@@ -1792,6 +1796,8 @@ class WF:
         if self.unmarshallExport(offline=True, fail_ok=True) is None:
             # TODO
             raise WFException("FIXME")
+        # We might to export the previously failed execution
+        self.unmarshallExecute(offline=True, fail_ok=True)
 
         # If actions is None, then try using default ones
         matActions: MutableSequence[MaterializedExportAction] = []

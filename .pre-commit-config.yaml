@@ -16,7 +16,8 @@ repos:
 #        files: \.py$
         exclude: "^[^/]*env/|dev-[^/]*/"
         require_serial: true
-        entry: ./basic-installer.bash mypy --strict
+#        entry: ./basic-installer.bash mypy --strict
+        entry: mypy --strict
 
   - repo: https://github.com/ambv/black
     rev: 22.6.0
@@ -33,4 +34,5 @@ repos:
         pass_filenames: false
         language: system
         files: "^CITATION.cff$"
-        entry: ./basic-installer.bash python dev-scripts/cff-ver-validate.py CITATION.cff
+#        entry: ./basic-installer.bash python dev-scripts/cff-ver-validate.py CITATION.cff
+        entry: python dev-scripts/cff-ver-validate.py CITATION.cff
