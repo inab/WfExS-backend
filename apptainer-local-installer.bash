@@ -140,3 +140,7 @@ cd "${downloadDir}"/"${apptainerBundlePrefix}"
 ./mconfig -b ./builddir --without-suid --prefix="${envDir}"
 make -C ./builddir
 make -C ./builddir install
+
+# Last, in order to keep compatibility, there should be a symlink called
+# singularity pointing to apptainer
+ln -sf apptainer "${envDir}"/bin/singularity
