@@ -16,18 +16,32 @@ The automated installer installs both core dependencies and it fetches and insta
   * gocryptfs: needed by secure directories feature.
   * A static bash copy: needed by Nextflow runner to monkey-patch some containers which do not have bash, or whose bash copy is buggy.
 
-If you also want to install [singularity](https://sylabs.io/singularity/) at the WfExS-backend virtual environment, and you are using Ubuntu Linux, a rootless setup is achieved using [singularity-local-installer.bash](singularity-local-installer.bash).
+If you also want to install [singularity](https://sylabs.io/singularity/) or
+[apptainer](https://apptainer.org) at the WfExS-backend virtual environment, and you are using Ubuntu Linux, a rootless setup is achieved using either [singularity-local-installer.bash](singularity-local-installer.bash)
+or [apptainer-local-installer.bash](apptainer-local-installer.bash).
 
 ```bash
+# For singularity
 ./singularity-local-installer.bash
+```
+
+```bash
+# For apptainer
+./apptainer-local-installer.bash
 ```
 
 This setup will only work on Linux systems with cgroups v2 enabled. You will also need to install the package which provides `mksquashfs`, which is `squashfs-tools` both in Debian and Ubuntu.
 
-The script only installs singularity when it is not available. If you want to force the installation of singularity in the WfExS backend environment, then you should run:
+The scripts only install singularity or apptainer when it is not available. If you want to force the installation of singularity or apptainer in the WfExS backend environment, then you should run:
 
 ```bash
+# For singularity
 ./singularity-local-installer.bash force
+```
+
+```bash
+# For apptainer
+./apptainer-local-installer.bash force
 ```
 
 ## Core Dependencies
@@ -44,7 +58,7 @@ This workflow execution service backend is written for Python 3.6 and later.
 ./basic-installer.bash
 ```
 
-* If you upgrade your Python installation (from version 3.6 to 3.7, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.
+* If you upgrade your Python installation (from version 3.6 to 3.7 or later, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.
 
 ## Software Dependencies
 
@@ -70,9 +84,9 @@ There are additional software dependencies beyond core ones. Depending on the lo
 
 Currently, both Nextflow and cwltool support secure and paranoid working directories when no container technology is set up.
 
-* When [Singularity](https://sylabs.io/singularity/) is set up, both Nextflow and cwltool support secure working directories when either singularity was compiled and set up with user namespaces support, or FUSE was set up at the system level in `/etc/fuse.conf` with the flag _`user_allow_other`_.
+* When [Singularity](https://sylabs.io/singularity/)/[Apptainer](https://apptainer.org) mode is set up, both Nextflow and cwltool support secure working directories when either singularity was compiled and set up with user namespaces support, or FUSE was set up at the system level in `/etc/fuse.conf` with the flag _`user_allow_other`_.
 
-* When [Singularity](https://sylabs.io/singularity/) is set up, both Nextflow and cwltool support paranoid working directories when singularity was compiled and set up with user namespaces support.
+* When [Singularity](https://sylabs.io/singularity/)/[Apptainer](https://apptainer.org) is set up, both Nextflow and cwltool support paranoid working directories when singularity (or apptainer) was compiled and set up with user namespaces support.
 
 * When [Docker](https://www.docker.com/) or [Podman](https://podman.io/) are set up, there is no support for secure or paranoid working directories due technical and architectural limitations.
 

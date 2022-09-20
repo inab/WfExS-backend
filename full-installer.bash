@@ -40,6 +40,10 @@ set -e
 
 # It is assumed that sourcing this script a python environment
 # will be created with all the needed dependencies
+declare -a input_params=( "$@" )
+if [ $# -gt 0 ]; then
+	shift $#
+fi
 source "${wfexsDir}/basic-installer.bash"
 
 # Now, it is time to install the binaries

@@ -2,7 +2,7 @@
 
 # These are the software versions being installed
 # in the virtual environment
-SINGULARITY_VER=3.10.2
+APPTAINER_VER=1.0.3
 GO_VER=1.17.13
 
 # These are placeholders
@@ -22,7 +22,7 @@ case "${wfexsDir}" in
 	;;
 esac
 
-downloadDir="$(mktemp -d --tmpdir wfexs_singularity_installer.XXXXXXXXXXX)"
+downloadDir="$(mktemp -d --tmpdir wfexs_apptainer_installer.XXXXXXXXXXX)"
 echo "$0: ${downloadDir} will be used to download third party dependencies, and later removed"
 
 cleanup() {
@@ -41,7 +41,7 @@ if [ $# -gt 0 ]; then
 	if [ "$1" == "force" ] ; then
 		doForce=1
 		if [ $# -gt 1 ] ; then
-			SINGULARITY_VER="$2"
+			APPTAINER_VER="$2"
 			if [ $# -gt 2 ] ; then
 				GO_VER="$3"
 			fi
@@ -49,10 +49,10 @@ if [ $# -gt 0 ]; then
 	fi
 fi
 
-# Before installing, check whether singularity is already available
+# Before installing, check whether apptainer is already available
 if [ -z "$doForce" ] ; then
-	if type -a singularity >& /dev/null ; then
-		echo "Singularity $(singularity version) is already available in the system. Skipping install"
+	if type -a apptainer >& /dev/null ; then
+		echo "Apptainer $(apptainer version) is already available in the system. Skipping install"
 		exit 0
 	fi
 fi
@@ -64,7 +64,7 @@ fi
 source "$wfexsDir"/basic-installer.bash
 
 # Second, let's load the environment in order to install
-# singularity in the python profile
+# apptainer in the python profile
 envDir="$(python -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
 if [ -z "${envDir}" ] ; then
 	envDir="${wfexsDir}/.pyWEenv"
@@ -74,10 +74,10 @@ if [ -z "${envDir}" ] ; then
 	source "${envActivate}"
 fi
 
-# Now, it is time to check singularity binaries availability
+# Now, it is time to check apptainer binaries availability
 if [ -z "$doForce" ] ; then
-	if [ -x "${envDir}/bin/singularity" ] ; then
-		echo "Singularity $(singularity version) is already available in the environment. Skipping install"
+	if [ -x "${envDir}/bin/apptainer" ] ; then
+		echo "Apptainer $(apptainer version) is already available in the environment. Skipping install"
 		exit 0
 	fi
 fi
@@ -126,16 +126,17 @@ if [ -n "$doInstallGo" ] ; then
 	PATH="${goSoftDir}/go/bin:${PATH}"
 fi
 
-# Fetch and compile singularity
-singularityBundlePrefix=singularity-ce-"${SINGULARITY_VER}"
-singularityBundle="${singularityBundlePrefix}".tar.gz
-( cd "${downloadDir}" && curl -L -O https://github.com/sylabs/singularity/releases/download/v"${SINGULARITY_VER}"/"${singularityBundle}" )
-tar -x -z -C "${downloadDir}" -f "${downloadDir}/${singularityBundle}"
-# Removing singularity bundle
-rm "${downloadDir}/${singularityBundle}"
-cd "${downloadDir}"/"${singularityBundlePrefix}"
+# Fetch and compile apptainer
+apptainerBundlePrefix=apptainer-"${APPTAINER_VER}"
+apptainerBundle="${apptainerBundlePrefix}".tar.gz
 
-# Now, the right moment to compile and install rootless singularity
+( cd "${downloadDir}" && curl -L -O https://github.com/apptainer/apptainer/releases/download/v"${APPTAINER_VER}"/"${apptainerBundle}" )
+tar -x -z -C "${downloadDir}" -f "${downloadDir}/${apptainerBundle}"
+# Removing apptainer bundle
+rm "${downloadDir}/${apptainerBundle}"
+cd "${downloadDir}"/"${apptainerBundlePrefix}"
+
+# Now, the right moment to compile and install rootless apptainer
 ./mconfig -b ./builddir --without-suid --prefix="${envDir}"
 make -C ./builddir
 make -C ./builddir install

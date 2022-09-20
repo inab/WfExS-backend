@@ -12,7 +12,7 @@ WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") proje
 * Identify the kind of workflow.
 * Fetch and set up workflow execution engine (currently supported [Nextflow](https://www.nextflow.io/)
 and [cwltool](https://github.com/common-workflow-language/cwltool)).
-* Identify the needed containers by the workflow, and fetch/cache them. Depending on the local setup, `singularity`, `docker`, `podman` or none of them will be used.
+* Identify the needed containers by the workflow, and fetch/cache them. Depending on the local setup, `singularity`, `apptainer`, `docker`, `podman` or none of them will be used.
 * Fetch and cache the inputs, represented either through an URL or a [CURIE-represented](https://en.wikipedia.org/wiki/CURIE) PID (public [persistent identifier](https://en.wikipedia.org/wiki/Persistent_identifier)).
 * Execute the workflow in a secure way, if it was requested.
 * Optionally describe the results through an [RO-Crate](https://www.researchobject.org/ro-crate/), and upload both RO-Crate and the results elsewhere in a secure way.
