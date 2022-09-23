@@ -1,0 +1,23 @@
+workflow_id: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/main.nf
+workflow_config:
+  secure: false
+  writable_containers: true
+  nextflow:
+    version: 20.01.0
+    profile: docker
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  worflow: "all"
+  sdrf:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/dev/data/sdrf_UPS.tsv
+  fasta:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/dev/data/yeast_UPS.fasta
+  parameters:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/test_data/test_params.yml   
+outputs:
+  outdir:
+    c-l-a-s-s: Directory
+    glob: "*"
