@@ -22,12 +22,12 @@ jobs:
       - run: pip install --upgrade pip wheel
       - run: |
           pip install -r requirements.txt
-          pip freeze > constraints-${{ env.py-semver }}.txt
+          pip freeze > constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
         uses: pilosus/action-pip-license-checker@v0.6.2
         with:
-          requirements: constraints-${{ env.py-semver }}.txt
+          requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
           exclude: 'pylint.*'
       - name: Print licences report
@@ -37,8 +37,8 @@ jobs:
       - name: MyPy cache
         uses: actions/cache@v3
         with:
-          path: .mypy_cache/${{ env.py-semver }}
-          key: mypy-${{ env.py-semver }}
+          path: .mypy_cache/${{ matrix.python-version }}
+          key: mypy-${{ matrix.python-version }}
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh.yaml
@@ -58,12 +58,12 @@ jobs:
       - run: pip install wheel
       - run: |
           pip install -r requirements.txt -r requirements-additional-3.6.txt
-          pip freeze > constraints-${{ env.py-semver }}.txt
+          pip freeze > constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
         uses: pilosus/action-pip-license-checker@v0.6.2
         with:
-          requirements: constraints-${{ env.py-semver }}.txt
+          requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
           exclude: 'pylint.*'
       - name: Print licences report
@@ -73,8 +73,8 @@ jobs:
       - name: MyPy cache
         uses: actions/cache@v3
         with:
-          path: .mypy_cache/${{ env.py-semver }}
-          key: mypy-${{ env.py-semver }}
+          path: .mypy_cache/${{ matrix.python-version }}
+          key: mypy-${{ matrix.python-version }}
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh-3.6.yaml
