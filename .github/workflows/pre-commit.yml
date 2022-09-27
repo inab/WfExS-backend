@@ -93,6 +93,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
+        with:
+          path: .
       - uses: EndBug/add-and-commit@v9
         with:
           add: constraints-*.txt
