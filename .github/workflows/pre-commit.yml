@@ -95,10 +95,11 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           path: constraints-dir
-      - run: ls -lR constraints-dir
+      - name: Move artifacts to their right place
+        run: mv constraints-dir/artifact/* .
       - uses: EndBug/add-and-commit@v9
         with:
           add: constraints-*.txt
-          message: Automatically update constraints
+          message: Automatically commit changed constraints
           default_author: github_actions
     
