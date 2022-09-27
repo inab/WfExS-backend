@@ -1,4 +1,4 @@
-workflow_id: git+https://gitlab.bsc.es/lrodrig1/structuralvariants_poc.git@1.0.7#subdirectory=structuralvariants/cwl/workflow.cwl
+workflow_id: git+https://gitlab.bsc.es/lrodrig1/structuralvariants_poc.git@master#subdirectory=structuralvariants/cwl/workflow.cwl
 workflow_config:
   secure: false
 # All the inputs must be URLs or CURIEs from identifiers.org
@@ -33,31 +33,17 @@ params:
     c-l-a-s-s: File
     url:
       - https://nextcloud.bsc.es/index.php/s/85nC4Kogp8eKyXn/download/samples_test.txt
-  blacklist:
-    c-l-a-s-s: File
-    url:
-      - https://nextcloud.bsc.es/index.php/s/7BcTeKPo2XS8JDz/download/hg19-blacklist.v2.num.bed.gz
   generate_bwa_indexes: true
-  threads_fastqc: 1
-  threads_fastp: 1
-  threads_bwa_mem: 1
-  threads_samtools: 1
+  threads_fastqc: 2
+  threads_fastp: 12
+  threads_bwa_mem: 24
+  threads_samtools: 8
   min_mapping_quality: 10
   bits_set: 4
   manta_exome: true
   manta_min_len: "50"
   manta_max_len: "1500000"
   manta_min_q: "20"
-  gridss_min_len: "100"
-  gridss_max_len: "1500000"
-  gridss_min_q: "999"
-  exomeDepth_min_len: "0.1"
-  exomeDepth_max_len: "200"
-  exomeDepth_min_bf: "5.5"
-  chromosome: "22"
-  codex_min_len: "0.1"
-  codex_max_len: "200"
-  codex_min_lratio: "40"
   enable_manta: true
   enable_gridss: false
   enable_exomeDepth: false
