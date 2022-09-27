@@ -42,11 +42,9 @@ jobs:
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh.yaml
-      - uses: EndBug/add-and-commit@v9
+      - uses: actions/upload-artifact@v3
         with:
-          add: constraints-${{ matrix.python-version }}.txt
-          message: Automatically updated constraints-${{ matrix.python-version }}.txt
-          default_author: github_actions
+          path: constraints-${{ matrix.python-version }}.txt
   pre-commit_3-6:
     runs-on: ubuntu-latest
     strategy:
@@ -83,8 +81,21 @@ jobs:
       - uses: pre-commit/action@v3.0.0
         with:
           extra_args: --all -c .pre-commit-config-gh-3.6.yaml
+      - uses: actions/upload-artifact@v3
+        with:
+          path: constraints-${{ matrix.python-version }}.txt
+  push_constraints:
+    runs-on: ubuntu-latest
+    name: Store newly generated constraints
+    needs:
+      - pre-commit
+      - pre-commit_3-6
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
       - uses: EndBug/add-and-commit@v9
         with:
-          add: constraints-${{ matrix.python-version }}.txt
-          message: Automatically updated constraints-${{ matrix.python-version }}.txt
+          add: constraints-*.txt
+          message: Automatically update constraints
           default_author: github_actions
+    
