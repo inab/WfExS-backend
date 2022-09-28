@@ -5,7 +5,7 @@ repos:
     rev: v2.15.2
     hooks:
       - id: pylint
-        args: [--disable=all, --enable=unused-import]
+        args: [ -j, "0", --disable=all, --enable=unused-import]
 
   - repo: local
     hooks:

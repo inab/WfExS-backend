@@ -1107,45 +1107,89 @@ class WfExSBackend:
         acceptGlob: bool = False,
         firstMatch: bool = True,
     ) -> ExitVal:
-        retval = cast(ExitVal, -1)
+        arg0 = []
         if len(args) > 0:
-            theEnv = dict(os.environ)
-            if len(args) > 1:
-                command = cast(Sequence[str], args[1:])
-            else:
-                command = [os.environ.get("SHELL", "/bin/sh")]
+            if not firstMatch or args[0] != "":
+                arg0.append(args[0])
+
+        if len(args) > 1:
+            command = cast(Sequence[str], args[1:])
+        else:
+            command = [os.environ.get("SHELL", "/bin/sh")]
+
+        listIter: Union[
+            Iterator[
+                Tuple[
+                    WfExSInstanceId,
+                    str,
+                    datetime.datetime,
+                    Optional[StagedSetup],
+                    Optional[WF],
+                ]
+            ],
+            Sequence[Tuple[WfExSInstanceId, str, datetime.datetime, StagedSetup, WF]],
+        ] = self.listStagedWorkflows(*arg0, acceptGlob=acceptGlob, doCleanup=False)
+
+        # This is needed to implement the case of no working directory
+        # and no command, so the latest is used, so avoiding to leave other mountpoints
+        if firstMatch and len(arg0) == 0:
+            listIterNew = []
+            prev_creation: Optional[datetime.datetime] = None
+            prev_wfInstance: Optional[WF] = None
             for (
                 instance_id,
                 nickname,
                 creation,
                 wfSetup,
                 wfInstance,
-            ) in self.listStagedWorkflows(
-                args[0], acceptGlob=acceptGlob, doCleanup=False
-            ):
-                # We are doing it only for the first non-corrupted match
+            ) in listIter:
                 if (wfSetup is not None) and (wfInstance is not None):
-                    self.logger.info(f"Running {command} at {instance_id} ({nickname})")
-                    # Setting a custom symbol
-                    theEnv["PROMPT_COMMAND"] = f"echo \"(WfExS '{nickname}')\""
-                    theEnv["PROMPT_DIRTRIM"] = "2"
+                    if (prev_creation is None) or creation > prev_creation:
+                        listIterNew = [
+                            (instance_id, nickname, creation, wfSetup, wfInstance)
+                        ]
+                        if prev_wfInstance is not None:
+                            prev_wfInstance.cleanup()
+                        prev_creation = creation
+                        prev_wfInstance = wfInstance
 
-                    cp = subprocess.run(
-                        command,
-                        cwd=wfSetup.work_dir,
-                        stdin=stdin,
-                        stdout=stdout,
-                        stderr=stderr,
-                        env=theEnv,
-                    )
-                    retval = cast(ExitVal, cp.returncode)
-                    wfInstance.cleanup()
-                    if firstMatch:
-                        break
-                else:
-                    self.logger.info(
-                        f"Cannot run {command} at {instance_id} ({nickname}), as it is corrupted"
-                    )
+                    if wfInstance != prev_wfInstance:
+                        wfInstance.cleanup()
+
+            listIter = listIterNew
+
+        theEnv = dict(os.environ)
+        retval = cast(ExitVal, -1)
+        for (
+            instance_id,
+            nickname,
+            creation,
+            wfSetup,
+            wfInstance,
+        ) in listIter:
+            # We are doing it only for the first non-corrupted match
+            if (wfSetup is not None) and (wfInstance is not None):
+                self.logger.info(f"Running {command} at {instance_id} ({nickname})")
+                # Setting a custom symbol
+                theEnv["PROMPT_COMMAND"] = f"echo \"(WfExS '{nickname}')\""
+                theEnv["PROMPT_DIRTRIM"] = "2"
+
+                cp = subprocess.run(
+                    command,
+                    cwd=wfSetup.work_dir,
+                    stdin=stdin,
+                    stdout=stdout,
+                    stderr=stderr,
+                    env=theEnv,
+                )
+                retval = cast(ExitVal, cp.returncode)
+                wfInstance.cleanup()
+                if firstMatch:
+                    break
+            else:
+                self.logger.info(
+                    f"Cannot run {command} at {instance_id} ({nickname}), as it is corrupted"
+                )
         return retval
 
     def cacheFetch(

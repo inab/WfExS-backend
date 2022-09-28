@@ -44,6 +44,7 @@ jobs:
           extra_args: --all -c .pre-commit-config-gh.yaml
       - uses: actions/upload-artifact@v3
         with:
+          retention-days: 2
           path: constraints-${{ matrix.python-version }}.txt
   pre-commit_3-6:
     runs-on: ubuntu-latest
@@ -83,6 +84,7 @@ jobs:
           extra_args: --all -c .pre-commit-config-gh-3.6.yaml
       - uses: actions/upload-artifact@v3
         with:
+          retention-days: 2
           path: constraints-${{ matrix.python-version }}.txt
   push_constraints:
     runs-on: ubuntu-latest
