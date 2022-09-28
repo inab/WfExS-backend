@@ -9,8 +9,8 @@ bagit==1.8.1
 bcrypt==4.0.0
 bioblend==0.18.0
 boto==2.49.0
-boto3==1.24.81
-botocore==1.27.81
+boto3==1.24.82
+botocore==1.27.82
 cachetools==5.2.0
 certifi==2022.9.24
 cffi==1.15.1
@@ -29,7 +29,7 @@ future==0.18.2
 galaxy2cwl==0.1.4
 genluhn==0.3.0
 google-api-core==2.10.1
-google-auth==2.11.1
+google-auth==2.12.0
 google-cloud-core==2.3.2
 google-cloud-storage==2.5.0
 google-crc32c==1.5.0
@@ -60,7 +60,7 @@ pyncclient==0.7
 pyncclient-ext==0.1.2
 pyrsistent==0.18.1
 python-dateutil==2.8.2
-python-dxf==7.10.0
+python-dxf==8.0.0
 python-magic==0.4.27
 python-xz==0.4.0
 pyxdg==0.28
