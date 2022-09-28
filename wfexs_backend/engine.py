@@ -35,6 +35,7 @@ from .common import (
     AbsPath,
     AnyPath,
     Container,
+    ContainerEngineVersionStr,
     ContainerTaggedName,
     ContainerType,
     ContentKind,
@@ -513,17 +514,20 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
         pass
 
-    def materializeContainers(
+    def materialize_containers(
         self,
         listOfContainerTags: Sequence[ContainerTaggedName],
         containersDir: Union[RelPath, AbsPath],
         offline: bool = False,
-    ) -> Sequence[Container]:
-        return self.container_factory.materializeContainers(
-            listOfContainerTags,
-            self.simpleContainerFileName,
-            containers_dir=containersDir,
-            offline=offline,
+    ) -> Tuple[ContainerEngineVersionStr, Sequence[Container]]:
+        return (
+            self.container_factory.engine_version(),
+            self.container_factory.materializeContainers(
+                listOfContainerTags,
+                self.simpleContainerFileName,
+                containers_dir=containersDir,
+                offline=offline,
+            ),
         )
 
     @abc.abstractmethod
@@ -555,12 +559,15 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         matWfEng: MaterializedWorkflowEngine,
         containersDir: AbsPath,
         offline: bool = False,
-    ) -> MaterializedWorkflowEngine:
+    ) -> Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr]:
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
             matWfEng, offline=offline
         )
 
-        listOfContainers = matWfEngV2.instance.materializeContainers(
+        (
+            containerEngineStr,
+            listOfContainers,
+        ) = matWfEngV2.instance.materialize_containers(
             listOfContainerTags, containersDir, offline=offline
         )
 
@@ -568,7 +575,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         listOfOperationalContainerTags = matWfEng.instance.sideContainers()
         if len(listOfOperationalContainerTags) > 0:
             try:
-                listOfOperationalContainers = matWfEngV2.instance.materializeContainers(
+                (
+                    _,
+                    listOfOperationalContainers,
+                ) = matWfEngV2.instance.materialize_containers(
                     listOfOperationalContainerTags, containersDir, offline=offline
                 )
             except:
@@ -588,7 +598,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             operational_containers=listOfOperationalContainers,
         )
 
-        return matWfEngV3
+        return matWfEngV3, containerEngineStr
 
     GuessedCardinalityMapping = {
         False: (0, 1),

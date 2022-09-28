@@ -48,7 +48,11 @@ from .common import (
     URIType,
 )
 
-from .container import ContainerFactory, ContainerFactoryException
+from .container import (
+    ContainerFactory,
+    ContainerEngineException,
+    ContainerFactoryException,
+)
 
 from .utils.contents import link_or_copy
 from .utils.digests import ComputeDigestFromFile, nihDigester
@@ -322,7 +326,7 @@ STDERR
                                 os.unlink(tmpContainerPath)
                             except:
                                 pass
-                        raise ContainerFactoryException(errstr)
+                        raise ContainerEngineException(errstr)
 
             # Only metadata was generated
             if tmpContainerPathMeta is not None:

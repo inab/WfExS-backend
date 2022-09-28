@@ -20,6 +20,7 @@ import os
 import tempfile
 import atexit
 import shutil
+import subprocess
 import abc
 import logging
 import inspect
@@ -40,6 +41,7 @@ from .common import (
     AbsPath,
     AnyPath,
     Container,
+    ContainerEngineVersionStr,
     ContainerFileNamingMethod,
     ContainerLocalConfig,
     ContainerTaggedName,
@@ -51,6 +53,15 @@ from . import common
 class ContainerFactoryException(AbstractWfExSException):
     """
     Exceptions fired by instances of ContainerFactory
+    """
+
+    pass
+
+
+class ContainerEngineException(ContainerFactoryException):
+    """
+    Exceptions fired by instances of ContainerFactory when calling the
+    container engine
     """
 
     pass
@@ -164,6 +175,45 @@ class ContainerFactory(abc.ABC):
         """
         return self.engineContainersSymlinkDir
 
+    def engine_version(self) -> ContainerEngineVersionStr:
+        """
+        As most of the engines return the version with this flag,
+        the default implementation is this
+        """
+
+        matEnv = dict(os.environ)
+        matEnv.update(self.environment)
+        with tempfile.NamedTemporaryFile() as e_err:
+            with subprocess.Popen(
+                [self.runtime_cmd, "--version"],
+                env=matEnv,
+                stdout=subprocess.PIPE,
+                stderr=e_err,
+            ) as sp_v:
+                engine_ver: str = ""
+                if sp_v.stdout is not None:
+                    engine_ver = sp_v.stdout.read().decode("utf-8", errors="continue")
+                    self.logger.debug(f"{self.runtime_cmd} version => {engine_ver}")
+
+                d_retval = sp_v.wait()
+
+            if d_retval == 0:
+                return cast(ContainerEngineVersionStr, engine_ver)
+            else:
+                with open(e_err.name, mode="rb") as eH:
+                    d_err_v = eH.read().decode("utf-8", errors="continue")
+                errstr = f"""Could not obtain version string from {self.runtime_cmd}. Retval {d_retval}
+======
+STDOUT
+======
+{engine_ver}
+
+======
+STDERR
+======
+{d_err_v}"""
+                raise ContainerEngineException(errstr)
+
     @abc.abstractmethod
     def materializeContainers(
         self,
@@ -196,6 +246,10 @@ class NoContainerFactory(ContainerFactory):
     @classmethod
     def ContainerType(cls) -> common.ContainerType:
         return common.ContainerType.NoContainer
+
+    def engine_version(self) -> ContainerEngineVersionStr:
+        """No container engine, empty version"""
+        return cast(ContainerEngineVersionStr, "")
 
     def materializeContainers(
         self,

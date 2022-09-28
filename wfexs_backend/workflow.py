@@ -72,6 +72,7 @@ from .common import (
     AnyPath,
     Attribution,
     CacheType,
+    ContainerEngineVersionStr,
     ContentKind,
     DefaultNoLicenceTuple,
     EngineVersion,
@@ -545,6 +546,7 @@ class WF:
         self.materializedParams: Optional[Sequence[MaterializedInput]] = None
         self.localWorkflow: Optional[LocalWorkflow] = None
         self.materializedEngine: Optional[MaterializedWorkflowEngine] = None
+        self.containerEngineVersion: Optional[ContainerEngineVersionStr] = None
 
         self.exitVal: Optional[ExitVal] = None
         self.augmentedInputs: Optional[Sequence[MaterializedInput]] = None
@@ -1082,7 +1084,10 @@ class WF:
             ), "The destination directory should be available here"
             if not offline:
                 os.makedirs(self.containersDir, exist_ok=True)
-            self.materializedEngine = WorkflowEngine.MaterializeWorkflowAndContainers(
+            (
+                self.materializedEngine,
+                self.containerEngineVersion,
+            ) = WorkflowEngine.MaterializeWorkflowAndContainers(
                 self.materializedEngine, self.containersDir, offline=offline
             )
 
@@ -2117,6 +2122,7 @@ class WF:
                     "engineVer": self.engineVer,
                     "materializedEngine": self.materializedEngine,
                     "containers": self.materializedEngine.containers,
+                    "containerEngineVersion": self.containerEngineVersion,
                     "materializedParams": self.materializedParams
                     # TODO: check nothing essential was left
                 }
@@ -2175,6 +2181,7 @@ class WF:
                     self.engineVer = stage["engineVer"]
                     self.materializedEngine = stage["materializedEngine"]
                     self.materializedParams = stage["materializedParams"]
+                    self.containerEngineVersion = stage.get("containerEngineVersion")
 
                     # This is needed to properly set up the materializedEngine
                     self.setupEngine(offline=True)

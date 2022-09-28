@@ -87,6 +87,7 @@ AnyPath = Union[RelPath, AbsPath]
 
 DEFAULT_DOCKER_CMD = cast(SymbolicName, "docker")
 DEFAULT_SINGULARITY_CMD = cast(SymbolicName, "singularity")
+DEFAULT_APPTAINER_CMD = cast(SymbolicName, "apptainer")
 DEFAULT_PODMAN_CMD = cast(SymbolicName, "podman")
 DEFAULT_JAVA_CMD = cast(SymbolicName, "java")
 DEFAULT_FUSERMOUNT_CMD = cast(SymbolicName, "fusermount")
@@ -96,6 +97,7 @@ ProgsMapping = MutableMapping[SymbolicName, AnyPath]
 DEFAULT_PROGS: ProgsMapping = {
     DEFAULT_DOCKER_CMD: cast(RelPath, DEFAULT_DOCKER_CMD),
     DEFAULT_SINGULARITY_CMD: cast(RelPath, DEFAULT_SINGULARITY_CMD),
+    DEFAULT_APPTAINER_CMD: cast(RelPath, DEFAULT_APPTAINER_CMD),
     DEFAULT_PODMAN_CMD: cast(RelPath, DEFAULT_PODMAN_CMD),
     DEFAULT_JAVA_CMD: cast(RelPath, DEFAULT_JAVA_CMD),
     DEFAULT_FUSERMOUNT_CMD: cast(RelPath, DEFAULT_FUSERMOUNT_CMD),
@@ -125,6 +127,9 @@ RepoURL = NewType("RepoURL", URIType)
 RepoTag = NewType("RepoTag", str)
 # This is also an absolute path
 EnginePath = NewType("EnginePath", AbsPath)
+
+# This is a container engine version
+ContainerEngineVersionStr = NewType("ContainerEngineVersionStr", str)
 
 # This is a workflow engine version
 EngineVersion = NewType("EngineVersion", str)
@@ -470,12 +475,12 @@ class AbstractWorkflowEngineType(abc.ABC):
     def sideContainers(self) -> Sequence[ContainerTaggedName]:
         pass
 
-    def materializeContainers(
+    def materialize_containers(
         self,
         listOfContainerTags: Sequence[ContainerTaggedName],
         containersDir: AnyPath,
         offline: bool = False,
-    ) -> "Sequence[Container]":
+    ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container]]":
         pass
 
     @abc.abstractmethod
@@ -632,6 +637,7 @@ class MarshallingStatus(NamedTuple):
 
 class ContainerType(enum.Enum):
     Singularity = "singularity"
+    Apptainer = "singularity"
     Docker = "docker"
     UDocker = "udocker"
     Podman = "podman"

@@ -19,6 +19,10 @@ The automated installer installs both core dependencies and it fetches and insta
 If you also want to install [singularity](https://sylabs.io/singularity/) or
 [apptainer](https://apptainer.org) at the WfExS-backend virtual environment, and you are using Ubuntu Linux, a rootless setup is achieved using either [singularity-local-installer.bash](singularity-local-installer.bash)
 or [apptainer-local-installer.bash](apptainer-local-installer.bash).
+At most only one of them can be locally installed, because as of
+September 2022 workflow engines like `cwltool` or `nextflow` still use the
+hardcoded name of `singularity`. So, the apptainer installer has to create
+a "singularity" symlink pointing to "apptainer".
 
 ```bash
 # For singularity
@@ -72,7 +76,7 @@ There are additional software dependencies beyond core ones. Depending on the lo
 
   * [java](https://openjdk.java.net/): Needed to run Nextflow. Supported Java versions go from version 8 to any version below 15 (Nextflow does not support this last one). Both OpenJDK and Sun implementations should work.
   
-  * [singularity](https://sylabs.io/singularity/): when local installation is set up to use singularity, version 3.5 or later is needed. Singularity itself depends on `mksquashfs`, which is available in Ubuntu through `squashfs-tools` package.
+  * [singularity](https://sylabs.io/singularity/) or [apptainer](https://apptainer.org): when local installation is set up to use singularity, version 3.5 or later is needed. Singularity and Apptainer themselves depend on `mksquashfs`, which is available in Ubuntu through `squashfs-tools` package.
   
   * [encfs](https://vgough.github.io/encfs/) can be used for the feature of secure intermediate results. It has been tested with version 1.9.2 and 1.9.5 ([releases](https://github.com/vgough/encfs/releases) have to be compiled or installed from your distro).
 
