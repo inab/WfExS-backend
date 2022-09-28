@@ -16,7 +16,7 @@
     and in a WfExS profile next command to fetch the test copy:
 
     ```bash
-    python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache fetch input http://127.0.0.1:8008/hosts fetchers-tests/tests.wfex.ctxt localtest
+    python WfExS-backend.py -L workflow_examples/local_config_gocryptfs.yaml cache fetch input http://127.0.0.1:8008/hosts fetchers-tests/tests.wfex.ctxt localtest
     ```
 
 3. Testing FTP auth would be possible launching here next:
@@ -28,7 +28,7 @@
     and in a WfExS profile next command to fetch the test copy:
 
     ```bash
-    python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache fetch input ftp://127.0.0.1:2121/hosts fetchers-tests/tests.wfex.ctxt localtest
+    python WfExS-backend.py -L workflow_examples/local_config_gocryptfs.yaml cache fetch input ftp://127.0.0.1:2121/hosts fetchers-tests/tests.wfex.ctxt localtest
     ```
 
 4. Testing FASP auth with EGA:
@@ -42,5 +42,5 @@
     Then, next command should work, fetching the test file from EGA.
 
     ```bash
-    python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache fetch input fasp://xfer.ega-archive.org/file fetchers-tests/tests.wfex.ctxt fasp-ega
+    python WfExS-backend.py -L workflow_examples/local_config_gocryptfs.yaml cache fetch input fasp://xfer.ega-archive.org/file fetchers-tests/tests.wfex.ctxt fasp-ega
     ```

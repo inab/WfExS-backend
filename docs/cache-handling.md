@@ -74,13 +74,13 @@ Currently implemented operations over these caches are:
 ### Injecting an entry
 
 ```bash
-python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache inject input perrito:piloto /etc/passwd
+python WfExS-backend.py -L workflow_examples/local_config_gocryptfs.yaml cache inject input perrito:piloto /etc/passwd
 ```
 
 ### Listing an specific cached input
 
 ```bash
-python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache ls input perrito:piloto
+python WfExS-backend.py -L workflow_examples/local_config_gocryptfs.yaml cache ls input perrito:piloto
 ```
 ```
 2021-12-15 16:56:22,265 - [INFO] Loading a Crypt4GH public key
@@ -114,7 +114,7 @@ python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache ls input perr
 ### Listing workflows
 
 ```bash
-python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache ls workflow
+python WfExS-backend.py -L workflow_examples/local_config_gocryptfs.yaml cache ls workflow
 ```
 ```
 2021-12-15 16:55:14,742 - [INFO] Loading a Crypt4GH public key
@@ -150,7 +150,7 @@ python WfExS-backend.py -L tests/local_config_gocryptfs.yaml cache ls workflow
 ### Listing all the inputs in a quiet way (`-q` flag)
 
 ```bash
-python WfExS-backend.py -q -L tests/local_config_gocryptfs.yaml cache ls input
+python WfExS-backend.py -q -L workflow_examples/local_config_gocryptfs.yaml cache ls input
 ```
 ```
 ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz
@@ -170,7 +170,7 @@ pride.project:PXD001819
 ### Removing both cache metadata and its fetched content using glob patterns
 
 ```bash
-python WfExS-backend.py -v -L tests/local_config_gocryptfs.yaml cache rm -r -g input 'ftp://ftp-trace.ncbi.nih.gov/giab/ftp/data/NA12878/NIST_NA12878_HG001_HiSeq_300x/140407_D00360_0017_BH947YADXX/Project_RM8398/Sample_U5c/*.gz'
+python WfExS-backend.py -v -L workflow_examples/local_config_gocryptfs.yaml cache rm -r -g input 'ftp://ftp-trace.ncbi.nih.gov/giab/ftp/data/NA12878/NIST_NA12878_HG001_HiSeq_300x/140407_D00360_0017_BH947YADXX/Project_RM8398/Sample_U5c/*.gz'
 ```
 ```
 2021-12-15 16:43:52,489 - [INFO] Loading a Crypt4GH public key

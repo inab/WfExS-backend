@@ -7,7 +7,7 @@ Example and usage of this tool, which helps generating a bunch of workflow insta
 from a template one and an Excel or CSV file with the fields to substitute:
 
 ```bash
-python WfExS-config-replicator.py -W tests/wetlab2variations_execution_nxf.wfex.stage --params-file tests/wetlab2variations_execution_nxf.variations.xlsx /tmp/generated
+python WfExS-config-replicator.py -W workflow_examples/wetlab2variations_execution_nxf.wfex.stage --params-file workflow_examples/wetlab2variations_execution_nxf.variations.xlsx /tmp/generated
 ```
 
 ```
@@ -38,6 +38,6 @@ optional arguments:
 ```
 
 ## License
-* © 2020-2021 Barcelona Supercomputing Center (BSC), ES
+* © 2020-2022 Barcelona Supercomputing Center (BSC), ES
 
 Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE.txt` for details.

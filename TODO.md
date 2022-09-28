@@ -7,7 +7,7 @@ WorkflowHub to materialize workflows.
 
 - [x] **Step 2**: Materialize inputs to launch the workflows. Using a file that contains the ids or data 
 references to the inputs, that we are going to use to instantiate the workflows. For example: 
-([wetlab2variations_execution_cwl.yaml](https://github.com/inab/WfExS-backend/blob/main/tests/wetlab2variations_execution_cwl.yaml))
+([wetlab2variations_execution_cwl.yaml](https://github.com/inab/WfExS-backend/blob/main/workflow_examples/wetlab2variations_execution_cwl.yaml))
 
 - [x] **Step 3**: Setup Nextflow and CWL engines.
 
@@ -73,7 +73,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 - [ ] Generate an abstract CWL description of a workflow execution. In the case of CWL will be a no-op, in the case of Nextflow it will use execution provenance.
 
 - [x] Integrate GA4GH API providers which do not support returning an RO-Crate [dockstore.org](https://dockstore.org/search?searchMode=files).
-  - Incomplete example 1 at [tests/somatic_cnv_dockstore_cwl.yaml](tests/somatic_cnv_dockstore_cwl.yaml).
+  - Incomplete example 1 at [workflow_examples/somatic_cnv_dockstore_cwl.yaml](workflow_examples/somatic_cnv_dockstore_cwl.yaml).
   - Example of the kind of entries being understood:
     - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902
     - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902/versions/master/CWL/files
