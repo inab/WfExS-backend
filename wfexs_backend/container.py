@@ -198,7 +198,7 @@ class ContainerFactory(abc.ABC):
                 d_retval = sp_v.wait()
 
             if d_retval == 0:
-                return cast(ContainerEngineVersionStr, engine_ver)
+                return cast(ContainerEngineVersionStr, engine_ver.strip())
             else:
                 with open(e_err.name, mode="rb") as eH:
                     d_err_v = eH.read().decode("utf-8", errors="continue")
