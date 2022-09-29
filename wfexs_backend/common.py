@@ -130,6 +130,7 @@ EnginePath = NewType("EnginePath", AbsPath)
 
 # This is a container engine version
 ContainerEngineVersionStr = NewType("ContainerEngineVersionStr", str)
+WorkflowEngineVersionStr = NewType("WorkflowEngineVersionStr", str)
 
 # This is a workflow engine version
 EngineVersion = NewType("EngineVersion", str)
@@ -470,6 +471,12 @@ class AbstractWorkflowEngineType(abc.ABC):
     @property
     def workflowType(self) -> "WorkflowType":
         return self.MyWorkflowType()
+
+    @abc.abstractmethod
+    def _get_engine_version_str(
+        self, matWfEng: "MaterializedWorkflowEngine"
+    ) -> WorkflowEngineVersionStr:
+        pass
 
     @abc.abstractmethod
     def sideContainers(self) -> Sequence[ContainerTaggedName]:

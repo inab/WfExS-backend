@@ -55,6 +55,7 @@ from .common import (
     RelPath,
     SymbolicParamName,
     URIType,
+    WorkflowEngineVersionStr,
     WorkflowType,
 )
 
@@ -380,6 +381,50 @@ class CWLWorkflowEngine(WorkflowEngine):
             cast(EnginePath, cwl_install_dir),
             cast(Fingerprint, engineVersion),
         )
+
+    def _get_engine_version_str(
+        self, matWfEng: MaterializedWorkflowEngine
+    ) -> WorkflowEngineVersionStr:
+        assert (
+            matWfEng.instance == self
+        ), "The workflow engine instance does not match!!!!"
+
+        # CWLWorkflowEngine directory is needed
+        cwl_install_dir = matWfEng.engine_path
+
+        # Execute cwltool --version
+        with tempfile.NamedTemporaryFile() as cwl_version_stderr:
+            # Writing straight to the file
+            with subprocess.Popen(
+                ". '{0}'/bin/activate && cwltool --version".format(cwl_install_dir),
+                stdout=subprocess.PIPE,
+                stderr=cwl_version_stderr,
+                cwd=cwl_install_dir,
+                shell=True,
+            ) as vP:
+                engine_ver: str = ""
+                if vP.stdout is not None:
+                    engine_ver = vP.stdout.read().decode("utf-8", errors="continue")
+                    self.logger.debug(f"{cwl_install_dir} version => {engine_ver}")
+
+                retval = vP.wait()
+
+            # Proper error handling
+            if retval != 0:
+                # Reading the output and error for the report
+                with open(cwl_version_stderr.name, "r") as c_stF:
+                    cwl_version_stderr_v = c_stF.read()
+
+                errstr = "Could not get version running cwltool --version from {}. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                    cwl_install_dir, retval, engine_ver, cwl_version_stderr_v
+                )
+                raise WorkflowEngineException(errstr)
+
+            pref_ver = os.path.join(cwl_install_dir, "bin") + "/"
+            if engine_ver.startswith(pref_ver):
+                engine_ver = engine_ver[len(pref_ver) :]
+
+            return cast(WorkflowEngineVersionStr, engine_ver.strip())
 
     def materializeWorkflow(
         self, matWorkflowEngine: MaterializedWorkflowEngine, offline: bool = False

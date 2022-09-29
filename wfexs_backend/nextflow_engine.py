@@ -67,6 +67,7 @@ from .common import (
     RelPath,
     SymbolicParamName,
     URIType,
+    WorkflowEngineVersionStr,
     WorkflowType,
 )
 
@@ -516,19 +517,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         env=instEnv,
                     ).wait()
 
-                # Reading the output and error for the report
-                if retval != 0:
-                    if os.path.exists(nxf_install_stdout.name):
-                        with open(nxf_install_stdout.name, "r") as c_stF:
-                            nxf_run_stdout_v = c_stF.read()
-                    else:
-                        nxf_run_stdout_v = ""
+                    # Reading the output and error for the report
+                    if retval != 0:
+                        if os.path.exists(nxf_install_stdout.name):
+                            with open(nxf_install_stdout.name, "r") as c_stF:
+                                nxf_run_stdout_v = c_stF.read()
+                        else:
+                            nxf_run_stdout_v = ""
 
-                    if os.path.exists(nxf_install_stderr.name):
-                        with open(nxf_install_stderr.name, "r") as c_stF:
-                            nxf_run_stderr_v = c_stF.read()
-                    else:
-                        nxf_run_stderr_v = ""
+                        if os.path.exists(nxf_install_stderr.name):
+                            with open(nxf_install_stderr.name, "r") as c_stF:
+                                nxf_run_stderr_v = c_stF.read()
+                        else:
+                            nxf_run_stderr_v = ""
 
         # And now the command is run
         if retval == 0 and isinstance(commandLine, list) and len(commandLine) > 0:
@@ -884,6 +885,31 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 nxf_run_stderr_v = errstr
 
         return cast(ExitVal, retval), nxf_run_stdout_v, nxf_run_stderr_v
+
+    def _get_engine_version_str(
+        self, matWfEng: MaterializedWorkflowEngine
+    ) -> WorkflowEngineVersionStr:
+        assert (
+            matWfEng.instance == self
+        ), "The workflow engine instance does not match!!!!"
+
+        retval, engine_ver, nxf_version_stderr_v = self.runNextflowCommand(
+            matWfEng.version,
+            ["-v"],
+            workdir=matWfEng.engine_path,
+            nextflow_path=matWfEng.engine_path,
+        )
+
+        if retval != 0:
+            errstr = "Could not get version running nextflow -v from {}. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                matWfEng.engine_path, retval, engine_ver, nxf_version_stderr_v
+            )
+            raise WorkflowEngineException(errstr)
+
+        if engine_ver is None:
+            engine_ver = ""
+
+        return cast(WorkflowEngineVersionStr, engine_ver.strip())
 
     # Pattern for searching for process\..*container = ['"]([^'"]+)['"] in dumped config
     ContConfigPat: Pattern[str] = re.compile(

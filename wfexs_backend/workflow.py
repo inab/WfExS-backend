@@ -105,6 +105,7 @@ from .common import (
     URIType,
     WfExSInstanceId,
     WorkflowConfigBlock,
+    WorkflowEngineVersionStr,
     WorkflowMetaConfigBlock,
     WorkflowType,
     WritableWorkflowMetaConfigBlock,
@@ -547,6 +548,7 @@ class WF:
         self.localWorkflow: Optional[LocalWorkflow] = None
         self.materializedEngine: Optional[MaterializedWorkflowEngine] = None
         self.containerEngineVersion: Optional[ContainerEngineVersionStr] = None
+        self.workflowEngineVersion: Optional[WorkflowEngineVersionStr] = None
 
         self.exitVal: Optional[ExitVal] = None
         self.augmentedInputs: Optional[Sequence[MaterializedInput]] = None
@@ -1056,17 +1058,20 @@ class WF:
         matWfEngV2 = self.engine.materializeEngine(localWorkflow, self.engineVer)
 
         # At this point, there can be uninitialized elements
-        if (self.materializedEngine is not None) and (matWfEngV2 is not None):
-            matWfEngV2 = MaterializedWorkflowEngine(
-                instance=matWfEngV2.instance,
-                version=matWfEngV2.version,
-                fingerprint=matWfEngV2.fingerprint,
-                engine_path=matWfEngV2.engine_path,
-                workflow=matWfEngV2.workflow,
-                containers_path=self.materializedEngine.containers_path,
-                containers=self.materializedEngine.containers,
-                operational_containers=self.materializedEngine.operational_containers,
-            )
+        if matWfEngV2 is not None:
+            engine_version_str = WorkflowEngine.GetEngineVersion(matWfEngV2)
+            self.workflowEngineVersion = engine_version_str
+            if self.materializedEngine is not None:
+                matWfEngV2 = MaterializedWorkflowEngine(
+                    instance=matWfEngV2.instance,
+                    version=matWfEngV2.version,
+                    fingerprint=matWfEngV2.fingerprint,
+                    engine_path=matWfEngV2.engine_path,
+                    workflow=matWfEngV2.workflow,
+                    containers_path=self.materializedEngine.containers_path,
+                    containers=self.materializedEngine.containers,
+                    operational_containers=self.materializedEngine.operational_containers,
+                )
         self.materializedEngine = matWfEngV2
 
     def materializeWorkflow(self, offline: bool = False) -> None:
@@ -2123,6 +2128,7 @@ class WF:
                     "materializedEngine": self.materializedEngine,
                     "containers": self.materializedEngine.containers,
                     "containerEngineVersion": self.containerEngineVersion,
+                    "workflowEngineVersion": self.workflowEngineVersion,
                     "materializedParams": self.materializedParams
                     # TODO: check nothing essential was left
                 }
@@ -2182,6 +2188,7 @@ class WF:
                     self.materializedEngine = stage["materializedEngine"]
                     self.materializedParams = stage["materializedParams"]
                     self.containerEngineVersion = stage.get("containerEngineVersion")
+                    self.workflowEngineVersion = stage.get("workflowEngineVersion")
 
                     # This is needed to properly set up the materializedEngine
                     self.setupEngine(offline=True)

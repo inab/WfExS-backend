@@ -62,6 +62,7 @@ from .common import (
     SymbolicParamName,
     URIType,
     WFLangVersion,
+    WorkflowEngineVersionStr,
 )
 
 from .container import ContainerFactory, NoContainerFactory
@@ -451,6 +452,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
 
         pass
+
+    @staticmethod
+    def GetEngineVersion(
+        matWfEng: MaterializedWorkflowEngine,
+    ) -> WorkflowEngineVersionStr:
+        return matWfEng.instance._get_engine_version_str(matWfEng)
 
     def materializeEngine(
         self, localWf: LocalWorkflow, engineVersion: Optional[EngineVersion] = None
