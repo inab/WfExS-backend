@@ -578,7 +578,7 @@ def main() -> None:
         "--local-config",
         dest="localConfigFilename",
         default=defaultLocalConfigFilename,
-        help="Local installation configuration file",
+        help="Local installation configuration file (can also be set up through WFEXS_CONFIG_FILE environment variable)",
     )
     ap.add_argument("--cache-dir", dest="cacheDir", help="Caching directory")
 
