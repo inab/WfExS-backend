@@ -962,6 +962,7 @@ STDERR
         # searching for process\..*container = ['"]([^'"]+)['"]
         containerTags: Set[ContainerTaggedName] = set()
         assert flat_stdout is not None
+        self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
         for contMatch in self.ContConfigPat.finditer(flat_stdout):
             containerTags.add(cast(ContainerTaggedName, contMatch.group(1)))
 
