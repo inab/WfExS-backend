@@ -153,8 +153,8 @@ jobs:
         uses: peter-evans/create-pull-request@v4
         with:
           delete-branch: true
-          commit-message: [create-pull-request] Automatically commit updated contents (constraints, generated documentation)
-      - name: Check outputs
+          commit-message: "[create-pull-request] Automatically commit updated contents (constraints, generated documentation)
+      - name: Check outputs"
         if: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
           echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
