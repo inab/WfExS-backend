@@ -19,15 +19,17 @@ repos:
 #        entry: ./basic-installer.bash mypy --strict
         entry: mypy --strict
     
+#  - repo: meta
   - repo: https://github.com/inab/python-extended-json-schema-validator.git
     rev: v0.10.10
     hooks:
+#      - id: identity
       - id: jsonschema_dir_validate
         name: Check jsonschema
-        language: python
-        always_run: true
-        pass_filenames: false
-        args: [ "wfexs_backend/schemas" ]
+        types:
+          - directory
+        files: ^wfexs_backend/schemas$
+        require_serial: true
 
   - repo: https://github.com/ambv/black
     rev: 22.6.0
@@ -43,6 +45,6 @@ repos:
         always_run: true
         pass_filenames: false
         language: system
-        files: "^CITATION.cff$"
+        files: "CITATION.cff$"
 #        entry: ./basic-installer.bash python dev-scripts/cff-ver-validate.py CITATION.cff
         entry: python dev-scripts/cff-ver-validate.py CITATION.cff

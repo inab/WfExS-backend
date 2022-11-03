@@ -18,6 +18,17 @@ repos:
         require_serial: true
         entry: mypy --strict
 
+  - repo: https://github.com/inab/python-extended-json-schema-validator.git
+    rev: v0.10.10
+    hooks:
+      - id: jsonschema_dir_validate
+        name: Check jsonschema
+        types:
+          - directory
+        args: [ "wfexs_backend/schemas" ]
+        files: ^wfexs_backend/schemas$
+        require_serial: true
+
   - repo: https://github.com/ambv/black
     rev: 22.6.0
     hooks:
