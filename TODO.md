@@ -68,6 +68,10 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
 - [x] Supporting `file` protocol and lean and mean paths, so WfExS can be used with local routes and paths. The main drawback is that RO-Crate provenance can suffer in these scenarios, as it is not provided a public URL/URI.
 
+- [ ] Support conda-based workflows.
+
+- [ ] Support Snakemake workflows.
+
 - [ ] Support pre and post processing steps through the usage of side workflow executions.
 
 - [ ] Generate an abstract CWL description of a workflow execution. In the case of CWL will be a no-op, in the case of Nextflow it will use execution provenance.
