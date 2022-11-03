@@ -93,6 +93,7 @@ jobs:
       - pre-commit
       - pre-commit_3-6
     steps:
+      - uses: actions/checkout@v3
       - name: Changes at WfExS-backend internal JSON Schemas
         id: changed_schemas
         uses: tj-actions/changed-files@v34
