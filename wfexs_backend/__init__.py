@@ -95,7 +95,7 @@ def describeGitRepo(repo: str) -> Tuple[str, str]:
 
         # Walk through all commits
         walker: dulwich.walk.Walker
-        walker = r.get_walker()  # type:ignore
+        walker = r.get_walker()
         skipFirst = True
         for entry in walker:
             # Check if tag

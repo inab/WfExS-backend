@@ -404,7 +404,7 @@ def get_git_default_branch(
 ) -> RepoTag:
 
     remote_refs_dict: Mapping[bytes, bytes]
-    remote_refs_dict = dulwich.porcelain.ls_remote(repoURL)  # type:ignore
+    remote_refs_dict = dulwich.porcelain.ls_remote(repoURL)
     head_remote_ref = remote_refs_dict[HEAD_LABEL]
     b_default_repo_tag: Optional[str] = None
     for remote_label, remote_ref in remote_refs_dict.items():
