@@ -104,12 +104,13 @@ source .pyWEenv/bin/activate
 pip install --upgrade pip wheel
 pip install -r requirements.txt
 pip install -r dev-requirements.txt
+pip install -r mypy-requirements.txt
 ```
 
 One of these dependencies is [pre-commit](https://pre-commit.com/), whose rules are declared at [.pre-commit-config.yaml](.pre-commit-config.yaml) (there are special versions of these rules for GitHub).
 
-The rules run both [pylint](https://pypi.org/project/pylint/) and
-[mypy](http://mypy-lang.org/), and [black](https://black.readthedocs.io/en/stable/) in the near future.
+The rules run both [pylint](https://pypi.org/project/pylint/),
+[mypy](http://mypy-lang.org/) and [black](https://black.readthedocs.io/en/stable/), among others.
 
 The pre-commit development hook which runs these tools before any commit is installed just running:
 
