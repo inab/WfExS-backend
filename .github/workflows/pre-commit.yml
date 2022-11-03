@@ -117,10 +117,10 @@ jobs:
         if: steps.doc-generate-html-if-changed.outcome == 'success'
         with:
           retention-days: 2
-          path:
-            - docs/schemas/*.html
-            - docs/schemas/*.css
-            - docs/schemas/*.js
+          path: |
+            docs/schemas/*.html
+            docs/schemas/*.css
+            docs/schemas/*.js
       - name: Generate MD documentation from internal JSON Schemas
         id: doc-generate-md-if-changed
         if: steps.changed_schemas.outputs.any_changed == 'true'
@@ -130,7 +130,8 @@ jobs:
         if: steps.doc-generate-md-if-changed.outcome == 'success'
         with:
           retention-days: 2
-          path: docs/schemas/*.md
+          path: |
+            docs/schemas/*.md
 
   pull_request_changes:
     runs-on: ubuntu-latest
