@@ -61,7 +61,7 @@ jobs:
           architecture: x64
       - run: pip install wheel
       - run: |
-          pip install -r requirements.txt -r requirements-additional-3.6.txt
+          pip install -r requirements.txt -r requirements-additional-${{ matrix.python-version }}.txt
           pip freeze > constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
