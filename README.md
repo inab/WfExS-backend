@@ -345,4 +345,4 @@ The program uses three different types of configuration files:
 ## License
 * © 2020-2022 Barcelona Supercomputing Center (BSC), ES
 
-Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE.txt` for details.
+Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE` for details.
