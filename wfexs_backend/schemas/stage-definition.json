@@ -323,8 +323,23 @@
 							"default": "19.04.1"
 						},
 						"profile": {
-							"type": "string",
-							"minLength": 1
+							"description": "If defined, the profile/s to enable",
+							"oneOf": [
+								{
+									"type": "string",
+									"pattern": "^[^, \t]+[ \t]*(,[ \t]*[^, \t]+[ \t]*)*$",
+									"minLength": 1
+								},
+								{
+									"type": "array",
+									"items": {
+										"type": "string",
+										"pattern": "^[^,]+$",
+										"minLength": 1
+									},
+									"minItems": 1
+								}
+							]
 						}
 					}
 				},

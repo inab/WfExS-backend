@@ -32,10 +32,10 @@ import yaml
 from typing import (
     cast,
     Any,
-    Dict,
     IO,
     List,
     Mapping,
+    MutableMapping,
     MutableSequence,
     Optional,
     Pattern,
@@ -44,6 +44,8 @@ from typing import (
     Tuple,
     Union,
 )
+
+from typing_extensions import Final
 
 from .common import (
     AbsPath,
@@ -88,7 +90,7 @@ DEFAULT_STATIC_PS_CMDS = [
 
 
 @functools.lru_cache()
-def _tzstring() -> str:
+def _tzstring() -> "str":
     try:
         with open("/etc/timezone", "r") as tzreader:
             tzstring = tzreader.readline().rstrip()
@@ -101,8 +103,9 @@ def _tzstring() -> str:
 
 class NextflowWorkflowEngine(WorkflowEngine):
     NEXTFLOW_REPO = "https://github.com/nextflow-io/nextflow"
-    DEFAULT_NEXTFLOW_VERSION = cast(EngineVersion, "19.04.1")
-    DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN = cast(EngineVersion, "20.01.0")
+    DEFAULT_NEXTFLOW_VERSION = cast("EngineVersion", "19.04.1")
+    DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN = cast("EngineVersion", "20.01.0")
+    DEFAULT_NEXTFLOW_VERSION_20_04 = cast("EngineVersion", "20.04.1")
     DEFAULT_NEXTFLOW_DOCKER_IMAGE = "nextflow/nextflow"
 
     DEFAULT_MAX_RETRIES = 5
@@ -125,20 +128,20 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     def __init__(
         self,
-        cacheDir: Optional[AnyPath] = None,
-        workflow_config: Optional[Mapping[str, Any]] = None,
-        local_config: Optional[EngineLocalConfig] = None,
-        engineTweaksDir: Optional[AnyPath] = None,
-        cacheWorkflowDir: Optional[AnyPath] = None,
-        cacheWorkflowInputsDir: Optional[AnyPath] = None,
-        workDir: Optional[AnyPath] = None,
-        outputsDir: Optional[AnyPath] = None,
-        outputMetaDir: Optional[AnyPath] = None,
-        intermediateDir: Optional[AnyPath] = None,
-        tempDir: Optional[AnyPath] = None,
-        secure_exec: bool = False,
-        allowOther: bool = False,
-        config_directory: Optional[AnyPath] = None,
+        cacheDir: "Optional[AnyPath]" = None,
+        workflow_config: "Optional[Mapping[str, Any]]" = None,
+        local_config: "Optional[EngineLocalConfig]" = None,
+        engineTweaksDir: "Optional[AnyPath]" = None,
+        cacheWorkflowDir: "Optional[AnyPath]" = None,
+        cacheWorkflowInputsDir: "Optional[AnyPath]" = None,
+        workDir: "Optional[AnyPath]" = None,
+        outputsDir: "Optional[AnyPath]" = None,
+        outputMetaDir: "Optional[AnyPath]" = None,
+        intermediateDir: "Optional[AnyPath]" = None,
+        tempDir: "Optional[AnyPath]" = None,
+        secure_exec: "bool" = False,
+        allowOther: "bool" = False,
+        config_directory: "Optional[AnyPath]" = None,
     ):
         super().__init__(
             cacheDir=cacheDir,
@@ -225,37 +228,42 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.max_cpus = engineConf.get("maxProcesses", self.DEFAULT_MAX_CPUS)
 
         # The profile to force, in case it cannot be guessed
-        self.nxf_profile = workflowEngineConf.get("profile")
+        nxf_profile: "Union[str, Sequence[str]]" = workflowEngineConf.get("profile", [])
+        self.nxf_profile: "Sequence[str]"
+        if isinstance(nxf_profile, list):
+            self.nxf_profile = nxf_profile
+        else:
+            self.nxf_profile = [cast("str", nxf_profile)]
 
         # Setting the assets directory
         self.nxf_assets = os.path.join(self.engineTweaksDir, "assets")
         os.makedirs(self.nxf_assets, exist_ok=True)
 
     @classmethod
-    def MyWorkflowType(cls) -> WorkflowType:
+    def MyWorkflowType(cls) -> "WorkflowType":
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
             shortname="nextflow",
             name="Nextflow",
             clazz=cls,
-            uriMatch=[cast(URIType, "https://www.nextflow.io/")],
-            uriTemplate=cast(URIType, "https://www.nextflow.io/"),
-            url=cast(URIType, "https://www.nextflow.io/"),
+            uriMatch=[cast("URIType", "https://www.nextflow.io/")],
+            uriTemplate=cast("URIType", "https://www.nextflow.io/"),
+            url=cast("URIType", "https://www.nextflow.io/"),
             trs_descriptor="NFL",
             rocrate_programming_language="#nextflow",
         )
 
     @classmethod
-    def SupportedContainerTypes(cls) -> Set[ContainerType]:
+    def SupportedContainerTypes(cls) -> "Set[ContainerType]":
         return cls.SUPPORTED_CONTAINER_TYPES
 
     @classmethod
-    def SupportedSecureExecContainerTypes(cls) -> Set[ContainerType]:
+    def SupportedSecureExecContainerTypes(cls) -> "Set[ContainerType]":
         return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
 
     def identifyWorkflow(
-        self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None
-    ) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
+        self, localWf: "LocalWorkflow", engineVer: "Optional[EngineVersion]" = None
+    ) -> "Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]":
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -263,15 +271,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         nfPath = localWf.dir
         if localWf.relPath is not None:
-            nfPath = cast(AbsPath, os.path.join(nfPath, localWf.relPath))
+            nfPath = cast("AbsPath", os.path.join(nfPath, localWf.relPath))
 
         candidateNf: Optional[RelPath]
         if os.path.isdir(nfPath):
             nfDir = nfPath
             candidateNf = None
         else:
-            nfDir = cast(AbsPath, os.path.dirname(nfPath))
-            candidateNf = cast(RelPath, os.path.basename(nfPath))
+            nfDir = cast("AbsPath", os.path.dirname(nfPath))
+            candidateNf = cast("RelPath", os.path.basename(nfPath))
 
         nfConfig = os.path.join(nfDir, "nextflow.config")
         verPat: Optional[Pattern[str]] = re.compile(
@@ -280,7 +288,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         mainPat: Optional[Pattern[str]] = re.compile(
             r"mainScript *= *['\"]([^\"]+)['\"]"
         )
+        kw_20_04_Pat: Optional[Pattern[str]] = re.compile(
+            r"\$(?:(?:launchDir|moduleDir|projectDir)|\{(?:launchDir|moduleDir|projectDir)\})"
+        )
         engineVer = None
+        minimalEngineVer = None
 
         # else:
         #    # We are deactivating the engine version capture from the config
@@ -293,14 +305,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     if verPat is not None:
                         matched = verPat.search(line)
                         if matched:
-                            engineVer = cast(EngineVersion, matched.group(1))
+                            engineVer = cast("EngineVersion", matched.group(1))
                             verPat = None
 
                     if mainPat is not None:
                         matched = mainPat.search(line)
                         if matched:
                             putativeCandidateNf = cast(
-                                Optional[RelPath], matched.group(1)
+                                "Optional[RelPath]", matched.group(1)
                             )
                             if candidateNf is not None:
                                 if candidateNf != putativeCandidateNf:
@@ -314,10 +326,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                 candidateNf = putativeCandidateNf
                             mainPat = None
 
+                    if kw_20_04_Pat is not None:
+                        matched = kw_20_04_Pat.search(line)
+                        if matched:
+                            if self.nxf_version <= self.DEFAULT_NEXTFLOW_VERSION_20_04:
+                                minimalEngineVer = self.DEFAULT_NEXTFLOW_VERSION_20_04
+                            else:
+                                minimalEngineVer = self.nxf_version
+                            kw_20_04_Pat = None
+
         if candidateNf is None:
             # Default case
             self.logger.debug("Default candidateNf")
-            candidateNf = cast(RelPath, "main.nf")
+            candidateNf = cast("RelPath", "main.nf")
 
         entrypoint = os.path.join(nfDir, candidateNf)
         self.logger.debug(
@@ -346,6 +367,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 return None, None
 
         # Setting a default engineVer
+        if (minimalEngineVer is not None) and (
+            (engineVer is None) or engineVer < minimalEngineVer
+        ):
+            engineVer = minimalEngineVer
+
         if engineVer is None:
             engineVer = self.nxf_version
         elif (
@@ -363,8 +389,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         )
 
     def materializeEngineVersion(
-        self, engineVersion: EngineVersion
-    ) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
+        self, engineVersion: "EngineVersion"
+    ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -372,7 +398,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         """
 
         nextflow_install_dir = cast(
-            EnginePath, os.path.join(self.weCacheDir, engineVersion)
+            "EnginePath", os.path.join(self.weCacheDir, engineVersion)
         )
         retval, nxf_install_stdout_v, nxf_install_stderr_v = self.runNextflowCommand(
             engineVersion, ["info"], nextflow_path=nextflow_install_dir
@@ -390,19 +416,23 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         engineFingerprint = verMatch.group(1) if verMatch else ""
 
-        return engineVersion, nextflow_install_dir, cast(Fingerprint, engineFingerprint)
+        return (
+            engineVersion,
+            nextflow_install_dir,
+            cast("Fingerprint", engineFingerprint),
+        )
 
     def runNextflowCommand(
         self,
-        nextflow_version: EngineVersion,
-        commandLine: List[str],
-        workdir: Optional[AbsPath] = None,
-        nextflow_path: Optional[EnginePath] = None,
-        containers_path: Optional[AnyPath] = None,
-        stdoutFilename: Optional[AbsPath] = None,
-        stderrFilename: Optional[AbsPath] = None,
-        runEnv: Optional[Mapping[str, str]] = None,
-    ) -> Tuple[ExitVal, Optional[str], Optional[str]]:
+        nextflow_version: "EngineVersion",
+        commandLine: "Sequence[str]",
+        workdir: "Optional[AbsPath]" = None,
+        nextflow_path: "Optional[EnginePath]" = None,
+        containers_path: "Optional[AnyPath]" = None,
+        stdoutFilename: "Optional[AbsPath]" = None,
+        stderrFilename: "Optional[AbsPath]" = None,
+        runEnv: "Optional[Mapping[str, str]]" = None,
+    ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         self.logger.debug("Command => nextflow " + " ".join(commandLine))
         if self.engine_mode == EngineMode.Docker:
             (
@@ -440,24 +470,24 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     def runLocalNextflowCommand(
         self,
-        nextflow_version: EngineVersion,
-        commandLine: List[str],
-        workdir: Optional[AbsPath] = None,
-        nextflow_install_dir: Optional[EnginePath] = None,
-        containers_path: Optional[AnyPath] = None,
-        stdoutFilename: Optional[AbsPath] = None,
-        stderrFilename: Optional[AbsPath] = None,
-        runEnv: Optional[Mapping[str, str]] = None,
-    ) -> Tuple[ExitVal, Optional[str], Optional[str]]:
+        nextflow_version: "EngineVersion",
+        commandLine: "Sequence[str]",
+        workdir: "Optional[AbsPath]" = None,
+        nextflow_install_dir: "Optional[EnginePath]" = None,
+        containers_path: "Optional[AnyPath]" = None,
+        stdoutFilename: "Optional[AbsPath]" = None,
+        stderrFilename: "Optional[AbsPath]" = None,
+        runEnv: "Optional[Mapping[str, str]]" = None,
+    ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         if nextflow_install_dir is None:
             nextflow_install_dir = cast(
-                EnginePath, os.path.join(self.weCacheDir, nextflow_version)
+                "EnginePath", os.path.join(self.weCacheDir, nextflow_version)
             )
-        cachedScript = cast(AbsPath, os.path.join(nextflow_install_dir, "nextflow"))
+        cachedScript = cast("AbsPath", os.path.join(nextflow_install_dir, "nextflow"))
         if not os.path.exists(cachedScript):
             os.makedirs(nextflow_install_dir, exist_ok=True)
             nextflow_script_url = cast(
-                URIType,
+                "URIType",
                 "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow".format(
                     nextflow_version
                 ),
@@ -477,16 +507,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
         NXF_HOME = os.path.join(nextflow_install_dir, ".nextflow")
         instEnv = dict(os.environ if runEnv is None else runEnv)
         instEnv["NXF_HOME"] = NXF_HOME
-        # Needed to tie Nextflow short
-        instEnv["NXF_OFFLINE"] = "TRUE"
+        # Needed for newer nextflow versions, so older workflows do not misbehave
+        instEnv["NXF_DEFAULT_DSL"] = "1"
         instEnv["JAVA_CMD"] = self.java_cmd
         if self.unset_java_home:
             instEnv.pop("NXF_JAVA_HOME", None)
             instEnv.pop("JAVA_HOME", None)
 
-        instEnv["NXF_WORKDIR"] = (
-            workdir if workdir is not None else self.intermediateDir
-        )
+        instEnv["NXF_WORK"] = workdir if workdir is not None else self.intermediateDir
         instEnv["NXF_ASSETS"] = self.nxf_assets
         if self.logger.getEffectiveLevel() <= logging.DEBUG:
             instEnv["NXF_DEBUG"] = "1"
@@ -507,18 +535,21 @@ class NextflowWorkflowEngine(WorkflowEngine):
         nxf_run_stdout_v = None
         nxf_run_stderr_v = None
         if not os.path.isdir(NXF_HOME):
-            with tempfile.NamedTemporaryFile() as nxf_install_stdout:
-                with tempfile.NamedTemporaryFile() as nxf_install_stderr:
-                    retval = subprocess.Popen(
-                        [cachedScript, "-download"],
-                        stdout=nxf_install_stdout,
-                        stderr=nxf_install_stderr,
-                        cwd=nextflow_install_dir,
-                        env=instEnv,
-                    ).wait()
+            for tries in range(2):
+                with tempfile.NamedTemporaryFile() as nxf_install_stdout:
+                    with tempfile.NamedTemporaryFile() as nxf_install_stderr:
+                        retval = subprocess.Popen(
+                            [cachedScript, "-version"],
+                            stdout=nxf_install_stdout,
+                            stderr=nxf_install_stderr,
+                            cwd=nextflow_install_dir,
+                            env=instEnv,
+                        ).wait()
 
-                    # Reading the output and error for the report
-                    if retval != 0:
+                        if retval == 0:
+                            break
+
+                        # Reading the output and error for the report
                         if os.path.exists(nxf_install_stdout.name):
                             with open(nxf_install_stdout.name, "r") as c_stF:
                                 nxf_run_stdout_v = c_stF.read()
@@ -533,18 +564,21 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         # And now the command is run
         if retval == 0 and isinstance(commandLine, list) and len(commandLine) > 0:
+            # Needed to tie Nextflow short
+            instEnv["NXF_OFFLINE"] = "true"
+
             nxf_run_stdout: IO[bytes]
             nxf_run_stderr: IO[bytes]
             try:
                 if stdoutFilename is None:
                     nxf_run_stdout = tempfile.NamedTemporaryFile()
-                    stdoutFilename = cast(AbsPath, nxf_run_stdout.name)
+                    stdoutFilename = cast("AbsPath", nxf_run_stdout.name)
                 else:
                     nxf_run_stdout = open(stdoutFilename, mode="ab+")
 
                 if stderrFilename is None:
                     nxf_run_stderr = tempfile.NamedTemporaryFile()
-                    stderrFilename = cast(AbsPath, nxf_run_stderr.name)
+                    stderrFilename = cast("AbsPath", nxf_run_stderr.name)
                 else:
                     nxf_run_stderr = open(stderrFilename, mode="ab+")
 
@@ -568,18 +602,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     nxf_run_stderr_v = nxf_run_stderr_v_b.decode("utf-8", "ignore")
                     nxf_run_stderr.close()
 
-        return cast(ExitVal, retval), nxf_run_stdout_v, nxf_run_stderr_v
+        return cast("ExitVal", retval), nxf_run_stdout_v, nxf_run_stderr_v
 
     def runNextflowCommandInDocker(
         self,
-        nextflow_version: EngineVersion,
-        commandLine: List[str],
-        workdir: Optional[AbsPath] = None,
-        containers_path: Optional[AnyPath] = None,
-        stdoutFilename: Optional[AbsPath] = None,
-        stderrFilename: Optional[AbsPath] = None,
-        runEnv: Optional[Mapping[str, str]] = None,
-    ) -> Tuple[ExitVal, Optional[str], Optional[str]]:
+        nextflow_version: "EngineVersion",
+        commandLine: "Sequence[str]",
+        workdir: "Optional[AbsPath]" = None,
+        containers_path: "Optional[AnyPath]" = None,
+        stdoutFilename: "Optional[AbsPath]" = None,
+        stderrFilename: "Optional[AbsPath]" = None,
+        runEnv: "Optional[Mapping[str, str]]" = None,
+    ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         # Now, we have to assure the nextflow image is already here
         docker_tag = self.nxf_image + ":" + nextflow_version
         checkimage_params = [
@@ -647,7 +681,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             try:
                 if workdir is None:
                     workdir = cast(
-                        AbsPath,
+                        "AbsPath",
                         os.path.abspath(self.workDir)
                         if not os.path.isabs(self.workDir)
                         else self.workDir,
@@ -838,13 +872,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
             try:
                 if stdoutFilename is None:
                     run_stdout = tempfile.NamedTemporaryFile()
-                    stdoutFilename = cast(AbsPath, run_stdout.name)
+                    stdoutFilename = cast("AbsPath", run_stdout.name)
                 else:
                     run_stdout = open(stdoutFilename, mode="ab+")
 
                 if stderrFilename is None:
                     run_stderr = tempfile.NamedTemporaryFile()
-                    stderrFilename = cast(AbsPath, run_stderr.name)
+                    stderrFilename = cast("AbsPath", run_stderr.name)
                 else:
                     run_stderr = open(stderrFilename, mode="ab+")
 
@@ -884,11 +918,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
                 nxf_run_stderr_v = errstr
 
-        return cast(ExitVal, retval), nxf_run_stdout_v, nxf_run_stderr_v
+        return cast("ExitVal", retval), nxf_run_stdout_v, nxf_run_stderr_v
 
     def _get_engine_version_str(
-        self, matWfEng: MaterializedWorkflowEngine
-    ) -> WorkflowEngineVersionStr:
+        self, matWfEng: "MaterializedWorkflowEngine"
+    ) -> "WorkflowEngineVersionStr":
         assert (
             matWfEng.instance == self
         ), "The workflow engine instance does not match!!!!"
@@ -909,18 +943,28 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if engine_ver is None:
             engine_ver = ""
 
-        return cast(WorkflowEngineVersionStr, engine_ver.strip())
+        return cast("WorkflowEngineVersionStr", engine_ver.strip())
 
     # Pattern for searching for process\..*container = ['"]([^'"]+)['"] in dumped config
     ContConfigPat: Pattern[str] = re.compile(
         r"process\..*container = '(.+)'$", flags=re.MULTILINE
     )
     # Pattern for searching for container ['"]([^'"]+)['"] in main workflow
-    ContScriptPat: Pattern[str] = re.compile(r"^\s*container\s+['\"]([^'\"]+)['\"]")
+    ContScriptPat: Final[Pattern[str]] = re.compile(
+        r"^\s*container\s+(['\"])([^'\"]+)\1"
+    )
+    # Pattern to search dsl enabling
+    DSLEnablePat: Final[Pattern[str]] = re.compile(
+        r"^\s*nextflow\.enable\.dsl\s*=\s*([1-9])"
+    )
+    # Pattern to search includes
+    IncludeScriptPat: Final[Pattern[str]] = re.compile(
+        r"^\s*include\s+\{[^\}]+\}\s+from\s+(['\"])([^'\"]+)\1"
+    )
 
     def materializeWorkflow(
-        self, matWorkflowEngine: MaterializedWorkflowEngine, offline: bool = False
-    ) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
+        self, matWorkflowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
+    ) -> "Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
         localWorkflow directory, as well as the list of containers
@@ -933,8 +977,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # nextflow config -flat
         localWf = matWorkflowEngine.workflow
         nxf_params = ["config", "-flat"]
-        if self.nxf_profile is not None:
-            nxf_params.extend(["-profile", self.nxf_profile])
+        if self.nxf_profile:
+            nxf_params.extend(["-profile", ",".join(self.nxf_profile)])
+        else:
+            nxf_params.extend(["-show-profiles"])
         nxf_params.append(localWf.dir)
 
         flat_retval, flat_stdout, flat_stderr = self.runNextflowCommand(
@@ -964,7 +1010,14 @@ STDERR
         assert flat_stdout is not None
         self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
         for contMatch in self.ContConfigPat.finditer(flat_stdout):
-            containerTags.add(cast(ContainerTaggedName, contMatch.group(1)))
+            containerTags.add(cast("ContainerTaggedName", contMatch.group(1)))
+
+        # Early DSL2 detection
+        dslVer: Optional[str] = None
+        for dslMatch in self.DSLEnablePat.finditer(flat_stdout):
+            dslVer = dslMatch.group(1)
+            # Only first declaration should be allowed
+            break
 
         # and main workflow for
         # container ['"]([^'"]+)['"]
@@ -974,15 +1027,61 @@ STDERR
             if os.path.isabs(localWf.relPath)
             else os.path.join(localWf.dir, localWf.relPath)
         )
-        with open(wfEntrypoint, encoding="utf-8") as wfH:
-            for line in wfH:
-                contMatchE = self.ContScriptPat.search(line)
-                if contMatchE:
-                    containerTags.add(cast(ContainerTaggedName, contMatchE.group(1)))
+
+        # Subworkflow / submodule include detection
+        nxfScripts = []
+        newNxfScripts = [wfEntrypoint]
+        while len(newNxfScripts) > 0:
+            nextNxfScripts = []
+            for nxfScript in newNxfScripts:
+                # Avoid loops
+                if nxfScript in nxfScripts:
+                    continue
+
+                baseNxfScript = os.path.dirname(nxfScript)
+                self.logger.debug(f"Parsing {nxfScript}")
+                with open(nxfScript, encoding="utf-8") as wfH:
+                    for line in wfH:
+                        contMatchE = self.ContScriptPat.search(line)
+                        # Getting container declaration
+                        if contMatchE:
+                            containerTags.add(
+                                cast("ContainerTaggedName", contMatchE.group(2))
+                            )
+
+                        # Getting DSL enabling declaration
+                        if dslVer is None:
+                            dslEnable = self.DSLEnablePat.search(line)
+                            if dslEnable:
+                                dslVer = dslEnable.group(1)
+
+                        # Getting include declaration
+                        includeMatchE = self.IncludeScriptPat.search(line)
+                        if includeMatchE:
+                            relScriptPath = includeMatchE.group(2)
+                            # self.logger.debug(f"File {nxfScript} includes {relScriptPath} (line {line})")
+                            if "$" in relScriptPath:
+                                self.logger.error(
+                                    f"File {nxfScript} includes from {relScriptPath} using variable"
+                                )
+
+                            if not relScriptPath.endswith(".nf"):
+                                relScriptPath += ".nf"
+
+                            absScriptPath = os.path.normpath(
+                                os.path.join(baseNxfScript, relScriptPath)
+                            )
+                            nextNxfScripts.append(absScriptPath)
+
+                # Recording the script
+                nxfScripts.append(nxfScript)
+            newNxfScripts = nextNxfScripts
+
+        # TODO: record the involved scripts
 
         return matWorkflowEngine, list(containerTags)
 
-    def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
+    def simpleContainerFileName(self, imageUrl: "URIType") -> "RelPath":
         """
         This method was borrowed from
         https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L80
@@ -1000,12 +1099,12 @@ STDERR
 
         name = name.replace(":", "-").replace("/", "-")
 
-        return cast(RelPath, name + extension)
+        return cast("RelPath", name + extension)
 
     def structureAsNXFParams(
-        self, matInputs: Sequence[MaterializedInput]
-    ) -> Mapping[str, Any]:
-        nxpParams: Dict[str, Any] = {}
+        self, matInputs: "Sequence[MaterializedInput]"
+    ) -> "Mapping[str, Any]":
+        nxpParams: "MutableMapping[str, Any]" = {}
 
         for matInput in matInputs:
             node = nxpParams
@@ -1013,7 +1112,7 @@ STDERR
             for step in splittedPath[:-1]:
                 node = node.setdefault(step, {})
 
-            nxfValues: List[Union[str, int, float]] = []
+            nxfValues: "MutableSequence[Union[str, int, float]]" = []
 
             for value in matInput.values:
                 if isinstance(value, MaterializedContent):
@@ -1040,16 +1139,16 @@ STDERR
 
     def augmentNextflowInputs(
         self,
-        matHash: Mapping[SymbolicParamName, MaterializedInput],
-        allExecutionParams: Mapping[str, Any],
-        prefix: str = "",
-    ) -> Sequence[MaterializedInput]:
+        matHash: "Mapping[SymbolicParamName, MaterializedInput]",
+        allExecutionParams: "Mapping[str, Any]",
+        prefix: "str" = "",
+    ) -> "Sequence[MaterializedInput]":
         """
         Generate additional MaterializedInput for the implicit params.
         """
-        augmentedInputs = cast(MutableSequence[MaterializedInput], [])
+        augmentedInputs = cast("MutableSequence[MaterializedInput]", [])
         for key, val in allExecutionParams.items():
-            linearKey = cast(SymbolicParamName, prefix + key)
+            linearKey = cast("SymbolicParamName", prefix + key)
             if isinstance(val, dict):
                 newAugmentedInputs = self.augmentNextflowInputs(
                     matHash, val, prefix=linearKey + "."
@@ -1061,7 +1160,7 @@ STDERR
                     # Time to create a new materialized input
                     theValues = val if isinstance(val, list) else [val]
                     augmentedInput = MaterializedInput(
-                        name=cast(SymbolicParamName, key), values=theValues
+                        name=cast("SymbolicParamName", key), values=theValues
                     )
 
                 augmentedInputs.append(augmentedInput)
@@ -1070,10 +1169,10 @@ STDERR
 
     def launchWorkflow(
         self,
-        matWfEng: MaterializedWorkflowEngine,
-        matInputs: Sequence[MaterializedInput],
-        outputs: Sequence[ExpectedOutput],
-    ) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
+        matWfEng: "MaterializedWorkflowEngine",
+        matInputs: "Sequence[MaterializedInput]",
+        outputs: "Sequence[ExpectedOutput]",
+    ) -> "Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]":
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
 
@@ -1275,8 +1374,8 @@ wfexs_allParams()
             inputsFileName,
         ]
 
-        if self.nxf_profile is not None:
-            nxf_params.extend(["-profile", self.nxf_profile])
+        if self.nxf_profile:
+            nxf_params.extend(["-profile", ",".join(self.nxf_profile)])
 
         # Using the patched workflow instead of
         # the original one
@@ -1284,10 +1383,10 @@ wfexs_allParams()
         # nxf_params.append(localWf.dir)
 
         stdoutFilename = cast(
-            AbsPath, os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
+            "AbsPath", os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
         )
         stderrFilename = cast(
-            AbsPath, os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)
+            "AbsPath", os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)
         )
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
