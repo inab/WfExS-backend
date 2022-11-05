@@ -34,7 +34,7 @@ jobs:
           pip freeze > constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
-        uses: pilosus/action-pip-license-checker@v0.6.2
+        uses: pilosus/action-pip-license-checker@v0.6.3
         with:
           requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
