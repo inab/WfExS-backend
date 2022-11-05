@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.7", "3.8", "3.9", "3.10" ]
+        python-version: [ "3.6", "3.7", "3.8", "3.9", "3.10", "3.11" ]
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v3
@@ -19,9 +19,18 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
           architecture: x64
-      - run: pip install --upgrade pip wheel
-      - run: |
+      - name: 'Install requirements (standard)'
+        if: ${{ matrix.python-version != '3.6' }}
+        run: |
+          pip install --upgrade pip wheel
           pip install -r requirements.txt
+      - name: 'Install requirements  (custom Python ${{ matrix.python-version }})'
+        if: ${{ matrix.python-version == '3.6' }}
+        run: |
+          pip install wheel
+          pip install -r requirements.txt -r requirements-additional-${{ matrix.python-version }}.txt
+      - name: 'Freeze Python ${{ matrix.python-version }} constraints'
+        run: |
           pip freeze > constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
@@ -39,49 +48,16 @@ jobs:
         with:
           path: .mypy_cache/${{ matrix.python-version }}
           key: mypy-${{ matrix.python-version }}
-      - uses: pre-commit/action@v3.0.0
+      - name: 'pre-commit (standard)'
+        uses: pre-commit/action@v3.0.0
+        if: ${{ matrix.python-version != '3.6' }}
         with:
           extra_args: --all -c .pre-commit-config-gh.yaml
-      - uses: actions/upload-artifact@v3
+      - name: 'pre-commit (custom Python ${{ matrix.python-version }})'
+        uses: pre-commit/action@v3.0.0
+        if: ${{ matrix.python-version == '3.6' }}
         with:
-          retention-days: 2
-          path: constraints-${{ matrix.python-version }}.txt
-  pre-commit_3-6:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [ "3.6" ]
-    name: Pre-commit python ${{ matrix.python-version }}
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: 'pip'
-          architecture: x64
-      - run: pip install wheel
-      - run: |
-          pip install -r requirements.txt -r requirements-additional-${{ matrix.python-version }}.txt
-          pip freeze > constraints-${{ matrix.python-version }}.txt
-      - name: Check transitive dependencies licences
-        id: license_check_report
-        uses: pilosus/action-pip-license-checker@v0.6.2
-        with:
-          requirements: constraints-${{ matrix.python-version }}.txt
-          fail: 'StrongCopyleft'
-          exclude: 'pylint.*'
-      - name: Print licences report
-        if: ${{ always() }}
-        run: echo "${{ steps.license_check_report.outputs.report }}"
-      - run: pip install -r dev-requirements.txt -r mypy-requirements.txt
-      - name: MyPy cache
-        uses: actions/cache@v3
-        with:
-          path: .mypy_cache/${{ matrix.python-version }}
-          key: mypy-${{ matrix.python-version }}
-      - uses: pre-commit/action@v3.0.0
-        with:
-          extra_args: --all -c .pre-commit-config-gh-3.6.yaml
+          extra_args: --all -c .pre-commit-config-gh-${{ matrix.python-version }}.yaml
       - uses: actions/upload-artifact@v3
         with:
           retention-days: 2
@@ -91,7 +67,6 @@ jobs:
     name: Update documentation if all worked properly
     needs:
       - pre-commit
-      - pre-commit_3-6
     steps:
       - uses: actions/checkout@v3
       - name: Changes at WfExS-backend internal JSON Schemas
@@ -139,7 +114,6 @@ jobs:
     name: Pull request with the newly generated contents
     needs:
       - pre-commit
-      - pre-commit_3-6
       - update_docs
     steps:
       - uses: actions/checkout@v3
@@ -154,6 +128,7 @@ jobs:
         id: cpr
         uses: peter-evans/create-pull-request@v4
         with:
+          title: Updated constraints (triggered by ${{ github.sha }})
           delete-branch: true
           commit-message: "[create-pull-request] Automatically commit updated contents (constraints, generated documentation)"
       - name: Check outputs
