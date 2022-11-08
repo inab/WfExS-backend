@@ -251,7 +251,7 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
                     shutil.rmtree(dest)
 
                 # TODO: study passing link_or_copy as copy_function
-                shutil.copytree(src, dest, copy_function=os.link)
+                shutil.copytree(src, dest, copy_function=link_or_copy)  # type: ignore[arg-type]
         except OSError as ose:
             # Even when we are detecting whether it is the same
             # device, it can happen both paths are in different
