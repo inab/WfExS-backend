@@ -482,6 +482,7 @@ class AbstractWorkflowEngineType(abc.ABC):
     def sideContainers(self) -> Sequence[ContainerTaggedName]:
         pass
 
+    @abc.abstractmethod
     def materialize_containers(
         self,
         listOfContainerTags: Sequence[ContainerTaggedName],

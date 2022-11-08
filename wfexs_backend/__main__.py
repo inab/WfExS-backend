@@ -606,7 +606,7 @@ def main() -> None:
         "cache_command",
         help="raw|Cache command to perform\n\n"
         + "\n".join(
-            map(lambda c: f"{c.value:<12}{c.description}", WfExS_Cache_Commands)
+            map(lambda c: f"{c.value:<12}{c.description}", WfExS_Cache_Commands)  # type: ignore[attr-defined]
         ),
         type=cast(Callable_WfExS_Cache_Commands, WfExS_Cache_Commands.argtype),
         choices=WfExS_Cache_Commands,
@@ -636,7 +636,7 @@ def main() -> None:
     ap_c.add_argument(
         "cache_type",
         help="raw|Cache type to perform the cache command\n\n"
-        + "\n".join(map(lambda c: f"{c.value:<12}{c.description}", WfExS_CacheType)),
+        + "\n".join(map(lambda c: f"{c.value:<12}{c.description}", WfExS_CacheType)),  # type: ignore[attr-defined]
         type=cast(Callable_WfExS_CacheType, WfExS_CacheType.argtype),
         choices=WfExS_CacheType,
     )
@@ -650,7 +650,7 @@ def main() -> None:
         help="raw|Staged working directory command to perform\n\n"
         + "\n".join(
             map(
-                lambda c: f"{c.value:<16}{c.description}", WfExS_Staged_WorkDir_Commands
+                lambda c: f"{c.value:<16}{c.description}", WfExS_Staged_WorkDir_Commands  # type: ignore[attr-defined]
             )
         ),
         type=cast(
@@ -680,7 +680,7 @@ def main() -> None:
         "export_contents_command",
         help="raw|Export operations from staged working directory to perform\n\n"
         + "\n".join(
-            map(lambda c: f"{c.value:<16}{c.description}", WfExS_Export_Commands)
+            map(lambda c: f"{c.value:<16}{c.description}", WfExS_Export_Commands)  # type: ignore[attr-defined]
         ),
         type=cast(Callable_WfExS_Export_Commands, WfExS_Export_Commands.argtype),
         choices=WfExS_Export_Commands,

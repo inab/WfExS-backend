@@ -17,7 +17,7 @@ repos:
         exclude: "^[^/]*env/|dev-[^/]*/"
         require_serial: true
 #        entry: ./basic-installer.bash mypy --strict
-        entry: mypy --strict
+        entry: mypy --strict --show-error-codes --no-warn-unused-ignores
     
 #  - repo: meta
   - repo: https://github.com/inab/python-extended-json-schema-validator.git

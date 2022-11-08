@@ -16,7 +16,7 @@ repos:
 #        files: \.py$
         exclude: "^[^/]*env/|dev-[^/]*/"
         require_serial: true
-        entry: mypy --strict
+        entry: mypy --strict --show-error-codes --no-warn-unused-ignores
 
   - repo: https://github.com/inab/python-extended-json-schema-validator.git
     rev: v0.11.0
@@ -25,7 +25,6 @@ repos:
         name: Check jsonschema
         types:
           - directory
-        args: [ "wfexs_backend/schemas" ]
         files: ^wfexs_backend/schemas$
         require_serial: true
 
