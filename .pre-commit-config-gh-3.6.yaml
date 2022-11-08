@@ -19,7 +19,7 @@ repos:
         entry: mypy --strict
 
   - repo: https://github.com/inab/python-extended-json-schema-validator.git
-    rev: v0.10.10
+    rev: v0.11.0
     hooks:
       - id: jsonschema_dir_validate
         name: Check jsonschema
