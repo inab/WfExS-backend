@@ -27,6 +27,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import yaml
 
 from typing import (
@@ -74,7 +75,12 @@ from .common import (
 )
 
 from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
+from .engine import (
+    WORKDIR_STATS_RELDIR,
+    WORKDIR_STDOUT_FILE,
+    WORKDIR_STDERR_FILE,
+    STATS_DAG_DOT_FILE,
+)
 from .fetchers import fetchClassicURL
 
 # A default name for the static bash
@@ -1179,7 +1185,12 @@ STDERR
         localWf = matWfEng.workflow
         assert localWf.relPath is not None
 
-        outputStatsDir = self.outputStatsDir
+        # These declarations provide a separate metadata directory for
+        # each one of the executions of Nextflow
+        outputMetaDir = self.outputMetaDir + "_" + str(int(time.time()))
+        os.makedirs(outputMetaDir, exist_ok=True)
+        outputStatsDir = os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
+        os.makedirs(outputStatsDir, exist_ok=True)
 
         timelineFile = os.path.join(outputStatsDir, "timeline.html")
         reportFile = os.path.join(outputStatsDir, "report.html")
@@ -1312,7 +1323,7 @@ executor.cpus={self.max_cpus}
             shutil.rmtree(trojanDir)
         shutil.copytree(localWf.dir, trojanDir)
 
-        allParamsFile = os.path.join(self.outputMetaDir, "all-params.json")
+        allParamsFile = os.path.join(outputMetaDir, "all-params.json")
         with open(
             os.path.join(trojanDir, localWf.relPath), mode="a+", encoding="utf-8"
         ) as tH:
@@ -1383,10 +1394,10 @@ wfexs_allParams()
         # nxf_params.append(localWf.dir)
 
         stdoutFilename = cast(
-            "AbsPath", os.path.join(self.outputMetaDir, WORKDIR_STDOUT_FILE)
+            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STDOUT_FILE)
         )
         stderrFilename = cast(
-            "AbsPath", os.path.join(self.outputMetaDir, WORKDIR_STDERR_FILE)
+            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STDERR_FILE)
         )
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
