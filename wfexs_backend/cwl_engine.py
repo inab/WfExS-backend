@@ -219,6 +219,8 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     @classmethod
     def MyWorkflowType(cls) -> WorkflowType:
+        # As of https://about.workflowhub.eu/Workflow-RO-Crate/ ,
+        # the rocrate_programming_language should be next
         return WorkflowType(
             engineName=cls.ENGINE_NAME,
             shortname="cwl",
@@ -228,7 +230,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             uriTemplate=cast(URIType, r"https://w3id.org/cwl/{}/"),
             url=cast(URIType, "https://www.commonwl.org/"),
             trs_descriptor="CWL",
-            rocrate_programming_language="#cwl",
+            rocrate_programming_language="https://w3id.org/workflowhub/workflow-ro-crate#cwl",
         )
 
     @classmethod
