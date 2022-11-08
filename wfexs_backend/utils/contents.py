@@ -249,12 +249,27 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
                 # as of https://stackoverflow.com/a/10778930
                 if dest_exists:
                     shutil.rmtree(dest)
+
+                # TODO: study passing link_or_copy as copy_function
                 shutil.copytree(src, dest, copy_function=os.link)
         except OSError as ose:
             # Even when we are detecting whether it is the same
             # device, it can happen both paths are in different
             # bind mounts, which forbid hard links
             if ose.errno != 18:
+                if ose.errno == 1 and os.path.isfile(src):
+                    try:
+                        with open(src, mode="rb") as dummy:
+                            readable = dummy.readable()
+                    except OSError as dummy_err:
+                        readable = False
+                else:
+                    # Too difficult to guess
+                    readable = False
+            else:
+                readable = True
+
+            if not readable:
                 raise ose
 
             force_copy = True
