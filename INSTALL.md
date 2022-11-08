@@ -9,7 +9,7 @@ There is an automated installer at [full-installer.bash](full-installer.bash):
 ```
 
 which assumes both essential build dependencies
-(package `build-essential` in Ubuntu), `curl`, `tar`, `gzip `python3` and its `pip` and `venv` counterparts are properly installed.
+(package `build-essential` in Ubuntu), `curl`, `tar`, `gzip`, `python3` and its `pip` and `venv` counterparts are properly installed.
 The automated installer installs both core dependencies and it fetches and installs:
 
   * OpenJDK: needed by Nextflow.
