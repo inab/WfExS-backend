@@ -32,47 +32,56 @@ import yaml
 
 from typing import (
     cast,
-    Any,
-    IO,
-    List,
-    Mapping,
-    MutableMapping,
-    MutableSequence,
-    Optional,
-    Pattern,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
+    TYPE_CHECKING,
 )
 
-from typing_extensions import Final
-
 from .common import (
-    AbsPath,
-    AnyPath,
-    ContainerTaggedName,
     ContainerType,
     ContentKind,
     DEFAULT_JAVA_CMD,
-    EngineLocalConfig,
     EngineMode,
-    EnginePath,
-    EngineVersion,
-    ExitVal,
-    ExpectedOutput,
-    Fingerprint,
     LocalWorkflow,
     MaterializedContent,
     MaterializedInput,
-    MaterializedOutput,
-    MaterializedWorkflowEngine,
-    RelPath,
-    SymbolicParamName,
-    URIType,
-    WorkflowEngineVersionStr,
     WorkflowType,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        IO,
+        List,
+        Mapping,
+        MutableMapping,
+        MutableSequence,
+        Optional,
+        Pattern,
+        Sequence,
+        Set,
+        Tuple,
+        Union,
+    )
+
+    from typing_extensions import Final
+
+    from .common import (
+        AbsPath,
+        AnyPath,
+        ContainerTaggedName,
+        EngineLocalConfig,
+        EngineMode,
+        EnginePath,
+        EngineVersion,
+        ExitVal,
+        ExpectedOutput,
+        Fingerprint,
+        MaterializedOutput,
+        MaterializedWorkflowEngine,
+        RelPath,
+        SymbolicParamName,
+        URIType,
+        WorkflowEngineVersionStr,
+    )
 
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import (
@@ -279,7 +288,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if localWf.relPath is not None:
             nfPath = cast("AbsPath", os.path.join(nfPath, localWf.relPath))
 
-        candidateNf: Optional[RelPath]
+        candidateNf: "Optional[RelPath]"
         if os.path.isdir(nfPath):
             nfDir = nfPath
             candidateNf = None
@@ -288,13 +297,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
             candidateNf = cast("RelPath", os.path.basename(nfPath))
 
         nfConfig = os.path.join(nfDir, "nextflow.config")
-        verPat: Optional[Pattern[str]] = re.compile(
+        verPat: "Optional[Pattern[str]]" = re.compile(
             r"nextflowVersion *= *['\"]!?[>=]*([^ ]+)['\"]"
         )
-        mainPat: Optional[Pattern[str]] = re.compile(
+        mainPat: "Optional[Pattern[str]]" = re.compile(
             r"mainScript *= *['\"]([^\"]+)['\"]"
         )
-        kw_20_04_Pat: Optional[Pattern[str]] = re.compile(
+        kw_20_04_Pat: "Optional[Pattern[str]]" = re.compile(
             r"\$(?:(?:launchDir|moduleDir|projectDir)|\{(?:launchDir|moduleDir|projectDir)\})"
         )
         engineVer = None
@@ -573,8 +582,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # Needed to tie Nextflow short
             instEnv["NXF_OFFLINE"] = "true"
 
-            nxf_run_stdout: IO[bytes]
-            nxf_run_stderr: IO[bytes]
+            nxf_run_stdout: "IO[bytes]"
+            nxf_run_stderr: "IO[bytes]"
             try:
                 if stdoutFilename is None:
                     nxf_run_stdout = tempfile.NamedTemporaryFile()
@@ -873,8 +882,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             retval = -1
             validation_params_cmd = validation_params
 
-            run_stdout: IO[bytes]
-            run_stderr: IO[bytes]
+            run_stdout: "IO[bytes]"
+            run_stderr: "IO[bytes]"
             try:
                 if stdoutFilename is None:
                     run_stdout = tempfile.NamedTemporaryFile()
@@ -952,19 +961,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
         return cast("WorkflowEngineVersionStr", engine_ver.strip())
 
     # Pattern for searching for process\..*container = ['"]([^'"]+)['"] in dumped config
-    ContConfigPat: Pattern[str] = re.compile(
+    ContConfigPat: "Pattern[str]" = re.compile(
         r"process\..*container = '(.+)'$", flags=re.MULTILINE
     )
     # Pattern for searching for container ['"]([^'"]+)['"] in main workflow
-    ContScriptPat: Final[Pattern[str]] = re.compile(
+    ContScriptPat: "Final[Pattern[str]]" = re.compile(
         r"^\s*container\s+(['\"])([^'\"]+)\1"
     )
     # Pattern to search dsl enabling
-    DSLEnablePat: Final[Pattern[str]] = re.compile(
+    DSLEnablePat: "Final[Pattern[str]]" = re.compile(
         r"^\s*nextflow\.enable\.dsl\s*=\s*([1-9])"
     )
     # Pattern to search includes
-    IncludeScriptPat: Final[Pattern[str]] = re.compile(
+    IncludeScriptPat: "Final[Pattern[str]]" = re.compile(
         r"^\s*include\s+\{[^\}]+\}\s+from\s+(['\"])([^'\"]+)\1"
     )
 
@@ -1012,14 +1021,14 @@ STDERR
             raise WorkflowEngineException(errstr)
 
         # searching for process\..*container = ['"]([^'"]+)['"]
-        containerTags: Set[ContainerTaggedName] = set()
+        containerTags: "Set[ContainerTaggedName]" = set()
         assert flat_stdout is not None
         self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
         for contMatch in self.ContConfigPat.finditer(flat_stdout):
             containerTags.add(cast("ContainerTaggedName", contMatch.group(1)))
 
         # Early DSL2 detection
-        dslVer: Optional[str] = None
+        dslVer: "Optional[str]" = None
         for dslMatch in self.DSLEnablePat.finditer(flat_stdout):
             dslVer = dslMatch.group(1)
             # Only first declaration should be allowed
