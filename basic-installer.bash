@@ -15,6 +15,28 @@ esac
 
 set -e
 
+for cmd in python3 pip ; do
+	type -a "$cmd" 2> /dev/null
+	retval=$?
+	if [ "$retval" -ne 0 ] ; then
+		failed=1
+		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
+	fi
+done
+
+for lib in libmagic.so ; do
+	ldconfig -p | grep -qF "/${lib}"
+	retval=$?
+	if [ "$retval" -ne 0 ] ; then
+		failed=1
+		echo "ERROR: Library $lib found in ldconfig cache and needed for the installation"
+	fi
+done
+
+if [ -n "$failed" ] ; then
+	exit 1
+fi
+
 #if declare -F deactivate >& /dev/null ; then
 envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
 if [ -n "${envDir}" ] ; then

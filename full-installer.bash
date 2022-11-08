@@ -23,6 +23,19 @@ case "${wfexsDir}" in
 		;;
 esac
 
+for cmd in curl tar gzip mktemp grep ; do
+	type -a "$cmd" 2> /dev/null
+	retval=$?
+	if [ "$retval" -ne 0 ] ; then
+		failed=1
+		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
+	fi
+done
+
+if [ -n "$failed" ] ; then
+	exit 1
+fi
+
 downloadDir="$(mktemp -d --tmpdir wfexs_installer.XXXXXXXXXXX)"
 echo "${downloadDir} will be used to download third party dependencies, and later removed"
 
