@@ -512,6 +512,8 @@ def guess_repo_params(
                 fragment="",
             )
         )
+        if repoTag is None:
+            repoTag = get_git_default_branch(repoURL)
 
     # TODO handling other popular cases, like bitbucket
     elif parsed_wf_url.netloc == GITHUB_NETLOC:
