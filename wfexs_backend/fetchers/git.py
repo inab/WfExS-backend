@@ -57,6 +57,10 @@ from ..common import (
 )
 
 
+GITHUB_SCHEME = "github"
+GITHUB_NETLOC = "github.com"
+
+
 class GitGuessException(FetcherException):
     pass
 
@@ -294,7 +298,7 @@ class GitFetcher(AbstractStatefulFetcher):
                                 repo_type = RepoType.GitLab
                             elif list(
                                 filter(
-                                    lambda c: "github.com" in c,
+                                    lambda c: GITHUB_NETLOC in c,
                                     resp.headers.get_all("Set-Cookie"),
                                 )
                             ):
@@ -486,8 +490,31 @@ def guess_repo_params(
         if repoTag is None:
             repoTag = get_git_default_branch(repoURL)
         repoType = RepoType.Raw
+
+    elif parsed_wf_url.scheme == GITHUB_SCHEME:
+        repoType = RepoType.GitHub
+
+        gh_path_split = parsed_wf_url.path.split("/")
+        gh_path = "/".join(gh_path_split[:2])
+        gh_post_path = gh_path_split[2:]
+        if len(gh_post_path) > 0:
+            repoTag = gh_post_path[0]
+            if len(gh_post_path) > 1:
+                repoRelPath = "/".join(gh_post_path[1:])
+
+        repoURL = parse.urlunparse(
+            parse.ParseResult(
+                scheme="https",
+                netloc=GITHUB_NETLOC,
+                path=gh_path,
+                params="",
+                query="",
+                fragment="",
+            )
+        )
+
     # TODO handling other popular cases, like bitbucket
-    elif parsed_wf_url.netloc == "github.com":
+    elif parsed_wf_url.netloc == GITHUB_NETLOC:
         wf_path = parsed_wf_url.path.split("/")
 
         if len(wf_path) >= 3:
@@ -525,7 +552,7 @@ def guess_repo_params(
 
             # Rebuilding repo git path
             repoURL = parse.urlunparse(
-                ("https", "github.com", "/".join(repoGitPath), "", "", "")
+                ("https", GITHUB_NETLOC, "/".join(repoGitPath), "", "", "")
             )
 
             # And now, guessing the tag/checkout and the relative path
