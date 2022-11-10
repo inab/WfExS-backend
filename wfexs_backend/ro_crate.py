@@ -166,8 +166,14 @@ def addInputsResearchObject(
                     formal_parameter.append_to("workExample", crate_file)
 
                 elif os.path.isdir(itemInLocalSource):
-                    errmsg = "FIXME: input directory / dataset handling in RO-Crate"
-                    logger.error(errmsg)
+                    crate_dataset = crate.add_dataset(
+                        source=itemInURISource,
+                        fetch_remote=False,
+                        validate_url=False,
+                        # properties=file_properties,
+                    )
+                    crate_file.append_to("exampleOfWork", formal_parameter)
+                    formal_parameter.append_to("workExample", crate_dataset)
 
                 else:
                     pass  # TODO: raise exception
@@ -237,126 +243,170 @@ def addOutputsResearchObject(
         if len(out_item.values) == 0:
             continue
 
-        itemOutValues = out_item.values[0]
+        itemOutValue0 = out_item.values[0]
+        additional_type: "Optional[str]" = None
+        if isinstance(itemOutValue0, int):
+            additional_type = "Integer"
+        elif isinstance(itemOutValue0, str):
+            additional_type = "String"
+        elif isinstance(itemOutValue0, bool):
+            additional_type = "Boolean"
+        elif isinstance(itemOutValue0, float):
+            additional_type = "Float"
+        elif isinstance(itemOutValue0, MaterializedContent):
+            if itemOutValue0.kind == ContentKind.File:
+                additional_type = "File"
+            elif itemOutValue0.kind == ContentKind.Directory:
+                additional_type = "Dataset"
 
-        assert isinstance(itemOutValues, (GeneratedContent, GeneratedDirectoryContent))
+        if additional_type in ("File", "Dataset"):
+            for itemOutValues in cast("Sequence[MaterializedContent]", out_item.values):
 
-        itemOutSource = itemOutValues.local  # local source
-        itemOutName = out_item.name
-        properties: MutableMapping[str, SymbolicOutputName] = {"name": itemOutName}
-        if isinstance(itemOutValues, GeneratedDirectoryContent):  # if directory
-            if os.path.isdir(itemOutSource):
-                generatedDirectoryContentURI = ComputeDigestFromDirectory(
-                    itemOutSource, repMethod=nihDigester
-                )  # generate directory digest
-                dirProperties: MutableMapping[str, Any] = dict.fromkeys(["hasPart"])
-                generatedContentList: MutableSequence[Mapping[str, Fingerprint]] = []
-                generatedDirectoryContentList: MutableSequence[
-                    Mapping[str, Fingerprint]
-                ] = []
+                assert isinstance(
+                    itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
+                )
+                itemOutSource = itemOutValues.local  # local source
+                itemOutName = out_item.name
+                properties: MutableMapping[str, SymbolicOutputName] = {
+                    "name": itemOutName
+                }
+                if isinstance(itemOutValues, GeneratedDirectoryContent):  # if directory
+                    if os.path.isdir(itemOutSource):
+                        generatedDirectoryContentURI = ComputeDigestFromDirectory(
+                            itemOutSource, repMethod=nihDigester
+                        )  # generate directory digest
+                        dirProperties: MutableMapping[str, Any] = dict.fromkeys(
+                            ["hasPart"]
+                        )
+                        generatedContentList: MutableSequence[
+                            Mapping[str, Fingerprint]
+                        ] = []
+                        generatedDirectoryContentList: MutableSequence[
+                            Mapping[str, Fingerprint]
+                        ] = []
 
-                assert itemOutValues.values is not None
-                for item in itemOutValues.values:
-                    if isinstance(item, GeneratedContent):  # directory of files
-                        fileID = item.signature
+                        assert itemOutValues.values is not None
+                        for item in itemOutValues.values:
+                            if isinstance(item, GeneratedContent):  # directory of files
+                                fileID = item.signature
+                                if fileID is None:
+                                    fileID = cast(
+                                        Fingerprint,
+                                        ComputeDigestFromFile(
+                                            item.local, repMethod=nihDigester
+                                        ),
+                                    )
+                                fileProperties = {
+                                    "name": itemOutName
+                                    + "::/"
+                                    + os.path.basename(item.local),
+                                    "isPartOf": {
+                                        "@id": generatedDirectoryContentURI
+                                    },  # reference to directory containing the file
+                                }
+                                generatedContentList.append({"@id": fileID})
+                                crate.add_file(
+                                    source=fileID,
+                                    fetch_remote=False,
+                                    properties=fileProperties,
+                                )
+
+                            elif isinstance(
+                                item, GeneratedDirectoryContent
+                            ):  # directory of directories
+
+                                # search recursively for other content inside directory
+                                def search_new_content(
+                                    content_list: Sequence[AbstractGeneratedContent],
+                                ) -> Sequence[Mapping[str, Fingerprint]]:
+                                    tempList: MutableSequence[
+                                        Mapping[str, Fingerprint]
+                                    ] = []
+                                    for content in content_list:
+                                        if isinstance(
+                                            content, GeneratedContent
+                                        ):  # file
+                                            fileID = (
+                                                content.signature
+                                            )  # TODO: create a method to add files to RO-crate
+                                            if fileID is None:
+                                                fileID = cast(
+                                                    Fingerprint,
+                                                    ComputeDigestFromFile(
+                                                        content.local,
+                                                        repMethod=nihDigester,
+                                                    ),
+                                                )  # generate file digest
+                                            fileProperties = {
+                                                "name": itemOutName
+                                                + "::/"
+                                                + os.path.basename(content.local),
+                                                "isPartOf": {
+                                                    "@id": generatedDirectoryContentURI
+                                                },  # reference to directory containing the file
+                                            }
+                                            tempList.append({"@id": fileID})
+                                            crate.add_file(
+                                                source=fileID,
+                                                fetch_remote=False,
+                                                properties=fileProperties,
+                                            )
+
+                                        elif isinstance(
+                                            content, GeneratedDirectoryContent
+                                        ):  # directory
+                                            assert content.values is not None
+                                            tempList.extend(
+                                                search_new_content(content.values)
+                                            )
+
+                                    return tempList
+
+                                assert item.values is not None
+                                generatedDirectoryContentList.extend(
+                                    search_new_content(item.values)
+                                )
+
+                            else:
+                                pass  # TODO: raise exception
+
+                        d_has_part = copy.copy(generatedDirectoryContentList)
+                        d_has_part.extend(generatedContentList)
+                        dirProperties["hasPart"] = d_has_part  # all the content
+                        properties.update(dirProperties)
+                        crate.add_directory(
+                            source=generatedDirectoryContentURI,
+                            fetch_remote=False,
+                            properties=properties,
+                        )
+
+                    else:
+                        errmsg = (
+                            "ERROR: The output directory %s does not exist"
+                            % itemOutSource
+                        )
+                        logger.error(errmsg)
+
+                elif isinstance(itemOutValues, GeneratedContent):  # file
+                    if os.path.isfile(itemOutSource):
+                        fileID = itemOutValues.signature
                         if fileID is None:
                             fileID = cast(
                                 Fingerprint,
                                 ComputeDigestFromFile(
-                                    item.local, repMethod=nihDigester
+                                    itemOutSource, repMethod=nihDigester
                                 ),
                             )
-                        fileProperties = {
-                            "name": itemOutName + "::/" + os.path.basename(item.local),
-                            "isPartOf": {
-                                "@id": generatedDirectoryContentURI
-                            },  # reference to directory containing the file
-                        }
-                        generatedContentList.append({"@id": fileID})
                         crate.add_file(
-                            source=fileID, fetch_remote=False, properties=fileProperties
-                        )
-
-                    elif isinstance(
-                        item, GeneratedDirectoryContent
-                    ):  # directory of directories
-
-                        # search recursively for other content inside directory
-                        def search_new_content(
-                            content_list: Sequence[AbstractGeneratedContent],
-                        ) -> Sequence[Mapping[str, Fingerprint]]:
-                            tempList: MutableSequence[Mapping[str, Fingerprint]] = []
-                            for content in content_list:
-                                if isinstance(content, GeneratedContent):  # file
-                                    fileID = (
-                                        content.signature
-                                    )  # TODO: create a method to add files to RO-crate
-                                    if fileID is None:
-                                        fileID = cast(
-                                            Fingerprint,
-                                            ComputeDigestFromFile(
-                                                content.local, repMethod=nihDigester
-                                            ),
-                                        )  # generate file digest
-                                    fileProperties = {
-                                        "name": itemOutName
-                                        + "::/"
-                                        + os.path.basename(content.local),
-                                        "isPartOf": {
-                                            "@id": generatedDirectoryContentURI
-                                        },  # reference to directory containing the file
-                                    }
-                                    tempList.append({"@id": fileID})
-                                    crate.add_file(
-                                        source=fileID,
-                                        fetch_remote=False,
-                                        properties=fileProperties,
-                                    )
-
-                                elif isinstance(
-                                    content, GeneratedDirectoryContent
-                                ):  # directory
-                                    assert content.values is not None
-                                    tempList.extend(search_new_content(content.values))
-
-                            return tempList
-
-                        assert item.values is not None
-                        generatedDirectoryContentList.extend(
-                            search_new_content(item.values)
+                            source=fileID, fetch_remote=False, properties=properties
                         )
 
                     else:
-                        pass  # TODO: raise exception
+                        errmsg = (
+                            "ERROR: The output file %s does not exist" % itemOutSource
+                        )
+                        logger.error(errmsg)
 
-                d_has_part = copy.copy(generatedDirectoryContentList)
-                d_has_part.extend(generatedContentList)
-                dirProperties["hasPart"] = d_has_part  # all the content
-                properties.update(dirProperties)
-                crate.add_directory(
-                    source=generatedDirectoryContentURI,
-                    fetch_remote=False,
-                    properties=properties,
-                )
-
-            else:
-                errmsg = "ERROR: The output directory %s does not exist" % itemOutSource
-                logger.error(errmsg)
-
-        elif isinstance(itemOutValues, GeneratedContent):  # file
-            if os.path.isfile(itemOutSource):
-                fileID = itemOutValues.signature
-                if fileID is None:
-                    fileID = cast(
-                        Fingerprint,
-                        ComputeDigestFromFile(itemOutSource, repMethod=nihDigester),
-                    )
-                crate.add_file(source=fileID, fetch_remote=False, properties=properties)
-
-            else:
-                errmsg = "ERROR: The output file %s does not exist" % itemOutSource
-                logger.error(errmsg)
-
-        else:
-            pass
-            # TODO digest other types of inputs
+                else:
+                    pass
+                    # TODO digest other types of inputs
