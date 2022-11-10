@@ -1281,7 +1281,7 @@ class WF:
             if len(parsed_attributions) > 0:
                 attributions = parsed_attributions
         else:
-            remote_url = remote_file
+            remote_url = remote_file_f
 
         secContext = None
         if contextName is not None:
@@ -1289,7 +1289,7 @@ class WF:
             if secContext is None:
                 raise WFException(
                     "No security context {} is available, needed by {}".format(
-                        contextName, remote_file
+                        contextName, remote_file_f
                     )
                 )
 
