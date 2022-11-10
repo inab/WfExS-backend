@@ -64,6 +64,10 @@ def stringifyDigest(digestAlgorithm: str, digest: bytes) -> Fingerprint:
     )
 
 
+def hexDigest(digestAlgorithm: str, digest: bytes) -> Fingerprint:
+    return cast(Fingerprint, digest.hex())
+
+
 def stringifyFilenameDigest(digestAlgorithm: str, digest: bytes) -> Fingerprint:
     return cast(
         Fingerprint,

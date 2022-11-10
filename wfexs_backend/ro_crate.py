@@ -32,6 +32,7 @@ from typing import (
 )
 import urllib.parse
 
+import magic  # type: ignore
 import rocrate.model.entity  # type:ignore
 import rocrate.model.dataset  # type:ignore
 import rocrate.rocrate  # type:ignore
@@ -40,6 +41,7 @@ from .utils.digests import (
     nihDigester,
     ComputeDigestFromDirectory,
     ComputeDigestFromFile,
+    hexDigest,
 )
 from .common import (
     AbstractGeneratedContent,
@@ -99,6 +101,30 @@ class PropertyValue(rocrate.model.entity.Entity):  # type: ignore[misc]
         super().__init__(crate, identifier=identifier, properties=pv_properties)
 
 
+def add_file_to_crate(
+    crate: "rocrate.rocrate.ROCrate",
+    the_path: "str",
+    the_uri: "URIType",
+    the_size: "Optional[int]" = None,
+) -> "rocrate.model.file.File":
+    the_file_crate = crate.add_file(
+        source=the_uri,
+        fetch_remote=False,
+        validate_url=False,
+    )
+    if the_size is None:
+        the_size = os.stat(the_path).st_size
+    the_file_crate.append_to("contentSize", the_size, compact=True)
+    the_file_crate.append_to(
+        "sha256", ComputeDigestFromFile(the_path, repMethod=hexDigest), compact=True
+    )
+    the_file_crate.append_to(
+        "encodingFormat", magic.from_file(the_path, mime=True), compact=True
+    )
+
+    return the_file_crate
+
+
 def add_directory_as_dataset(
     crate: "rocrate.rocrate.ROCrate",
     itemInLocalSource: "str",
@@ -123,10 +149,8 @@ def add_directory_as_dataset(
                     itemInURISource + "/" + urllib.parse.quote(the_file.name, safe=""),
                 )
                 if the_file.is_file():
-                    the_file_crate = crate.add_file(
-                        source=the_uri,
-                        fetch_remote=False,
-                        validate_url=False,
+                    the_file_crate = add_file_to_crate(
+                        crate, the_file.path, the_uri, the_file.stat().st_size
                     )
 
                     crate_dataset.append_to("hasPart", the_file_crate)
@@ -199,17 +223,10 @@ def addInputsResearchObject(
                 itemInLocalSource = itemInValues.local  # local source
                 itemInURISource = itemInValues.licensed_uri.uri  # uri source
                 if os.path.isfile(itemInLocalSource):
-                    # file_properties = {
-                    #    "exampleOfWork": {
-                    #        "@id": formal_parameter_id
-                    #    }
-                    # }
-                    crate_file = crate.add_file(
-                        source=itemInURISource,
-                        fetch_remote=False,
-                        validate_url=False,
-                        # properties=file_properties,
+                    crate_file = add_file_to_crate(
+                        crate, itemInLocalSource, itemInURISource
                     )
+
                     crate_file.append_to("exampleOfWork", formal_parameter)
                     formal_parameter.append_to("workExample", crate_file)
 
