@@ -896,10 +896,37 @@ def main() -> None:
         WfExS_Commands.ExportResults,
         WfExS_Commands.ExportCrate,
     ):
-        wfInstance = wfBackend.fromWorkDir(
-            args.workflowWorkingDirectory,
-            fail_ok=command != WfExS_Commands.MountWorkDir,
-        )
+        if os.path.isdir(args.workflowWorkingDirectory):
+            wfInstance = wfBackend.fromWorkDir(
+                args.workflowWorkingDirectory,
+                fail_ok=command != WfExS_Commands.MountWorkDir,
+            )
+        else:
+            for (
+                instance_id,
+                nickname,
+                creation,
+                wfSetup,
+                wfInstance,
+            ) in wfBackend.listStagedWorkflows(
+                args.workflowWorkingDirectory,
+                acceptGlob=True,
+                doCleanup=False,
+            ):
+                is_damaged = True if wfSetup is None else wfSetup.is_damaged
+                if is_damaged or (wfInstance is None):
+                    print(
+                        f"[ERROR] Workflow {instance_id} is corrupted! Stopping.",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
+                break
+        if wfInstance is None:
+            print(
+                f"[ERROR] Workflow {args.workflowWorkingDirectory} could not be found! Stopping.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
     elif not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
