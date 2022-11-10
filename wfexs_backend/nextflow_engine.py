@@ -540,6 +540,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         #    instEnv['NXF_DEBUG'] = '1'
 
         # FIXME: Should we set NXF_TEMP???
+        instEnv["NXF_TEMP"] = self.tempDir
+        instEnv["TMPDIR"] = self.tempDir
 
         # This is needed to have Nextflow using the cached contents
         if containers_path is None:
