@@ -140,7 +140,7 @@ def add_directory_as_dataset(
                     if the_dir_crate is not None:
                         assert the_subfiles_crates is not None
                         crate_dataset.append_to("hasPart", the_dir_crate)
-                        crate_dataset.append_to("hasPart", *the_subfiles_crates)
+                        crate_dataset.append_to("hasPart", the_subfiles_crates)
 
                         the_files_crates.extend(the_subfiles_crates)
 
