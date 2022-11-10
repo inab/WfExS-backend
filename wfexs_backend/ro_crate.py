@@ -27,11 +27,13 @@ from typing import (
     MutableSequence,
     Optional,
     Sequence,
+    Tuple,
     Union,
 )
 import urllib.parse
 
 import rocrate.model.entity  # type:ignore
+import rocrate.model.dataset  # type:ignore
 import rocrate.rocrate  # type:ignore
 
 from .utils.digests import (
@@ -97,8 +99,54 @@ class PropertyValue(rocrate.model.entity.Entity):  # type: ignore[misc]
         super().__init__(crate, identifier=identifier, properties=pv_properties)
 
 
-# class PropertyValue(rocrate.model.entity.Entity):
-#    def __init__(self, crate, )
+def add_directory_as_dataset(
+    crate: "rocrate.rocrate.ROCrate",
+    itemInLocalSource: "str",
+    itemInURISource: "URIType",
+) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
+    if os.path.isdir(itemInLocalSource):
+        the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
+        crate_dataset = crate.add_dataset(
+            source=itemInURISource,
+            fetch_remote=False,
+            validate_url=False,
+            # properties=file_properties,
+        )
+
+        # Now, recursively walk it
+        with os.scandir(itemInLocalSource) as the_dir:
+            for the_file in the_dir:
+                if the_file.name[0] == ".":
+                    continue
+                the_uri = cast(
+                    "URIType",
+                    itemInURISource + "/" + urllib.parse.quote(the_file.name, safe=""),
+                )
+                if the_file.is_file():
+                    the_file_crate = crate.add_file(
+                        source=the_uri,
+                        fetch_remote=False,
+                        validate_url=False,
+                    )
+
+                    crate_dataset.append_to("hasPart", the_file_crate)
+
+                    the_files_crates.append(the_file_crate)
+                elif the_file.is_dir():
+                    # TODO: fix URI handling
+                    the_dir_crate, the_subfiles_crates = add_directory_as_dataset(
+                        crate, the_file.path, the_uri
+                    )
+                    if the_dir_crate is not None:
+                        assert the_subfiles_crates is not None
+                        crate_dataset.append_to("hasPart", the_dir_crate)
+                        crate_dataset.append_to("hasPart", *the_subfiles_crates)
+
+                        the_files_crates.extend(the_subfiles_crates)
+
+        return crate_dataset, the_files_crates
+
+    return None, None
 
 
 def addInputsResearchObject(
@@ -166,13 +214,16 @@ def addInputsResearchObject(
                     formal_parameter.append_to("workExample", crate_file)
 
                 elif os.path.isdir(itemInLocalSource):
+                    crate_dataset, _ = add_directory_as_dataset(
+                        crate, itemInLocalSource, itemInURISource
+                    )
                     crate_dataset = crate.add_dataset(
                         source=itemInURISource,
                         fetch_remote=False,
                         validate_url=False,
                         # properties=file_properties,
                     )
-                    crate_file.append_to("exampleOfWork", formal_parameter)
+                    crate_dataset.append_to("exampleOfWork", formal_parameter)
                     formal_parameter.append_to("workExample", crate_dataset)
 
                 else:
