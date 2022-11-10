@@ -1573,6 +1573,26 @@ class WF:
                     if inputs != formatted_inputs_nested:
                         some_formatted = True
                     formatted_params[key] = formatted_inputs_nested
+            elif isinstance(raw_inputs, list):
+                if len(raw_inputs) > 0 and isinstance(raw_inputs[0], str):
+                    formatted_inputs_l = []
+                    did_change = False
+                    for raw_input in raw_inputs:
+                        formatted_input = self._formatStringFromPlaceHolders(raw_input)
+                        formatted_inputs_l.append(formatted_input)
+                        if formatted_input != raw_input:
+                            did_change = True
+
+                    formatted_params[key] = (
+                        formatted_inputs_l if did_change else raw_inputs
+                    )
+                else:
+                    formatted_params[key] = raw_inputs
+            elif isinstance(raw_inputs, str):
+                formatted_input = self._formatStringFromPlaceHolders(raw_inputs)
+                formatted_params[key] = formatted_input
+                if raw_inputs != formatted_input:
+                    some_formatted = True
             else:
                 formatted_params[key] = raw_inputs
 
