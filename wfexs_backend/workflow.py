@@ -16,6 +16,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import copy
 import datetime
 import inspect
 import json
@@ -30,10 +31,10 @@ import threading
 import time
 
 from typing import (
+    TYPE_CHECKING,
     Any,
     cast,
     Iterable,
-    List,
     Mapping,
     MutableSequence,
     Optional,
@@ -45,7 +46,12 @@ from typing import (
     Union,
 )
 
-from typing_extensions import Final
+from typing_extensions import Final, TypedDict
+
+if TYPE_CHECKING:
+    from typing_extensions import (
+        Literal,
+    )
 
 from urllib import parse
 
@@ -91,8 +97,10 @@ from .common import (
     MaterializedOutput,
     MaterializedExportAction,
     MaterializedWorkflowEngine,
+    MutableParamsBlock,
     OutputsBlock,
     ParamsBlock,
+    PlaceHoldersBlock,
     RelPath,
     RemoteRepo,
     RepoTag,
@@ -161,7 +169,7 @@ if TYPE_CHECKING:
 # CWL detection is before, as Nextflow one is
 # a bit lax (only detects a couple of too common
 # keywords)
-WORKFLOW_ENGINE_CLASSES: List[Type[WorkflowEngine]] = [
+WORKFLOW_ENGINE_CLASSES: Sequence[Type[WorkflowEngine]] = [
     CWLWorkflowEngine,
     NextflowWorkflowEngine,
 ]
@@ -183,6 +191,40 @@ def _wakeupEncDir(
         cond.release()
 
 
+Sch_PlainURI = URIType
+
+Sch_LicensedURI = TypedDict(
+    "Sch_LicensedURI",
+    {
+        "uri": "str",
+        "licences": "Sequence[Sch_PlainURI]",
+        "attributions": "Sequence[Any]",
+        "security-context": "str",
+    },
+    total=False,
+)
+
+Sch_InputURI_Elem = Union[Sch_PlainURI, Sch_LicensedURI]
+Sch_InputURI_Fetchable = Union[Sch_InputURI_Elem, Sequence[Sch_InputURI_Elem]]
+Sch_InputURI = Union[Sch_InputURI_Fetchable, Sequence[Sequence[Sch_InputURI_Elem]]]
+
+Sch_Param = TypedDict(
+    "Sch_Param",
+    {
+        "c-l-a-s-s": "str",
+        "url": "Sch_InputURI",
+        "secondary-urls": "Sch_InputURI",
+        "preferred-name": "Union[Literal[False], str]",
+        "relative-dir": "Union[Literal[False], str]",
+        "security-context": "str",
+        "globExplode": "str",
+        "autoFill": "bool",
+        "autoPrefix": "bool",
+    },
+    total=False,
+)
+
+
 class WFException(AbstractWfExSException):
     pass
 
@@ -200,27 +242,27 @@ class WF:
     Workflow enaction class
     """
 
-    TRS_METADATA_FILE: Final[RelPath] = cast(RelPath, "trs_metadata.json")
-    TRS_QUERY_CACHE_FILE: Final[RelPath] = cast(RelPath, "trs_result.json")
-    TRS_TOOL_FILES_FILE: Final[RelPath] = cast(RelPath, "trs_tool_files.json")
+    TRS_METADATA_FILE: "Final[RelPath]" = cast("RelPath", "trs_metadata.json")
+    TRS_QUERY_CACHE_FILE: "Final[RelPath]" = cast("RelPath", "trs_result.json")
+    TRS_TOOL_FILES_FILE: "Final[RelPath]" = cast("RelPath", "trs_tool_files.json")
 
-    SECURITY_CONTEXT_SCHEMA: Final[RelPath] = cast(RelPath, "security-context.json")
-    STAGE_DEFINITION_SCHEMA: Final[RelPath] = cast(RelPath, "stage-definition.json")
-    EXPORT_ACTIONS_SCHEMA: Final[RelPath] = cast(RelPath, "export-actions.json")
+    SECURITY_CONTEXT_SCHEMA: "Final[RelPath]" = cast("RelPath", "security-context.json")
+    STAGE_DEFINITION_SCHEMA: "Final[RelPath]" = cast("RelPath", "stage-definition.json")
+    EXPORT_ACTIONS_SCHEMA: "Final[RelPath]" = cast("RelPath", "export-actions.json")
 
-    DEFAULT_RO_EXTENSION: Final[str] = ".crate.zip"
-    DEFAULT_TRS_ENDPOINT: Final[
-        str
-    ] = "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
-    TRS_TOOLS_PATH: Final[str] = "tools/"
+    DEFAULT_RO_EXTENSION: "Final[str]" = ".crate.zip"
+    DEFAULT_TRS_ENDPOINT: "Final[str]" = (
+        "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
+    )
+    TRS_TOOLS_PATH: "Final[str]" = "tools/"
 
-    WORKFLOW_ENGINES: Final[Sequence[WorkflowType]] = list(
+    WORKFLOW_ENGINES: "Final[Sequence[WorkflowType]]" = list(
         map(lambda clazz: clazz.MyWorkflowType(), WORKFLOW_ENGINE_CLASSES)
     )
 
-    RECOGNIZED_TRS_DESCRIPTORS: Final[
-        Mapping[TRS_Workflow_Descriptor, WorkflowType]
-    ] = dict(map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES))
+    RECOGNIZED_TRS_DESCRIPTORS: "Final[Mapping[TRS_Workflow_Descriptor, WorkflowType]]" = dict(
+        map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES)
+    )
 
     def __init__(
         self,
@@ -231,6 +273,7 @@ class WF:
         trs_endpoint: str = DEFAULT_TRS_ENDPOINT,
         params: Optional[ParamsBlock] = None,
         outputs: Optional[OutputsBlock] = None,
+        placeholders: "Optional[PlaceHoldersBlock]" = None,
         default_actions: Optional[Sequence[ExportActionBlock]] = None,
         workflow_config: Optional[WorkflowConfigBlock] = None,
         creds_config: Optional[SecurityContextConfigBlock] = None,
@@ -323,6 +366,8 @@ class WF:
                 workflow_meta["params"] = params
             if outputs is not None:
                 workflow_meta["outputs"] = outputs
+            if placeholders is not None:
+                workflow_meta["placeholders"] = placeholders
 
             valErrors = config_validate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
             if len(valErrors) > 0:
@@ -345,6 +390,9 @@ class WF:
             if not isinstance(outputs, dict):
                 outputs = {}
 
+            if not isinstance(placeholders, dict):
+                placeholders = {}
+
             # Workflow-specific
             self.workflow_config = workflow_config
             self.creds_config = creds_config
@@ -353,6 +401,8 @@ class WF:
             self.version_id = str(version_id)
             self.descriptor_type = descriptor_type
             self.params = params
+            self.placeholders = placeholders
+            self.formatted_params = self.formatParams(params)
             self.outputs = self.parseExpectedOutputs(outputs)
             self.default_actions = self.parseExportActions(
                 [] if default_actions is None else default_actions
@@ -860,6 +910,7 @@ class WF:
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
             outputs=workflow_meta.get("outputs", {}),
+            placeholders=workflow_meta.get("placeholders", {}),
             default_actions=workflow_meta.get("default_actions"),
             workflow_config=workflow_meta.get("workflow_config"),
             nickname=workflow_meta.get("nickname"),
@@ -892,6 +943,7 @@ class WF:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            placeholders=workflow_meta.get("placeholders", {}),
             default_actions=workflow_meta.get("default_actions"),
             workflow_config=workflow_meta.get("workflow_config"),
             nickname=workflow_meta.get("nickname"),
@@ -1163,8 +1215,10 @@ class WF:
         assert (
             self.inputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
+        assert self.formatted_params is not None
+
         theParams, numInputs = self.fetchInputs(
-            self.params,
+            self.formatted_params,
             workflowInputs_destdir=self.inputsDir,
             offline=offline,
             lastInput=lastInput,
@@ -1188,14 +1242,14 @@ class WF:
 
     def buildLicensedURI(
         self,
-        remote_file: Union[URIType, Mapping[str, Any], Sequence[URIType]],
+        remote_file_f: Sch_InputURI_Fetchable,
         contextName: Optional[str] = None,
         licences: Tuple[URIType, ...] = DefaultNoLicenceTuple,
         attributions: Sequence[Attribution] = [],
     ) -> Union[LicensedURI, Sequence[LicensedURI]]:
-        if isinstance(remote_file, list):
+        if isinstance(remote_file_f, list):
             retvals = []
-            for remote_url in remote_file:
+            for remote_url in remote_file_f:
                 retval = self.buildLicensedURI(
                     remote_url,
                     contextName=contextName,
@@ -1209,12 +1263,13 @@ class WF:
 
             return retvals
 
-        if isinstance(remote_file, dict):
+        if isinstance(remote_file_f, dict):
+            remote_file = remote_file_f
             # The value of the attributes is superseded
             remote_url = remote_file["uri"]
-            licences = remote_file.get("licences", licences)
-            if isinstance(licences, list):
-                licences = tuple(licences)
+            licences_l = remote_file.get("licences")
+            if isinstance(licences_l, list):
+                licences = tuple(licences_l)
             contextName = remote_file.get("security-context", contextName)
 
             # Reconstruction of the attributions
@@ -1247,7 +1302,7 @@ class WF:
 
     def _fetchRemoteFile(
         self,
-        remote_file: Union[URIType, Mapping[str, Any], Sequence[URIType]],
+        remote_file: Sch_InputURI_Fetchable,
         contextName: Optional[str],
         offline: bool,
         storeDir: Union[AbsPath, CacheType],
@@ -1353,14 +1408,184 @@ class WF:
 
         return remote_pairs
 
+    def _formatStringFromPlaceHolders(self, the_string: str) -> str:
+        assert self.params is not None
+
+        i_l_the_string = the_string.find("{")
+        i_r_the_string = the_string.find("}")
+        if (
+            i_l_the_string != -1
+            and i_r_the_string != -1
+            and i_l_the_string < i_r_the_string
+        ):
+            try:
+                the_string = the_string.format(**self.placeholders)
+            except:
+                # Ignore failures
+                self.logger.warning(
+                    f"Failed to format (revise placeholders): {the_string}"
+                )
+        return the_string
+
+    def _formatInputURIFromPlaceHolders(self, input_uri: Sch_InputURI) -> Sch_InputURI:
+        some_formatted = False
+
+        return_input_uri: Sch_InputURI
+        if isinstance(input_uri, list):
+            return_input_uri = []
+            for i_uri in input_uri:
+                return_i_uri = self._formatInputURIFromPlaceHolders(i_uri)
+                return_input_uri.append(return_i_uri)  # type: ignore[arg-type]
+                if return_i_uri != i_uri:
+                    some_formatted = True
+        elif isinstance(input_uri, dict):
+            i_uri = input_uri["uri"]
+            return_i_uri = cast(URIType, self._formatStringFromPlaceHolders(i_uri))
+            some_formatted = return_i_uri != i_uri
+            if some_formatted:
+                return_input_uri = copy.copy(input_uri)
+                return_input_uri["uri"] = return_i_uri
+            else:
+                return_input_uri = input_uri
+        else:
+            return_input_uri = cast(
+                URIType, self._formatStringFromPlaceHolders(cast("URIType", input_uri))
+            )
+            some_formatted = return_input_uri != input_uri
+
+        return return_input_uri if some_formatted else input_uri
+
+    def formatParams(
+        self, params: "Optional[ParamsBlock]", prefix: str = ""
+    ) -> "Optional[ParamsBlock]":
+        if params is None:
+            return params
+
+        formatted_params: "MutableParamsBlock" = dict()
+        some_formatted = False
+        for key, raw_inputs in params.items():
+            # We are here for the
+            linearKey = prefix + key
+            if isinstance(raw_inputs, dict):
+                inputs = cast("Sch_Param", raw_inputs)
+                inputClass = inputs.get("c-l-a-s-s")
+                if inputClass is not None:
+                    if inputClass in ("File", "Directory"):  # input files
+                        if inputClass == "Directory":
+                            # We have to autofill this with the outputs directory,
+                            # so results are properly stored (without escaping the jail)
+                            if inputs.get("autoFill", False):
+                                formatted_params[key] = inputs
+                                continue
+
+                            globExplode = inputs.get("globExplode")
+                        elif inputClass == "File" and inputs.get("autoFill", False):
+                            formatted_params[key] = inputs
+                            continue
+
+                        was_formatted = False
+
+                        remote_files: Optional[Sch_InputURI] = inputs.get("url")
+                        if remote_files is not None:
+                            formatted_remote_files = (
+                                self._formatInputURIFromPlaceHolders(remote_files)
+                            )
+                            if remote_files != formatted_remote_files:
+                                was_formatted = True
+                        else:
+                            formatted_remote_files = None
+
+                        secondary_remote_files: "Optional[Sch_InputURI]" = inputs.get(
+                            "secondary-urls"
+                        )
+                        if secondary_remote_files is not None:
+                            formatted_secondary_remote_files = (
+                                self._formatInputURIFromPlaceHolders(
+                                    secondary_remote_files
+                                )
+                            )
+                            if (
+                                secondary_remote_files
+                                != formatted_secondary_remote_files
+                            ):
+                                was_formatted = True
+                        else:
+                            formatted_secondary_remote_files = None
+
+                        preferred_name_conf = inputs.get("preferred-name")
+                        formatted_preferred_name_conf: "Optional[Union[str, Literal[False]]]"
+                        if isinstance(preferred_name_conf, str):
+                            formatted_preferred_name_conf = (
+                                self._formatStringFromPlaceHolders(preferred_name_conf)
+                            )
+                            if preferred_name_conf != formatted_preferred_name_conf:
+                                was_formatted = True
+                        else:
+                            formatted_preferred_name_conf = preferred_name_conf
+
+                        reldir_conf = inputs.get("relative-dir")
+                        formatted_reldir_conf: "Optional[Union[str, Literal[False]]]"
+                        if isinstance(reldir_conf, str):
+                            formatted_reldir_conf = self._formatStringFromPlaceHolders(
+                                reldir_conf
+                            )
+                            if reldir_conf != formatted_reldir_conf:
+                                was_formatted = True
+                        else:
+                            formatted_reldir_conf = reldir_conf
+
+                        # Something has to be changed
+                        if was_formatted:
+                            some_formatted = True
+                            formatted_inputs = copy.copy(inputs)
+                            if "url" in inputs:
+                                assert formatted_remote_files is not None
+                                formatted_inputs["url"] = formatted_remote_files
+                            if "secondary-urls" in inputs:
+                                assert formatted_secondary_remote_files is not None
+                                formatted_inputs[
+                                    "secondary-urls"
+                                ] = formatted_secondary_remote_files
+                            if "preferred-name" in inputs:
+                                assert formatted_preferred_name_conf is not None
+                                formatted_inputs[
+                                    "preferred-name"
+                                ] = formatted_preferred_name_conf
+                            if "relative-dir" in inputs:
+                                assert formatted_reldir_conf is not None
+                                formatted_inputs["relative-dir"] = formatted_reldir_conf
+                        else:
+                            formatted_inputs = inputs
+
+                        formatted_params[key] = formatted_inputs
+
+                    else:
+                        raise WFException(
+                            'Unrecognized input class "{}", attached to "{}"'.format(
+                                inputClass, linearKey
+                            )
+                        )
+                else:
+                    # possible nested files
+                    formatted_inputs_nested = self.formatParams(
+                        cast("ParamsBlock", inputs), prefix=linearKey + "."
+                    )
+                    if inputs != formatted_inputs_nested:
+                        some_formatted = True
+                    formatted_params[key] = formatted_inputs_nested
+            else:
+                formatted_params[key] = raw_inputs
+
+        return formatted_params if some_formatted else params
+
     def fetchInputs(
         self,
-        params: Union[Mapping[str, Mapping[str, Any]], Sequence[Mapping[str, Any]]],
+        params: Union[ParamsBlock, Sequence[Mapping[str, Any]]],
         workflowInputs_destdir: AbsPath,
         prefix: str = "",
         lastInput: int = 0,
         offline: bool = False,
-    ) -> Tuple[List[MaterializedInput], int]:
+    ) -> Tuple[Sequence[MaterializedInput], int]:
         """
         Fetch the input files for the workflow execution.
         All the inputs must be URLs or CURIEs from identifiers.org / n2t.net.
@@ -1434,14 +1659,16 @@ class WF:
                             )
                             continue
 
-                        remote_files = inputs.get("url")
+                        remote_files: Optional[Sch_InputURI] = inputs.get("url")
                         # It has to exist
                         if remote_files is not None:
                             # We are sending the context name thinking in the future,
                             # as it could contain potential hints for authenticated access
                             contextName = inputs.get("security-context")
 
-                            secondary_remote_files = inputs.get("secondary-urls")
+                            secondary_remote_files: Optional[Sch_InputURI] = inputs.get(
+                                "secondary-urls"
+                            )
                             preferred_name_conf = inputs.get("preferred-name")
                             if isinstance(preferred_name_conf, str):
                                 pretty_relname = preferred_name_conf
@@ -1477,13 +1704,18 @@ class WF:
                                 CacheType.Input if cacheable else workflowInputs_destdir
                             )
 
-                            if not isinstance(
+                            remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+                            if isinstance(
                                 remote_files, list
                             ):  # more than one input file
-                                remote_files = [remote_files]
+                                remote_files_f = remote_files
+                            else:
+                                remote_files_f = [
+                                    cast("Sch_InputURI_Fetchable", remote_files)
+                                ]
 
-                            remote_pairs: MutableSequence[MaterializedContent] = []
-                            for remote_file in remote_files:
+                            remote_pairs: "MutableSequence[MaterializedContent]" = []
+                            for remote_file in remote_files_f:
                                 lastInput += 1
                                 t_remote_pairs = self._fetchRemoteFile(
                                     remote_file,
@@ -1502,13 +1734,21 @@ class WF:
                                 MutableSequence[MaterializedContent]
                             ]
                             if secondary_remote_files is not None:
-                                if not isinstance(
+                                secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+                                if isinstance(
                                     secondary_remote_files, list
-                                ):  # more than one secondary input file
-                                    secondary_remote_files = [secondary_remote_files]
+                                ):  # more than one input file
+                                    secondary_remote_files_f = secondary_remote_files
+                                else:
+                                    secondary_remote_files_f = [
+                                        cast(
+                                            "Sch_InputURI_Fetchable",
+                                            secondary_remote_files,
+                                        )
+                                    ]
 
                                 secondary_remote_pairs = []
-                                for secondary_remote_file in secondary_remote_files:
+                                for secondary_remote_file in secondary_remote_files_f:
                                     # The last fetched content prefix is the one used
                                     # for all the secondaries
                                     t_secondary_remote_pairs = self._fetchRemoteFile(
@@ -1625,8 +1865,8 @@ class WF:
     }
 
     def parseExpectedOutputs(
-        self, outputs: Union[List[Any], Mapping[str, Any]]
-    ) -> List[ExpectedOutput]:
+        self, outputs: Union[Sequence[Any], Mapping[str, Any]]
+    ) -> Sequence[ExpectedOutput]:
         expectedOutputs = []
 
         # TODO: implement parsing of outputs
@@ -1936,6 +2176,8 @@ class WF:
                         workflow_meta["workflow_config"] = self.workflow_config
                     if self.params is not None:
                         workflow_meta["params"] = self.params
+                    if self.placeholders is not None:
+                        workflow_meta["placeholders"] = self.placeholders
                     if self.outputs is not None:
                         outputs = {output.name: output for output in self.outputs}
                         workflow_meta["outputs"] = outputs
@@ -2004,6 +2246,8 @@ class WF:
                     self.trs_endpoint = workflow_meta.get("trs_endpoint")
                     self.workflow_config = workflow_meta.get("workflow_config")
                     self.params = workflow_meta.get("params")
+                    self.placeholders = workflow_meta.get("placeholders")
+                    self.formatted_params = self.formatParams(self.params)
 
                     outputsM = workflow_meta.get("outputs")
                     if isinstance(outputsM, dict):
@@ -2543,18 +2787,130 @@ class WF:
 
         return retval
 
-    def createStageResearchObject(self, doMaterializedROCrate: bool = False) -> None:
+    def createStageResearchObject(
+        self, filename: "Optional[AnyPath]" = None, doMaterializedROCrate: bool = False
+    ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
         """
-
         # TODO: implement deserialization
         self.unmarshallStage(offline=True)
 
+        assert self.localWorkflow is not None
+        assert self.materializedEngine is not None
+        assert self.repoURL is not None
+        assert self.repoTag is not None
+        assert self.outputsDir is not None
+        assert self.materializedParams is not None
+
+        assert self.materializedParams is not None
+        assert self.outputs is not None
+
+        if self.localWorkflow.relPath is not None:
+            wf_local_path = os.path.join(
+                self.localWorkflow.dir, self.localWorkflow.relPath
+            )
+        else:
+            wf_local_path = self.localWorkflow.dir
+
+        (
+            wfCrate,
+            compLang,
+        ) = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(
+            self.localWorkflow.langVersion
+        )
+
+        wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag
+        if self.localWorkflow.relPath is not None:
+            wf_url += "/" + os.path.dirname(self.localWorkflow.relPath)
+
+        matWf = self.materializedEngine.workflow
+
+        assert (
+            matWf.effectiveCheckout is not None
+        ), "The effective checkout should be available"
+
+        parsed_repo_url = parse.urlparse(self.repoURL)
+        if parsed_repo_url.netloc == "github.com":
+            parsed_repo_path = parsed_repo_url.path.split("/")
+            repo_name = parsed_repo_path[2]
+            # TODO: should we urldecode repo_name?
+            if repo_name.endswith(".git"):
+                repo_name = repo_name[:-4]
+            wf_entrypoint_path = [
+                "",  # Needed to prepend a slash
+                parsed_repo_path[1],
+                # TODO: should we urlencode repo_name?
+                repo_name,
+                matWf.effectiveCheckout,
+            ]
+
+            if self.localWorkflow.relPath is not None:
+                wf_entrypoint_path.append(self.localWorkflow.relPath)
+
+            wf_entrypoint_url = parse.urlunparse(
+                (
+                    "https",
+                    "raw.githubusercontent.com",
+                    "/".join(wf_entrypoint_path),
+                    "",
+                    "",
+                    "",
+                )
+            )
+
+        elif "gitlab" in parsed_repo_url.netloc:
+            parsed_repo_path = parsed_repo_url.path.split("/")
+            # FIXME: cover the case of nested groups
+            repo_name = parsed_repo_path[2]
+            if repo_name.endswith(".git"):
+                repo_name = repo_name[:-4]
+            wf_entrypoint_path = [parsed_repo_path[1], repo_name]
+            if self.localWorkflow.relPath is not None:
+                # TODO: should we urlencode self.repoTag?
+                wf_entrypoint_path.extend(
+                    ["-", "raw", self.repoTag, self.localWorkflow.relPath]
+                )
+
+            wf_entrypoint_url = parse.urlunparse(
+                (
+                    parsed_repo_url.scheme,
+                    parsed_repo_url.netloc,
+                    "/".join(wf_entrypoint_path),
+                    "",
+                    "",
+                    "",
+                )
+            )
+
+        else:
+            raise WFException(
+                "FIXME: Unsupported http(s) git repository {}".format(self.repoURL)
+            )
+
+        workflow_path = pathlib.Path(wf_local_path)
+        wf_file = wfCrate.add_workflow(
+            str(workflow_path),
+            workflow_path.name,
+            fetch_remote=False,
+            main=True,
+            lang=compLang,
+            gen_cwl=False,
+        )
+
+        addInputsResearchObject(
+            wf_file, self.materializedParams, cast("URIType", workflow_path.name)
+        )
         # TODO: implement logic of doMaterializedROCrate
 
-        # TODO
-        pass
+        # Save RO-crate as execution.crate.zip
+        if filename is None:
+            filename = cast("AnyPath", os.path.join(self.outputsDir, "staged.crate"))
+        wfCrate.write_zip(filename)
+
+        self.logger.info("Staged RO-Crate created: {}".format(filename))
+
+        return filename
 
     def createResultsResearchObject(self, doMaterializedROCrate: bool = False) -> None:
         """
@@ -2595,7 +2951,7 @@ class WF:
             ) = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(
                 self.localWorkflow.langVersion
             )
-            # TODO: how to get the name of the default branch?
+
             repoTag = (
                 self.repoTag
                 if self.repoTag is not None
@@ -2703,14 +3059,16 @@ class WF:
             wfCrate.isBasedOn = wf_url
 
         # Add inputs provenance to RO-crate
-        addInputsResearchObject(wfCrate, self.augmentedInputs)
+        addInputsResearchObject(
+            wf_file, self.augmentedInputs, cast("URIType", workflow_path.name)
+        )
 
         # Add outputs provenance to RO-crate
-        addOutputsResearchObject(wfCrate, self.matCheckOutputs)
+        addOutputsResearchObject(wf_file, self.matCheckOutputs)
 
         # Save RO-crate as execution.crate.zip
         wfCrate.write_zip(os.path.join(self.outputsDir, "execution.crate"))
-        self.logger.info("RO-Crate created: {}".format(self.outputsDir))
+        self.logger.info("Execution RO-Crate created: {}".format(self.outputsDir))
 
         # TODO error handling
 

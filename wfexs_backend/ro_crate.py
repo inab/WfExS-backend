@@ -25,10 +25,14 @@ from typing import (
     Mapping,
     MutableMapping,
     MutableSequence,
+    Optional,
     Sequence,
+    Union,
 )
+import urllib.parse
 
-from rocrate import rocrate  # type:ignore
+import rocrate.model.entity  # type:ignore
+import rocrate.rocrate  # type:ignore
 
 from .utils.digests import (
     nihDigester,
@@ -37,6 +41,7 @@ from .utils.digests import (
 )
 from .common import (
     AbstractGeneratedContent,
+    ContentKind,
     Fingerprint,
     GeneratedContent,
     GeneratedDirectoryContent,
@@ -44,13 +49,61 @@ from .common import (
     MaterializedInput,
     MaterializedOutput,
     SymbolicOutputName,
+    URIType,
 )
 
 logger = logging.getLogger()
 
 
+class FormalParameter(rocrate.model.entity.Entity):  # type: ignore[misc]
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        name: "str",
+        additional_type: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        fp_properties = {
+            "name": name,
+            "conformsTo": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE/",
+        }
+
+        if additional_type is not None:
+            fp_properties["additionalType"] = additional_type
+
+        if properties is not None:
+            fp_properties.update(properties)
+        super().__init__(crate, identifier=identifier, properties=fp_properties)
+
+
+class PropertyValue(rocrate.model.entity.Entity):  # type: ignore[misc]
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        name: "str",
+        value: "Union[bool,str,int,float]",
+        identifier: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        pv_properties = {
+            "name": name,
+            "value": value,
+        }
+
+        if properties is not None:
+            pv_properties.update(properties)
+        super().__init__(crate, identifier=identifier, properties=pv_properties)
+
+
+# class PropertyValue(rocrate.model.entity.Entity):
+#    def __init__(self, crate, )
+
+
 def addInputsResearchObject(
-    crate: rocrate.ROCrate, inputs: Sequence[MaterializedInput]
+    wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
+    inputs: "Sequence[MaterializedInput]",
+    workflow_id: "URIType",
 ) -> None:
     """
     Add the input's provenance data to a Research Object.
@@ -60,33 +113,79 @@ def addInputsResearchObject(
     :param inputs: List of inputs to add
     :type inputs: Sequence[MaterializedInput]
     """
+    crate = wf_crate.crate
     for in_item in inputs:
-        itemInValues = in_item.values[0]
-        if isinstance(itemInValues, MaterializedContent):
-            # TODO: embed metadata_array in some way
-            itemInLocalSource = itemInValues.local  # local source
-            itemInURISource = itemInValues.licensed_uri.uri  # uri source
-            if os.path.isfile(itemInLocalSource):
-                properties = {"name": in_item.name}
-                crate.add_file(
-                    source=itemInURISource,
-                    fetch_remote=False,
-                    validate_url=False,
-                    properties=properties,
-                )
+        formal_parameter_id = (
+            workflow_id + "#param:" + urllib.parse.quote(in_item.name, safe="")
+        )
+        itemInValue0 = in_item.values[0]
+        additional_type: "Optional[str]" = None
+        if isinstance(itemInValue0, int):
+            additional_type = "Integer"
+        elif isinstance(itemInValue0, str):
+            additional_type = "String"
+        elif isinstance(itemInValue0, bool):
+            additional_type = "Boolean"
+        elif isinstance(itemInValue0, float):
+            additional_type = "Float"
+        elif isinstance(itemInValue0, MaterializedContent):
+            if itemInValue0.kind == ContentKind.File:
+                additional_type = "File"
+            elif itemInValue0.kind == ContentKind.Directory:
+                additional_type = "Dataset"
 
-            elif os.path.isdir(itemInLocalSource):
-                errmsg = "FIXME: input directory / dataset handling in RO-Crate"
-                logger.error(errmsg)
+        formal_parameter = FormalParameter(
+            crate,
+            name=in_item.name,
+            identifier=formal_parameter_id,
+            additional_type=additional_type,
+        )
+        crate.add(formal_parameter)
+        wf_crate.append_to("input", formal_parameter)
 
-            else:
-                pass  # TODO: raise exception
+        if additional_type in ("File", "Dataset"):
+            for itemInValues in cast("Sequence[MaterializedContent]", in_item.values):
+                # TODO: embed metadata_array in some way
+                assert isinstance(itemInValues, MaterializedContent)
+                itemInLocalSource = itemInValues.local  # local source
+                itemInURISource = itemInValues.licensed_uri.uri  # uri source
+                if os.path.isfile(itemInLocalSource):
+                    # file_properties = {
+                    #    "exampleOfWork": {
+                    #        "@id": formal_parameter_id
+                    #    }
+                    # }
+                    crate_file = crate.add_file(
+                        source=itemInURISource,
+                        fetch_remote=False,
+                        validate_url=False,
+                        # properties=file_properties,
+                    )
+                    crate_file.append_to("exampleOfWork", formal_parameter)
+                    formal_parameter.append_to("workExample", crate_file)
+
+                elif os.path.isdir(itemInLocalSource):
+                    errmsg = "FIXME: input directory / dataset handling in RO-Crate"
+                    logger.error(errmsg)
+
+                else:
+                    pass  # TODO: raise exception
+        else:
+            for itemInAtomicValues in cast(
+                "Sequence[Union[bool,str,float,int]]", in_item.values
+            ):
+                assert isinstance(itemInAtomicValues, (bool, str, float, int))
+                parameter_value = PropertyValue(crate, in_item.name, itemInAtomicValues)
+                crate_pv = crate.add(parameter_value)
+                crate_pv.append_to("exampleOfWork", formal_parameter)
+                formal_parameter.append_to("workExample", crate_pv)
 
         # TODO digest other types of inputs
 
 
 def addOutputsResearchObject(
-    crate: rocrate.ROCrate, outputs: Sequence[MaterializedOutput]
+    wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
+    outputs: Sequence[MaterializedOutput],
 ) -> None:
     """
     Add the output's provenance data to a Research Object.
@@ -96,6 +195,7 @@ def addOutputsResearchObject(
     :param outputs: List of outputs to add
     :type outputs: Sequence[MaterializedOutput]
     """
+    crate = wf_crate.crate
     for out_item in outputs:
         # This can happen when there is no output, like when a workflow has failed
         if len(out_item.values) == 0:

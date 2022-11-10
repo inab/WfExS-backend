@@ -12,7 +12,7 @@ dulwich
 python-dxf
 genluhn >= 0.3.0
 rfc6920 >= 0.1.2
-rocrate >= 0.5.2
+rocrate >= 0.7.0
 boto3
 botocore
 google-cloud-storage

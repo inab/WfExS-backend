@@ -162,7 +162,9 @@ WfExSConfigBlock = Mapping[str, Any]
 WritableWfExSConfigBlock = MutableMapping[str, Any]
 ExportActionBlock = Mapping[str, Any]
 ParamsBlock = Mapping[str, Any]
+MutableParamsBlock = MutableMapping[str, Any]
 OutputsBlock = Mapping[str, Any]
+PlaceHoldersBlock = Mapping[str, Union[int, float, str]]
 
 # As each workflow engine can have its own naming convention, leave them to
 # provide it

@@ -131,6 +131,10 @@ class WfExS_Staged_WorkDir_Commands(StrDocEnum):
         "Launches a command in the workdir\n\tFirst parameter is either the staged instance id or the nickname.\n\tIt launches the command specified after the id.\n\tIf there is no additional parameters, it launches a shell\n\tin the mounted working directory of the instance",
     )
     Status = ("status", "Shows staged instances status")
+    CreateStagedROCrate = (
+        "create-staged-crate",
+        "It creates an RO-Crate from the prospective provenance",
+    )
 
 
 #    Validate = 'validate'
@@ -495,6 +499,52 @@ def processStagedWorkdirCommand(
 * {repr(mStatus)}
 """
                 )
+    elif (
+        args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
+    ):
+        if len(args.staged_workdir_command_args) == 2:
+            for (
+                instance_id,
+                nickname,
+                creation,
+                wfSetup,
+                wfInstance,
+            ) in wB.listStagedWorkflows(
+                args.staged_workdir_command_args[0],
+                acceptGlob=args.filesAsGlobs,
+                doCleanup=False,
+            ):
+                is_damaged = True if wfSetup is None else wfSetup.is_damaged
+                if not is_damaged and (wfInstance is not None):
+                    try:
+                        assert wfSetup is not None
+                        print(
+                            "\t- Generating prospective RO-Crate fro instance {} (nickname '{}')\n".format(
+                                wfSetup.instance_id,
+                                wfSetup.nickname,
+                            )
+                        )
+                        wfInstance.createStageResearchObject(
+                            filename=args.staged_workdir_command_args[1]
+                        )
+                    except Exception as e:
+                        logging.exception(
+                            f"Error while executing {instance_id} ({nickname})"
+                        )
+                    finally:
+                        wfInstance.cleanup()
+                else:
+                    print(
+                        f"ERROR: staged workdir {instance_id} ({nickname}) is damaged",
+                        file=sys.stderr,
+                    )
+                    retval = 1
+        else:
+            print(
+                f"ERROR: subcommand {args.staged_workdir_command} takes two positional parameters: the staged workdir name or id and the path where to store the RO-Crate",
+                file=sys.stderr,
+            )
+            retval = 1
 
     # Thi
     return retval

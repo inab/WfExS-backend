@@ -355,6 +355,16 @@
 				}
 			}
 		},
+		"placeholders": {
+			"type": "object",
+			"additionalProperties": {
+				"type": [
+					"number",
+					"integer",
+					"string"
+				]
+			}
+		},
 		"params": {
 			"$ref": "#/definitions/Params"
 		},
