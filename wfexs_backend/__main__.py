@@ -971,7 +971,9 @@ def main() -> None:
             )
 
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
-        wfInstance.createStageResearchObject(args.doMaterializedROCrate)
+        wfInstance.createStageResearchObject(
+            doMaterializedROCrate=args.doMaterializedROCrate
+        )
 
     if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
         print(
