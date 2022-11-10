@@ -1582,6 +1582,7 @@ class WF:
                         formatted_inputs_l.append(formatted_input)
                         if formatted_input != raw_input:
                             did_change = True
+                            some_formatted = True
 
                     formatted_params[key] = (
                         formatted_inputs_l if did_change else raw_inputs
