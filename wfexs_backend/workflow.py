@@ -56,7 +56,11 @@ if TYPE_CHECKING:
 from urllib import parse
 
 from rocrate import rocrate  # type: ignore[import]
-from .ro_crate import addInputsResearchObject, addOutputsResearchObject
+from .ro_crate import (
+    addInputsResearchObject,
+    addOutputsResearchObject,
+    addExpectedOutputsResearchObject,
+)
 import bagit  # type: ignore[import]
 
 # We have preference for the C based loader and dumper, but the code
@@ -2922,6 +2926,10 @@ class WF:
         addInputsResearchObject(
             wf_file, self.materializedParams, cast("URIType", workflow_path.name)
         )
+        if self.outputs is not None:
+            addExpectedOutputsResearchObject(
+                wf_file, self.outputs, cast("URIType", workflow_path.name)
+            )
         # TODO: implement logic of doMaterializedROCrate
 
         # Save RO-crate as execution.crate.zip

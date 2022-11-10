@@ -42,6 +42,7 @@ from .utils.digests import (
 from .common import (
     AbstractGeneratedContent,
     ContentKind,
+    ExpectedOutput,
     Fingerprint,
     GeneratedContent,
     GeneratedDirectoryContent,
@@ -181,6 +182,41 @@ def addInputsResearchObject(
                 formal_parameter.append_to("workExample", crate_pv)
 
         # TODO digest other types of inputs
+
+
+def addExpectedOutputsResearchObject(
+    wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
+    outputs: "Sequence[ExpectedOutput]",
+    workflow_id: "URIType",
+) -> None:
+    """
+    Add the input's provenance data to a Research Object.
+
+    :param crate: Research Object
+    :type crate: ROCrate object
+    :param inputs: List of inputs to add
+    :type inputs: Sequence[MaterializedInput]
+    """
+    crate = wf_crate.crate
+    for out_item in outputs:
+        formal_parameter_id = (
+            workflow_id + "#output:" + urllib.parse.quote(out_item.name, safe="")
+        )
+        if out_item.kind == ContentKind.File:
+            additional_type = "File"
+        elif out_item.kind == ContentKind.Directory:
+            additional_type = "Dataset"
+        else:
+            additional_type = None
+
+        formal_parameter = FormalParameter(
+            crate,
+            name=out_item.name,
+            identifier=formal_parameter_id,
+            additional_type=additional_type,
+        )
+        crate.add(formal_parameter)
+        wf_crate.append_to("output", formal_parameter)
 
 
 def addOutputsResearchObject(
