@@ -31,27 +31,93 @@ import threading
 import time
 
 from typing import (
-    TYPE_CHECKING,
-    Any,
     cast,
-    Iterable,
-    Mapping,
-    MutableSequence,
-    Optional,
     Pattern,
-    Sequence,
-    Tuple,
-    Type,
     TYPE_CHECKING,
-    Union,
 )
 
-from typing_extensions import Final, TypedDict
+from typing_extensions import TypedDict
 
 if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Iterable,
+        Mapping,
+        MutableSequence,
+        Optional,
+        Sequence,
+        Tuple,
+        Type,
+        Union,
+    )
+
     from typing_extensions import (
+        Final,
         Literal,
     )
+
+    from .common import (
+        AbsPath,
+        AbstractWorkflowEngineType,
+        AnyPath,
+        ContainerEngineVersionStr,
+        EngineVersion,
+        ExportActionBlock,
+        MaterializedOutput,
+        MutableParamsBlock,
+        OutputsBlock,
+        ParamsBlock,
+        PlaceHoldersBlock,
+        RelPath,
+        RepoTag,
+        RepoURL,
+        SecurityContextConfig,
+        SecurityContextConfigBlock,
+        SymbolicName,
+        TRS_Workflow_Descriptor,
+        WfExSInstanceId,
+        WorkflowConfigBlock,
+        WorkflowEngineVersionStr,
+        WorkflowMetaConfigBlock,
+        WorkflowType,
+        WritableWorkflowMetaConfigBlock,
+    )
+
+    Sch_PlainURI = URIType
+
+    Sch_LicensedURI = TypedDict(
+        "Sch_LicensedURI",
+        {
+            "uri": str,
+            "licences": Sequence[Sch_PlainURI],
+            "attributions": Sequence[Any],
+            "security-context": str,
+        },
+        total=False,
+    )
+
+    Sch_InputURI_Elem = Union[Sch_PlainURI, Sch_LicensedURI]
+    Sch_InputURI_Fetchable = Union[Sch_InputURI_Elem, Sequence[Sch_InputURI_Elem]]
+    Sch_InputURI = Union[Sch_InputURI_Fetchable, Sequence[Sequence[Sch_InputURI_Elem]]]
+
+    Sch_Param = TypedDict(
+        "Sch_Param",
+        {
+            "c-l-a-s-s": str,
+            "url": Sch_InputURI,
+            "secondary-urls": Sch_InputURI,
+            "preferred-name": Union[Literal[False], str],
+            "relative-dir": Union[Literal[False], str],
+            "security-context": str,
+            "globExplode": str,
+            "autoFill": bool,
+            "autoPrefix": bool,
+        },
+        total=False,
+    )
+
+    WFVersionId = Union[str, int]
+    WorkflowId = Union[str, int]
 
 from urllib import parse
 
@@ -68,24 +134,19 @@ import bagit  # type: ignore[import]
 
 import yaml
 
-YAMLLoader: Type[Union[yaml.Loader, yaml.CLoader]]
-YAMLDumper: Type[Union[yaml.Dumper, yaml.CDumper]]
+YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
+YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
 try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .common import (
-    AbsPath,
     AbstractWfExSException,
-    AbstractWorkflowEngineType,
-    AnyPath,
     Attribution,
     CacheType,
-    ContainerEngineVersionStr,
     ContentKind,
     DefaultNoLicenceTuple,
-    EngineVersion,
     ExpectedOutput,
     ExportItem,
     ExportItemType,
@@ -98,43 +159,19 @@ from .common import (
     MarshallingStatus,
     MaterializedContent,
     MaterializedInput,
-    MaterializedOutput,
     MaterializedExportAction,
     MaterializedWorkflowEngine,
-    MutableParamsBlock,
-    OutputsBlock,
-    ParamsBlock,
-    PlaceHoldersBlock,
-    RelPath,
     RemoteRepo,
-    RepoTag,
-    RepoURL,
-    SecurityContextConfig,
-    SecurityContextConfigBlock,
     StagedSetup,
-    SymbolicName,
-    TRS_Workflow_Descriptor,
     URIType,
-    WfExSInstanceId,
-    WorkflowConfigBlock,
-    WorkflowEngineVersionStr,
-    WorkflowMetaConfigBlock,
-    WorkflowType,
-    WritableWorkflowMetaConfigBlock,
 )
 
 # These imports are needed to properly unmarshall from YAML
-
-# pylint: disable-next=unused-import
-from .common import (
+from .common import (  # pylint: disable=unused-import
     AnyContent,
-    Container,
-    ExportActionBlock,
     ExitVal,
-    Fingerprint,
     SymbolicParamName,
     SymbolicOutputName,
-    URIWithMetadata,
 )
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
@@ -173,14 +210,14 @@ if TYPE_CHECKING:
 # CWL detection is before, as Nextflow one is
 # a bit lax (only detects a couple of too common
 # keywords)
-WORKFLOW_ENGINE_CLASSES: Sequence[Type[WorkflowEngine]] = [
+WORKFLOW_ENGINE_CLASSES: "Sequence[Type[WorkflowEngine]]" = [
     CWLWorkflowEngine,
     NextflowWorkflowEngine,
 ]
 
 
 def _wakeupEncDir(
-    cond: threading.Condition, workDir: AbsPath, logger: logging.Logger
+    cond: "threading.Condition", workDir: "AbsPath", logger: "logging.Logger"
 ) -> None:
     """
     This method periodically checks whether the directory is still available
@@ -195,50 +232,12 @@ def _wakeupEncDir(
         cond.release()
 
 
-Sch_PlainURI = URIType
-
-Sch_LicensedURI = TypedDict(
-    "Sch_LicensedURI",
-    {
-        "uri": "str",
-        "licences": "Sequence[Sch_PlainURI]",
-        "attributions": "Sequence[Any]",
-        "security-context": "str",
-    },
-    total=False,
-)
-
-Sch_InputURI_Elem = Union[Sch_PlainURI, Sch_LicensedURI]
-Sch_InputURI_Fetchable = Union[Sch_InputURI_Elem, Sequence[Sch_InputURI_Elem]]
-Sch_InputURI = Union[Sch_InputURI_Fetchable, Sequence[Sequence[Sch_InputURI_Elem]]]
-
-Sch_Param = TypedDict(
-    "Sch_Param",
-    {
-        "c-l-a-s-s": "str",
-        "url": "Sch_InputURI",
-        "secondary-urls": "Sch_InputURI",
-        "preferred-name": "Union[Literal[False], str]",
-        "relative-dir": "Union[Literal[False], str]",
-        "security-context": "str",
-        "globExplode": "str",
-        "autoFill": "bool",
-        "autoPrefix": "bool",
-    },
-    total=False,
-)
-
-
 class WFException(AbstractWfExSException):
     pass
 
 
 class ExportActionException(AbstractWfExSException):
     pass
-
-
-WFVersionId = Union[str, int]
-WorkflowId = Union[str, int]
 
 
 class WF:
@@ -271,22 +270,22 @@ class WF:
     def __init__(
         self,
         wfexs: "WfExSBackend",
-        workflow_id: Optional[WorkflowId] = None,
-        version_id: Optional[WFVersionId] = None,
-        descriptor_type: Optional[TRS_Workflow_Descriptor] = None,
-        trs_endpoint: str = DEFAULT_TRS_ENDPOINT,
-        params: Optional[ParamsBlock] = None,
-        outputs: Optional[OutputsBlock] = None,
+        workflow_id: "Optional[WorkflowId]" = None,
+        version_id: "Optional[WFVersionId]" = None,
+        descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
+        trs_endpoint: "str" = DEFAULT_TRS_ENDPOINT,
+        params: "Optional[ParamsBlock]" = None,
+        outputs: "Optional[OutputsBlock]" = None,
         placeholders: "Optional[PlaceHoldersBlock]" = None,
-        default_actions: Optional[Sequence[ExportActionBlock]] = None,
-        workflow_config: Optional[WorkflowConfigBlock] = None,
-        creds_config: Optional[SecurityContextConfigBlock] = None,
-        instanceId: Optional[WfExSInstanceId] = None,
-        nickname: Optional[str] = None,
-        creation: Optional[datetime.datetime] = None,
-        rawWorkDir: Optional[AnyPath] = None,
-        paranoid_mode: Optional[bool] = None,
-        fail_ok: bool = False,
+        default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
+        workflow_config: "Optional[WorkflowConfigBlock]" = None,
+        creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        instanceId: "Optional[WfExSInstanceId]" = None,
+        nickname: "Optional[str]" = None,
+        creation: "Optional[datetime.datetime]" = None,
+        rawWorkDir: "Optional[AnyPath]" = None,
+        paranoid_mode: "Optional[bool]" = None,
+        fail_ok: "bool" = False,
     ):
         """
         Init function
@@ -335,8 +334,8 @@ class WF:
         )
 
         self.wfexs = wfexs
-        self.encWorkDir: Optional[AbsPath] = None
-        self.workDir: Optional[AbsPath] = None
+        self.encWorkDir: "Optional[AbsPath]" = None
+        self.workDir: "Optional[AbsPath]" = None
 
         if isinstance(paranoid_mode, bool):
             self.paranoidMode = paranoid_mode
@@ -346,10 +345,10 @@ class WF:
         if not isinstance(workflow_config, dict):
             workflow_config = {}
 
-        self.outputs: Optional[Sequence[ExpectedOutput]]
-        self.default_actions: Optional[Sequence[ExportAction]]
+        self.outputs: "Optional[Sequence[ExpectedOutput]]"
+        self.default_actions: "Optional[Sequence[ExportAction]]"
         if workflow_id is not None:
-            workflow_meta: WritableWorkflowMetaConfigBlock = {
+            workflow_meta: "WritableWorkflowMetaConfigBlock" = {
                 "workflow_id": workflow_id
             }
             if version_id is not None:
@@ -434,7 +433,7 @@ class WF:
         self.encfs_type = None
         self.encfsCond = None
         self.encfsThread = None
-        self.fusermount_cmd = cast(AnyPath, "")
+        self.fusermount_cmd = cast("AnyPath", "")
         self.encfs_idleMinutes = None
         self.doUnmount = False
 
@@ -458,7 +457,7 @@ class WF:
                     instanceId, nickname=nickname, create_ok=False
                 )
         else:
-            self.rawWorkDir = cast(AbsPath, os.path.abspath(rawWorkDir))
+            self.rawWorkDir = cast("AbsPath", os.path.abspath(rawWorkDir))
             if instanceId is None:
                 (
                     self.instanceId,
@@ -484,14 +483,14 @@ class WF:
 
         was_setup = self.setupWorkdir(doSecureWorkDir, fail_ok=fail_ok)
 
-        self.configMarshalled: Optional[Union[bool, datetime.datetime]] = None
-        self.inputsDir: Optional[AbsPath]
-        self.intermediateDir: Optional[AbsPath]
-        self.outputsDir: Optional[AbsPath]
-        self.engineTweaksDir: Optional[AbsPath]
-        self.metaDir: Optional[AbsPath]
-        self.workflowDir: Optional[AbsPath]
-        self.containersDir: Optional[AbsPath]
+        self.configMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
+        self.inputsDir: "Optional[AbsPath]"
+        self.intermediateDir: "Optional[AbsPath]"
+        self.outputsDir: "Optional[AbsPath]"
+        self.engineTweaksDir: "Optional[AbsPath]"
+        self.metaDir: "Optional[AbsPath]"
+        self.workflowDir: "Optional[AbsPath]"
+        self.containersDir: "Optional[AbsPath]"
         if was_setup:
             assert (
                 self.workDir is not None
@@ -500,38 +499,38 @@ class WF:
             # inputs, or the inputs properly post-processed (decompressed,
             # decrypted, etc....)
             self.inputsDir = cast(
-                AbsPath, os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
+                "AbsPath", os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
             )
             os.makedirs(self.inputsDir, exist_ok=True)
             # This directory should hold intermediate workflow steps results
             self.intermediateDir = cast(
-                AbsPath, os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
+                "AbsPath", os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
             )
             os.makedirs(self.intermediateDir, exist_ok=True)
             # This directory will hold the final workflow results, which could
             # be either symbolic links to the intermediate results directory
             # or newly generated content
             self.outputsDir = cast(
-                AbsPath, os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR)
+                "AbsPath", os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR)
             )
             os.makedirs(self.outputsDir, exist_ok=True)
             # This directory is here for those files which are created in order
             # to tweak or patch workflow executions
             self.engineTweaksDir = cast(
-                AbsPath, os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
+                "AbsPath", os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
             )
             os.makedirs(self.engineTweaksDir, exist_ok=True)
             # This directory will hold metadata related to the execution
             self.metaDir = cast(
-                AbsPath, os.path.join(self.workDir, WORKDIR_META_RELDIR)
+                "AbsPath", os.path.join(self.workDir, WORKDIR_META_RELDIR)
             )
-            # This directory will hold either a hardlink or a copy of the workflow
+            # This directory will hold a copy of the workflow
             self.workflowDir = cast(
-                AbsPath, os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR)
+                "AbsPath", os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR)
             )
             # This directory will hold either a hardlink or a copy of the containers
             self.containersDir = cast(
-                AbsPath, os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR)
+                "AbsPath", os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR)
             )
 
             # This is true when the working directory already exists
@@ -589,42 +588,42 @@ class WF:
             is_damaged=is_damaged,
         )
 
-        self.repoURL: Optional[RepoURL] = None
-        self.repoTag: Optional[RepoTag] = None
-        self.repoRelPath: Optional[RelPath] = None
-        self.repoDir: Optional[AbsPath] = None
-        self.repoEffectiveCheckout: Optional[RepoTag] = None
-        self.engine: Optional[AbstractWorkflowEngineType] = None
-        self.engineVer: Optional[EngineVersion] = None
-        self.engineDesc: Optional[WorkflowType] = None
+        self.repoURL: "Optional[RepoURL]" = None
+        self.repoTag: "Optional[RepoTag]" = None
+        self.repoRelPath: "Optional[RelPath]" = None
+        self.repoDir: "Optional[AbsPath]" = None
+        self.repoEffectiveCheckout: "Optional[RepoTag]" = None
+        self.engine: "Optional[AbstractWorkflowEngineType]" = None
+        self.engineVer: "Optional[EngineVersion]" = None
+        self.engineDesc: "Optional[WorkflowType]" = None
 
-        self.materializedParams: Optional[Sequence[MaterializedInput]] = None
-        self.localWorkflow: Optional[LocalWorkflow] = None
-        self.materializedEngine: Optional[MaterializedWorkflowEngine] = None
-        self.containerEngineVersion: Optional[ContainerEngineVersionStr] = None
-        self.workflowEngineVersion: Optional[WorkflowEngineVersionStr] = None
+        self.materializedParams: "Optional[Sequence[MaterializedInput]]" = None
+        self.localWorkflow: "Optional[LocalWorkflow]" = None
+        self.materializedEngine: "Optional[MaterializedWorkflowEngine]" = None
+        self.containerEngineVersion: "Optional[ContainerEngineVersionStr]" = None
+        self.workflowEngineVersion: "Optional[WorkflowEngineVersionStr]" = None
 
-        self.exitVal: Optional[ExitVal] = None
-        self.augmentedInputs: Optional[Sequence[MaterializedInput]] = None
-        self.matCheckOutputs: Optional[Sequence[MaterializedOutput]] = None
-        self.cacheROCrateFilename: Optional[AbsPath] = None
+        self.exitVal: "Optional[ExitVal]" = None
+        self.augmentedInputs: "Optional[Sequence[MaterializedInput]]" = None
+        self.matCheckOutputs: "Optional[Sequence[MaterializedOutput]]" = None
+        self.cacheROCrateFilename: "Optional[AbsPath]" = None
 
-        self.runExportActions: Optional[
-            MutableSequence[MaterializedExportAction]
-        ] = None
+        self.runExportActions: "Optional[MutableSequence[MaterializedExportAction]]" = (
+            None
+        )
 
-        self.stageMarshalled: Optional[Union[bool, datetime.datetime]] = None
-        self.executionMarshalled: Optional[Union[bool, datetime.datetime]] = None
-        self.exportMarshalled: Optional[Union[bool, datetime.datetime]] = None
+        self.stageMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
+        self.executionMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
+        self.exportMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
 
     FUSE_SYSTEM_CONF = "/etc/fuse.conf"
 
-    def setupWorkdir(self, doSecureWorkDir: bool, fail_ok: bool = False) -> bool:
+    def setupWorkdir(self, doSecureWorkDir: "bool", fail_ok: "bool" = False) -> "bool":
         uniqueRawWorkDir = self.rawWorkDir
 
         allowOther = False
-        uniqueEncWorkDir: Optional[AbsPath]
-        uniqueWorkDir: AbsPath
+        uniqueEncWorkDir: "Optional[AbsPath]"
+        uniqueWorkDir: "AbsPath"
         if doSecureWorkDir:
             # We need to detect whether fuse has enabled user_allow_other
             # the only way I know is parsing /etc/fuse.conf
@@ -636,8 +635,8 @@ class WF:
                             break
                     self.logger.debug(f"FUSE has user_allow_other: {allowOther}")
 
-            uniqueEncWorkDir = cast(AbsPath, os.path.join(uniqueRawWorkDir, ".crypt"))
-            uniqueWorkDir = cast(AbsPath, os.path.join(uniqueRawWorkDir, "work"))
+            uniqueEncWorkDir = cast("AbsPath", os.path.join(uniqueRawWorkDir, ".crypt"))
+            uniqueWorkDir = cast("AbsPath", os.path.join(uniqueRawWorkDir, "work"))
 
             # The directories should exist before calling encryption FS mount
             os.makedirs(uniqueEncWorkDir, exist_ok=True)
@@ -645,7 +644,7 @@ class WF:
 
             # This is the passphrase needed to decrypt the filesystem
             passphraseFile = cast(
-                AbsPath, os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
+                "AbsPath", os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
             )
 
             if os.path.exists(passphraseFile):
@@ -731,7 +730,7 @@ class WF:
 
         # The temporary directory is in the raw working directory as
         # some container engine could fail
-        uniqueTempDir = cast(AbsPath, os.path.join(uniqueRawWorkDir, ".TEMP"))
+        uniqueTempDir = cast("AbsPath", os.path.join(uniqueRawWorkDir, ".TEMP"))
         os.makedirs(uniqueTempDir, exist_ok=True)
         os.chmod(uniqueTempDir, 0o1777)
 
@@ -754,7 +753,7 @@ class WF:
             assert self.workDir is not None
             if os.path.ismount(self.workDir):
                 with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
-                    fusermountCommand: Sequence[str] = [
+                    fusermountCommand: "Sequence[str]" = [
                         self.fusermount_cmd,
                         "-u",  # Umount the directory
                         "-z",  # Even if it is not possible to umount it now, hide the mount point
@@ -790,10 +789,10 @@ class WF:
     def cleanup(self) -> None:
         self.unmountWorkdir()
 
-    def getStagedSetup(self) -> StagedSetup:
+    def getStagedSetup(self) -> "StagedSetup":
         return self.stagedSetup
 
-    def getMarshallingStatus(self, reread_stats: bool = False) -> MarshallingStatus:
+    def getMarshallingStatus(self, reread_stats: "bool" = False) -> "MarshallingStatus":
         if reread_stats:
             self.unmarshallExecute(offline=True, fail_ok=True)
             self.unmarshallExport(offline=True, fail_ok=True)
@@ -812,8 +811,8 @@ class WF:
     def FromWorkDir(
         cls,
         wfexs: "WfExSBackend",
-        workflowWorkingDirectory: Union[RelPath, AbsPath],
-        fail_ok: bool = False,
+        workflowWorkingDirectory: "Union[RelPath, AbsPath]",
+        fail_ok: "bool" = False,
     ) -> "WF":
         """
         This class method requires an existing staged working directory
@@ -837,21 +836,21 @@ class WF:
 
     @classmethod
     def ReadSecurityContextFile(
-        cls, securityContextsConfigFilename: AnyPath
-    ) -> SecurityContextConfigBlock:
+        cls, securityContextsConfigFilename: "AnyPath"
+    ) -> "SecurityContextConfigBlock":
         with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
             creds_config = unmarshall_namedtuple(yaml.safe_load(scf))
 
-        return cast(SecurityContextConfigBlock, creds_config)
+        return cast("SecurityContextConfigBlock", creds_config)
 
     @classmethod
     def FromFiles(
         cls,
         wfexs: "WfExSBackend",
-        workflowMetaFilename: AnyPath,
-        securityContextsConfigFilename: Optional[AnyPath] = None,
-        nickname_prefix: Optional[str] = None,
-        paranoidMode: bool = False,
+        workflowMetaFilename: "AnyPath",
+        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        nickname_prefix: "Optional[str]" = None,
+        paranoidMode: "bool" = False,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -882,9 +881,9 @@ class WF:
     def FromDescription(
         cls,
         wfexs: "WfExSBackend",
-        workflow_meta: WorkflowMetaConfigBlock,
-        creds_config: Optional[SecurityContextConfigBlock] = None,
-        paranoidMode: bool = False,
+        workflow_meta: "WorkflowMetaConfigBlock",
+        creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        paranoidMode: "bool" = False,
     ) -> "WF":
         """
         This class method might create a new staged working directory
@@ -926,8 +925,8 @@ class WF:
     def FromForm(
         cls,
         wfexs: "WfExSBackend",
-        workflow_meta: WorkflowMetaConfigBlock,
-        paranoidMode: bool = False,
+        workflow_meta: "WorkflowMetaConfigBlock",
+        paranoidMode: "bool" = False,
     ) -> "WF":  # VRE
         """
 
@@ -954,7 +953,7 @@ class WF:
             paranoid_mode=paranoidMode,
         )
 
-    def fetchWorkflow(self, offline: bool = False) -> None:
+    def fetchWorkflow(self, offline: "bool" = False) -> None:
         """
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
@@ -966,9 +965,9 @@ class WF:
         parsedRepoURL = parse.urlparse(self.id)
 
         # It is not an absolute URL, so it is being an identifier in the workflow
-        i_workflow: Optional[IdentifiedWorkflow] = None
-        engineDesc: Optional[WorkflowType] = None
-        guessedRepo: Optional[RemoteRepo] = None
+        i_workflow: "Optional[IdentifiedWorkflow]" = None
+        engineDesc: "Optional[WorkflowType]" = None
+        guessedRepo: "Optional[RemoteRepo]" = None
         if parsedRepoURL.scheme == "":
             if (self.trs_endpoint is not None) and len(self.trs_endpoint) > 0:
                 i_workflow = self.getWorkflowRepoFromTRS(offline=offline)
@@ -986,12 +985,12 @@ class WF:
                 if guessedRepo.tag is None:
                     guessedRepo = RemoteRepo(
                         repo_url=guessedRepo.repo_url,
-                        tag=cast(RepoTag, self.version_id),
+                        tag=cast("RepoTag", self.version_id),
                         rel_path=guessedRepo.rel_path,
                     )
             else:
                 i_workflow = self.getWorkflowRepoFromROCrateURL(
-                    cast(URIType, self.id), offline=offline
+                    cast("URIType", self.id), offline=offline
                 )
 
         if i_workflow is not None:
@@ -1001,15 +1000,15 @@ class WF:
         if guessedRepo is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
             guessedRepo = RemoteRepo(
-                repo_url=cast(RepoURL, self.id), tag=cast(RepoTag, self.version_id)
+                repo_url=cast("RepoURL", self.id), tag=cast("RepoTag", self.version_id)
             )
 
         repoURL = guessedRepo.repo_url
         repoTag = guessedRepo.tag
         repoRelPath = guessedRepo.rel_path
 
-        repoDir: Optional[AbsPath] = None
-        repoEffectiveCheckout: Optional[RepoTag] = None
+        repoDir: "Optional[AbsPath]" = None
+        repoEffectiveCheckout: "Optional[RepoTag]" = None
         if ":" in repoURL:
             parsedRepoURL = parse.urlparse(repoURL)
             if len(parsedRepoURL.scheme) > 0:
@@ -1027,14 +1026,17 @@ class WF:
 
         # For the cases of pure TRS repos, like Dockstore
         if repoDir is None:
-            repoDir = cast(AbsPath, repoURL)
+            repoDir = cast("AbsPath", repoURL)
 
         # Workflow Language version cannot be assumed here yet
         # A copy of the workflows is kept
         assert self.workflowDir is not None, "The workflow directory should be defined"
         if os.path.isdir(self.workflowDir):
             shutil.rmtree(self.workflowDir)
-        link_or_copy(repoDir, self.workflowDir)
+        # force_copy is needed to isolate the copy of the workflow
+        # so local modifications in a working directory does not
+        # poison the cached workflow
+        link_or_copy(repoDir, self.workflowDir, force_copy=True)
         localWorkflow = LocalWorkflow(
             dir=self.workflowDir,
             relPath=repoRelPath,
@@ -1096,7 +1098,7 @@ class WF:
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
 
-    def setupEngine(self, offline: bool = False) -> None:
+    def setupEngine(self, offline: "bool" = False) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
             self.fetchWorkflow(offline=offline)
@@ -1130,7 +1132,7 @@ class WF:
                 )
         self.materializedEngine = matWfEngV2
 
-    def materializeWorkflow(self, offline: bool = False) -> None:
+    def materializeWorkflow(self, offline: "bool" = False) -> None:
         if self.materializedEngine is None:
             self.setupEngine(offline=offline)
 
@@ -1154,10 +1156,10 @@ class WF:
 
     def injectInputs(
         self,
-        paths: Sequence[AnyPath],
-        workflowInputs_destdir: Optional[AbsPath] = None,
-        workflowInputs_cacheDir: Optional[Union[AbsPath, CacheType]] = None,
-        lastInput: int = 0,
+        paths: "Sequence[AnyPath]",
+        workflowInputs_destdir: "Optional[AbsPath]" = None,
+        workflowInputs_cacheDir: "Optional[Union[AbsPath, CacheType]]" = None,
+        lastInput: "int" = 0,
     ) -> int:
         if workflowInputs_destdir is None:
             workflowInputs_destdir = self.inputsDir
@@ -1179,7 +1181,7 @@ class WF:
             # as it could contain potential hints for authenticated access
             fileuri = parse.urlunparse(("file", "", os.path.abspath(path), "", "", ""))
             matContent = self.wfexs.downloadContent(
-                cast(URIType, fileuri),
+                cast("URIType", fileuri),
                 dest=storeDir,
                 ignoreCache=not cacheable,
                 registerInCache=cacheable,
@@ -1215,7 +1217,7 @@ class WF:
 
         return lastInput
 
-    def materializeInputs(self, offline: bool = False, lastInput: int = 0) -> None:
+    def materializeInputs(self, offline: "bool" = False, lastInput: "int" = 0) -> None:
         assert (
             self.inputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
@@ -1230,8 +1232,8 @@ class WF:
         self.materializedParams = theParams
 
     def getContext(
-        self, remote_file: str, contextName: Optional[str]
-    ) -> Optional[SecurityContextConfig]:
+        self, remote_file: "str", contextName: "Optional[str]"
+    ) -> "Optional[SecurityContextConfig]":
         secContext = None
         if contextName is not None:
             secContext = self.creds_config.get(contextName)
@@ -1246,11 +1248,11 @@ class WF:
 
     def buildLicensedURI(
         self,
-        remote_file_f: Sch_InputURI_Fetchable,
-        contextName: Optional[str] = None,
-        licences: Tuple[URIType, ...] = DefaultNoLicenceTuple,
-        attributions: Sequence[Attribution] = [],
-    ) -> Union[LicensedURI, Sequence[LicensedURI]]:
+        remote_file_f: "Sch_InputURI_Fetchable",
+        contextName: "Optional[str]" = None,
+        licences: "Tuple[URIType, ...]" = DefaultNoLicenceTuple,
+        attributions: "Sequence[Attribution]" = [],
+    ) -> "Union[LicensedURI, Sequence[LicensedURI]]":
         if isinstance(remote_file_f, list):
             retvals = []
             for remote_url in remote_file_f:
@@ -1306,17 +1308,17 @@ class WF:
 
     def _fetchRemoteFile(
         self,
-        remote_file: Sch_InputURI_Fetchable,
-        contextName: Optional[str],
-        offline: bool,
-        storeDir: Union[AbsPath, CacheType],
-        cacheable: bool,
-        inputDestDir: AbsPath,
-        globExplode: Optional[str],
-        prefix: str = "",
-        hardenPrettyLocal: bool = False,
-        prettyRelname: Optional[RelPath] = None,
-    ) -> Sequence[MaterializedContent]:
+        remote_file: "Sch_InputURI_Fetchable",
+        contextName: "Optional[str]",
+        offline: "bool",
+        storeDir: "Union[AbsPath, CacheType]",
+        cacheable: "bool",
+        inputDestDir: "AbsPath",
+        globExplode: "Optional[str]",
+        prefix: "str" = "",
+        hardenPrettyLocal: "bool" = False,
+        prettyRelname: "Optional[RelPath]" = None,
+    ) -> "Sequence[MaterializedContent]":
 
         # Embedding the context
         alt_remote_file = self.buildLicensedURI(remote_file, contextName=contextName)
@@ -1332,15 +1334,15 @@ class WF:
         if prettyRelname is None:
             prettyRelname = matContent.prettyFilename
 
-        prettyLocal = cast(AbsPath, os.path.join(inputDestDir, prettyRelname))
+        prettyLocal = cast("AbsPath", os.path.join(inputDestDir, prettyRelname))
 
         # Protection against misbehaviours which could hijack the
         # execution environment
         realPrettyLocal = os.path.realpath(prettyLocal)
         realInputDestDir = os.path.realpath(inputDestDir)
         if not realPrettyLocal.startswith(realInputDestDir):
-            prettyRelname = cast(RelPath, os.path.basename(realPrettyLocal))
-            prettyLocal = cast(AbsPath, os.path.join(inputDestDir, prettyRelname))
+            prettyRelname = cast("RelPath", os.path.basename(realPrettyLocal))
+            prettyLocal = cast("AbsPath", os.path.join(inputDestDir, prettyRelname))
 
         # Checking whether local name hardening is needed
         if not hardenPrettyLocal:
@@ -1354,7 +1356,7 @@ class WF:
         if hardenPrettyLocal:
             # Trying to avoid collisions on input naming
             prettyLocal = cast(
-                AbsPath, os.path.join(inputDestDir, prefix + prettyRelname)
+                "AbsPath", os.path.join(inputDestDir, prefix + prettyRelname)
             )
 
         if not os.path.exists(prettyLocal):
@@ -1367,7 +1369,7 @@ class WF:
             matParse = parse.urlparse(matContent.licensed_uri.uri)
             for exp in prettyLocalPath.glob(globExplode):
                 relPath = exp.relative_to(prettyLocalPath)
-                relName = cast(RelPath, str(relPath))
+                relName = cast("RelPath", str(relPath))
                 relExpPath = matParse.path
                 if relExpPath[-1] != "/":
                     relExpPath += "/"
@@ -1387,11 +1389,12 @@ class WF:
 
                 # TODO: enrich outputs to add licensing features?
                 lic_expUri = LicensedURI(
-                    uri=cast(URIType, expUri), licences=matContent.licensed_uri.licences
+                    uri=cast("URIType", expUri),
+                    licences=matContent.licensed_uri.licences,
                 )
                 remote_pairs.append(
                     MaterializedContent(
-                        local=cast(AbsPath, str(exp)),
+                        local=cast("AbsPath", str(exp)),
                         licensed_uri=lic_expUri,
                         prettyFilename=relName,
                         metadata_array=matContent.metadata_array,
@@ -1412,7 +1415,7 @@ class WF:
 
         return remote_pairs
 
-    def _formatStringFromPlaceHolders(self, the_string: str) -> str:
+    def _formatStringFromPlaceHolders(self, the_string: "str") -> "str":
         assert self.params is not None
 
         i_l_the_string = the_string.find("{")
@@ -1431,10 +1434,12 @@ class WF:
                 )
         return the_string
 
-    def _formatInputURIFromPlaceHolders(self, input_uri: Sch_InputURI) -> Sch_InputURI:
+    def _formatInputURIFromPlaceHolders(
+        self, input_uri: "Sch_InputURI"
+    ) -> "Sch_InputURI":
         some_formatted = False
 
-        return_input_uri: Sch_InputURI
+        return_input_uri: "Sch_InputURI"
         if isinstance(input_uri, list):
             return_input_uri = []
             for i_uri in input_uri:
@@ -1444,7 +1449,7 @@ class WF:
                     some_formatted = True
         elif isinstance(input_uri, dict):
             i_uri = input_uri["uri"]
-            return_i_uri = cast(URIType, self._formatStringFromPlaceHolders(i_uri))
+            return_i_uri = cast("URIType", self._formatStringFromPlaceHolders(i_uri))
             some_formatted = return_i_uri != i_uri
             if some_formatted:
                 return_input_uri = copy.copy(input_uri)
@@ -1453,14 +1458,14 @@ class WF:
                 return_input_uri = input_uri
         else:
             return_input_uri = cast(
-                URIType, self._formatStringFromPlaceHolders(cast("URIType", input_uri))
+                "URIType", self._formatStringFromPlaceHolders(cast("str", input_uri))
             )
             some_formatted = return_input_uri != input_uri
 
         return return_input_uri if some_formatted else input_uri
 
     def formatParams(
-        self, params: "Optional[ParamsBlock]", prefix: str = ""
+        self, params: "Optional[ParamsBlock]", prefix: "str" = ""
     ) -> "Optional[ParamsBlock]":
         if params is None:
             return params
@@ -1489,7 +1494,7 @@ class WF:
 
                         was_formatted = False
 
-                        remote_files: Optional[Sch_InputURI] = inputs.get("url")
+                        remote_files: "Optional[Sch_InputURI]" = inputs.get("url")
                         if remote_files is not None:
                             formatted_remote_files = (
                                 self._formatInputURIFromPlaceHolders(remote_files)
@@ -1605,12 +1610,12 @@ class WF:
 
     def fetchInputs(
         self,
-        params: Union[ParamsBlock, Sequence[Mapping[str, Any]]],
-        workflowInputs_destdir: AbsPath,
-        prefix: str = "",
-        lastInput: int = 0,
-        offline: bool = False,
-    ) -> Tuple[Sequence[MaterializedInput], int]:
+        params: "Union[ParamsBlock, Sequence[Mapping[str, Any]]]",
+        workflowInputs_destdir: "AbsPath",
+        prefix: "str" = "",
+        lastInput: "int" = 0,
+        offline: "bool" = False,
+    ) -> "Tuple[Sequence[MaterializedInput], int]":
         """
         Fetch the input files for the workflow execution.
         All the inputs must be URLs or CURIEs from identifiers.org / n2t.net.
@@ -1684,15 +1689,15 @@ class WF:
                             )
                             continue
 
-                        remote_files: Optional[Sch_InputURI] = inputs.get("url")
+                        remote_files: "Optional[Sch_InputURI]" = inputs.get("url")
                         # It has to exist
                         if remote_files is not None:
                             # We are sending the context name thinking in the future,
                             # as it could contain potential hints for authenticated access
                             contextName = inputs.get("security-context")
 
-                            secondary_remote_files: Optional[Sch_InputURI] = inputs.get(
-                                "secondary-urls"
+                            secondary_remote_files: "Optional[Sch_InputURI]" = (
+                                inputs.get("secondary-urls")
                             )
                             preferred_name_conf = inputs.get("preferred-name")
                             if isinstance(preferred_name_conf, str):
@@ -1722,10 +1727,10 @@ class WF:
                                 if newInputDestDir.startswith(
                                     os.path.realpath(inputDestDir)
                                 ):
-                                    inputDestDir = cast(AbsPath, newInputDestDir)
+                                    inputDestDir = cast("AbsPath", newInputDestDir)
 
                             # The storage dir depends on whether it can be cached or not
-                            storeDir: Union[CacheType, AbsPath] = (
+                            storeDir: "Union[CacheType, AbsPath]" = (
                                 CacheType.Input if cacheable else workflowInputs_destdir
                             )
 
@@ -1755,9 +1760,7 @@ class WF:
                                 )
                                 remote_pairs.extend(t_remote_pairs)
 
-                            secondary_remote_pairs: Optional[
-                                MutableSequence[MaterializedContent]
-                            ]
+                            secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]"
                             if secondary_remote_files is not None:
                                 secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
                                 if isinstance(
@@ -1803,7 +1806,7 @@ class WF:
                             if inputClass == "File":
                                 # Empty input, i.e. empty file
                                 inputDestPath = cast(
-                                    AbsPath,
+                                    "AbsPath",
                                     os.path.join(inputDestDir, *linearKey.split(".")),
                                 )
                                 os.makedirs(
@@ -1824,10 +1827,11 @@ class WF:
                                         MaterializedContent(
                                             local=inputDestPath,
                                             licensed_uri=LicensedURI(
-                                                uri=cast(URIType, "data:,")
+                                                uri=cast("URIType", "data:,")
                                             ),
                                             prettyFilename=cast(
-                                                RelPath, os.path.basename(inputDestPath)
+                                                "RelPath",
+                                                os.path.basename(inputDestPath),
                                             ),
                                             kind=contentKind,
                                         )
@@ -1857,7 +1861,7 @@ class WF:
 
         return theInputs, lastInput
 
-    def stageWorkDir(self) -> StagedSetup:
+    def stageWorkDir(self) -> "StagedSetup":
         """
         This method is here to simplify the understanding of the needed steps
         """
@@ -1869,7 +1873,7 @@ class WF:
 
         return self.getStagedSetup()
 
-    def workdirToBagit(self) -> bagit.Bag:
+    def workdirToBagit(self) -> "bagit.Bag":
         """
         BEWARE: This is a destructive step! So, once run, there is no back!
         """
@@ -1890,8 +1894,8 @@ class WF:
     }
 
     def parseExpectedOutputs(
-        self, outputs: Union[Sequence[Any], Mapping[str, Any]]
-    ) -> Sequence[ExpectedOutput]:
+        self, outputs: "Union[Sequence[Any], Mapping[str, Any]]"
+    ) -> "Sequence[ExpectedOutput]":
         expectedOutputs = []
 
         # TODO: implement parsing of outputs
@@ -1941,8 +1945,8 @@ class WF:
         return expectedOutputs
 
     def parseExportActions(
-        self, raw_actions: Sequence[Mapping[str, Any]]
-    ) -> Sequence[ExportAction]:
+        self, raw_actions: "Sequence[Mapping[str, Any]]"
+    ) -> "Sequence[ExportAction]":
         assert self.outputs is not None
 
         o_raw_actions = {"exports": raw_actions}
@@ -1952,10 +1956,10 @@ class WF:
             self.logger.error(errstr)
             raise WFException(errstr)
 
-        actions: MutableSequence[ExportAction] = []
+        actions: "MutableSequence[ExportAction]" = []
         for actionDesc in raw_actions:
-            actionId = cast(SymbolicName, actionDesc["id"])
-            pluginId = cast(SymbolicName, actionDesc["plugin"])
+            actionId = cast("SymbolicName", actionDesc["id"])
+            pluginId = cast("SymbolicName", actionDesc["plugin"])
 
             whatToExport = []
             for encoded_name in actionDesc["what"]:
@@ -1991,7 +1995,7 @@ class WF:
 
         return actions
 
-    def executeWorkflow(self, offline: bool = False) -> ExitVal:
+    def executeWorkflow(self, offline: "bool" = False) -> "ExitVal":
         self.unmarshallStage(offline=offline)
 
         assert self.materializedEngine is not None
@@ -2016,7 +2020,7 @@ class WF:
         # And last, report the exit value
         return exitVal
 
-    def listMaterializedExportActions(self) -> Sequence[MaterializedExportAction]:
+    def listMaterializedExportActions(self) -> "Sequence[MaterializedExportAction]":
         """
         This method should return the pids generated from the contents
         """
@@ -2028,13 +2032,11 @@ class WF:
 
     def exportResultsFromFiles(
         self,
-        exportActionsFile: Optional[AnyPath] = None,
-        securityContextFile: Optional[AnyPath] = None,
-        action_ids: Sequence[SymbolicName] = [],
-        fail_ok: bool = False,
-    ) -> Tuple[
-        Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]
-    ]:
+        exportActionsFile: "Optional[AnyPath]" = None,
+        securityContextFile: "Optional[AnyPath]" = None,
+        action_ids: "Sequence[SymbolicName]" = [],
+        fail_ok: "bool" = False,
+    ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
 
         if exportActionsFile is not None:
             with open(exportActionsFile, mode="r", encoding="utf-8") as eaf:
@@ -2059,13 +2061,11 @@ class WF:
 
     def exportResults(
         self,
-        actions: Optional[Sequence[ExportAction]] = None,
-        creds_config: Optional[SecurityContextConfigBlock] = None,
-        action_ids: Sequence[SymbolicName] = [],
-        fail_ok: bool = False,
-    ) -> Tuple[
-        Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]
-    ]:
+        actions: "Optional[Sequence[ExportAction]]" = None,
+        creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        action_ids: "Sequence[SymbolicName]" = [],
+        fail_ok: "bool" = False,
+    ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
 
         # The precondition
         if self.unmarshallExport(offline=True, fail_ok=True) is None:
@@ -2075,8 +2075,8 @@ class WF:
         self.unmarshallExecute(offline=True, fail_ok=True)
 
         # If actions is None, then try using default ones
-        matActions: MutableSequence[MaterializedExportAction] = []
-        actionErrors: MutableSequence[Tuple[ExportAction, Exception]] = []
+        matActions: "MutableSequence[MaterializedExportAction]" = []
+        actionErrors: "MutableSequence[Tuple[ExportAction, Exception]]" = []
         if actions is None:
             actions = self.default_actions
 
@@ -2084,7 +2084,7 @@ class WF:
             if actions is None:
                 return matActions, actionErrors
 
-        filtered_actions: Sequence[ExportAction]
+        filtered_actions: "Sequence[ExportAction]"
         if len(action_ids) > 0:
             action_ids_set = set(action_ids)
             filtered_actions = list(
@@ -2100,7 +2100,7 @@ class WF:
                 elems = self.locateExportItems(action.what)
 
                 # check the security context is available
-                a_setup_block: Optional[SecurityContextConfig] = action.setup
+                a_setup_block: "Optional[SecurityContextConfig]" = action.setup
                 if a_setup_block is not None:
                     # Clone it
                     a_setup_block = a_setup_block.copy()
@@ -2168,7 +2168,9 @@ class WF:
 
         return matActions, actionErrors
 
-    def marshallConfig(self, overwrite: bool = False) -> Union[bool, datetime.datetime]:
+    def marshallConfig(
+        self, overwrite: "bool" = False
+    ) -> "Union[bool, datetime.datetime]":
         assert (
             self.metaDir is not None
         ), "Working directory should not be corrupted beyond basic usage"
@@ -2227,8 +2229,8 @@ class WF:
         return self.configMarshalled
 
     def unmarshallConfig(
-        self, fail_ok: bool = False
-    ) -> Optional[Union[bool, datetime.datetime]]:
+        self, fail_ok: "bool" = False
+    ) -> "Optional[Union[bool, datetime.datetime]]":
         assert (
             self.metaDir is not None
         ), "Working directory should not be corrupted beyond basic usage"
@@ -2359,8 +2361,8 @@ class WF:
         return self.configMarshalled
 
     def marshallStage(
-        self, exist_ok: bool = True, overwrite: bool = False
-    ) -> Optional[Union[bool, datetime.datetime]]:
+        self, exist_ok: "bool" = True, overwrite: "bool" = False
+    ) -> "Optional[Union[bool, datetime.datetime]]":
         if overwrite or (self.stageMarshalled is None):
             # Do not even try
             if self.marshallConfig(overwrite=overwrite) is None:
@@ -2418,8 +2420,8 @@ class WF:
         return self.stageMarshalled
 
     def unmarshallStage(
-        self, offline: bool = False, fail_ok: bool = False
-    ) -> Optional[Union[bool, datetime.datetime]]:
+        self, offline: "bool" = False, fail_ok: "bool" = False
+    ) -> "Optional[Union[bool, datetime.datetime]]":
         if self.stageMarshalled is None:
             # If basic state does not work, even do not try
             retval = self.unmarshallConfig(fail_ok=fail_ok)
@@ -2478,8 +2480,8 @@ class WF:
         return self.stageMarshalled
 
     def marshallExecute(
-        self, exist_ok: bool = True, overwrite: bool = False
-    ) -> Optional[Union[bool, datetime.datetime]]:
+        self, exist_ok: "bool" = True, overwrite: "bool" = False
+    ) -> "Optional[Union[bool, datetime.datetime]]":
         if overwrite or (self.executionMarshalled is None):
             if self.marshallStage(exist_ok=exist_ok, overwrite=overwrite) is None:
                 return None
@@ -2526,8 +2528,8 @@ class WF:
         return self.executionMarshalled
 
     def unmarshallExecute(
-        self, offline: bool = True, fail_ok: bool = False
-    ) -> Optional[Union[bool, datetime.datetime]]:
+        self, offline: "bool" = True, fail_ok: "bool" = False
+    ) -> "Optional[Union[bool, datetime.datetime]]":
         if self.executionMarshalled is None:
             # If stage state is not properly prepared, even do not try
             retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
@@ -2579,8 +2581,8 @@ class WF:
         return self.executionMarshalled
 
     def marshallExport(
-        self, exist_ok: bool = True, overwrite: bool = False
-    ) -> Optional[Union[bool, datetime.datetime]]:
+        self, exist_ok: "bool" = True, overwrite: "bool" = False
+    ) -> "Optional[Union[bool, datetime.datetime]]":
         if overwrite or (self.exportMarshalled is None):
             # Do not even try saving the state
             if self.marshallStage(exist_ok=exist_ok, overwrite=overwrite) is None:
@@ -2628,8 +2630,8 @@ class WF:
         return self.exportMarshalled
 
     def unmarshallExport(
-        self, offline: bool = True, fail_ok: bool = False
-    ) -> Optional[Union[bool, datetime.datetime]]:
+        self, offline: "bool" = True, fail_ok: "bool" = False
+    ) -> "Optional[Union[bool, datetime.datetime]]":
         if self.exportMarshalled is None:
             # If state does not work, even do not try
             retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
@@ -2677,14 +2679,16 @@ class WF:
 
         return self.exportMarshalled
 
-    def locateExportItems(self, items: Sequence[ExportItem]) -> Sequence[AnyContent]:
+    def locateExportItems(
+        self, items: "Sequence[ExportItem]"
+    ) -> "Sequence[AnyContent]":
         """
         The located paths in the contents should be relative to the working directory
         """
-        retval: MutableSequence[AnyContent] = []
+        retval: "MutableSequence[AnyContent]" = []
 
-        materializedParamsDict: Mapping[SymbolicParamName, MaterializedInput] = dict()
-        matCheckOutputsDict: Mapping[SymbolicOutputName, MaterializedOutput] = dict()
+        materializedParamsDict: "Mapping[SymbolicParamName, MaterializedInput]" = dict()
+        matCheckOutputsDict: "Mapping[SymbolicOutputName, MaterializedOutput]" = dict()
         for item in items:
             if item.type == ExportItemType.Param:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
@@ -2700,7 +2704,7 @@ class WF:
                             map(lambda mp: (mp.name, mp), self.materializedParams)
                         )
                     materializedParam = materializedParamsDict.get(
-                        cast(SymbolicParamName, item.name)
+                        cast("SymbolicParamName", item.name)
                     )
                     if materializedParam is None:
                         raise KeyError(
@@ -2708,7 +2712,7 @@ class WF:
                         )
                     retval.extend(
                         cast(
-                            Iterable[MaterializedContent],
+                            "Iterable[MaterializedContent]",
                             filter(
                                 lambda mpc: isinstance(mpc, MaterializedContent),
                                 materializedParam.values,
@@ -2720,14 +2724,14 @@ class WF:
                 else:
                     # The whole input directory
                     prettyFilename = cast(
-                        RelPath, os.path.basename(self.stagedSetup.inputs_dir)
+                        "RelPath", os.path.basename(self.stagedSetup.inputs_dir)
                     )
                     retval.append(
                         MaterializedContent(
                             local=self.stagedSetup.inputs_dir,
                             licensed_uri=LicensedURI(
                                 uri=cast(
-                                    URIType,
+                                    "URIType",
                                     "wfexs:"
                                     + self.stagedSetup.instance_id
                                     + "/"
@@ -2754,7 +2758,7 @@ class WF:
                             map(lambda ao: (ao.name, ao), self.matCheckOutputs)
                         )
                     matCheckOutput = matCheckOutputsDict.get(
-                        cast(SymbolicOutputName, item.name)
+                        cast("SymbolicOutputName", item.name)
                     )
                     if matCheckOutput is None:
                         raise KeyError(
@@ -2762,9 +2766,7 @@ class WF:
                         )
                     retval.extend(
                         cast(
-                            Iterable[
-                                Union[GeneratedContent, GeneratedDirectoryContent]
-                            ],
+                            "Iterable[Union[GeneratedContent, GeneratedDirectoryContent]]",
                             filter(
                                 lambda aoc: isinstance(
                                     aoc, (GeneratedContent, GeneratedDirectoryContent)
@@ -2776,14 +2778,14 @@ class WF:
                 else:
                     # The whole output directory
                     prettyFilename = cast(
-                        RelPath, os.path.basename(self.stagedSetup.outputs_dir)
+                        "RelPath", os.path.basename(self.stagedSetup.outputs_dir)
                     )
                     retval.append(
                         MaterializedContent(
                             local=self.stagedSetup.outputs_dir,
                             licensed_uri=LicensedURI(
                                 uri=cast(
-                                    URIType,
+                                    "URIType",
                                     "wfexs:"
                                     + self.stagedSetup.instance_id
                                     + "/"
@@ -2798,9 +2800,9 @@ class WF:
                 # The whole working directory
                 retval.append(
                     MaterializedContent(
-                        local=cast(AbsPath, self.stagedSetup.work_dir),
+                        local=cast("AbsPath", self.stagedSetup.work_dir),
                         licensed_uri=LicensedURI(
-                            uri=cast(URIType, "wfexs:" + self.stagedSetup.instance_id)
+                            uri=cast("URIType", "wfexs:" + self.stagedSetup.instance_id)
                         ),
                         prettyFilename=prettyFilename,
                         kind=ContentKind.Directory,
@@ -2813,7 +2815,9 @@ class WF:
         return retval
 
     def createStageResearchObject(
-        self, filename: "Optional[AnyPath]" = None, doMaterializedROCrate: bool = False
+        self,
+        filename: "Optional[AnyPath]" = None,
+        doMaterializedROCrate: "bool" = False,
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -2941,7 +2945,9 @@ class WF:
 
         return filename
 
-    def createResultsResearchObject(self, doMaterializedROCrate: bool = False) -> None:
+    def createResultsResearchObject(
+        self, doMaterializedROCrate: "bool" = False
+    ) -> None:
         """
         Create RO-crate from execution provenance.
         """
@@ -3101,7 +3107,7 @@ class WF:
 
         # TODO error handling
 
-    def getWorkflowRepoFromTRS(self, offline: bool = False) -> IdentifiedWorkflow:
+    def getWorkflowRepoFromTRS(self, offline: "bool" = False) -> "IdentifiedWorkflow":
         """
 
         :return:
@@ -3110,8 +3116,8 @@ class WF:
 
         cacheHandler = self.wfexs.cacheHandler
         # Now, time to check whether it is a TRSv2
-        trs_endpoint_v2_meta_url = cast(URIType, self.trs_endpoint + "service-info")
-        trs_endpoint_v2_beta2_meta_url = cast(URIType, self.trs_endpoint + "metadata")
+        trs_endpoint_v2_meta_url = cast("URIType", self.trs_endpoint + "service-info")
+        trs_endpoint_v2_beta2_meta_url = cast("URIType", self.trs_endpoint + "metadata")
         trs_endpoint_meta_url = None
 
         # Needed to store this metadata
@@ -3166,7 +3172,7 @@ class WF:
 
         # Now, check the tool does exist in the TRS, and the version
         trs_tools_url = cast(
-            URIType,
+            "URIType",
             parse.urljoin(
                 self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe="")
             ),
@@ -3294,7 +3300,7 @@ class WF:
             self.logger.debug("WorkflowHub workflow")
             # And this is the moment where the RO-Crate must be fetched
             roCrateURL = cast(
-                URIType, toolFilesURL + "?" + parse.urlencode({"format": "zip"})
+                "URIType", toolFilesURL + "?" + parse.urlencode({"format": "zip"})
             )
 
             return self.getWorkflowRepoFromROCrateURL(
@@ -3309,7 +3315,7 @@ class WF:
             # Learning the available files and maybe
             # which is the entrypoint to the workflow
             _, trsFilesDir, trsFilesMeta, _ = self.wfexs.cacheFetch(
-                cast(URIType, INTERNAL_TRS_SCHEME_PREFIX + ":" + toolFilesURL),
+                cast("URIType", INTERNAL_TRS_SCHEME_PREFIX + ":" + toolFilesURL),
                 CacheType.TRS,
                 offline,
             )
@@ -3342,7 +3348,7 @@ class WF:
                 return IdentifiedWorkflow(
                     workflow_type=expectedEngineDesc,
                     remote_repo=RemoteRepo(
-                        repo_url=cast(RepoURL, trsFilesDir),
+                        repo_url=cast("RepoURL", trsFilesDir),
                         rel_path=workflow_entrypoint,
                     ),
                 )
@@ -3351,9 +3357,9 @@ class WF:
 
     def getWorkflowRepoFromROCrateURL(
         self,
-        roCrateURL: URIType,
-        expectedEngineDesc: Optional[WorkflowType] = None,
-        offline: bool = False,
+        roCrateURL: "URIType",
+        expectedEngineDesc: "Optional[WorkflowType]" = None,
+        offline: "bool" = False,
     ) -> IdentifiedWorkflow:
         """
 
@@ -3370,8 +3376,10 @@ class WF:
         return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
 
     def getWorkflowRepoFromROCrateFile(
-        self, roCrateFile: AbsPath, expectedEngineDesc: Optional[WorkflowType] = None
-    ) -> IdentifiedWorkflow:
+        self,
+        roCrateFile: "AbsPath",
+        expectedEngineDesc: "Optional[WorkflowType]" = None,
+    ) -> "IdentifiedWorkflow":
         """
 
         :param roCrateFile:
@@ -3430,7 +3438,7 @@ class WF:
             ):
                 engineDescByUrl = possibleEngineDesc
 
-        engineDesc: WorkflowType
+        engineDesc: "WorkflowType"
         if engineDescById is not None:
             engineDesc = engineDescById
         elif engineDescByUrl is not None:
@@ -3465,7 +3473,7 @@ class WF:
         # fetched content (needed by Nextflow)
 
         # Some RO-Crates might have this value missing or ill-built
-        remote_repo: Optional[RemoteRepo] = None
+        remote_repo: "Optional[RemoteRepo]" = None
         if workflowUploadURL is not None:
             remote_repo = guess_repo_params(
                 workflowUploadURL, logger=self.logger, fail_ok=True
