@@ -5,7 +5,8 @@ repos:
     rev: v2.15.2
     hooks:
       - id: pylint
-        args: [ -j, "0", --disable=all, --enable=unused-import]
+        require_serial: true
+        args: [ -j, "0", --disable=all, --enable=unused-import, --fail-on=unused-import ]
 
   - repo: local
     hooks:

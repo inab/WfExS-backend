@@ -24,6 +24,7 @@ import subprocess
 import tempfile
 from typing import (
     cast,
+    TYPE_CHECKING,
     Any,
     Mapping,
     MutableMapping,
@@ -56,6 +57,12 @@ from ..common import (
     URIWithMetadata,
 )
 
+from ..utils.contents import link_or_copy
+
+if TYPE_CHECKING:
+    from ..common import (
+        AnyPath,
+    )
 
 GITHUB_SCHEME = "github"
 GITHUB_NETLOC = "github.com"
@@ -386,7 +393,8 @@ class GitFetcher(AbstractStatefulFetcher):
                 f"Remote {remote_file} is neither a file nor a directory (does it exist?)"
             )
 
-        shutil.move(cachedContentPath, cachedFilename)
+        # shutil.move(cachedContentPath, cachedFilename)
+        link_or_copy(cast("AnyPath", cachedContentPath), cachedFilename)
 
         return (
             kind,
