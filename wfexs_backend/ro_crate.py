@@ -21,14 +21,12 @@ import logging
 import os
 from typing import (
     cast,
+    TYPE_CHECKING,
     Any,
     Mapping,
     MutableMapping,
     MutableSequence,
-    Optional,
     Sequence,
-    Tuple,
-    Union,
 )
 import urllib.parse
 
@@ -46,16 +44,25 @@ from .utils.digests import (
 from .common import (
     AbstractGeneratedContent,
     ContentKind,
-    ExpectedOutput,
     Fingerprint,
     GeneratedContent,
     GeneratedDirectoryContent,
     MaterializedContent,
-    MaterializedInput,
     MaterializedOutput,
     SymbolicOutputName,
-    URIType,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Optional,
+        Tuple,
+        Union,
+    )
+    from .common import (
+        ExpectedOutput,
+        MaterializedInput,
+        URIType,
+    )
 
 logger = logging.getLogger()
 
