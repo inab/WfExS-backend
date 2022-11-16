@@ -38,6 +38,12 @@ if [ -n "$failed" ] ; then
 fi
 
 #if declare -F deactivate >& /dev/null ; then
+is_minimal_ver="$(python3 -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor)  if tuple(sys.version_info) >= (3, 7, 0, "final", 0)  else  "")')"
+if [ -z "$is_minimal_ver" ] ; then
+	echo "ERROR: Python 3.7 or newer is required, but $(python3 -V) was detected" 1>&2
+	exit 1
+fi
+
 envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
 if [ -n "${envDir}" ] ; then
 	echo "Using currently active environment ${envDir} to install the dependencies"

@@ -49,7 +49,7 @@ The scripts only install singularity or apptainer when it is not available. If y
 ```
 
 ## Core Dependencies
-This workflow execution service backend is written for Python 3.6 and later.
+This workflow execution service backend is written for Python 3.7 and later.
 
 * In order to install the dependencies you need `pip` and `venv` Python modules, and the essential build dependencies.
 	- `pip` is available in many Linux distributions (Ubuntu packages `python3-pip`, CentOS EPEL package `python-pip`), and also as [pip](https://pip.pypa.io/en/stable/) Python package.
@@ -62,7 +62,7 @@ This workflow execution service backend is written for Python 3.6 and later.
 ./basic-installer.bash
 ```
 
-* If you upgrade your Python installation (from version 3.6 to 3.7 or later, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.
+* If you upgrade your Python installation (from version 3.8 to 3.9 or later, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.
 
 ## Software Dependencies
 
