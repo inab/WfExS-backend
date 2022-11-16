@@ -33,25 +33,30 @@ import sys
 import time
 
 from typing import (
-    Any,
-    Coroutine,
-    Mapping,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
+    TYPE_CHECKING,
 )
 
-from typing_extensions import (
-    Final,
-)
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Coroutine,
+        Mapping,
+        Sequence,
+        Tuple,
+        TypeVar,
+        Union,
+    )
+
+    from typing_extensions import (
+        Final,
+    )
+
+    CT = TypeVar("CT")
 
 import aioftp  # type: ignore[import]
 
-CT = TypeVar("CT")
 
-
-def asyncio_run(tasks: Tuple[Coroutine[Any, Any, CT], ...]) -> CT:
+def asyncio_run(tasks: "Tuple[Coroutine[Any, Any, CT], ...]") -> "CT":
     """
     Helper method which abstracts differences from
     Python 3.7 and before about coroutines
@@ -75,19 +80,19 @@ def asyncio_run(tasks: Tuple[Coroutine[Any, Any, CT], ...]) -> CT:
 
 
 class FTPDownloader:
-    DEFAULT_USER: Final[str] = "ftp"
-    DEFAULT_PASS: Final[str] = "guest@"
-    DEFAULT_FTP_PORT: Final[int] = 21
+    DEFAULT_USER: "Final[str]" = "ftp"
+    DEFAULT_PASS: "Final[str]" = "guest@"
+    DEFAULT_FTP_PORT: "Final[int]" = 21
 
-    DEFAULT_MAX_RETRIES: Final[int] = 5
+    DEFAULT_MAX_RETRIES: "Final[int]" = 5
 
     def __init__(
         self,
-        HOST: str,
-        PORT: int = DEFAULT_FTP_PORT,
-        USER: str = DEFAULT_USER,
-        PASSWORD: str = DEFAULT_PASS,
-        max_retries: int = DEFAULT_MAX_RETRIES,
+        HOST: "str",
+        PORT: "int" = DEFAULT_FTP_PORT,
+        USER: "str" = DEFAULT_USER,
+        PASSWORD: "str" = DEFAULT_PASS,
+        max_retries: "int" = DEFAULT_MAX_RETRIES,
     ):
         # Due a misbehaviour in asyncio.open_connection with
         # EPSV connection in ftp-trace.ncbi.nih.gov
@@ -111,7 +116,7 @@ class FTPDownloader:
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def __enter__(self):  # type: ignore
+    def __enter__(self) -> "FTPDownloader":
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
@@ -119,10 +124,10 @@ class FTPDownloader:
 
     async def __download_file_async(
         self,
-        client: aioftp.Client,
-        upload_file_path: Path,
-        dfdPath: Path,
-        dfdStat: Mapping[str, Any],
+        client: "aioftp.Client",
+        upload_file_path: "Path",
+        dfdPath: "Path",
+        dfdStat: "Mapping[str, Any]",
     ) -> None:
         if upload_file_path.exists():
             upload_file_path.unlink()  # Remove file before append stream to file
@@ -164,7 +169,7 @@ class FTPDownloader:
             # In order to concatenate
             open_mode = "ab"
 
-    async def _reconnect(self, client: aioftp.Client) -> None:
+    async def _reconnect(self, client: "aioftp.Client") -> None:
         self.logger.debug(f"Reconnecting {self.HOST}:{self.PORT}")
         try:
             await client.quit()
@@ -175,11 +180,11 @@ class FTPDownloader:
 
     async def _download_dir_async(
         self,
-        client: aioftp.Client,
-        dfdPath: Path,
-        utdPath: Path,
-        exclude_ext: Sequence[str],
-    ) -> Sequence[Path]:
+        client: "aioftp.Client",
+        dfdPath: "Path",
+        utdPath: "Path",
+        exclude_ext: "Sequence[str]",
+    ) -> "Sequence[Path]":
         """
         This method mirrors a whole directory into a destination one
         dfdPath must be absolute
@@ -207,7 +212,7 @@ class FTPDownloader:
         downloaded_path = []
         if files_list:
             self.logger.debug(f"({len(files_list)}) {dfdPath} -> " f"{utdPath}")
-            info: Mapping[str, Any]
+            info: "Mapping[str, Any]"
             for i, (path, info) in enumerate(files_list):
                 download = False
                 upload_file_path = Path.joinpath(utdPath, path.relative_to(dfdPath))
@@ -240,8 +245,8 @@ class FTPDownloader:
         return downloaded_path
 
     async def _download_file_async(
-        self, client: aioftp.Client, dfdPath: Path, utdPath: Path
-    ) -> Path:
+        self, client: "aioftp.Client", dfdPath: "Path", utdPath: "Path"
+    ) -> "Path":
         """
         dfdPath must be absolute
         """
@@ -275,8 +280,11 @@ class FTPDownloader:
         return upload_file_path
 
     async def download_dir_async(
-        self, download_from_dir: str, upload_to_dir: str, exclude_ext: Sequence[str]
-    ) -> Sequence[Path]:
+        self,
+        download_from_dir: "str",
+        upload_to_dir: "str",
+        exclude_ext: "Sequence[str]",
+    ) -> "Sequence[Path]":
         dfdPath = Path(download_from_dir)
         destdir = os.path.abspath(upload_to_dir)
         os.makedirs(destdir, exist_ok=True)
@@ -297,8 +305,8 @@ class FTPDownloader:
             return retval
 
     async def download_file_async(
-        self, download_from_file: str, upload_to_file: str
-    ) -> Path:
+        self, download_from_file: "str", upload_to_file: "str"
+    ) -> "Path":
         dfdPath = Path(download_from_file)
         destfile = os.path.abspath(upload_to_file)
         utdPath = Path(destfile)
@@ -314,8 +322,8 @@ class FTPDownloader:
             return retval
 
     async def download_async(
-        self, download_from_df: str, upload_to_df: str, exclude_ext: Sequence[str]
-    ) -> Union[Path, Sequence[Path]]:
+        self, download_from_df: "str", upload_to_df: "str", exclude_ext: "Sequence[str]"
+    ) -> "Union[Path, Sequence[Path]]":
         """
         This method returns a Path when a file is fetched
         and a list of Path when it is a directory
@@ -332,7 +340,7 @@ class FTPDownloader:
                 dfdPath = currRemoteDir.joinpath(dfdPath).resolve()
 
             dfdStat = await client.stat(dfdPath)
-            retval: Union[Path, Sequence[Path]]
+            retval: "Union[Path, Sequence[Path]]"
             if dfdStat["type"] == "dir":
                 os.makedirs(destpath, exist_ok=True)
                 retval = await self._download_dir_async(
@@ -345,22 +353,25 @@ class FTPDownloader:
 
     def download_dir(
         self,
-        download_from_dir: str,
-        upload_to_dir: str = ".",
-        exclude_ext: Sequence[str] = [],
-    ) -> Sequence[Path]:
+        download_from_dir: "str",
+        upload_to_dir: "str" = ".",
+        exclude_ext: "Sequence[str]" = [],
+    ) -> "Sequence[Path]":
         tasks = (
             self.download_dir_async(download_from_dir, upload_to_dir, exclude_ext),
         )
         return asyncio_run(tasks)
 
-    def download_file(self, download_from_file: str, upload_to_file: str) -> Path:
+    def download_file(self, download_from_file: "str", upload_to_file: "str") -> "Path":
         tasks = (self.download_file_async(download_from_file, upload_to_file),)
         return asyncio_run(tasks)
 
     def download(
-        self, download_path: str, upload_path: str, exclude_ext: Sequence[str] = []
-    ) -> Union[Path, Sequence[Path]]:
+        self,
+        download_path: "str",
+        upload_path: "str",
+        exclude_ext: "Sequence[str]" = [],
+    ) -> "Union[Path, Sequence[Path]]":
         tasks = (self.download_async(download_path, upload_path, exclude_ext),)
         return asyncio_run(tasks)
 
@@ -371,7 +382,7 @@ class FTPDownloader:
         if sys.version_info >= (3, 7):
             task = asyncio.current_task()
         else:
-            task = asyncio.Task.current_task()
+            task = asyncio.Task.current_task()  # pylint: disable=E1101
 
         if task is not None:
             task.cancel()
