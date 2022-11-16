@@ -81,6 +81,7 @@ if TYPE_CHECKING:
         WorkflowMetaConfigBlock,
         WorkflowType,
         WritableWorkflowMetaConfigBlock,
+        URIType,
     )
 
     Sch_PlainURI = URIType
