@@ -284,6 +284,10 @@ class MaterializedContent(NamedTuple):
     kind: ContentKind = ContentKind.File
     metadata_array: Optional[Sequence[URIWithMetadata]] = None
 
+    @classmethod
+    def _key_fixes(cls) -> Mapping[str, str]:
+        return {"uri": "licensed_uri"}
+
 
 ProtocolFetcherReturn = Tuple[
     Union[AnyURI, ContentKind, Sequence[AnyURI]],
@@ -577,6 +581,10 @@ class WorkflowType(NamedTuple):
     url: URIType
     trs_descriptor: TRS_Workflow_Descriptor
     rocrate_programming_language: str
+
+    @classmethod
+    def _value_fixes(cls) -> Mapping[str, Optional[str]]:
+        return {"shortname": "trs_descriptor"}
 
 
 class RepoType(enum.Enum):

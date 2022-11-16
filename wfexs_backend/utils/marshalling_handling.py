@@ -20,23 +20,34 @@ from __future__ import absolute_import
 from functools import partial
 import abc
 import collections.abc
+import copy
+import logging
 from typing import (
-    Any,
-    Iterable,
-    Mapping,
-    Optional,
+    TYPE_CHECKING,
+    cast,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Callable,
+        Iterable,
+        Mapping,
+        Optional,
+    )
 
 # This method was inspired by https://stackoverflow.com/a/52989965
 
+logger = logging.getLogger(__name__)
 
-def marshall_namedtuple(obj: Any) -> Any:
+
+def marshall_namedtuple(obj: "Any") -> "Any":
     """
     This method takes any atomic value, list, dictionary or namedtuple,
     and recursively it tries translating namedtuples into dictionaries
     """
 
-    def recurse_m(x: Iterable[Any]) -> Iterable[Any]:
+    def recurse_m(x: "Iterable[Any]") -> "Iterable[Any]":
         return map(marshall_namedtuple, x)
 
     # recurse_orig = lambda x: map(marshall_namedtuple, x)
@@ -60,40 +71,81 @@ def marshall_namedtuple(obj: Any) -> Any:
 
 
 def unmarshall_namedtuple(
-    obj: Any, myglobals: Optional[Mapping[str, Any]] = None
-) -> Any:
+    obj: "Any", myglobals: "Optional[Mapping[str, Any]]" = None
+) -> "Any":
     """
     This method takes any atomic value, list or dictionary,
     and recursively it tries translating dictionaries into namedtuples
     """
 
+    # Peeking the globals from the caller
+    if myglobals is None:
+        import inspect
+
+        myglobals = inspect.stack()[1].frame.f_globals
+
     def recurse_u(
-        x: Iterable[Any], myglobals: Optional[Mapping[str, Any]]
-    ) -> Iterable[Any]:
+        x: "Iterable[Any]", myglobals: "Optional[Mapping[str, Any]]"
+    ) -> "Iterable[Any]":
         return map(lambda l: unmarshall_namedtuple(l, myglobals), x)
 
     # recurse_orig = lambda x, myglobals: map(lambda l: unmarshall_namedtuple(l, myglobals), x)
     obj_is = partial(isinstance, obj)
     if obj_is((collections.abc.Mapping, dict)):
         if "_class" in obj:  # originally a class
-            if myglobals is None:
-                myglobals = globals()
-            clazz = myglobals[obj["_class"]]
+            try:
+                clazz = myglobals[obj["_class"]]
+            except:
+                logger.error(
+                    f"Unmarshalling Error peeking class implementation for {obj['_class']}"
+                )
+                raise
 
             return clazz
 
         if "_type" in obj:  # originally namedtuple
             objn = obj.copy()
             theTypeName = objn.pop("_type")
-            if myglobals is None:
-                myglobals = globals()
-            clazz = myglobals[theTypeName]
+            try:
+                clazz = myglobals[theTypeName]
+            except:
+                logger.error(
+                    f"Unmarshalling Error peeking namedtuple implementation for {theTypeName}"
+                )
+                raise
         else:
             objn = obj
             clazz = type(obj)
             # theTypeName = clazz.__name__
 
-        fields = dict(zip(objn.keys(), recurse_u(objn.values(), myglobals)))
+        # Fixes where some key was added or removed along the development
+        v_fixes_m = getattr(clazz, "_value_fixes", None)
+        if callable(v_fixes_m):
+            v_fixes = v_fixes_m()
+            c_objn = copy.copy(objn)
+            for dest_key, source_key in v_fixes.items():
+                if source_key is None:
+                    # Removal if it is there
+                    if dest_key in c_objn:
+                        c_objn.pop(dest_key)
+                elif dest_key not in c_objn:
+                    # Addition if it is there
+                    if source_key in c_objn:
+                        c_objn[dest_key] = c_objn[source_key]
+        else:
+            c_objn = objn
+
+        # Fixes where some key was renamed along the development
+        fixes_m = getattr(clazz, "_key_fixes", None)
+        if callable(fixes_m):
+            fixes = cast("Callable[[], Mapping[str, str]]", fixes_m)()
+            c_objn_keys = map(
+                lambda c_objn_key: fixes.get(c_objn_key, c_objn_key), c_objn.keys()
+            )
+        else:
+            c_objn_keys = c_objn.keys()
+
+        fields = dict(zip(c_objn_keys, recurse_u(c_objn.values(), myglobals)))
         # print("{} {} {}".format(clazz, theTypeName, fields))
 
         # Deactivated for now, as the code is not ready for this magic
@@ -102,7 +154,11 @@ def unmarshall_namedtuple(
         # else:
         #    return clazz(**fields)
 
-        return clazz(**fields)
+        try:
+            return clazz(**fields)
+        except:
+            logger.error(f"Unmarshalling Error instantiating {clazz.__name__}")
+            raise
     elif obj_is(collections.abc.Iterable) and not obj_is(str):
         # print(type(obj))
         return type(obj)(recurse_u(obj, myglobals))
