@@ -1,19 +1,21 @@
 fail_fast: true
 
 repos:
-  - repo: https://github.com/PyCQA/pylint
-    rev: v2.15.2
-    hooks:
-      - id: pylint
-        require_serial: true
-        args: [ -j, "0", --disable=all, --enable=unused-import, --fail-on=unused-import ]
-
   - repo: local
     hooks:
+      - id: pylint
+        name: Local PyLint
+        language: system
+        require_serial: true
+        types:
+          - python
+        exclude: "^[^/]*env/|dev-[^/]*/"
+        entry: pylint -j 0
       - id: mypy
         name: Local MyPy
         language: system
-        types: [file, python]
+        types:
+          - python
 #        files: \.py$
         exclude: "^[^/]*env/|dev-[^/]*/"
         require_serial: true
@@ -28,9 +30,11 @@ repos:
       - id: jsonschema_dir_validate
         name: Check jsonschema
         types:
-          - directory
-        files: ^wfexs_backend/schemas$
+          - json
+        files: ^wfexs_backend/schemas/.*\.json$
         require_serial: true
+        pass_filenames: false
+        args: [ wfexs_backend/schemas ]
 
   - repo: https://github.com/ambv/black
     rev: 22.6.0
