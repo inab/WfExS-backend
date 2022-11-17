@@ -43,6 +43,7 @@ from .common import (
     LocalWorkflow,
     MaterializedContent,
     MaterializedInput,
+    StagedExecution,
     WorkflowType,
 )
 
@@ -1121,7 +1122,7 @@ STDERR
         return cast("RelPath", name + extension)
 
     def structureAsNXFParams(
-        self, matInputs: "Sequence[MaterializedInput]"
+        self, matInputs: "Sequence[MaterializedInput]", outputsDir: "AbsPath"
     ) -> "Mapping[str, Any]":
         nxpParams: "MutableMapping[str, Any]" = {}
 
@@ -1149,6 +1150,14 @@ STDERR
                                 matInput.name, value.kind
                             )
                         )
+                elif matInput.autoFilled:
+                    # This is needed to correct paths for different executions
+                    assert isinstance(value, str)
+                    nxfValues.append(
+                        os.path.join(
+                            outputsDir, os.path.relpath(value, self.outputsDir)
+                        )
+                    )
                 else:
                     nxfValues.append(value)
 
@@ -1181,6 +1190,12 @@ STDERR
                     augmentedInput = MaterializedInput(
                         name=cast("SymbolicParamName", key), values=theValues
                     )
+                elif augmentedInput.autoFilled:
+                    # Time to update an existing materialized input
+                    theValues = val if isinstance(val, list) else [val]
+                    augmentedInput = MaterializedInput(
+                        name=augmentedInput.name, values=theValues, autoFilled=True
+                    )
 
                 augmentedInputs.append(augmentedInput)
 
@@ -1191,16 +1206,20 @@ STDERR
         matWfEng: "MaterializedWorkflowEngine",
         matInputs: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
-    ) -> "Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]":
+    ) -> "StagedExecution":
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
 
         localWf = matWfEng.workflow
         assert localWf.relPath is not None
 
+        outputDirPostfix = "_" + str(int(time.time()))
+        outputsDir = cast("AbsPath", os.path.join(self.outputsDir, outputDirPostfix))
+        os.makedirs(outputsDir, exist_ok=True)
+
         # These declarations provide a separate metadata directory for
         # each one of the executions of Nextflow
-        outputMetaDir = self.outputMetaDir + "_" + str(int(time.time()))
+        outputMetaDir = os.path.join(self.outputMetaDir, outputDirPostfix)
         os.makedirs(outputMetaDir, exist_ok=True)
         outputStatsDir = os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
         os.makedirs(outputStatsDir, exist_ok=True)
@@ -1359,7 +1378,7 @@ wfexs_allParams()
         relInputsFileName = "inputdeclarations.yaml"
         inputsFileName = os.path.join(self.workDir, relInputsFileName)
 
-        nxpParams = self.structureAsNXFParams(matInputs)
+        nxpParams = self.structureAsNXFParams(matInputs, outputsDir)
         if len(nxpParams) != 0:
             try:
                 with open(inputsFileName, mode="w+", encoding="utf-8") as yF:
@@ -1412,16 +1431,20 @@ wfexs_allParams()
         stderrFilename = cast(
             "AbsPath", os.path.join(outputMetaDir, WORKDIR_STDERR_FILE)
         )
+
+        started = datetime.datetime.now(datetime.timezone.utc)
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
             nxf_params,
-            workdir=self.outputsDir,
+            workdir=outputsDir,
             nextflow_path=matWfEng.engine_path,
             containers_path=matWfEng.containers_path,
             stdoutFilename=stdoutFilename,
             stderrFilename=stderrFilename,
             runEnv=runEnv,
         )
+        ended = datetime.datetime.now(datetime.timezone.utc)
+
         self.logger.debug(launch_retval)
         self.logger.debug(launch_stdout)
         self.logger.debug(launch_stderr)
@@ -1440,8 +1463,14 @@ wfexs_allParams()
             augmentedInputs = matInputs
 
         # Creating the materialized outputs
-        matOutputs = self.identifyMaterializedOutputs(
-            matInputs, outputs, self.outputsDir
-        )
+        matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, outputsDir)
 
-        return launch_retval, augmentedInputs, matOutputs
+        relOutputsDir = cast("RelPath", os.path.relpath(outputsDir, self.workDir))
+        return StagedExecution(
+            exitVal=launch_retval,
+            augmentedInputs=augmentedInputs,
+            matCheckOutputs=matOutputs,
+            outputsDir=relOutputsDir,
+            started=started,
+            ended=ended,
+        )

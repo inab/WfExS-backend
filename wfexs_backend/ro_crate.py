@@ -19,6 +19,7 @@ from __future__ import absolute_import
 import copy
 import logging
 import os
+import pathlib
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -33,6 +34,8 @@ import urllib.parse
 import magic  # type: ignore
 import rocrate.model.entity  # type:ignore
 import rocrate.model.dataset  # type:ignore
+import rocrate.model.computationalworkflow  # type:ignore
+import rocrate.model.softwareapplication  # type:ignore
 import rocrate.rocrate  # type:ignore
 
 from .utils.digests import (
@@ -43,28 +46,44 @@ from .utils.digests import (
 )
 from .common import (
     AbstractGeneratedContent,
+    AbstractWfExSException,
+    ContainerType,
     ContentKind,
     Fingerprint,
     GeneratedContent,
     GeneratedDirectoryContent,
     MaterializedContent,
     MaterializedOutput,
+    StagedExecution,
     SymbolicOutputName,
 )
 
+
 if TYPE_CHECKING:
+    import datetime
     from typing import (
         Optional,
         Tuple,
         Union,
     )
     from .common import (
+        Container,
+        ContainerEngineVersionStr,
         ExpectedOutput,
+        LocalWorkflow,
         MaterializedInput,
+        MaterializedWorkflowEngine,
+        RepoTag,
+        RepoURL,
         URIType,
+        WorkflowEngineVersionStr,
     )
 
 logger = logging.getLogger()
+
+
+class ROCrateGenerationException(AbstractWfExSException):
+    pass
 
 
 class FormalParameter(rocrate.model.entity.Entity):  # type: ignore[misc]
@@ -108,6 +127,32 @@ class PropertyValue(rocrate.model.entity.Entity):  # type: ignore[misc]
         super().__init__(crate, identifier=identifier, properties=pv_properties)
 
 
+class Action(rocrate.model.entity.Entity):  # type: ignore[misc]
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        name: "str",
+        startTime: "datetime.datetime",
+        endTime: "datetime.datetime",
+        identifier: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+
+        pv_properties = {
+            "name": name,
+            "startTime": startTime.isoformat(),
+            "endTime": endTime.isoformat(),
+        }
+
+        if properties is not None:
+            pv_properties.update(properties)
+        super().__init__(crate, identifier=identifier, properties=pv_properties)
+
+
+class CreateAction(Action):
+    pass
+
+
 def add_file_to_crate(
     crate: "rocrate.rocrate.ROCrate",
     the_path: "str",
@@ -130,6 +175,131 @@ def add_file_to_crate(
     )
 
     return the_file_crate
+
+
+def create_workflow_crate(
+    repoURL: "RepoURL",
+    repoTag: "RepoTag",
+    localWorkflow: "LocalWorkflow",
+    materializedEngine: "MaterializedWorkflowEngine",
+    workflowEngineVersion: "Optional[WorkflowEngineVersionStr]",
+    containerEngineVersion: "Optional[ContainerEngineVersionStr]",
+) -> "rocrate.model.computationalworkflow.ComputationalWorkflow":
+    if localWorkflow.relPath is not None:
+        wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
+    else:
+        wf_local_path = localWorkflow.dir
+
+    (wfCrate, compLang,) = materializedEngine.instance.getEmptyCrateAndComputerLanguage(
+        localWorkflow.langVersion
+    )
+
+    wf_url = repoURL.replace(".git", "/") + "tree/" + repoTag
+    if localWorkflow.relPath is not None:
+        wf_url += "/" + os.path.dirname(localWorkflow.relPath)
+
+    matWf = materializedEngine.workflow
+
+    assert (
+        matWf.effectiveCheckout is not None
+    ), "The effective checkout should be available"
+
+    parsed_repo_url = urllib.parse.urlparse(repoURL)
+    if parsed_repo_url.netloc == "github.com":
+        parsed_repo_path = parsed_repo_url.path.split("/")
+        repo_name = parsed_repo_path[2]
+        # TODO: should we urldecode repo_name?
+        if repo_name.endswith(".git"):
+            repo_name = repo_name[:-4]
+        wf_entrypoint_path = [
+            "",  # Needed to prepend a slash
+            parsed_repo_path[1],
+            # TODO: should we urlencode repo_name?
+            repo_name,
+            matWf.effectiveCheckout,
+        ]
+
+        if localWorkflow.relPath is not None:
+            wf_entrypoint_path.append(localWorkflow.relPath)
+
+        wf_entrypoint_url = urllib.parse.urlunparse(
+            (
+                "https",
+                "raw.githubusercontent.com",
+                "/".join(wf_entrypoint_path),
+                "",
+                "",
+                "",
+            )
+        )
+
+    elif "gitlab" in parsed_repo_url.netloc:
+        parsed_repo_path = parsed_repo_url.path.split("/")
+        # FIXME: cover the case of nested groups
+        repo_name = parsed_repo_path[2]
+        if repo_name.endswith(".git"):
+            repo_name = repo_name[:-4]
+        wf_entrypoint_path = [parsed_repo_path[1], repo_name]
+        if localWorkflow.relPath is not None:
+            # TODO: should we urlencode repoTag?
+            wf_entrypoint_path.extend(["-", "raw", repoTag, localWorkflow.relPath])
+
+        wf_entrypoint_url = urllib.parse.urlunparse(
+            (
+                parsed_repo_url.scheme,
+                parsed_repo_url.netloc,
+                "/".join(wf_entrypoint_path),
+                "",
+                "",
+                "",
+            )
+        )
+
+    else:
+        raise ROCrateGenerationException(
+            "FIXME: Unsupported http(s) git repository {}".format(repoURL)
+        )
+
+    workflow_path = pathlib.Path(wf_local_path)
+    wf_file = wfCrate.add_workflow(
+        str(workflow_path),
+        workflow_path.name,
+        fetch_remote=False,
+        main=True,
+        lang=compLang,
+        gen_cwl=False,
+    )
+    wf_file["url"] = wf_entrypoint_url
+    wf_file["codeRepository"] = repoURL
+    wf_file["version"] = materializedEngine.workflow.effectiveCheckout
+
+    wf_file.append_to(
+        "conformsTo",
+        {"@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"},
+    )
+    if workflowEngineVersion is not None:
+        wf_file["runtimePlatform"] = workflowEngineVersion
+
+    if materializedEngine.containers is not None:
+        add_containers_to_workflow(
+            wf_file, materializedEngine.containers, containerEngineVersion
+        )
+
+    # if materializedEngine.operational_containers is not None:
+    #    add_containers_to_workflow(wf_file, materializedEngine.operational_containers, containerEngineVersion)
+
+    # if 'url' in wf_file.properties():
+    #    wf_file['codeRepository'] = wf_file['url']
+
+    # TODO: add extra files, like nextflow.config in the case of
+    # Nextflow workflows, the diagram, an abstract CWL
+    # representation of the workflow (when it is not a CWL workflow)
+    # etc...
+    # for file_entry in include_files:
+    #    wfCrate.add_file(file_entry)
+    wfCrate.isBasedOn = wf_file
+
+    return wf_file
 
 
 def add_directory_as_dataset(
@@ -183,8 +353,7 @@ def add_directory_as_dataset(
 def addInputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     inputs: "Sequence[MaterializedInput]",
-    workflow_id: "URIType",
-) -> None:
+) -> "Sequence[rocrate.model.entity.Entity]":
     """
     Add the input's provenance data to a Research Object.
 
@@ -194,9 +363,10 @@ def addInputsResearchObject(
     :type inputs: Sequence[MaterializedInput]
     """
     crate = wf_crate.crate
+    crate_inputs = []
     for in_item in inputs:
         formal_parameter_id = (
-            workflow_id + "#param:" + urllib.parse.quote(in_item.name, safe="")
+            wf_crate.id + "#param:" + urllib.parse.quote(in_item.name, safe="")
         )
         itemInValue0 = in_item.values[0]
         additional_type: "Optional[str]" = None
@@ -236,6 +406,7 @@ def addInputsResearchObject(
 
                     crate_file.append_to("exampleOfWork", formal_parameter)
                     formal_parameter.append_to("workExample", crate_file)
+                    crate_inputs.append(crate_file)
 
                 elif os.path.isdir(itemInLocalSource):
                     crate_dataset, _ = add_directory_as_dataset(
@@ -249,6 +420,7 @@ def addInputsResearchObject(
                     )
                     crate_dataset.append_to("exampleOfWork", formal_parameter)
                     formal_parameter.append_to("workExample", crate_dataset)
+                    crate_inputs.append(crate_dataset)
 
                 else:
                     pass  # TODO: raise exception
@@ -261,14 +433,48 @@ def addInputsResearchObject(
                 crate_pv = crate.add(parameter_value)
                 crate_pv.append_to("exampleOfWork", formal_parameter)
                 formal_parameter.append_to("workExample", crate_pv)
+                crate_inputs.append(crate_pv)
 
         # TODO digest other types of inputs
+    return crate_inputs
+
+
+ContainerTypeIds = {
+    ContainerType.Singularity: "https://apptainer.org/",
+    ContainerType.Docker: "https://www.docker.com/",
+}
+
+
+def add_containers_to_workflow(
+    wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
+    containers: "Sequence[Container]",
+    containerEngineVersion: "Optional[ContainerEngineVersionStr]",
+) -> None:
+    if len(containers) > 0:
+        crate = wf_crate.crate
+        for container in containers:
+            container_type = rocrate.model.softwareapplication.SoftwareApplication(
+                crate, identifier=ContainerTypeIds[container.type]
+            )
+            container_type["name"] = container.type.value
+            container_type["softwareVersion"] = containerEngineVersion
+            crate_cont_type = crate.add(container_type)
+            wf_crate.append_to("softwareRequirements", crate_cont_type)
+
+            container_pid = container.taggedName
+            software_container = rocrate.model.softwareapplication.SoftwareApplication(
+                crate, identifier=container_pid
+            )
+            software_container["softwareVersion"] = container.fingerprint
+            software_container["softwareRequirements"] = crate_cont_type
+
+            crate_cont = crate.add(software_container)
+            wf_crate.append_to("softwareRequirements", crate_cont)
 
 
 def addExpectedOutputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     outputs: "Sequence[ExpectedOutput]",
-    workflow_id: "URIType",
 ) -> None:
     """
     Add the input's provenance data to a Research Object.
@@ -281,7 +487,7 @@ def addExpectedOutputsResearchObject(
     crate = wf_crate.crate
     for out_item in outputs:
         formal_parameter_id = (
-            workflow_id + "#output:" + urllib.parse.quote(out_item.name, safe="")
+            wf_crate.id + "#output:" + urllib.parse.quote(out_item.name, safe="")
         )
         if out_item.kind == ContentKind.File:
             additional_type = "File"
@@ -302,8 +508,8 @@ def addExpectedOutputsResearchObject(
 
 def addOutputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
-    outputs: Sequence[MaterializedOutput],
-) -> None:
+    outputs: "Sequence[MaterializedOutput]",
+) -> "Sequence[rocrate.model.entity.Entity]":
     """
     Add the output's provenance data to a Research Object.
 
@@ -313,6 +519,7 @@ def addOutputsResearchObject(
     :type outputs: Sequence[MaterializedOutput]
     """
     crate = wf_crate.crate
+    crate_outputs: "MutableSequence[rocrate.model.entity.Entity]" = []
     for out_item in outputs:
         # This can happen when there is no output, like when a workflow has failed
         if len(out_item.values) == 0:
@@ -449,11 +656,12 @@ def addOutputsResearchObject(
                         d_has_part.extend(generatedContentList)
                         dirProperties["hasPart"] = d_has_part  # all the content
                         properties.update(dirProperties)
-                        crate.add_directory(
+                        crate_dataset = crate.add_directory(
                             source=generatedDirectoryContentURI,
                             fetch_remote=False,
                             properties=properties,
                         )
+                        crate_outputs.append(crate_dataset)
 
                     else:
                         errmsg = (
@@ -472,9 +680,10 @@ def addOutputsResearchObject(
                                     itemOutSource, repMethod=nihDigester
                                 ),
                             )
-                        crate.add_file(
+                        crate_file = crate.add_file(
                             source=fileID, fetch_remote=False, properties=properties
                         )
+                        crate_outputs.append(crate_file)
 
                     else:
                         errmsg = (
@@ -484,4 +693,25 @@ def addOutputsResearchObject(
 
                 else:
                     pass
-                    # TODO digest other types of inputs
+                    # TODO digest other types of outputs
+
+    return crate_outputs
+
+
+def add_execution_to_crate(
+    wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
+    stagedExec: "StagedExecution",
+) -> None:
+    # TODO: Add a new CreateAction for each stagedExec
+    # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
+    crate = wf_crate.crate
+    crate_action = CreateAction(
+        crate, stagedExec.outputsDir, stagedExec.started, stagedExec.ended
+    )
+    crate.add(crate_action)
+    crate_action["instrument"] = wf_crate
+
+    crate_inputs = addInputsResearchObject(wf_crate, stagedExec.augmentedInputs)
+    crate_action["object"] = crate_inputs
+    crate_outputs = addOutputsResearchObject(wf_crate, stagedExec.matCheckOutputs)
+    crate_action["result"] = crate_outputs

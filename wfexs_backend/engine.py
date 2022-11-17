@@ -57,6 +57,7 @@ from .common import (
     MaterializedOutput,
     MaterializedWorkflowEngine,
     RelPath,
+    StagedExecution,
     StagedSetup,
     SymbolicOutputName,
     SymbolicParamName,
@@ -543,7 +544,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         matWfEng: MaterializedWorkflowEngine,
         inputs: Sequence[MaterializedInput],
         outputs: Sequence[ExpectedOutput],
-    ) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
+    ) -> StagedExecution:
         pass
 
     @classmethod
@@ -552,13 +553,11 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         matWfEng: MaterializedWorkflowEngine,
         inputs: Sequence[MaterializedInput],
         outputs: Sequence[ExpectedOutput],
-    ) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
+    ) -> StagedExecution:
 
-        exitVal, augmentedInputs, matOutputs = matWfEng.instance.launchWorkflow(
-            matWfEng, inputs, outputs
-        )
+        stagedExec = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
 
-        return exitVal, augmentedInputs, matOutputs
+        return stagedExec
 
     @classmethod
     def MaterializeWorkflowAndContainers(

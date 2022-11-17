@@ -17,6 +17,7 @@
 
 import argparse
 import atexit
+import datetime
 import json
 import logging
 import os
@@ -26,40 +27,56 @@ import shutil
 import tempfile
 from typing import (
     cast,
-    Callable,
-    Sequence,
-    Type,
-    Union,
+    TYPE_CHECKING,
 )
 
-from typing_extensions import (
-    NotRequired,
-    TypedDict,
+from .common import (
+    ArgsDefaultWithRawHelpFormatter,
+    CacheType as WfExS_CacheType,
+    StrDocEnum,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Callable,
+        Sequence,
+        Type,
+        Union,
+    )
+
+    from typing_extensions import (
+        NotRequired,
+        TypedDict,
+    )
+
+    from .common import (
+        SymbolicName,
+    )
+
+    from .workflow import WF
+
+    Callable_WfExS_CacheType = Callable[[str], WfExS_CacheType]
+
+    class BasicLoggingConfigDict(TypedDict):
+        filename: NotRequired[str]
+        format: str
+        level: int
+
 
 import yaml
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
-YAMLLoader: Type[Union[yaml.Loader, yaml.CLoader]]
-YAMLDumper: Type[Union[yaml.Dumper, yaml.CDumper]]
+YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
+YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
 try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .wfexs_backend import WfExSBackend
-from .workflow import WF
 from . import get_WfExS_version
-from .common import (
-    ArgsDefaultWithRawHelpFormatter,
-    CacheType as WfExS_CacheType,
-    StrDocEnum,
-    SymbolicName,
-)
 from .utils.misc import DatetimeEncoder
-
-Callable_WfExS_CacheType = Callable[[str], WfExS_CacheType]
 
 
 class WfExS_Commands(StrDocEnum):
@@ -98,7 +115,8 @@ class WfExS_Commands(StrDocEnum):
     )
 
 
-Callable_WfExS_Commands = Callable[[str], WfExS_Commands]
+if TYPE_CHECKING:
+    Callable_WfExS_Commands = Callable[[str], WfExS_Commands]
 
 
 class WfExS_Cache_Commands(StrDocEnum):
@@ -112,7 +130,8 @@ class WfExS_Cache_Commands(StrDocEnum):
     Validate = ("validate", "Validate the consistency of the cache")
 
 
-Callable_WfExS_Cache_Commands = Callable[[str], WfExS_Cache_Commands]
+if TYPE_CHECKING:
+    Callable_WfExS_Cache_Commands = Callable[[str], WfExS_Cache_Commands]
 
 
 class WfExS_Staged_WorkDir_Commands(StrDocEnum):
@@ -135,10 +154,17 @@ class WfExS_Staged_WorkDir_Commands(StrDocEnum):
         "create-staged-crate",
         "It creates an RO-Crate from the prospective provenance",
     )
+    CreateProvenanceROCrate = (
+        "create-prov-crate",
+        "It creates an RO-Crate from the retrospective provenance (after a workflow execution)",
+    )
 
 
 #    Validate = 'validate'
-Callable_WfExS_Staged_WorkDir_Commands = Callable[[str], WfExS_Staged_WorkDir_Commands]
+if TYPE_CHECKING:
+    Callable_WfExS_Staged_WorkDir_Commands = Callable[
+        [str], WfExS_Staged_WorkDir_Commands
+    ]
 
 
 class WfExS_Export_Commands(StrDocEnum):
@@ -149,13 +175,8 @@ class WfExS_Export_Commands(StrDocEnum):
     )
 
 
-Callable_WfExS_Export_Commands = Callable[[str], WfExS_Export_Commands]
-
-
-class BasicLoggingConfigDict(TypedDict):
-    filename: NotRequired[str]
-    format: str
-    level: int
+if TYPE_CHECKING:
+    Callable_WfExS_Export_Commands = Callable[[str], WfExS_Export_Commands]
 
 
 DEFAULT_LOCAL_CONFIG_RELNAME = "wfexs_config.yml"
@@ -167,12 +188,12 @@ DEBUG_LOGGING_FORMAT = (
 
 def genParserSub(
     sp: "argparse._SubParsersAction[argparse.ArgumentParser]",
-    command: WfExS_Commands,
-    preStageParams: bool = False,
-    postStageParams: bool = False,
-    crateParams: bool = False,
-    exportParams: bool = False,
-) -> argparse.ArgumentParser:
+    command: "WfExS_Commands",
+    preStageParams: "bool" = False,
+    postStageParams: "bool" = False,
+    crateParams: "bool" = False,
+    exportParams: "bool" = False,
+) -> "argparse.ArgumentParser":
     ap_ = sp.add_parser(
         command.value,
         formatter_class=ArgsDefaultWithRawHelpFormatter,
@@ -233,8 +254,8 @@ def genParserSub(
 
 
 def processCacheCommand(
-    wfBackend: WfExSBackend, args: argparse.Namespace, logLevel: int
-) -> int:
+    wfBackend: "WfExSBackend", args: "argparse.Namespace", logLevel: "int"
+) -> "int":
     """
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
@@ -372,8 +393,8 @@ def processCacheCommand(
 
 
 def processStagedWorkdirCommand(
-    wB: WfExSBackend, args: argparse.Namespace, loglevel: int
-) -> int:
+    wB: "WfExSBackend", args: "argparse.Namespace", loglevel: "int"
+) -> "int":
     """
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
@@ -408,7 +429,7 @@ def processStagedWorkdirCommand(
             key=lambda x: x[2],
         )
         for instance_id, nickname, creation, wfSetup, _ in contents:
-            is_encrypted: Union[bool, str]
+            is_encrypted: "Union[bool, str]"
             if wfSetup is None:
                 is_damaged = True
                 is_encrypted = "(unknown)"
@@ -499,8 +520,9 @@ def processStagedWorkdirCommand(
 * {repr(mStatus)}
 """
                 )
-    elif (
-        args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
+    elif args.staged_workdir_command in (
+        WfExS_Staged_WorkDir_Commands.CreateStagedROCrate,
+        WfExS_Staged_WorkDir_Commands.CreateProvenanceROCrate,
     ):
         if len(args.staged_workdir_command_args) == 2:
             for (
@@ -516,20 +538,42 @@ def processStagedWorkdirCommand(
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
+                    assert wfSetup is not None
                     try:
-                        assert wfSetup is not None
-                        print(
-                            "\t- Generating prospective RO-Crate fro instance {} (nickname '{}')\n".format(
-                                wfSetup.instance_id,
-                                wfSetup.nickname,
+                        if (
+                            args.staged_workdir_command
+                            == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
+                        ):
+                            print(
+                                "\t- Generating prospective RO-Crate fro instance {} (nickname '{}')\n".format(
+                                    wfSetup.instance_id,
+                                    wfSetup.nickname,
+                                )
                             )
-                        )
-                        wfInstance.createStageResearchObject(
-                            filename=args.staged_workdir_command_args[1]
-                        )
+                            wfInstance.createStageResearchObject(
+                                filename=args.staged_workdir_command_args[1]
+                            )
+                        else:
+                            mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
+                            if isinstance(mStatus.execution, datetime.datetime):
+                                print(
+                                    "\t- Generating retrospective RO-Crate fro instance {} (nickname '{}')\n".format(
+                                        wfSetup.instance_id,
+                                        wfSetup.nickname,
+                                    )
+                                )
+                                wfInstance.createResultsResearchObject(
+                                    filename=args.staged_workdir_command_args[1]
+                                )
+                            else:
+                                print(
+                                    f"ERROR: workflow was never executed at staged workdir {instance_id} ({nickname})",
+                                    file=sys.stderr,
+                                )
+                                retval = 1
                     except Exception as e:
                         logging.exception(
-                            f"Error while executing {instance_id} ({nickname})"
+                            f"Error while creating RO-Crate for {instance_id} ({nickname})"
                         )
                     finally:
                         wfInstance.cleanup()
@@ -551,8 +595,8 @@ def processStagedWorkdirCommand(
 
 
 def processExportCommand(
-    wfInstance: WF, args: argparse.Namespace, loglevel: int
-) -> int:
+    wfInstance: "WF", args: "argparse.Namespace", loglevel: "int"
+) -> "int":
     """
     This method processes the export subcommands, and returns the retval
     to be used with sys.exit
@@ -567,7 +611,9 @@ def processExportCommand(
         expval = wfInstance.exportResultsFromFiles(
             args.exportsConfigFilename,
             args.securityContextsConfigFilename,
-            action_ids=cast(Sequence[SymbolicName], args.export_contents_command_args),
+            action_ids=cast(
+                "Sequence[SymbolicName]", args.export_contents_command_args
+            ),
         )
         print(f"{expval}")
 
@@ -658,7 +704,7 @@ def main() -> None:
         + "\n".join(
             map(lambda c: f"{c.value:<12}{c.description}", WfExS_Cache_Commands)  # type: ignore[attr-defined]
         ),
-        type=cast(Callable_WfExS_Cache_Commands, WfExS_Cache_Commands.argtype),
+        type=cast("Callable_WfExS_Cache_Commands", WfExS_Cache_Commands.argtype),
         choices=WfExS_Cache_Commands,
     )
     ap_c.add_argument(
@@ -687,7 +733,7 @@ def main() -> None:
         "cache_type",
         help="raw|Cache type to perform the cache command\n\n"
         + "\n".join(map(lambda c: f"{c.value:<12}{c.description}", WfExS_CacheType)),  # type: ignore[attr-defined]
-        type=cast(Callable_WfExS_CacheType, WfExS_CacheType.argtype),
+        type=cast("Callable_WfExS_CacheType", WfExS_CacheType.argtype),
         choices=WfExS_CacheType,
     )
     ap_c.add_argument(
@@ -704,7 +750,7 @@ def main() -> None:
             )
         ),
         type=cast(
-            Callable_WfExS_Staged_WorkDir_Commands,
+            "Callable_WfExS_Staged_WorkDir_Commands",
             WfExS_Staged_WorkDir_Commands.argtype,
         ),
         choices=WfExS_Staged_WorkDir_Commands,
@@ -732,7 +778,7 @@ def main() -> None:
         + "\n".join(
             map(lambda c: f"{c.value:<16}{c.description}", WfExS_Export_Commands)  # type: ignore[attr-defined]
         ),
-        type=cast(Callable_WfExS_Export_Commands, WfExS_Export_Commands.argtype),
+        type=cast("Callable_WfExS_Export_Commands", WfExS_Export_Commands.argtype),
         choices=WfExS_Export_Commands,
     )
     ap_expt.add_argument(
@@ -802,7 +848,7 @@ def main() -> None:
     else:
         logFormat = LOGGING_FORMAT
 
-    loggingConf: BasicLoggingConfigDict = {"format": logFormat, "level": logLevel}
+    loggingConf: "BasicLoggingConfigDict" = {"format": logFormat, "level": logLevel}
 
     if args.logFilename is not None:
         loggingConf["filename"] = args.logFilename
@@ -998,7 +1044,9 @@ def main() -> None:
         wfInstance.exportResults()
 
     if command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
-        wfInstance.createResultsResearchObject(args.doMaterializedROCrate)
+        wfInstance.createResultsResearchObject(
+            doMaterializedROCrate=args.doMaterializedROCrate
+        )
 
 
 if __name__ == "__main__":

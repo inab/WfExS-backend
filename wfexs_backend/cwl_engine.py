@@ -16,6 +16,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import datetime
 import json
 import logging
 import os
@@ -25,6 +26,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 import venv
 
 from typing import cast, Any, List, Mapping, MutableMapping
@@ -53,6 +55,7 @@ from .common import (
     MaterializedOutput,
     MaterializedWorkflowEngine,
     RelPath,
+    StagedExecution,
     SymbolicParamName,
     URIType,
     WorkflowEngineVersionStr,
@@ -618,7 +621,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         matWfEng: MaterializedWorkflowEngine,
         matInputs: Sequence[MaterializedInput],
         outputs: Sequence[ExpectedOutput],
-    ) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
+    ) -> "StagedExecution":
         """
         Method to execute the workflow
         """
@@ -706,6 +709,13 @@ class CWLWorkflowEngine(WorkflowEngine):
             inputsFileName = "inputdeclarations.yaml"
             yamlFile = cast(AnyPath, os.path.join(self.workDir, inputsFileName))
 
+            outputDirPostfix = "_" + str(int(time.time()))
+            outputsDir = cast(
+                "AbsPath", os.path.join(self.outputsDir, outputDirPostfix)
+            )
+            os.makedirs(outputsDir, exist_ok=True)
+            outputMetaDir = os.path.join(self.outputMetaDir, outputDirPostfix)
+            os.makedirs(outputMetaDir, exist_ok=True)
             try:
                 # Create YAML file
                 augmentedInputs = self.createYAMLFile(
@@ -713,12 +723,8 @@ class CWLWorkflowEngine(WorkflowEngine):
                 )
                 if os.path.isfile(yamlFile):
                     # Execute workflow
-                    stdoutFilename = os.path.join(
-                        self.outputMetaDir, WORKDIR_STDOUT_FILE
-                    )
-                    stderrFilename = os.path.join(
-                        self.outputMetaDir, WORKDIR_STDERR_FILE
-                    )
+                    stdoutFilename = os.path.join(outputMetaDir, WORKDIR_STDOUT_FILE)
+                    stderrFilename = os.path.join(outputMetaDir, WORKDIR_STDERR_FILE)
 
                     # As the stdout contains the description of the outputs
                     # which is parsed to identify them
@@ -727,7 +733,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                     with open(stdoutFilename, mode="wb+") as cwl_yaml_stdout:
                         with open(stderrFilename, mode="ab+") as cwl_yaml_stderr:
                             intermediateDir = self.intermediateDir + "/"
-                            outputDir = self.outputsDir + "/"
+                            outputDir = outputsDir + "/"
 
                             # This is needed to isolate execution environment
                             # and teach cwltool where to find the cached images
@@ -805,6 +811,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             )
                             self.logger.debug("Command => {}".format(cmd))
 
+                            started = datetime.datetime.now(datetime.timezone.utc)
                             retVal = subprocess.Popen(
                                 ". '{0}'/bin/activate && {1}".format(
                                     cwl_install_dir, cmd
@@ -815,6 +822,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                                 shell=True,
                                 env=instEnv,
                             ).wait()
+                            ended = datetime.datetime.now(datetime.timezone.utc)
 
                             cwl_yaml_stdout.seek(0)
                             cwl_yaml_stdout_v = cwl_yaml_stdout.read().decode(
@@ -847,14 +855,25 @@ class CWLWorkflowEngine(WorkflowEngine):
 
                             # Reading the output for the report
                             matOutputs = self.identifyMaterializedOutputs(
-                                matInputs, outputs, self.outputsDir, outputsMapping
+                                matInputs, outputs, outputsDir, outputsMapping
                             )
                 else:
                     retVal = -1
                     matOutputs = []
 
                 # FIXME: create augmentedInputs properly
-                return cast(ExitVal, retVal), matInputs, matOutputs
+                relOutputsDir = cast(
+                    "RelPath", os.path.relpath(outputsDir, self.workDir)
+                )
+                stagedExec = StagedExecution(
+                    exitVal=cast(ExitVal, retVal),
+                    augmentedInputs=matInputs,
+                    matCheckOutputs=matOutputs,
+                    outputsDir=relOutputsDir,
+                    started=started,
+                    ended=ended,
+                )
+                return stagedExec
 
             except WorkflowEngineException as wfex:
                 raise wfex

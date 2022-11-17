@@ -36,7 +36,9 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from typing_extensions import TypedDict
+from .common import (
+    StagedExecution,
+)
 
 if TYPE_CHECKING:
     from typing import (
@@ -54,6 +56,7 @@ if TYPE_CHECKING:
     from typing_extensions import (
         Final,
         Literal,
+        TypedDict,
     )
 
     from .common import (
@@ -127,8 +130,12 @@ from .ro_crate import (
     addInputsResearchObject,
     addOutputsResearchObject,
     addExpectedOutputsResearchObject,
+    create_workflow_crate,
+    add_execution_to_crate,
 )
 import bagit  # type: ignore[import]
+
+from . import common as common_defs_module
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
@@ -164,7 +171,6 @@ from .common import (
     MaterializedWorkflowEngine,
     RemoteRepo,
     StagedSetup,
-    URIType,
 )
 
 # These imports are needed to properly unmarshall from YAML
@@ -604,9 +610,7 @@ class WF:
         self.containerEngineVersion: "Optional[ContainerEngineVersionStr]" = None
         self.workflowEngineVersion: "Optional[WorkflowEngineVersionStr]" = None
 
-        self.exitVal: "Optional[ExitVal]" = None
-        self.augmentedInputs: "Optional[Sequence[MaterializedInput]]" = None
-        self.matCheckOutputs: "Optional[Sequence[MaterializedOutput]]" = None
+        self.stagedExecutions: "Optional[MutableSequence[StagedExecution]]" = None
         self.cacheROCrateFilename: "Optional[AbsPath]" = None
 
         self.runExportActions: "Optional[MutableSequence[MaterializedExportAction]]" = (
@@ -1671,7 +1675,9 @@ class WF:
                                     autoFilledDir = self.outputsDir
 
                                 theInputs.append(
-                                    MaterializedInput(linearKey, [autoFilledDir])
+                                    MaterializedInput(
+                                        linearKey, [autoFilledDir], autoFilled=True
+                                    )
                                 )
                                 continue
 
@@ -1686,7 +1692,9 @@ class WF:
                                 os.makedirs(autoFilledDir, exist_ok=True)
 
                             theInputs.append(
-                                MaterializedInput(linearKey, [autoFilledFile])
+                                MaterializedInput(
+                                    linearKey, [autoFilledFile], autoFilled=True
+                                )
                             )
                             continue
 
@@ -1998,28 +2006,32 @@ class WF:
 
     def executeWorkflow(self, offline: "bool" = False) -> "ExitVal":
         self.unmarshallStage(offline=offline)
+        self.unmarshallExecute(offline=offline, fail_ok=True)
 
         assert self.materializedEngine is not None
         assert self.materializedParams is not None
         assert self.outputs is not None
 
-        exitVal, augmentedInputs, matCheckOutputs = WorkflowEngine.ExecuteWorkflow(
+        if self.stagedExecutions is None:
+            self.stagedExecutions = []
+
+        stagedExec = WorkflowEngine.ExecuteWorkflow(
             self.materializedEngine, self.materializedParams, self.outputs
         )
 
-        self.exitVal = exitVal
-        self.augmentedInputs = augmentedInputs
-        self.matCheckOutputs = matCheckOutputs
+        self.stagedExecutions.append(stagedExec)
 
-        self.logger.debug(exitVal)
-        self.logger.debug(augmentedInputs)
-        self.logger.debug(matCheckOutputs)
+        self.logger.debug(stagedExec.exitVal)
+        self.logger.debug(stagedExec.started)
+        self.logger.debug(stagedExec.ended)
+        self.logger.debug(stagedExec.augmentedInputs)
+        self.logger.debug(stagedExec.matCheckOutputs)
 
         # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
-        self.marshallExecute()
+        self.marshallExecute(overwrite=True)
 
         # And last, report the exit value
-        return exitVal
+        return stagedExec.exitVal
 
     def listMaterializedExportActions(self) -> "Sequence[MaterializedExportAction]":
         """
@@ -2448,9 +2460,13 @@ class WF:
                 "Parsing marshalled stage state file {}".format(marshalled_stage_file)
             )
             try:
+                # These symbols are needed to properly deserialize the yaml
                 with open(marshalled_stage_file, mode="r", encoding="utf-8") as msF:
                     marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
-                    stage = unmarshall_namedtuple(marshalled_stage, globals())
+
+                    combined_globals = copy.copy(common_defs_module.__dict__)
+                    combined_globals.update(globals())
+                    stage = unmarshall_namedtuple(marshalled_stage, combined_globals)
                     self.repoURL = stage["repoURL"]
                     self.repoTag = stage["repoTag"]
                     self.repoRelPath = stage["repoRelPath"]
@@ -2491,6 +2507,8 @@ class WF:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
+            assert self.stagedExecutions is not None
+
             marshalled_execution_file = os.path.join(
                 self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE
             )
@@ -2505,12 +2523,18 @@ class WF:
                 executionAlreadyMarshalled = True
 
             if not executionAlreadyMarshalled or overwrite:
-                execution = {
-                    "exitVal": self.exitVal,
-                    "augmentedInputs": self.augmentedInputs,
-                    "matCheckOutputs": self.matCheckOutputs
-                    # TODO: check nothing essential was left
-                }
+                executions = []
+                for stagedExec in self.stagedExecutions:
+                    execution = {
+                        "outputsDir": stagedExec.outputsDir,
+                        "exitVal": stagedExec.exitVal,
+                        "augmentedInputs": stagedExec.augmentedInputs,
+                        "matCheckOutputs": stagedExec.matCheckOutputs,
+                        "started": stagedExec.started,
+                        "ended": stagedExec.ended,
+                        # TODO: check nothing essential was left
+                    }
+                    executions.append(execution)
 
                 self.logger.debug(
                     "Creating marshalled execution file {}".format(
@@ -2518,7 +2542,7 @@ class WF:
                     )
                 )
                 with open(marshalled_execution_file, mode="w", encoding="utf-8") as msF:
-                    yaml.dump(marshall_namedtuple(execution), msF, Dumper=YAMLDumper)
+                    yaml.dump(marshall_namedtuple(executions), msF, Dumper=YAMLDumper)
 
             self.executionMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
@@ -2557,14 +2581,37 @@ class WF:
                     marshalled_execution_file
                 )
             )
+
+            executionMarshalled = datetime.datetime.fromtimestamp(
+                os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
+            )
             try:
                 with open(marshalled_execution_file, mode="r", encoding="utf-8") as meF:
                     marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
-                    execution = unmarshall_namedtuple(marshalled_execution, globals())
+                    combined_globals = copy.copy(common_defs_module.__dict__)
+                    combined_globals.update(globals())
+                    execution_read = unmarshall_namedtuple(
+                        marshalled_execution, combined_globals
+                    )
 
-                    self.exitVal = execution["exitVal"]
-                    self.augmentedInputs = execution["augmentedInputs"]
-                    self.matCheckOutputs = execution["matCheckOutputs"]
+                    if isinstance(execution_read, dict):
+                        executions = [execution_read]
+                    else:
+                        executions = execution_read
+
+                    self.stagedExecutions = []
+                    for execution in executions:
+                        stagedExec = StagedExecution(
+                            exitVal=execution["exitVal"],
+                            augmentedInputs=execution["augmentedInputs"],
+                            matCheckOutputs=execution["matCheckOutputs"],
+                            outputsDir=execution.get(
+                                "outputDir", WORKDIR_OUTPUTS_RELDIR
+                            ),
+                            started=execution.get("started", executionMarshalled),
+                            ended=execution.get("ended", executionMarshalled),
+                        )
+                        self.stagedExecutions.append(stagedExec)
             except Exception as e:
                 errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
                     marshalled_execution_file, e
@@ -2662,8 +2709,10 @@ class WF:
             try:
                 with open(marshalled_export_file, mode="r", encoding="utf-8") as meF:
                     marshalled_export = yaml.load(meF, Loader=YAMLLoader)
+                    combined_globals = copy.copy(common_defs_module.__dict__)
+                    combined_globals.update(globals())
                     self.runExportActions = unmarshall_namedtuple(
-                        marshalled_export, globals()
+                        marshalled_export, combined_globals
                     )
 
             except Exception as e:
@@ -2751,12 +2800,17 @@ class WF:
                         f"Cannot export outputs from {self.stagedSetup.instance_id} until the workflow has been executed at least once"
                     )
 
-                assert self.matCheckOutputs is not None
+                assert (
+                    isinstance(self.stagedExecutions, list)
+                    and len(self.stagedExecutions) > 0
+                )
                 assert self.stagedSetup.outputs_dir is not None
                 if item.name is not None:
+                    # TODO: select which of the executions export
+                    stagedExec = self.stagedExecutions[-1]
                     if not matCheckOutputsDict:
                         matCheckOutputsDict = dict(
-                            map(lambda ao: (ao.name, ao), self.matCheckOutputs)
+                            map(lambda ao: (ao.name, ao), stagedExec.matCheckOutputs)
                         )
                     matCheckOutput = matCheckOutputsDict.get(
                         cast("SymbolicOutputName", item.name)
@@ -2824,121 +2878,32 @@ class WF:
         Create RO-crate from stage provenance.
         """
         # TODO: implement deserialization
-        self.unmarshallStage(offline=True)
+        self.unmarshallStage(offline=True, fail_ok=True)
 
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
         assert self.repoURL is not None
         assert self.repoTag is not None
-        assert self.outputsDir is not None
         assert self.materializedParams is not None
 
-        assert self.materializedParams is not None
-        assert self.outputs is not None
-
-        if self.localWorkflow.relPath is not None:
-            wf_local_path = os.path.join(
-                self.localWorkflow.dir, self.localWorkflow.relPath
-            )
-        else:
-            wf_local_path = self.localWorkflow.dir
-
-        (
-            wfCrate,
-            compLang,
-        ) = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(
-            self.localWorkflow.langVersion
+        wf_file = create_workflow_crate(
+            self.repoURL,
+            self.repoTag,
+            self.localWorkflow,
+            self.materializedEngine,
+            self.workflowEngineVersion,
+            self.containerEngineVersion,
         )
+        wfCrate = wf_file.crate
 
-        wf_url = self.repoURL.replace(".git", "/") + "tree/" + self.repoTag
-        if self.localWorkflow.relPath is not None:
-            wf_url += "/" + os.path.dirname(self.localWorkflow.relPath)
-
-        matWf = self.materializedEngine.workflow
-
-        assert (
-            matWf.effectiveCheckout is not None
-        ), "The effective checkout should be available"
-
-        parsed_repo_url = parse.urlparse(self.repoURL)
-        if parsed_repo_url.netloc == "github.com":
-            parsed_repo_path = parsed_repo_url.path.split("/")
-            repo_name = parsed_repo_path[2]
-            # TODO: should we urldecode repo_name?
-            if repo_name.endswith(".git"):
-                repo_name = repo_name[:-4]
-            wf_entrypoint_path = [
-                "",  # Needed to prepend a slash
-                parsed_repo_path[1],
-                # TODO: should we urlencode repo_name?
-                repo_name,
-                matWf.effectiveCheckout,
-            ]
-
-            if self.localWorkflow.relPath is not None:
-                wf_entrypoint_path.append(self.localWorkflow.relPath)
-
-            wf_entrypoint_url = parse.urlunparse(
-                (
-                    "https",
-                    "raw.githubusercontent.com",
-                    "/".join(wf_entrypoint_path),
-                    "",
-                    "",
-                    "",
-                )
-            )
-
-        elif "gitlab" in parsed_repo_url.netloc:
-            parsed_repo_path = parsed_repo_url.path.split("/")
-            # FIXME: cover the case of nested groups
-            repo_name = parsed_repo_path[2]
-            if repo_name.endswith(".git"):
-                repo_name = repo_name[:-4]
-            wf_entrypoint_path = [parsed_repo_path[1], repo_name]
-            if self.localWorkflow.relPath is not None:
-                # TODO: should we urlencode self.repoTag?
-                wf_entrypoint_path.extend(
-                    ["-", "raw", self.repoTag, self.localWorkflow.relPath]
-                )
-
-            wf_entrypoint_url = parse.urlunparse(
-                (
-                    parsed_repo_url.scheme,
-                    parsed_repo_url.netloc,
-                    "/".join(wf_entrypoint_path),
-                    "",
-                    "",
-                    "",
-                )
-            )
-
-        else:
-            raise WFException(
-                "FIXME: Unsupported http(s) git repository {}".format(self.repoURL)
-            )
-
-        workflow_path = pathlib.Path(wf_local_path)
-        wf_file = wfCrate.add_workflow(
-            str(workflow_path),
-            workflow_path.name,
-            fetch_remote=False,
-            main=True,
-            lang=compLang,
-            gen_cwl=False,
-        )
-
-        addInputsResearchObject(
-            wf_file, self.materializedParams, cast("URIType", workflow_path.name)
-        )
+        addInputsResearchObject(wf_file, self.materializedParams)
         if self.outputs is not None:
-            addExpectedOutputsResearchObject(
-                wf_file, self.outputs, cast("URIType", workflow_path.name)
-            )
+            addExpectedOutputsResearchObject(wf_file, self.outputs)
         # TODO: implement logic of doMaterializedROCrate
 
         # Save RO-crate as execution.crate.zip
         if filename is None:
+            assert self.outputsDir is not None
             filename = cast("AnyPath", os.path.join(self.outputsDir, "staged.crate"))
         wfCrate.write_zip(filename)
 
@@ -2947,8 +2912,56 @@ class WF:
         return filename
 
     def createResultsResearchObject(
-        self, doMaterializedROCrate: "bool" = False
-    ) -> None:
+        self,
+        filename: "Optional[AnyPath]" = None,
+        doMaterializedROCrate: "bool" = False,
+    ) -> "AnyPath":
+        """
+        Create RO-crate from stage provenance.
+        """
+        # TODO: implement deserialization
+        self.unmarshallExecute(offline=True, fail_ok=True)
+
+        assert self.localWorkflow is not None
+        assert self.materializedEngine is not None
+        assert self.repoURL is not None
+        assert self.repoTag is not None
+        assert (
+            isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
+        )
+
+        wf_file = create_workflow_crate(
+            self.repoURL,
+            self.repoTag,
+            self.localWorkflow,
+            self.materializedEngine,
+            self.workflowEngineVersion,
+            self.containerEngineVersion,
+        )
+        wfCrate = wf_file.crate
+
+        for stagedExec in self.stagedExecutions:
+            add_execution_to_crate(wf_file, stagedExec)
+        # TODO: implement logic of doMaterializedROCrate
+
+        # Save RO-crate as execution.crate.zip
+        if filename is None:
+            assert self.outputsDir is not None
+            filename = cast("AnyPath", os.path.join(self.outputsDir, "execution.crate"))
+        import pprint
+
+        pprint.pprint(wfCrate)
+        wfCrate.write_zip(filename)
+
+        self.logger.info("Execution RO-Crate created: {}".format(filename))
+
+        return filename
+
+    def createResultsResearchObjectOrig(
+        self,
+        filename: "Optional[AnyPath]" = None,
+        doMaterializedROCrate: "bool" = False,
+    ) -> "AnyPath":
         """
         Create RO-crate from execution provenance.
         """
@@ -2958,8 +2971,9 @@ class WF:
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
         assert self.repoURL is not None
-        assert self.augmentedInputs is not None
-        assert self.matCheckOutputs is not None
+        assert (
+            isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
+        )
         assert self.outputsDir is not None
 
         # TODO: implement logic of doMaterializedROCrate
@@ -3095,18 +3109,19 @@ class WF:
             wfCrate.isBasedOn = wf_url
 
         # Add inputs provenance to RO-crate
-        addInputsResearchObject(
-            wf_file, self.augmentedInputs, cast("URIType", workflow_path.name)
-        )
+        stagedExec = self.stagedExecutions[-1]
+        addInputsResearchObject(wf_file, stagedExec.augmentedInputs)
 
         # Add outputs provenance to RO-crate
-        addOutputsResearchObject(wf_file, self.matCheckOutputs)
+        addOutputsResearchObject(wf_file, stagedExec.matCheckOutputs)
 
         # Save RO-crate as execution.crate.zip
-        wfCrate.write_zip(os.path.join(self.outputsDir, "execution.crate"))
-        self.logger.info("Execution RO-Crate created: {}".format(self.outputsDir))
+        if filename is None:
+            filename = cast("AnyPath", os.path.join(self.outputsDir, "execution.crate"))
+        wfCrate.write_zip(filename)
+        self.logger.info("Execution RO-Crate created: {}".format(filename))
 
-        # TODO error handling
+        return filename
 
     def getWorkflowRepoFromTRS(self, offline: "bool" = False) -> "IdentifiedWorkflow":
         """

@@ -319,6 +319,7 @@ class MaterializedInput(NamedTuple):
     name: SymbolicParamName
     values: MaterializedInputValues
     secondaryInputs: Optional[Sequence[MaterializedContent]] = None
+    autoFilled: bool = False
 
 
 GlobPattern = NewType("GlobPattern", str)
@@ -532,7 +533,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         matWfEng: "MaterializedWorkflowEngine",
         inputs: Sequence[MaterializedInput],
         outputs: Sequence[ExpectedOutput],
-    ) -> Tuple[ExitVal, Sequence[MaterializedInput], Sequence[MaterializedOutput]]:
+    ) -> "StagedExecution":
         pass
 
     @classmethod
@@ -633,9 +634,6 @@ class StagedSetup(NamedTuple):
     allow_other: bool
     is_encrypted: bool
     is_damaged: bool
-
-
-import datetime
 
 
 class MarshallingStatus(NamedTuple):
@@ -808,6 +806,19 @@ class MaterializedExportAction(NamedTuple):
     elems: Sequence[AnyContent]
     pids: Sequence[URIWithMetadata]
     when: datetime.datetime = datetime.datetime.now(tz=datetime.timezone.utc)
+
+
+class StagedExecution(NamedTuple):
+    """
+    The description of the execution of a workflow, giving the relative directory of the output
+    """
+
+    exitVal: ExitVal
+    augmentedInputs: Sequence[MaterializedInput]
+    matCheckOutputs: Sequence[MaterializedOutput]
+    outputsDir: RelPath
+    started: datetime.datetime
+    ended: datetime.datetime
 
 
 # Next method has been borrowed from FlowMaps
