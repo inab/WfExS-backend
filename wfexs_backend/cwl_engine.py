@@ -253,7 +253,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         """
         cwlPath = localWf.dir
         if localWf.relPath is not None:
-            cwlPath = cast(AbsPath, os.path.join(cwlPath, localWf.relPath))
+            cwlPath = cast("AbsPath", os.path.join(cwlPath, localWf.relPath))
 
         # Is this a yaml?
         cwlVersion = None
@@ -269,11 +269,15 @@ class CWLWorkflowEngine(WorkflowEngine):
         if cwlVersion is None:
             return None, None
 
+        # TODO: call cwltool --print-deps --relative-deps cwd
+        # and parse its contents in order to get either relative paths
+        # or URLs
         newLocalWf = LocalWorkflow(
             dir=localWf.dir,
             relPath=localWf.relPath,
             effectiveCheckout=localWf.effectiveCheckout,
             langVersion=cwlVersion,
+            relPathFiles=[cast("RelPath", localWf.relPath)],
         )
 
         # TODO: Check best version of the engine
@@ -540,6 +544,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             relPath=cast(RelPath, packedLocalWorkflowFile),
             effectiveCheckout=localWf.effectiveCheckout,
             langVersion=cwlVersion,
+            relPathFiles=localWf.relPathFiles,
         )
         newWfEngine = MaterializedWorkflowEngine(
             instance=matWorkflowEngine.instance,

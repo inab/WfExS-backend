@@ -1042,6 +1042,7 @@ class WF:
         # so local modifications in a working directory does not
         # poison the cached workflow
         link_or_copy(repoDir, self.workflowDir, force_copy=True)
+        # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
             dir=self.workflowDir,
             relPath=repoRelPath,
