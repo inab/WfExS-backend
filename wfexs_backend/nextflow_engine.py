@@ -18,6 +18,7 @@ from __future__ import absolute_import
 
 import datetime
 import functools
+import itertools
 import json
 import logging
 import os
@@ -123,6 +124,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
     DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN = cast("EngineVersion", "20.01.0")
     DEFAULT_NEXTFLOW_VERSION_20_04 = cast("EngineVersion", "20.04.1")
     DEFAULT_NEXTFLOW_DOCKER_IMAGE = "nextflow/nextflow"
+
+    NEXTFLOW_CONFIG_FILENAME = "nextflow.config"
 
     DEFAULT_MAX_RETRIES = 5
     DEFAULT_MAX_CPUS = 4
@@ -299,7 +302,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             nfDir = cast("AbsPath", os.path.dirname(nfPath))
             candidateNf = cast("RelPath", os.path.basename(nfPath))
 
-        nfConfig = os.path.join(nfDir, "nextflow.config")
+        nfConfig = os.path.join(nfDir, self.NEXTFLOW_CONFIG_FILENAME)
         verPat: "Optional[Pattern[str]]" = re.compile(
             r"nextflowVersion *= *['\"]!?[>=]*([^ ]+)['\"]"
         )
@@ -316,9 +319,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         #    # We are deactivating the engine version capture from the config
         #    verPat = None
 
+        nxfScripts: "MutableSequence[RelPath]" = []
         if os.path.isfile(nfConfig):
             # Now, let's guess the nextflow version and mainScript
             with open(nfConfig, "r") as nc_config:
+                # Recording the nextflow.config file
+                nxfScripts.append(cast("RelPath", os.path.relpath(nfConfig, nfDir)))
                 for line in nc_config:
                     if verPat is not None:
                         matched = verPat.search(line)
@@ -398,12 +404,49 @@ class NextflowWorkflowEngine(WorkflowEngine):
         ):
             engineVer = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
 
+        # Subworkflow / submodule include detection
+        newNxfScripts = [entrypoint]
+        while len(newNxfScripts) > 0:
+            nextNxfScripts = []
+            for nxfScript in newNxfScripts:
+                # Avoid loops
+                if nxfScript in nxfScripts:
+                    continue
+
+                baseNxfScript = os.path.dirname(nxfScript)
+                relNxfScript = cast("RelPath", os.path.relpath(nxfScript, nfDir))
+                self.logger.debug(f"Initial parsing {relNxfScript}")
+                with open(nxfScript, encoding="utf-8") as wfH:
+                    for line in wfH:
+                        # Getting include declaration
+                        includeMatchE = self.IncludeScriptPat.search(line)
+                        if includeMatchE:
+                            relScriptPath = includeMatchE.group(2)
+                            # self.logger.debug(f"File {nxfScript} includes {relScriptPath} (line {line})")
+                            if "$" in relScriptPath:
+                                self.logger.error(
+                                    f"File {relNxfScript} includes from {relScriptPath} using variable"
+                                )
+
+                            if not relScriptPath.endswith(".nf"):
+                                relScriptPath += ".nf"
+
+                            absScriptPath = os.path.normpath(
+                                os.path.join(baseNxfScript, relScriptPath)
+                            )
+                            nextNxfScripts.append(absScriptPath)
+
+                # Recording the script
+                nxfScripts.append(relNxfScript)
+            newNxfScripts = nextNxfScripts
+
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(
             dir=nfDir,
             relPath=candidateNf,
             effectiveCheckout=localWf.effectiveCheckout,
             langVersion=engineVer,
+            relPathFiles=nxfScripts,
         )
 
     def materializeEngineVersion(
@@ -973,6 +1016,24 @@ class NextflowWorkflowEngine(WorkflowEngine):
     ContScriptPat: "Final[Pattern[str]]" = re.compile(
         r"^\s*container\s+(['\"])([^'\"]+)\1"
     )
+
+    # Borrowed from https://github.com/nf-core/tools/blob/dec66abe1c36a8975a952e1f80f045cab65bbf72/nf_core/download.py#L462
+    BlockContainerPat: "Final[Pattern[str]]" = re.compile(
+        r"container\s*\"([^\"]*)\"", re.S
+    )
+
+    BlockContainerPatAlt: "Final[Pattern[str]]" = re.compile(
+        r"container\s*'([^']*)'", re.S
+    )
+
+    C_URL_REGEX: "Final[Pattern[str]]" = re.compile(
+        r"(['\"])(https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*))\1"
+    )
+
+    C_DOCKER_REGEX: "Final[Pattern[str]]" = re.compile(
+        r"(['\"])((?:(?=[^:\/]{1,253})(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-zA-Z0-9-]{1,63}(?<!-))*(?::[0-9]{1,5})?/)?((?![._-])(?:[a-z0-9._-]*)(?<![._-])(?:/(?![._-])[a-z0-9._-]*(?<![._-]))*)(?::(?![.-])[a-zA-Z0-9_.-]{1,128})?)\1"
+    )
+
     # Pattern to search dsl enabling
     DSLEnablePat: "Final[Pattern[str]]" = re.compile(
         r"^\s*nextflow\.enable\.dsl\s*=\s*([1-9])"
@@ -1030,7 +1091,9 @@ STDERR
         assert flat_stdout is not None
         self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
         for contMatch in self.ContConfigPat.finditer(flat_stdout):
-            containerTags.add(cast("ContainerTaggedName", contMatch.group(1)))
+            # Discarding local path cases
+            if contMatch[1][0] != "/":
+                containerTags.add(cast("ContainerTaggedName", contMatch[1]))
 
         # Early DSL2 detection
         dslVer: "Optional[str]" = None
@@ -1049,55 +1112,61 @@ STDERR
         )
 
         # Subworkflow / submodule include detection
-        nxfScripts = []
-        newNxfScripts = [wfEntrypoint]
-        while len(newNxfScripts) > 0:
-            nextNxfScripts = []
-            for nxfScript in newNxfScripts:
-                # Avoid loops
-                if nxfScript in nxfScripts:
-                    continue
+        nfDir = matWorkflowEngine.workflow.dir
+        assert matWorkflowEngine.workflow.relPathFiles is not None
+        for relNxfScript in matWorkflowEngine.workflow.relPathFiles:
+            # Skip the config file
+            if relNxfScript == self.NEXTFLOW_CONFIG_FILENAME:
+                continue
 
-                baseNxfScript = os.path.dirname(nxfScript)
-                self.logger.debug(f"Parsing {nxfScript}")
-                with open(nxfScript, encoding="utf-8") as wfH:
-                    for line in wfH:
-                        contMatchE = self.ContScriptPat.search(line)
-                        # Getting container declaration
-                        if contMatchE:
-                            containerTags.add(
-                                cast("ContainerTaggedName", contMatchE.group(2))
+            nxfScript = os.path.normpath(os.path.join(nfDir, relNxfScript))
+            baseNxfScript = os.path.dirname(nxfScript)
+            self.logger.debug(f"Searching container declarations at {relNxfScript}")
+            with open(nxfScript, encoding="utf-8") as wfH:
+                # This is needed for multi-line pattern matching
+                nxfSource = wfH.read()
+
+                # Matching all container declarations
+                for cont_match in itertools.chain(
+                    self.BlockContainerPat.finditer(nxfSource),
+                    self.BlockContainerPatAlt.finditer(nxfSource),
+                ):
+                    # This block is partially borrowed from
+                    # https://github.com/nf-core/tools/blob/dec66abe1c36a8975a952e1f80f045cab65bbf72/nf_core/download.py#L464-L488
+
+                    this_container_url = None
+                    this_container_docker = None
+                    url_match = self.C_URL_REGEX.search(cont_match[0])
+                    if url_match:
+                        this_container_url = url_match[2]
+                        self.logger.debug(f"Found URL container {this_container_url}")
+
+                    for docker_match in self.C_DOCKER_REGEX.finditer(cont_match[0]):
+                        if docker_match[2] != "singularity":
+                            this_container_docker = docker_match[2]
+                            self.logger.debug(
+                                f"Found Docker container {this_container_docker}"
                             )
+                            break
 
-                        # Getting DSL enabling declaration
-                        if dslVer is None:
-                            dslEnable = self.DSLEnablePat.search(line)
-                            if dslEnable:
-                                dslVer = dslEnable.group(1)
+                    if this_container_docker is not None:
+                        containerTags.add(
+                            cast("ContainerTaggedName", this_container_docker)
+                        )
+                    elif this_container_url is not None:
+                        containerTags.add(
+                            cast("ContainerTaggedName", this_container_url)
+                        )
+                    else:
+                        self.logger.error(
+                            f"Cannot parse container string in '{relNxfScript}':\n\n{cont_match[0]}\n\n:warning: Skipping this container image.."
+                        )
 
-                        # Getting include declaration
-                        includeMatchE = self.IncludeScriptPat.search(line)
-                        if includeMatchE:
-                            relScriptPath = includeMatchE.group(2)
-                            # self.logger.debug(f"File {nxfScript} includes {relScriptPath} (line {line})")
-                            if "$" in relScriptPath:
-                                self.logger.error(
-                                    f"File {nxfScript} includes from {relScriptPath} using variable"
-                                )
-
-                            if not relScriptPath.endswith(".nf"):
-                                relScriptPath += ".nf"
-
-                            absScriptPath = os.path.normpath(
-                                os.path.join(baseNxfScript, relScriptPath)
-                            )
-                            nextNxfScripts.append(absScriptPath)
-
-                # Recording the script
-                nxfScripts.append(nxfScript)
-            newNxfScripts = nextNxfScripts
-
-        # TODO: record the involved scripts
+                # Matching at least one DSL declaration
+                if dslVer is None:
+                    for dslEnable in self.DSLEnablePat.finditer(nxfSource):
+                        dslVer = dslEnable.group(1)
+                        break
 
         return matWorkflowEngine, list(containerTags)
 
