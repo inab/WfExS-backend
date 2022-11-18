@@ -53,7 +53,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
   
 - [ ] **Step 8**: Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
 
-- [ ] **Step 9**: Generate RO-Crate from execution provenance and exported results.
+- [x] **Step 9**: Generate RO-Crate from execution provenance and exported results.
 
   - [x] **Step 9.a**: Generated RO-Crate should be consumable by WorkflowHub.
 
