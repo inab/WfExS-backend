@@ -153,8 +153,11 @@ class SingularityContainerFactory(ContainerFactory):
             parsedTag = parse.urlparse(tag)
             if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
                 singTag = tag
+                isDocker = parsedTag.scheme == "docker"
             else:
                 singTag = cast(ContainerTaggedName, "docker://" + tag)
+                # Assuming it is docker
+                isDocker = True
 
             containerFilename = simpleFileNameMethod(cast(URIType, tag))
             containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
@@ -180,10 +183,18 @@ class SingularityContainerFactory(ContainerFactory):
             if os.path.isfile(localContainerPathMeta):
                 with open(localContainerPathMeta, mode="r", encoding="utf8") as tcpm:
                     metadata = json.load(tcpm)
-                    registryServer = metadata["registryServer"]
-                    repo = metadata["repo"]
-                    alias = metadata["alias"]
-                    partial_fingerprint = metadata["dcd"]
+                    if "registryServer" in metadata:
+                        registryServer = metadata["registryServer"]
+                        repo = metadata["repo"]
+                        alias = metadata["alias"]
+                        partial_fingerprint = metadata["dcd"]
+                        fingerprint = repo + "@" + partial_fingerprint
+                    else:
+                        registryServer = ""
+                        repo = ""
+                        alias = ""
+                        partial_fingerprint = ""
+                        fingerprint = tag
             elif offline:
                 raise ContainerFactoryException(
                     "Cannot download containers metadata in offline mode from {} to {}".format(
@@ -203,18 +214,27 @@ class SingularityContainerFactory(ContainerFactory):
                 )
 
                 with open(tmpContainerPathMeta, mode="w", encoding="utf8") as tcpm:
-                    registryServer, repo, alias, partial_fingerprint = dhelp.query_tag(
-                        singTag
-                    )
-                    json.dump(
-                        {
-                            "registryServer": registryServer,
-                            "repo": repo,
-                            "alias": alias,
-                            "dcd": partial_fingerprint,
-                        },
-                        tcpm,
-                    )
+                    if isDocker:
+                        (
+                            registryServer,
+                            repo,
+                            alias,
+                            partial_fingerprint,
+                        ) = dhelp.query_tag(singTag)
+                        json.dump(
+                            {
+                                "registryServer": registryServer,
+                                "repo": repo,
+                                "alias": alias,
+                                "dcd": partial_fingerprint,
+                            },
+                            tcpm,
+                        )
+                        fingerprint = repo + "@" + partial_fingerprint
+                    else:
+                        # TODO: Which metadata could we add for other schemes?
+                        json.dump({}, tcpm)
+                        fingerprint = tag
 
             canonicalContainerPath = None
             canonicalContainerPathMeta = None
@@ -379,9 +399,9 @@ STDERR
             containersList.append(
                 Container(
                     origTaggedName=tag,
-                    taggedName=cast(URIType, singTag),
+                    taggedName=cast("URIType", singTag),
                     signature=imageSignature,
-                    fingerprint=repo + "@" + partial_fingerprint,
+                    fingerprint=fingerprint,
                     type=self.containerType,
                     localPath=containerPath,
                 )
