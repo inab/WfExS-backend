@@ -196,7 +196,7 @@ def create_workflow_crate(
 
     wf_url = repoURL.replace(".git", "/") + "tree/" + repoTag
     if localWorkflow.relPath is not None:
-        wf_url += "/" + os.path.dirname(localWorkflow.relPath)
+        wf_url += localWorkflow.dir.rsplit("workflow")[1]
 
     matWf = materializedEngine.workflow
 
@@ -297,7 +297,7 @@ def create_workflow_crate(
     # etc...
     # for file_entry in include_files:
     #    wfCrate.add_file(file_entry)
-    wfCrate.isBasedOn = wf_file
+    wfCrate.isBasedOn = wf_url
 
     return wf_file
 
