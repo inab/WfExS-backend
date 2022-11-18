@@ -460,12 +460,15 @@ class LocalWorkflow(NamedTuple):
     relPath: Inside the checkout, the relative path to the workflow definition
     effectiveCheckout: hex hash of the materialized checkout
     langVersion: workflow language version / revision
+    relPathWorkflowFiles: files composing the workflow, which can be either local
+    or remote ones (i.e. CWL)
     """
 
     dir: AbsPath
     relPath: Optional[RelPath]
     effectiveCheckout: Optional[RepoTag]
     langVersion: Optional[Union[EngineVersion, WFLangVersion]] = None
+    relPathFiles: Optional[Sequence[Union[RelPath, URIType]]] = None
 
 
 # This skeleton is here only for type mapping reasons
