@@ -21,6 +21,7 @@ from functools import partial
 import abc
 import collections.abc
 import copy
+import enum
 import logging
 from typing import (
     TYPE_CHECKING,
@@ -54,10 +55,22 @@ def marshall_namedtuple(obj: "Any") -> "Any":
     obj_is = partial(isinstance, obj)
     if hasattr(obj, "_marshall"):
         return marshall_namedtuple(obj._marshall())
+    elif obj_is(enum.Enum):  # Enum
+        return {
+            "_enum": obj.__class__.__name__,
+            "value": obj.value,
+        }
     elif obj_is(tuple) and hasattr(obj, "_fields"):  # namedtuple
         fields = zip(obj._fields, recurse_m(obj))
         class_name = obj.__class__.__name__
         return dict(fields, **{"_type": class_name})
+    elif obj_is(abc.ABC) and hasattr(obj, "__dataclass_fields__"):  # dataclass
+        fields_m = map(
+            lambda field: (field, marshall_namedtuple(getattr(obj, field))),
+            obj.__dataclass_fields__.keys(),
+        )
+        class_name = obj.__class__.__name__
+        return dict(fields_m, **{"_type": class_name})
     elif obj_is((collections.abc.Mapping, dict)):
         return type(obj)(zip(obj.keys(), recurse_m(obj.values())))
     elif obj_is(collections.abc.Iterable) and not obj_is(str):
@@ -92,6 +105,18 @@ def unmarshall_namedtuple(
     # recurse_orig = lambda x, myglobals: map(lambda l: unmarshall_namedtuple(l, myglobals), x)
     obj_is = partial(isinstance, obj)
     if obj_is((collections.abc.Mapping, dict)):
+        if "_enum" in obj:  # originally an enum
+            try:
+                clazz = myglobals[obj["_enum"]]
+                retval = clazz(obj["value"])
+            except:
+                logger.error(
+                    f"Unmarshalling Error peeking class implementation for {obj['_enum']}"
+                )
+                raise
+
+            return retval
+
         if "_class" in obj:  # originally a class
             try:
                 clazz = myglobals[obj["_class"]]
