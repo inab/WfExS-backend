@@ -2897,7 +2897,9 @@ class WF:
         )
         wfCrate = wf_file.crate
 
-        addInputsResearchObject(wf_file, self.materializedParams)
+        addInputsResearchObject(
+            wf_file, self.materializedParams, do_attach=doMaterializedROCrate
+        )
         if self.outputs is not None:
             addExpectedOutputsResearchObject(wf_file, self.outputs)
         # TODO: implement logic of doMaterializedROCrate
@@ -2942,7 +2944,7 @@ class WF:
         wfCrate = wf_file.crate
 
         for stagedExec in self.stagedExecutions:
-            add_execution_to_crate(wf_file, stagedExec)
+            add_execution_to_crate(wf_file, stagedExec, do_attach=doMaterializedROCrate)
         # TODO: implement logic of doMaterializedROCrate
 
         # Save RO-crate as execution.crate.zip

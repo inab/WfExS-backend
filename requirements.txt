@@ -11,7 +11,7 @@ xlrd2
 dulwich
 python-dxf
 genluhn >= 0.3.0
-rfc6920 >= 0.1.2
+rfc6920 >= 0.1.3
 rocrate >= 0.7.0
 boto3
 botocore

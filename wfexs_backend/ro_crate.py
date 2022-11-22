@@ -30,13 +30,16 @@ from typing import (
     Sequence,
 )
 import urllib.parse
+import uuid
 
 import magic  # type: ignore
+from rfc6920.methods import extract_digest  # type: ignore[import]
 import rocrate.model.entity  # type:ignore
 import rocrate.model.dataset  # type:ignore
 import rocrate.model.computationalworkflow  # type:ignore
 import rocrate.model.softwareapplication  # type:ignore
 import rocrate.rocrate  # type:ignore
+
 
 from .utils.digests import (
     nihDigester,
@@ -158,23 +161,51 @@ def add_file_to_crate(
     the_path: "str",
     the_uri: "URIType",
     the_size: "Optional[int]" = None,
+    the_signature: "Optional[Fingerprint]" = None,
+    do_attach: "bool" = True,
 ) -> "rocrate.model.file.File":
+    # The do_attach logic helps on the ill internal logic of add_file
+    # when an id has to be assigned
     the_file_crate = crate.add_file(
-        source=the_uri,
+        source=the_path if do_attach else the_uri,
+        dest_path=the_uri if do_attach else None,
         fetch_remote=False,
         validate_url=False,
     )
     if the_size is None:
         the_size = os.stat(the_path).st_size
+    if the_signature is None:
+        the_signature = cast(
+            "Fingerprint", ComputeDigestFromFile(the_path, repMethod=hexDigest)
+        )
     the_file_crate.append_to("contentSize", the_size, compact=True)
-    the_file_crate.append_to(
-        "sha256", ComputeDigestFromFile(the_path, repMethod=hexDigest), compact=True
-    )
+    the_file_crate.append_to("sha256", the_signature, compact=True)
     the_file_crate.append_to(
         "encodingFormat", magic.from_file(the_path, mime=True), compact=True
     )
 
     return the_file_crate
+
+
+def add_GeneratedContent_to_crate(
+    crate: "rocrate.rocrate.ROCrate",
+    the_content: "GeneratedContent",
+    do_attach: "bool" = True,
+) -> "rocrate.model.file.File":
+    the_content_uri = (
+        the_content.uri.uri if the_content.uri is not None else the_content.signature
+    )
+    digest, algo = extract_digest(the_content.signature)
+    crate_file = add_file_to_crate(
+        crate,
+        the_path=the_content.local,
+        the_uri=cast("URIType", the_content_uri),
+        the_signature=hexDigest(algo, digest),
+        do_attach=do_attach,
+    )
+    crate_file["name"] = os.path.basename(the_content.local)
+
+    return crate_file
 
 
 def create_workflow_crate(
@@ -260,10 +291,15 @@ def create_workflow_crate(
             "FIXME: Unsupported http(s) git repository {}".format(repoURL)
         )
 
+    # This is needed to avoid future collisions with other workflows stored in the RO-Crate
+    rocrate_wf_folder = str(uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url))
+
     workflow_path = pathlib.Path(wf_local_path)
+    rocrate_wf_id = rocrate_wf_folder + "/" + workflow_path.name
+
     wf_file = wfCrate.add_workflow(
-        str(workflow_path),
-        workflow_path.name,
+        source=workflow_path,
+        dest_path=rocrate_wf_id,
         fetch_remote=False,
         main=True,
         lang=compLang,
@@ -272,6 +308,7 @@ def create_workflow_crate(
     wf_file["url"] = wf_entrypoint_url
     wf_file["codeRepository"] = repoURL
     wf_file["version"] = materializedEngine.workflow.effectiveCheckout
+    wf_file["name"] = "Workflow Entrypoint"
 
     wf_file.append_to(
         "conformsTo",
@@ -285,6 +322,18 @@ def create_workflow_crate(
             wf_file, materializedEngine.containers, containerEngineVersion
         )
 
+    # TODO: research why relPathFiles is not populated in matWf
+    lW = localWorkflow if matWf.relPathFiles is None else matWf
+    if lW.relPathFiles:
+        for rel_file in lW.relPathFiles:
+            rocrate_file_id = rocrate_wf_folder + "/" + rel_file
+            if rocrate_file_id != rocrate_wf_id:
+                add_file_to_crate(
+                    wfCrate,
+                    the_path=os.path.join(lW.dir, rel_file),
+                    the_uri=cast("URIType", rocrate_file_id),
+                )
+
     # if materializedEngine.operational_containers is not None:
     #    add_containers_to_workflow(wf_file, materializedEngine.operational_containers, containerEngineVersion)
 
@@ -297,7 +346,7 @@ def create_workflow_crate(
     # etc...
     # for file_entry in include_files:
     #    wfCrate.add_file(file_entry)
-    wfCrate.isBasedOn = wf_url
+    wfCrate.isBasedOn = wf_file
 
     return wf_file
 
@@ -306,6 +355,7 @@ def add_directory_as_dataset(
     crate: "rocrate.rocrate.ROCrate",
     itemInLocalSource: "str",
     itemInURISource: "URIType",
+    do_attach: "bool" = True,
 ) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
     if os.path.isdir(itemInLocalSource):
         the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
@@ -327,7 +377,11 @@ def add_directory_as_dataset(
                 )
                 if the_file.is_file():
                     the_file_crate = add_file_to_crate(
-                        crate, the_file.path, the_uri, the_file.stat().st_size
+                        crate,
+                        the_file.path,
+                        the_uri,
+                        the_size=the_file.stat().st_size,
+                        do_attach=do_attach,
                     )
 
                     crate_dataset.append_to("hasPart", the_file_crate)
@@ -336,7 +390,7 @@ def add_directory_as_dataset(
                 elif the_file.is_dir():
                     # TODO: fix URI handling
                     the_dir_crate, the_subfiles_crates = add_directory_as_dataset(
-                        crate, the_file.path, the_uri
+                        crate, the_file.path, the_uri, do_attach=do_attach
                     )
                     if the_dir_crate is not None:
                         assert the_subfiles_crates is not None
@@ -350,9 +404,58 @@ def add_directory_as_dataset(
     return None, None
 
 
+def add_GeneratedDirectoryContent_as_dataset(
+    crate: "rocrate.rocrate.ROCrate",
+    the_content: "GeneratedDirectoryContent",
+    do_attach: "bool" = True,
+) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
+    if os.path.isdir(the_content.local):
+        the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
+        an_uri = (
+            the_content.uri.uri
+            if the_content.uri is not None
+            else the_content.signature
+        )
+
+        crate_dataset = crate.add_dataset(
+            source=an_uri,
+            fetch_remote=False,
+            validate_url=False,
+            # properties=file_properties,
+        )
+        crate_dataset["name"] = os.path.basename(the_content.local)
+
+        if isinstance(the_content.values, list):
+            for the_val in the_content.values:
+                if isinstance(the_val, GeneratedContent):
+                    the_val_file = add_GeneratedContent_to_crate(
+                        crate, the_val, do_attach=do_attach
+                    )
+                    crate_dataset.append_to("hasPart", the_val_file)
+                    the_files_crates.append(the_val_file)
+                elif isinstance(the_val, GeneratedDirectoryContent):
+                    (
+                        the_val_dataset,
+                        the_subfiles_crates,
+                    ) = add_GeneratedDirectoryContent_as_dataset(
+                        crate, the_val, do_attach=do_attach
+                    )
+                    if the_val_dataset is not None:
+                        assert the_subfiles_crates is not None
+                        crate_dataset.append_to("hasPart", the_val_dataset)
+                        crate_dataset.append_tp("hasPart", the_subfiles_crates)
+
+                        the_files_crates.extend(the_subfiles_crates)
+
+        return crate_dataset, the_files_crates
+
+    return None, None
+
+
 def addInputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     inputs: "Sequence[MaterializedInput]",
+    do_attach: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
     Add the input's provenance data to a Research Object.
@@ -400,9 +503,17 @@ def addInputsResearchObject(
                 itemInLocalSource = itemInValues.local  # local source
                 itemInURISource = itemInValues.licensed_uri.uri  # uri source
                 if os.path.isfile(itemInLocalSource):
+                    # crate_file = add_file_to_crate(
+                    #    crate, itemInLocalSource, itemInURISource
+                    # )
+                    # This is needed to avoid including the input
                     crate_file = add_file_to_crate(
-                        crate, itemInLocalSource, itemInURISource
+                        crate,
+                        the_path=itemInLocalSource,
+                        the_uri=itemInURISource,
+                        do_attach=do_attach,
                     )
+                    crate_file["name"] = itemInValues.prettyFilename
 
                     crate_file.append_to("exampleOfWork", formal_parameter)
                     formal_parameter.append_to("workExample", crate_file)
@@ -412,15 +523,24 @@ def addInputsResearchObject(
                     crate_dataset, _ = add_directory_as_dataset(
                         crate, itemInLocalSource, itemInURISource
                     )
-                    crate_dataset = crate.add_dataset(
-                        source=itemInURISource,
-                        fetch_remote=False,
-                        validate_url=False,
-                        # properties=file_properties,
-                    )
-                    crate_dataset.append_to("exampleOfWork", formal_parameter)
-                    formal_parameter.append_to("workExample", crate_dataset)
-                    crate_inputs.append(crate_dataset)
+                    # crate_dataset = crate.add_dataset(
+                    #    source=itemInURISource,
+                    #    fetch_remote=False,
+                    #    validate_url=False,
+                    #    do_attach=do_attach,
+                    #    # properties=file_properties,
+                    # )
+                    the_name: "str"
+                    if itemInValues.prettyFilename:
+                        the_name = itemInValues.prettyFilename
+                    else:
+                        the_name = os.path.basename(itemInLocalSource)
+
+                    if crate_dataset is not None:
+                        crate_dataset["name"] = the_name + "/"
+                        crate_dataset.append_to("exampleOfWork", formal_parameter)
+                        formal_parameter.append_to("workExample", crate_dataset)
+                        crate_inputs.append(crate_dataset)
 
                 else:
                     pass  # TODO: raise exception
@@ -509,6 +629,7 @@ def addExpectedOutputsResearchObject(
 def addOutputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     outputs: "Sequence[MaterializedOutput]",
+    do_attach: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
     Add the output's provenance data to a Research Object.
@@ -521,173 +642,90 @@ def addOutputsResearchObject(
     crate = wf_crate.crate
     crate_outputs: "MutableSequence[rocrate.model.entity.Entity]" = []
     for out_item in outputs:
+        formal_parameter_id = (
+            wf_crate.id + "#output:" + urllib.parse.quote(out_item.name, safe="")
+        )
+        if out_item.kind == ContentKind.File:
+            additional_type = "File"
+        elif out_item.kind == ContentKind.Directory:
+            additional_type = "Dataset"
+        elif len(out_item.values) > 0:
+            itemOutValue0 = out_item.values[0]
+            if isinstance(itemOutValue0, int):
+                additional_type = "Integer"
+            elif isinstance(itemOutValue0, str):
+                additional_type = "String"
+            elif isinstance(itemOutValue0, bool):
+                additional_type = "Boolean"
+            elif isinstance(itemOutValue0, float):
+                additional_type = "Float"
+        else:
+            additional_type = None
+
+        formal_parameter = FormalParameter(
+            crate,
+            name=out_item.name,
+            identifier=formal_parameter_id,
+            additional_type=additional_type,
+        )
+        crate.add(formal_parameter)
+        wf_crate.append_to("output", formal_parameter)
+
         # This can happen when there is no output, like when a workflow has failed
         if len(out_item.values) == 0:
             continue
 
-        itemOutValue0 = out_item.values[0]
-        additional_type: "Optional[str]" = None
-        if isinstance(itemOutValue0, int):
-            additional_type = "Integer"
-        elif isinstance(itemOutValue0, str):
-            additional_type = "String"
-        elif isinstance(itemOutValue0, bool):
-            additional_type = "Boolean"
-        elif isinstance(itemOutValue0, float):
-            additional_type = "Float"
-        elif isinstance(itemOutValue0, MaterializedContent):
-            if itemOutValue0.kind == ContentKind.File:
-                additional_type = "File"
-            elif itemOutValue0.kind == ContentKind.Directory:
-                additional_type = "Dataset"
-
         if additional_type in ("File", "Dataset"):
-            for itemOutValues in cast("Sequence[MaterializedContent]", out_item.values):
+            for itemOutValues in cast(
+                "Sequence[AbstractGeneratedContent]", out_item.values
+            ):
 
                 assert isinstance(
                     itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
                 )
-                itemOutSource = itemOutValues.local  # local source
-                itemOutName = out_item.name
-                properties: MutableMapping[str, SymbolicOutputName] = {
-                    "name": itemOutName
-                }
+                if not isinstance(
+                    itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
+                ):
+                    logger.error("FIXME: elements of incorrect types")
+                itemOutLocalSource = itemOutValues.local  # local source
+                # TODO: use exported results logs to complement this
+                itemOutURISource = None
                 if isinstance(itemOutValues, GeneratedDirectoryContent):  # if directory
-                    if os.path.isdir(itemOutSource):
-                        generatedDirectoryContentURI = ComputeDigestFromDirectory(
-                            itemOutSource, repMethod=nihDigester
-                        )  # generate directory digest
-                        dirProperties: MutableMapping[str, Any] = dict.fromkeys(
-                            ["hasPart"]
+                    if os.path.isdir(itemOutLocalSource):
+                        crate_dataset, _ = add_GeneratedDirectoryContent_as_dataset(
+                            crate,
+                            itemOutValues,
+                            do_attach=do_attach,
                         )
-                        generatedContentList: MutableSequence[
-                            Mapping[str, Fingerprint]
-                        ] = []
-                        generatedDirectoryContentList: MutableSequence[
-                            Mapping[str, Fingerprint]
-                        ] = []
 
-                        assert itemOutValues.values is not None
-                        for item in itemOutValues.values:
-                            if isinstance(item, GeneratedContent):  # directory of files
-                                fileID = item.signature
-                                if fileID is None:
-                                    fileID = cast(
-                                        Fingerprint,
-                                        ComputeDigestFromFile(
-                                            item.local, repMethod=nihDigester
-                                        ),
-                                    )
-                                fileProperties = {
-                                    "name": itemOutName
-                                    + "::/"
-                                    + os.path.basename(item.local),
-                                    "isPartOf": {
-                                        "@id": generatedDirectoryContentURI
-                                    },  # reference to directory containing the file
-                                }
-                                generatedContentList.append({"@id": fileID})
-                                crate.add_file(
-                                    source=fileID,
-                                    fetch_remote=False,
-                                    properties=fileProperties,
-                                )
-
-                            elif isinstance(
-                                item, GeneratedDirectoryContent
-                            ):  # directory of directories
-
-                                # search recursively for other content inside directory
-                                def search_new_content(
-                                    content_list: Sequence[AbstractGeneratedContent],
-                                ) -> Sequence[Mapping[str, Fingerprint]]:
-                                    tempList: MutableSequence[
-                                        Mapping[str, Fingerprint]
-                                    ] = []
-                                    for content in content_list:
-                                        if isinstance(
-                                            content, GeneratedContent
-                                        ):  # file
-                                            fileID = (
-                                                content.signature
-                                            )  # TODO: create a method to add files to RO-crate
-                                            if fileID is None:
-                                                fileID = cast(
-                                                    Fingerprint,
-                                                    ComputeDigestFromFile(
-                                                        content.local,
-                                                        repMethod=nihDigester,
-                                                    ),
-                                                )  # generate file digest
-                                            fileProperties = {
-                                                "name": itemOutName
-                                                + "::/"
-                                                + os.path.basename(content.local),
-                                                "isPartOf": {
-                                                    "@id": generatedDirectoryContentURI
-                                                },  # reference to directory containing the file
-                                            }
-                                            tempList.append({"@id": fileID})
-                                            crate.add_file(
-                                                source=fileID,
-                                                fetch_remote=False,
-                                                properties=fileProperties,
-                                            )
-
-                                        elif isinstance(
-                                            content, GeneratedDirectoryContent
-                                        ):  # directory
-                                            assert content.values is not None
-                                            tempList.extend(
-                                                search_new_content(content.values)
-                                            )
-
-                                    return tempList
-
-                                assert item.values is not None
-                                generatedDirectoryContentList.extend(
-                                    search_new_content(item.values)
-                                )
-
-                            else:
-                                pass  # TODO: raise exception
-
-                        d_has_part = copy.copy(generatedDirectoryContentList)
-                        d_has_part.extend(generatedContentList)
-                        dirProperties["hasPart"] = d_has_part  # all the content
-                        properties.update(dirProperties)
-                        crate_dataset = crate.add_directory(
-                            source=generatedDirectoryContentURI,
-                            fetch_remote=False,
-                            properties=properties,
-                        )
-                        crate_outputs.append(crate_dataset)
+                        if crate_dataset is not None:
+                            crate_dataset.append_to("exampleOfWork", formal_parameter)
+                            formal_parameter.append_to("workExample", crate_dataset)
+                            crate_outputs.append(crate_dataset)
 
                     else:
                         errmsg = (
                             "ERROR: The output directory %s does not exist"
-                            % itemOutSource
+                            % itemOutLocalSource
                         )
                         logger.error(errmsg)
 
                 elif isinstance(itemOutValues, GeneratedContent):  # file
-                    if os.path.isfile(itemOutSource):
-                        fileID = itemOutValues.signature
-                        if fileID is None:
-                            fileID = cast(
-                                Fingerprint,
-                                ComputeDigestFromFile(
-                                    itemOutSource, repMethod=nihDigester
-                                ),
-                            )
-                        crate_file = crate.add_file(
-                            source=fileID, fetch_remote=False, properties=properties
+                    if os.path.isfile(itemOutLocalSource):
+                        crate_file = add_GeneratedContent_to_crate(
+                            crate,
+                            itemOutValues,
+                            do_attach=do_attach,
                         )
+
+                        crate_file.append_to("exampleOfWork", formal_parameter)
+                        formal_parameter.append_to("workExample", crate_file)
                         crate_outputs.append(crate_file)
 
                     else:
                         errmsg = (
-                            "ERROR: The output file %s does not exist" % itemOutSource
+                            "ERROR: The output file %s does not exist"
+                            % itemOutLocalSource
                         )
                         logger.error(errmsg)
 
@@ -701,6 +739,7 @@ def addOutputsResearchObject(
 def add_execution_to_crate(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     stagedExec: "StagedExecution",
+    do_attach: "bool" = False,
 ) -> None:
     # TODO: Add a new CreateAction for each stagedExec
     # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
@@ -711,7 +750,11 @@ def add_execution_to_crate(
     crate.add(crate_action)
     crate_action["instrument"] = wf_crate
 
-    crate_inputs = addInputsResearchObject(wf_crate, stagedExec.augmentedInputs)
+    crate_inputs = addInputsResearchObject(
+        wf_crate, stagedExec.augmentedInputs, do_attach=do_attach
+    )
     crate_action["object"] = crate_inputs
-    crate_outputs = addOutputsResearchObject(wf_crate, stagedExec.matCheckOutputs)
+    crate_outputs = addOutputsResearchObject(
+        wf_crate, stagedExec.matCheckOutputs, do_attach=do_attach
+    )
     crate_action["result"] = crate_outputs
