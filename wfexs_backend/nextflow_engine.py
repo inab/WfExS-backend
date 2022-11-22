@@ -435,6 +435,34 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                 os.path.join(baseNxfScript, relScriptPath)
                             )
                             nextNxfScripts.append(absScriptPath)
+                        # Matching all template declarations
+                        patMatchE = self.TemplatePat.search(line)
+                        if patMatchE is None:
+                            patMatchE = self.TemplatePatAlt.search(line)
+
+                        if patMatchE is not None:
+                            this_template = patMatchE.group(1)
+                            if "$" in this_template:
+                                self.logger.error(
+                                    f"File {relNxfScript} uses template {this_template} using variable"
+                                )
+
+                            # Now, let's try finding it
+                            local_template = os.path.join(
+                                baseNxfScript, "templates", this_template
+                            )
+                            if not os.path.isfile(local_template):
+                                local_template = os.path.join(
+                                    nfDir, "templates", this_template
+                                )
+
+                            # And now let's save it!
+                            if os.path.isfile(local_template):
+                                abs_local_template = os.path.normpath(local_template)
+                                rel_local_template = cast(
+                                    "RelPath", os.path.relpath(local_template, nfDir)
+                                )
+                                nxfScripts.append(rel_local_template)
 
                 # Recording the script
                 nxfScripts.append(relNxfScript)
@@ -1017,6 +1045,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
         r"^\s*container\s+(['\"])([^'\"]+)\1"
     )
 
+    TemplatePat: "Final[Pattern[str]]" = re.compile(r"^\s*template\s+'([^']+)'")
+    TemplatePatAlt: "Final[Pattern[str]]" = re.compile(r"^\s*template\s+\"([^\"]+)\"")
+
     # Borrowed from https://github.com/nf-core/tools/blob/dec66abe1c36a8975a952e1f80f045cab65bbf72/nf_core/download.py#L462
     BlockContainerPat: "Final[Pattern[str]]" = re.compile(
         r"container\s*\"([^\"]*)\"", re.S
@@ -1117,6 +1148,10 @@ STDERR
         for relNxfScript in matWorkflowEngine.workflow.relPathFiles:
             # Skip the config file
             if relNxfScript == self.NEXTFLOW_CONFIG_FILENAME:
+                continue
+
+            # Skipping templates and other elements
+            if not relNxfScript.endswith(".nf"):
                 continue
 
             nxfScript = os.path.normpath(os.path.join(nfDir, relNxfScript))
