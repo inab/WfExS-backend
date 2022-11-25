@@ -2897,8 +2897,14 @@ class WF:
         )
         wfCrate = wf_file.crate
 
+        assert self.stagedSetup.inputs_dir is not None
+        assert self.stagedSetup.outputs_dir is not None
+
         addInputsResearchObject(
-            wf_file, self.materializedParams, do_attach=doMaterializedROCrate
+            wf_file,
+            self.materializedParams,
+            inputsDir=self.stagedSetup.inputs_dir,
+            do_attach=doMaterializedROCrate,
         )
         if self.outputs is not None:
             addExpectedOutputsResearchObject(wf_file, self.outputs)
@@ -2944,7 +2950,12 @@ class WF:
         wfCrate = wf_file.crate
 
         for stagedExec in self.stagedExecutions:
-            add_execution_to_crate(wf_file, stagedExec, do_attach=doMaterializedROCrate)
+            add_execution_to_crate(
+                wf_file,
+                stagedSetup=self.stagedSetup,
+                stagedExec=stagedExec,
+                do_attach=doMaterializedROCrate,
+            )
         # TODO: implement logic of doMaterializedROCrate
 
         # Save RO-crate as execution.crate.zip
@@ -3112,11 +3123,29 @@ class WF:
             wfCrate.isBasedOn = wf_url
 
         # Add inputs provenance to RO-crate
+        assert self.stagedSetup.inputs_dir is not None
         stagedExec = self.stagedExecutions[-1]
-        addInputsResearchObject(wf_file, stagedExec.augmentedInputs)
+        addInputsResearchObject(
+            wf_file,
+            stagedExec.augmentedInputs,
+            self.stagedSetup.inputs_dir,
+            do_attach=doMaterializedROCrate,
+        )
 
         # Add outputs provenance to RO-crate
-        addOutputsResearchObject(wf_file, stagedExec.matCheckOutputs)
+        # This code won't work, as it was not updated to deal with
+        # the concept of multiple executions
+        assert self.outputsDir is not None
+        outputsDir = cast(
+            "AbsPath",
+            os.path.normpath(os.path.join(self.outputsDir, stagedExec.outputs_dir)),
+        )
+        addOutputsResearchObject(
+            wf_file,
+            stagedExec.matCheckOutputs,
+            outputsDir=outputsDir,
+            do_attach=doMaterializedROCrate,
+        )
 
         # Save RO-crate as execution.crate.zip
         if filename is None:

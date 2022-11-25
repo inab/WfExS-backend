@@ -70,6 +70,7 @@ if TYPE_CHECKING:
         Union,
     )
     from .common import (
+        AbsPath,
         Container,
         ContainerEngineVersionStr,
         ExpectedOutput,
@@ -78,6 +79,7 @@ if TYPE_CHECKING:
         MaterializedWorkflowEngine,
         RepoTag,
         RepoURL,
+        StagedSetup,
         URIType,
         WorkflowEngineVersionStr,
     )
@@ -190,6 +192,7 @@ def add_file_to_crate(
 def add_GeneratedContent_to_crate(
     crate: "rocrate.rocrate.ROCrate",
     the_content: "GeneratedContent",
+    outputsDir: "AbsPath",
     do_attach: "bool" = True,
 ) -> "rocrate.model.file.File":
     the_content_uri = (
@@ -203,7 +206,7 @@ def add_GeneratedContent_to_crate(
         the_signature=hexDigest(algo, digest),
         do_attach=do_attach,
     )
-    crate_file["name"] = os.path.basename(the_content.local)
+    crate_file["name"] = os.path.relpath(the_content.local, outputsDir)
 
     return crate_file
 
@@ -407,6 +410,7 @@ def add_directory_as_dataset(
 def add_GeneratedDirectoryContent_as_dataset(
     crate: "rocrate.rocrate.ROCrate",
     the_content: "GeneratedDirectoryContent",
+    outputsDir: "AbsPath",
     do_attach: "bool" = True,
 ) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
     if os.path.isdir(the_content.local):
@@ -423,13 +427,13 @@ def add_GeneratedDirectoryContent_as_dataset(
             validate_url=False,
             # properties=file_properties,
         )
-        crate_dataset["name"] = os.path.basename(the_content.local)
+        crate_dataset["name"] = os.path.relpath(the_content.local, outputsDir)
 
         if isinstance(the_content.values, list):
             for the_val in the_content.values:
                 if isinstance(the_val, GeneratedContent):
                     the_val_file = add_GeneratedContent_to_crate(
-                        crate, the_val, do_attach=do_attach
+                        crate, the_val, outputsDir=outputsDir, do_attach=do_attach
                     )
                     crate_dataset.append_to("hasPart", the_val_file)
                     the_files_crates.append(the_val_file)
@@ -438,7 +442,7 @@ def add_GeneratedDirectoryContent_as_dataset(
                         the_val_dataset,
                         the_subfiles_crates,
                     ) = add_GeneratedDirectoryContent_as_dataset(
-                        crate, the_val, do_attach=do_attach
+                        crate, the_val, outputsDir=outputsDir, do_attach=do_attach
                     )
                     if the_val_dataset is not None:
                         assert the_subfiles_crates is not None
@@ -455,6 +459,7 @@ def add_GeneratedDirectoryContent_as_dataset(
 def addInputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     inputs: "Sequence[MaterializedInput]",
+    inputsDir: "AbsPath",
     do_attach: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
@@ -629,6 +634,7 @@ def addExpectedOutputsResearchObject(
 def addOutputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     outputs: "Sequence[MaterializedOutput]",
+    outputsDir: "AbsPath",
     do_attach: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
@@ -695,6 +701,7 @@ def addOutputsResearchObject(
                         crate_dataset, _ = add_GeneratedDirectoryContent_as_dataset(
                             crate,
                             itemOutValues,
+                            outputsDir=outputsDir,
                             do_attach=do_attach,
                         )
 
@@ -715,6 +722,7 @@ def addOutputsResearchObject(
                         crate_file = add_GeneratedContent_to_crate(
                             crate,
                             itemOutValues,
+                            outputsDir=outputsDir,
                             do_attach=do_attach,
                         )
 
@@ -738,23 +746,34 @@ def addOutputsResearchObject(
 
 def add_execution_to_crate(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
+    stagedSetup: "StagedSetup",
     stagedExec: "StagedExecution",
     do_attach: "bool" = False,
 ) -> None:
     # TODO: Add a new CreateAction for each stagedExec
     # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
+    assert stagedSetup.work_dir is not None
+    assert stagedSetup.inputs_dir is not None
+    assert stagedSetup.outputs_dir is not None
+
     crate = wf_crate.crate
-    crate_action = CreateAction(
-        crate, stagedExec.outputsDir, stagedExec.started, stagedExec.ended
+    outputsDir = cast(
+        "AbsPath",
+        os.path.normpath(os.path.join(stagedSetup.work_dir, stagedExec.outputsDir)),
     )
+    crate_action = CreateAction(crate, outputsDir, stagedExec.started, stagedExec.ended)
     crate.add(crate_action)
     crate_action["instrument"] = wf_crate
 
     crate_inputs = addInputsResearchObject(
-        wf_crate, stagedExec.augmentedInputs, do_attach=do_attach
+        wf_crate,
+        stagedExec.augmentedInputs,
+        inputsDir=stagedSetup.inputs_dir,
+        do_attach=do_attach,
     )
     crate_action["object"] = crate_inputs
+
     crate_outputs = addOutputsResearchObject(
-        wf_crate, stagedExec.matCheckOutputs, do_attach=do_attach
+        wf_crate, stagedExec.matCheckOutputs, outputsDir=outputsDir, do_attach=do_attach
     )
     crate_action["result"] = crate_outputs
