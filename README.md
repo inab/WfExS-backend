@@ -65,7 +65,7 @@ usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCO
                         {init,cache,staged-workdir,export,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.5.6-29-geb9615b (eb9615ba3668ac21dde4c02286ff3baa34a00e62)
+WfExS (workflow execution service) backend 0.6.0 (532266dd5b0945cb1f1801a376428437e1ab3571)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -134,12 +134,12 @@ optional arguments:
   -g, --glob            Given cache element names are globs (default: False)
 
 Subparser 'staged-workdir'
-usage: WfExS-backend.py staged-workdir [-h] [-g]
-                                       {offline-exec,ls,mount,rm,shell,status}
+usage: WfExS-backend.py staged-workdir [-h] [--full] [-g]
+                                       {offline-exec,ls,mount,rm,shell,status,create-staged-crate,create-prov-crate}
                                        [staged_workdir_command_args [staged_workdir_command_args ...]]
 
 positional arguments:
-  {offline-exec,ls,mount,rm,shell,status}
+  {offline-exec,ls,mount,rm,shell,status,create-staged-crate,create-prov-crate}
                         Staged working directory command to perform
                         
                         offline-exec    Offline execute the staged instances which match the input pattern
@@ -154,11 +154,14 @@ positional arguments:
                                 If there is no additional parameters, it launches a shell
                                 in the mounted working directory of the instance
                         status          Shows staged instances status
+                        create-staged-crateIt creates an RO-Crate from the prospective provenance
+                        create-prov-crateIt creates an RO-Crate from the retrospective provenance (after a workflow execution)
   staged_workdir_command_args
                         Optional staged working directory element names (default: None)
 
 optional arguments:
   -h, --help            show this help message and exit
+  --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
   -g, --glob            Given staged workflow names are globs (default: False)
 
 Subparser 'export'
@@ -278,7 +281,7 @@ WfExS commands are:
 
 * `stage`: This command is used to first validate workflow staging and security context configuration files, then fetch all the workflow preconditions and files, staging them for an execution. It honours `-L`, `-W`, `-Z` parameters and `WFEXS_CONFIG_FILE` environment variable, and once the staging is finished it prints the path to the parent execution environment.
 
-* `staged-workdir`: This command is complementary to `stage`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable. This command has several subcommands which help on the workflow execution lifecycle (list available working directories and their statuses, remove some of them, execute either a shell or a custom command in a working directory context, execute, ...).
+* `staged-workdir`: This command is complementary to `stage`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable. This command has several subcommands which help on the workflow execution lifecycle (list available working directories and their statuses, remove some of them, execute either a shell or a custom command in a working directory context, execute, export prospective and retrospective provenance to RO-Crate, ...).
 
 * `export`: This command is complementary to `stage`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`. It also depends on both -E and -Z parameters, to declare the different export patterns and the needed credentials to complete the rules. This command has a couple of subcommands to list previously exported items and to do those exports.
 
@@ -286,9 +289,9 @@ WfExS commands are:
 
 * `offline-execute`: This command is complementary to `stage`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`. It executes the workflow, assuming all the preconditions are in place.
 
-* `export-results` _(to be finished)_: This command is complementary to `offline-execute`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute`. It export the results from an execution at a working directory, assuming there is an execution there. Export rules should be described in the file used in `-W` parameter when the working directory was staged.
+* `export-results`: This command is complementary to `offline-execute`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute`. It export the results from an execution at a working directory, assuming there is an execution there. Export rules should be described in the file used in `-W` parameter when the working directory was staged.
 
-* `export-crate` _(to be finished)_: This command is complementary to `export-results`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute` and `export-results`. It bundles the metadata and provenance results from an execution at a working directory in an RO-Crate, assuming there is an execution there.
+* `export-crate`: This command is complementary to `export-results`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage` and executed through `offline-execute` and `export-results`. It bundles the metadata and provenance results from an execution at a working directory in an RO-Crate, assuming there is an execution there.
 
 * `mount-workdir`: This command is a helper to inspect encrypted execution environments, as it mounts its working directory for a limited time. As `export-stage`, `offline-execute` or `export-results`, it recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter.
 

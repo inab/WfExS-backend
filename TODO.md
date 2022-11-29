@@ -51,7 +51,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
   - [ ] **Step 7.i**: Upload to osf.io .
   
-- [ ] **Step 8**: Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
+- [ ] **Step 8**: (partially implemented) Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
 
 - [x] **Step 9**: Generate RO-Crate from execution provenance and exported results.
 
