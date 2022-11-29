@@ -61,6 +61,9 @@ from .common import (
     SymbolicOutputName,
 )
 
+from . import __url__ as wfexs_backend_url
+from . import __official_name__ as wfexs_backend_name
+from . import get_WfExS_version
 
 if TYPE_CHECKING:
     import datetime
@@ -140,17 +143,19 @@ class Action(rocrate.model.entity.Entity):  # type: ignore[misc]
         self,
         crate: "rocrate.rocrate.ROCrate",
         name: "str",
-        startTime: "datetime.datetime",
-        endTime: "datetime.datetime",
+        startTime: "Optional[datetime.datetime]" = None,
+        endTime: "Optional[datetime.datetime]" = None,
         identifier: "Optional[str]" = None,
         properties: "Optional[Mapping[str, Any]]" = None,
     ):
 
         pv_properties = {
             "name": name,
-            "startTime": startTime.isoformat(),
-            "endTime": endTime.isoformat(),
         }
+        if startTime is not None:
+            pv_properties["startTime"] = startTime.isoformat()
+        if endTime is not None:
+            pv_properties["endTime"] = endTime.isoformat()
 
         if properties is not None:
             pv_properties.update(properties)
@@ -235,6 +240,20 @@ def add_GeneratedContent_to_crate(
     return crate_file
 
 
+def add_wfexs_to_crate(
+    crate: "rocrate.rocrate.ROCrate",
+) -> "rocrate.model.softwareapplication.SoftwareApplication":
+    wf_wfexs = rocrate.model.softwareapplication.SoftwareApplication(
+        crate, identifier=wfexs_backend_url
+    )
+    wf_wfexs = crate.add(wf_wfexs)
+    wf_wfexs["name"] = wfexs_backend_name
+    wf_wfexs.url = wfexs_backend_url
+    wf_wfexs.version = get_WfExS_version()
+
+    return wf_wfexs
+
+
 def create_workflow_crate(
     repoURL: "RepoURL",
     repoTag: "RepoTag",
@@ -256,11 +275,20 @@ def create_workflow_crate(
         localWorkflow.langVersion
     )
 
+    wf_wfexs = add_wfexs_to_crate(wfCrate)
+
     wf_url = repoURL.replace(".git", "/") + "tree/" + repoTag
     if localWorkflow.relPath is not None:
         wf_url += localWorkflow.dir.rsplit("workflow")[1]
 
     matWf = materializedEngine.workflow
+    if matWf.relPath is not None:
+        if os.path.isabs(matWf.relPath):
+            matWf_local_path = cast("AbsPath", matWf.relPath)
+        else:
+            matWf_local_path = cast("AbsPath", os.path.join(matWf.dir, matWf.relPath))
+    else:
+        matWf_local_path = matWf.dir
 
     assert (
         matWf.effectiveCheckout is not None
@@ -325,8 +353,20 @@ def create_workflow_crate(
     # This is needed to avoid future collisions with other workflows stored in the RO-Crate
     rocrate_wf_folder = str(uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url))
 
-    workflow_path = pathlib.Path(wf_local_path)
-    rocrate_wf_id = rocrate_wf_folder + "/" + workflow_path.name
+    # TODO: research why relPathFiles is not populated in matWf
+    lW = localWorkflow if matWf.relPathFiles is None else matWf
+
+    workflow_path = pathlib.Path(matWf_local_path)
+    if matWf_local_path != wf_local_path:
+        rocrate_wf_id = rocrate_wf_folder + "/" + os.path.basename(matWf_local_path)
+        logger.debug(f"OYE {matWf_local_path}")
+    else:
+        rocrate_wf_id = (
+            rocrate_wf_folder + "/" + os.path.relpath(matWf_local_path, matWf.dir)
+        )
+    local_rocrate_wf_id = (
+        rocrate_wf_folder + "/" + os.path.relpath(wf_local_path, localWorkflow.dir)
+    )
 
     wf_file = wfCrate.add_workflow(
         source=workflow_path,
@@ -336,10 +376,6 @@ def create_workflow_crate(
         lang=compLang,
         gen_cwl=False,
     )
-    wf_file["url"] = wf_entrypoint_url
-    wf_file["codeRepository"] = repoURL
-    wf_file["version"] = materializedEngine.workflow.effectiveCheckout
-    wf_file["name"] = "Workflow Entrypoint"
 
     wf_file.append_to(
         "conformsTo",
@@ -377,17 +413,62 @@ def create_workflow_crate(
             do_attach=do_attach,
         )
 
-    # TODO: research why relPathFiles is not populated in matWf
-    lW = localWorkflow if matWf.relPathFiles is None else matWf
+    rel_entities = []
     if lW.relPathFiles:
         for rel_file in lW.relPathFiles:
             rocrate_file_id = rocrate_wf_folder + "/" + rel_file
             if rocrate_file_id != rocrate_wf_id:
-                add_file_to_crate(
+                the_entity = add_file_to_crate(
                     wfCrate,
                     the_path=os.path.join(lW.dir, rel_file),
+                    the_name=cast("RelPath", rocrate_wf_folder + "/" + rel_file),
                     the_uri=cast("URIType", rocrate_file_id),
                 )
+                rel_entities.append(the_entity)
+
+    if local_rocrate_wf_id != rocrate_wf_id:
+        local_wf_file_pre = wfCrate.get(local_rocrate_wf_id)
+
+        local_wf_file = wfCrate.add_workflow(
+            source=workflow_path,
+            dest_path=local_rocrate_wf_id,
+            fetch_remote=False,
+            main=False,
+            lang=compLang,
+            gen_cwl=False,
+        )
+        local_wf_file["codeRepository"] = repoURL
+        local_wf_file["version"] = materializedEngine.workflow.effectiveCheckout
+        local_wf_file["name"] = "Unconsolidated Workflow Entrypoint"
+        local_wf_file["url"] = wf_entrypoint_url
+        local_wf_file["hasPart"] = rel_entities
+
+        # Transferring the properties
+        for prop_name in ("contentSize", "encodingFormat", "identifier", "sha256"):
+            local_wf_file[prop_name] = local_wf_file_pre[prop_name]
+
+        local_wf_file.append_to(
+            "conformsTo",
+            {
+                "@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"
+            },
+        )
+
+        wf_file["isBasedOn"] = local_wf_file
+
+        # Now, describe the transformation
+        wf_consolidate_action = CreateAction(wfCrate, "Workflow consolidation")
+        wf_consolidate_action = wfCrate.add(wf_consolidate_action)
+        wf_consolidate_action["object"] = local_wf_file
+        wf_consolidate_action["result"] = wf_file
+
+        wf_consolidate_action["instrument"] = wf_wfexs
+    else:
+        wf_file["codeRepository"] = repoURL
+        wf_file["version"] = materializedEngine.workflow.effectiveCheckout
+        wf_file["name"] = "Workflow Entrypoint"
+        wf_file["url"] = wf_entrypoint_url
+        wf_file["hasPart"] = rel_entities
 
     # if 'url' in wf_file.properties():
     #    wf_file['codeRepository'] = wf_file['url']
@@ -397,7 +478,6 @@ def create_workflow_crate(
     # etc...
     # for file_entry in include_files:
     #    wfCrate.add_file(file_entry)
-    wfCrate.isBasedOn = wf_file
 
     return wf_file
 
