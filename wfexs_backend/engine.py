@@ -436,7 +436,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     def getEmptyCrateAndComputerLanguage(
         self, langVersion: "Optional[Union[EngineVersion, WFLangVersion]]"
-    ) -> "ComputerLanguage":
+    ) -> "Tuple[ROCrate, ComputerLanguage]":
         """
         Due the internal synergies between an instance of ComputerLanguage
         and the RO-Crate it is attached to, both of them should be created
@@ -485,6 +485,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def GetEngineVersion(
         matWfEng: "MaterializedWorkflowEngine",
     ) -> "WorkflowEngineVersionStr":
+        """
+        It must return a string in the form of
+        "{symbolic engine name} {version}"
+        """
         return matWfEng.instance._get_engine_version_str(matWfEng)
 
     def materializeEngine(

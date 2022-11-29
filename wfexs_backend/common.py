@@ -50,6 +50,7 @@ from mypy_extensions import DefaultNamedArg
 
 if TYPE_CHECKING:
     from rocrate.model.computerlanguage import ComputerLanguage  # type: ignore[import]
+    from rocrate.rocrate import ROCrate  # type: ignore[import]
 
 
 # Patching default context in order to load CA certificates from certifi
@@ -493,6 +494,10 @@ class AbstractWorkflowEngineType(abc.ABC):
     def _get_engine_version_str(
         self, matWfEng: "MaterializedWorkflowEngine"
     ) -> WorkflowEngineVersionStr:
+        """
+        It must return a string in the form of
+        "{symbolic engine name} {version}"
+        """
         pass
 
     @abc.abstractmethod
@@ -561,8 +566,8 @@ class AbstractWorkflowEngineType(abc.ABC):
 
     @abc.abstractmethod
     def getEmptyCrateAndComputerLanguage(
-        self, langVersion: Optional[Union[EngineVersion, WFLangVersion]]
-    ) -> "ComputerLanguage":
+        self, langVersion: "Optional[Union[EngineVersion, WFLangVersion]]"
+    ) -> "Tuple[ROCrate, ComputerLanguage]":
         pass
 
 
