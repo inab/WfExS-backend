@@ -24,27 +24,37 @@ import subprocess
 import tempfile
 from typing import (
     cast,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
+    TYPE_CHECKING,
 )
 import uuid
 
-from .common import (
-    AbsPath,
-    AnyPath,
-    Container,
-    ContainerFileNamingMethod,
-    ContainerLocalConfig,
-    ContainerTaggedName,
-    ContainerType,
-    DEFAULT_PODMAN_CMD,
-    RelPath,
-    URIType,
-)
+if TYPE_CHECKING:
+    from typing import (
+        Mapping,
+        Optional,
+        Sequence,
+        Tuple,
+        Union,
+    )
 
+    from .common import (
+        AbsPath,
+        AnyPath,
+        ContainerFileNamingMethod,
+        ContainerLocalConfig,
+        ContainerOperatingSystem,
+        ContainerTaggedName,
+        ContainerType,
+        ExitVal,
+        ProcessorArchitecture,
+        RelPath,
+        URIType,
+    )
+
+from .common import (
+    DEFAULT_PODMAN_CMD,
+    Container,
+)
 from .container import (
     ContainerFactory,
     ContainerEngineException,
@@ -59,10 +69,10 @@ DOCKER_PROTO = "docker://"
 class PodmanContainerFactory(ContainerFactory):
     def __init__(
         self,
-        cacheDir: Optional[AnyPath] = None,
-        local_config: Optional[ContainerLocalConfig] = None,
-        engine_name: str = "unset",
-        tempDir: Optional[AnyPath] = None,
+        cacheDir: "Optional[AnyPath]" = None,
+        local_config: "Optional[ContainerLocalConfig]" = None,
+        engine_name: "str" = "unset",
+        tempDir: "Optional[AnyPath]" = None,
     ):
         super().__init__(
             cacheDir=cacheDir,
@@ -88,12 +98,12 @@ class PodmanContainerFactory(ContainerFactory):
         self.logger.debug(f"Podman supports userns: {userns_supported}")
 
     @classmethod
-    def ContainerType(cls) -> ContainerType:
+    def ContainerType(cls) -> "ContainerType":
         return ContainerType.Podman
 
     def _inspect(
-        self, dockerTag: ContainerTaggedName, matEnv: Mapping[str, str]
-    ) -> Tuple[int, str, str]:
+        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying podman container {dockerTag}")
             d_retval = subprocess.Popen(
@@ -114,11 +124,11 @@ class PodmanContainerFactory(ContainerFactory):
 
             self.logger.debug(f"podman inspect stderr: {d_err_v}")
 
-            return d_retval, d_out_v, d_err_v
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
 
     def _pull(
-        self, dockerTag: ContainerTaggedName, matEnv: Mapping[str, str]
-    ) -> Tuple[int, str, str]:
+        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"pulling podman container {dockerTag}")
             d_retval = subprocess.Popen(
@@ -139,14 +149,14 @@ class PodmanContainerFactory(ContainerFactory):
 
             self.logger.debug(f"podman pull stderr: {d_err_v}")
 
-            return d_retval, d_out_v, d_err_v
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
 
     def _save(
         self,
-        dockerTag: ContainerTaggedName,
-        destfile: AbsPath,
-        matEnv: Mapping[str, str],
-    ) -> Tuple[int, str]:
+        dockerTag: "ContainerTaggedName",
+        destfile: "AbsPath",
+        matEnv: "Mapping[str, str]",
+    ) -> "Tuple[ExitVal, str]":
         with lzma.open(
             destfile, mode="wb"
         ) as d_out, tempfile.NamedTemporaryFile() as d_err:
@@ -168,15 +178,74 @@ class PodmanContainerFactory(ContainerFactory):
 
             self.logger.debug(f"podman save stderr: {d_err_v}")
 
-            return d_retval, d_err_v
+            return cast("ExitVal", d_retval), d_err_v
+
+    def _version(
+        self,
+    ) -> "Tuple[ExitVal, str, str]":
+        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
+            self.logger.debug(f"querying podman version and details")
+            d_retval = subprocess.Popen(
+                [self.runtime_cmd, "version", "--format", "{{json .}}"],
+                stdout=d_out,
+                stderr=d_err,
+            ).wait()
+
+            self.logger.debug(f"podman version retval: {d_retval}")
+
+            with open(d_out.name, mode="r") as c_stF:
+                d_out_v = c_stF.read()
+            with open(d_err.name, "r") as c_stF:
+                d_err_v = c_stF.read()
+
+            self.logger.debug(f"podman version stdout: {d_out_v}")
+
+            self.logger.debug(f"podman version stderr: {d_err_v}")
+
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
+
+    @property
+    def architecture(self) -> "Tuple[ContainerOperatingSystem, ProcessorArchitecture]":
+        v_retval, payload, v_stderr = self._version()
+
+        if v_retval != 0:
+            errstr = """Could not get podman version. Retval {}
+======
+STDOUT
+======
+{}
+
+======
+STDERR
+======
+{}""".format(
+                v_retval, payload, v_stderr
+            )
+            raise ContainerEngineException(errstr)
+
+        try:
+            version_json = json.loads(payload)
+            osstr, arch = version_json["Client"]["OsArch"].split("/")
+
+            # Trying to be coherent with Python
+            if arch == "amd64":
+                arch = "x86_64"
+
+            return cast("ContainerOperatingSystem", osstr), cast(
+                "ProcessorArchitecture", arch
+            )
+        except Exception as e:
+            raise ContainerEngineException(
+                "Ill-formed answer from podman version"
+            ) from e
 
     def materializeContainers(
         self,
-        tagList: Sequence[ContainerTaggedName],
-        simpleFileNameMethod: ContainerFileNamingMethod,
-        containers_dir: Optional[Union[RelPath, AbsPath]] = None,
+        tagList: "Sequence[ContainerTaggedName]",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
         offline: bool = False,
-    ) -> Sequence[Container]:
+    ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
         """
@@ -187,11 +256,11 @@ class PodmanContainerFactory(ContainerFactory):
         for tag in tagList:
             # It is an absolute URL, we are removing the docker://
             if tag.startswith(DOCKER_PROTO):
-                dockerTag = cast(ContainerTaggedName, tag[len(DOCKER_PROTO) :])
+                dockerTag = cast("ContainerTaggedName", tag[len(DOCKER_PROTO) :])
                 podmanPullTag = tag
             else:
                 dockerTag = tag
-                podmanPullTag = cast(ContainerTaggedName, DOCKER_PROTO + tag)
+                podmanPullTag = cast("ContainerTaggedName", DOCKER_PROTO + tag)
 
             self.logger.info(f"downloading podman container: {tag}")
             d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
@@ -234,14 +303,14 @@ STDERR
                 fingerprint = manifest["RepoDigests"][0]
 
             # Last but one, let's save a copy of the container locally
-            containerFilename = simpleFileNameMethod(cast(URIType, tag))
+            containerFilename = simpleFileNameMethod(cast("URIType", tag))
             containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
             localContainerPath = cast(
-                AbsPath,
+                "AbsPath",
                 os.path.join(self.engineContainersSymlinkDir, containerFilename),
             )
             localContainerPathMeta = cast(
-                AbsPath,
+                "AbsPath",
                 os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
             )
 
@@ -289,7 +358,7 @@ STDERR
                 imageSignatureLocal = None
 
             # Only trust when they match
-            tmpContainerPath: Optional[str] = os.path.join(
+            tmpContainerPath: "Optional[str]" = os.path.join(
                 self.containersCacheDir, str(uuid.uuid4())
             )
             if os.path.isfile(canonicalContainerPath) and (
@@ -307,7 +376,7 @@ STDERR
             if tmpContainerPath is not None:
                 saveContainerPathMeta = True
                 d_retval, d_err_ev = self._save(
-                    dockerTag, cast(AbsPath, tmpContainerPath), matEnv
+                    dockerTag, cast("AbsPath", tmpContainerPath), matEnv
                 )
                 self.logger.debug("podman save retval: {}".format(d_retval))
                 self.logger.debug("podman save stderr: {}".format(d_err_v))
@@ -380,10 +449,10 @@ STDERR
             # Last, hardlink or copy the container and its metadata
             if containers_dir is not None:
                 containerPath = cast(
-                    AbsPath, os.path.join(containers_dir, containerFilename)
+                    "AbsPath", os.path.join(containers_dir, containerFilename)
                 )
                 containerPathMeta = cast(
-                    AbsPath, os.path.join(containers_dir, containerFilenameMeta)
+                    "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
                 )
 
                 # Do not allow overwriting in offline mode
@@ -398,7 +467,7 @@ STDERR
             containersList.append(
                 Container(
                     origTaggedName=tag,
-                    taggedName=cast(URIType, dockerTag),
+                    taggedName=cast("URIType", dockerTag),
                     signature=tagId,
                     fingerprint=fingerprint,
                     type=self.containerType,

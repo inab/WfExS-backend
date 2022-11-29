@@ -127,6 +127,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     NEXTFLOW_CONFIG_FILENAME = "nextflow.config"
 
+    NEXTFLOW_IO = cast("URIType", "https://www.nextflow.io/")
+
     DEFAULT_MAX_RETRIES = 5
     DEFAULT_MAX_CPUS = 4
 
@@ -267,9 +269,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
             shortname="nextflow",
             name="Nextflow",
             clazz=cls,
-            uriMatch=[cast("URIType", "https://www.nextflow.io/")],
-            uriTemplate=cast("URIType", "https://www.nextflow.io/"),
-            url=cast("URIType", "https://www.nextflow.io/"),
+            uriMatch=[cls.NEXTFLOW_IO],
+            uriTemplate=cls.NEXTFLOW_IO,
+            url=cls.NEXTFLOW_IO,
             trs_descriptor="NFL",
             rocrate_programming_language="https://w3id.org/workflowhub/workflow-ro-crate#nextflow",
         )
@@ -281,6 +283,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
     @classmethod
     def SupportedSecureExecContainerTypes(cls) -> "Set[ContainerType]":
         return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
+
+    @property
+    def engine_url(self) -> "URIType":
+        return self.NEXTFLOW_IO
 
     def identifyWorkflow(
         self, localWf: "LocalWorkflow", engineVer: "Optional[EngineVersion]" = None

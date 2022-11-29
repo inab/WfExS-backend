@@ -73,10 +73,13 @@ if TYPE_CHECKING:
         AbsPath,
         Container,
         ContainerEngineVersionStr,
+        ContainerOperatingSystem,
         ExpectedOutput,
         LocalWorkflow,
         MaterializedInput,
         MaterializedWorkflowEngine,
+        ProcessorArchitecture,
+        RelPath,
         RepoTag,
         RepoURL,
         StagedSetup,
@@ -158,10 +161,21 @@ class CreateAction(Action):
     pass
 
 
+class SoftwareContainer(rocrate.model.file.File):  # type: ignore[misc]
+    TYPES = ["File", "SoftwareApplication"]
+
+    def _empty(self) -> "Mapping[str, Any]":
+        return {
+            "@id": self.id,
+            "@type": self.TYPES[:],
+        }
+
+
 def add_file_to_crate(
     crate: "rocrate.rocrate.ROCrate",
     the_path: "str",
     the_uri: "URIType",
+    the_name: "Optional[RelPath]" = None,
     the_size: "Optional[int]" = None,
     the_signature: "Optional[Fingerprint]" = None,
     do_attach: "bool" = True,
@@ -170,10 +184,20 @@ def add_file_to_crate(
     # when an id has to be assigned
     the_file_crate = crate.add_file(
         source=the_path if do_attach else the_uri,
-        dest_path=the_uri if do_attach else None,
+        dest_path=the_name if do_attach else None,
         fetch_remote=False,
         validate_url=False,
     )
+    if do_attach:
+        if the_uri.startswith("http") or the_uri.startswith("ftp"):
+            uri_key = "url"
+        else:
+            uri_key = "identifier"
+
+        the_file_crate[uri_key] = the_uri
+    elif the_name is not None:
+        the_file_crate["name"] = the_name
+
     if the_size is None:
         the_size = os.stat(the_path).st_size
     if the_signature is None:
@@ -192,7 +216,7 @@ def add_file_to_crate(
 def add_GeneratedContent_to_crate(
     crate: "rocrate.rocrate.ROCrate",
     the_content: "GeneratedContent",
-    outputsDir: "AbsPath",
+    work_dir: "AbsPath",
     do_attach: "bool" = True,
 ) -> "rocrate.model.file.File":
     the_content_uri = (
@@ -203,10 +227,10 @@ def add_GeneratedContent_to_crate(
         crate,
         the_path=the_content.local,
         the_uri=cast("URIType", the_content_uri),
+        the_name=cast("RelPath", os.path.relpath(the_content.local, work_dir)),
         the_signature=hexDigest(algo, digest),
         do_attach=do_attach,
     )
-    crate_file["name"] = os.path.relpath(the_content.local, outputsDir)
 
     return crate_file
 
@@ -218,6 +242,10 @@ def create_workflow_crate(
     materializedEngine: "MaterializedWorkflowEngine",
     workflowEngineVersion: "Optional[WorkflowEngineVersionStr]",
     containerEngineVersion: "Optional[ContainerEngineVersionStr]",
+    containerEngineOs: "Optional[ContainerOperatingSystem]",
+    arch: "Optional[ProcessorArchitecture]",
+    work_dir: "AbsPath",
+    do_attach: "bool" = False,
 ) -> "rocrate.model.computationalworkflow.ComputationalWorkflow":
     if localWorkflow.relPath is not None:
         wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
@@ -317,12 +345,36 @@ def create_workflow_crate(
         "conformsTo",
         {"@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"},
     )
+
+    weng_crate = rocrate.model.softwareapplication.SoftwareApplication(
+        wfCrate, identifier=materializedEngine.instance.engine_url
+    )
     if workflowEngineVersion is not None:
+        weng_crate["softwareVersion"] = workflowEngineVersion
         wf_file["runtimePlatform"] = workflowEngineVersion
+    wfCrate.add(weng_crate)
+    wf_file.append_to("softwareRequirements", weng_crate)
 
     if materializedEngine.containers is not None:
         add_containers_to_workflow(
-            wf_file, materializedEngine.containers, containerEngineVersion
+            wf_file,
+            materializedEngine.containers,
+            containerEngineVersion,
+            containerEngineOs,
+            arch,
+            work_dir=work_dir,
+            do_attach=do_attach,
+        )
+    if materializedEngine.operational_containers is not None:
+        add_containers_to_workflow(
+            wf_file,
+            materializedEngine.operational_containers,
+            containerEngineVersion,
+            containerEngineOs,
+            arch,
+            weng_crate=weng_crate,
+            work_dir=work_dir,
+            do_attach=do_attach,
         )
 
     # TODO: research why relPathFiles is not populated in matWf
@@ -337,14 +389,10 @@ def create_workflow_crate(
                     the_uri=cast("URIType", rocrate_file_id),
                 )
 
-    # if materializedEngine.operational_containers is not None:
-    #    add_containers_to_workflow(wf_file, materializedEngine.operational_containers, containerEngineVersion)
-
     # if 'url' in wf_file.properties():
     #    wf_file['codeRepository'] = wf_file['url']
 
-    # TODO: add extra files, like nextflow.config in the case of
-    # Nextflow workflows, the diagram, an abstract CWL
+    # TODO: add extra files, like the diagram, an abstract CWL
     # representation of the workflow (when it is not a CWL workflow)
     # etc...
     # for file_entry in include_files:
@@ -410,7 +458,7 @@ def add_directory_as_dataset(
 def add_GeneratedDirectoryContent_as_dataset(
     crate: "rocrate.rocrate.ROCrate",
     the_content: "GeneratedDirectoryContent",
-    outputsDir: "AbsPath",
+    work_dir: "AbsPath",
     do_attach: "bool" = True,
 ) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
     if os.path.isdir(the_content.local):
@@ -427,13 +475,13 @@ def add_GeneratedDirectoryContent_as_dataset(
             validate_url=False,
             # properties=file_properties,
         )
-        crate_dataset["name"] = os.path.relpath(the_content.local, outputsDir)
+        crate_dataset["name"] = os.path.relpath(the_content.local, work_dir)
 
         if isinstance(the_content.values, list):
             for the_val in the_content.values:
                 if isinstance(the_val, GeneratedContent):
                     the_val_file = add_GeneratedContent_to_crate(
-                        crate, the_val, outputsDir=outputsDir, do_attach=do_attach
+                        crate, the_val, work_dir=work_dir, do_attach=do_attach
                     )
                     crate_dataset.append_to("hasPart", the_val_file)
                     the_files_crates.append(the_val_file)
@@ -442,7 +490,7 @@ def add_GeneratedDirectoryContent_as_dataset(
                         the_val_dataset,
                         the_subfiles_crates,
                     ) = add_GeneratedDirectoryContent_as_dataset(
-                        crate, the_val, outputsDir=outputsDir, do_attach=do_attach
+                        crate, the_val, work_dir=work_dir, do_attach=do_attach
                     )
                     if the_val_dataset is not None:
                         assert the_subfiles_crates is not None
@@ -459,7 +507,7 @@ def add_GeneratedDirectoryContent_as_dataset(
 def addInputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     inputs: "Sequence[MaterializedInput]",
-    inputsDir: "AbsPath",
+    work_dir: "AbsPath",
     do_attach: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
@@ -508,17 +556,16 @@ def addInputsResearchObject(
                 itemInLocalSource = itemInValues.local  # local source
                 itemInURISource = itemInValues.licensed_uri.uri  # uri source
                 if os.path.isfile(itemInLocalSource):
-                    # crate_file = add_file_to_crate(
-                    #    crate, itemInLocalSource, itemInURISource
-                    # )
                     # This is needed to avoid including the input
                     crate_file = add_file_to_crate(
                         crate,
                         the_path=itemInLocalSource,
                         the_uri=itemInURISource,
+                        the_name=cast(
+                            "RelPath", os.path.relpath(itemInLocalSource, work_dir)
+                        ),
                         do_attach=do_attach,
                     )
-                    crate_file["name"] = itemInValues.prettyFilename
 
                     crate_file.append_to("exampleOfWork", formal_parameter)
                     formal_parameter.append_to("workExample", crate_file)
@@ -535,11 +582,7 @@ def addInputsResearchObject(
                     #    do_attach=do_attach,
                     #    # properties=file_properties,
                     # )
-                    the_name: "str"
-                    if itemInValues.prettyFilename:
-                        the_name = itemInValues.prettyFilename
-                    else:
-                        the_name = os.path.basename(itemInLocalSource)
+                    the_name = os.path.relpath(itemInLocalSource, work_dir)
 
                     if crate_dataset is not None:
                         crate_dataset["name"] = the_name + "/"
@@ -574,27 +617,76 @@ def add_containers_to_workflow(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     containers: "Sequence[Container]",
     containerEngineVersion: "Optional[ContainerEngineVersionStr]",
+    containerEngineOs: "Optional[ContainerOperatingSystem]",
+    arch: "Optional[ProcessorArchitecture]",
+    work_dir: "AbsPath",
+    weng_crate: "Optional[rocrate.model.softwareapplication.SoftwareApplication]" = None,
+    do_attach: "bool" = False,
 ) -> None:
-    if len(containers) > 0:
-        crate = wf_crate.crate
-        for container in containers:
-            container_type = rocrate.model.softwareapplication.SoftwareApplication(
-                crate, identifier=ContainerTypeIds[container.type]
-            )
-            container_type["name"] = container.type.value
-            container_type["softwareVersion"] = containerEngineVersion
-            crate_cont_type = crate.add(container_type)
-            wf_crate.append_to("softwareRequirements", crate_cont_type)
+    crate = wf_crate.crate
+    cached_cts: "MutableMapping[ContainerType, rocrate.model.softwareapplication.SoftwareApplication]" = (
+        {}
+    )
 
-            container_pid = container.taggedName
-            software_container = rocrate.model.softwareapplication.SoftwareApplication(
-                crate, identifier=container_pid
-            )
+    # Operational containers are needed by the workflow engine, not by the workflow
+    if len(containers) > 0:
+        sa_crate: "Union[rocrate.model.computationalworkflow.ComputationalWorkflow, rocrate.model.softwareapplication.SoftwareApplication]"
+        if weng_crate is not None:
+            sa_crate = weng_crate
+        else:
+            sa_crate = wf_crate
+        for container in containers:
+            crate_cont_type = cached_cts.get(container.type)
+            if crate_cont_type is None:
+                container_type = rocrate.model.softwareapplication.SoftwareApplication(
+                    crate, identifier=ContainerTypeIds[container.type]
+                )
+                container_type["name"] = container.type.value
+                if containerEngineVersion is not None:
+                    container_type["softwareVersion"] = containerEngineVersion
+
+                crate_cont_type = crate.add(container_type)
+                wf_crate.append_to("softwareRequirements", crate_cont_type)
+                cached_cts[container.type] = crate_cont_type
+
+            if do_attach and container.localPath is not None:
+                the_size = os.stat(container.localPath).st_size
+                digest, algo = extract_digest(container.signature)
+                the_signature = hexDigest(algo, digest)
+
+                software_container = SoftwareContainer(
+                    crate,
+                    source=container.localPath,
+                    dest_path=os.path.relpath(container.localPath, work_dir),
+                    fetch_remote=False,
+                    validate_url=False,
+                    properties={
+                        "contentSize": the_size,
+                        "identifier": container.taggedName,
+                        "sha256": the_signature,
+                        "encodingFormat": magic.from_file(
+                            container.localPath, mime=True
+                        ),
+                    },
+                )
+
+            else:
+                container_pid = container.taggedName
+                software_container = (
+                    rocrate.model.softwareapplication.SoftwareApplication(
+                        crate, identifier=container_pid
+                    )
+                )
+
             software_container["softwareVersion"] = container.fingerprint
+            if containerEngineOs is not None:
+                software_container["operatingSystem"] = containerEngineOs
+            if arch is not None:
+                software_container["processorRequirements"] = arch
             software_container["softwareRequirements"] = crate_cont_type
 
             crate_cont = crate.add(software_container)
-            wf_crate.append_to("softwareRequirements", crate_cont)
+            sa_crate.append_to("softwareRequirements", crate_cont)
 
 
 def addExpectedOutputsResearchObject(
@@ -634,7 +726,7 @@ def addExpectedOutputsResearchObject(
 def addOutputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     outputs: "Sequence[MaterializedOutput]",
-    outputsDir: "AbsPath",
+    work_dir: "AbsPath",
     do_attach: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
@@ -701,7 +793,7 @@ def addOutputsResearchObject(
                         crate_dataset, _ = add_GeneratedDirectoryContent_as_dataset(
                             crate,
                             itemOutValues,
-                            outputsDir=outputsDir,
+                            work_dir=work_dir,
                             do_attach=do_attach,
                         )
 
@@ -722,7 +814,7 @@ def addOutputsResearchObject(
                         crate_file = add_GeneratedContent_to_crate(
                             crate,
                             itemOutValues,
-                            outputsDir=outputsDir,
+                            work_dir=work_dir,
                             do_attach=do_attach,
                         )
 
@@ -754,26 +846,31 @@ def add_execution_to_crate(
     # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
     assert stagedSetup.work_dir is not None
     assert stagedSetup.inputs_dir is not None
-    assert stagedSetup.outputs_dir is not None
 
     crate = wf_crate.crate
     outputsDir = cast(
         "AbsPath",
         os.path.normpath(os.path.join(stagedSetup.work_dir, stagedExec.outputsDir)),
     )
-    crate_action = CreateAction(crate, outputsDir, stagedExec.started, stagedExec.ended)
+
+    crate_action = CreateAction(
+        crate, stagedExec.outputsDir, stagedExec.started, stagedExec.ended
+    )
     crate.add(crate_action)
     crate_action["instrument"] = wf_crate
 
     crate_inputs = addInputsResearchObject(
         wf_crate,
         stagedExec.augmentedInputs,
-        inputsDir=stagedSetup.inputs_dir,
+        work_dir=stagedSetup.work_dir,
         do_attach=do_attach,
     )
     crate_action["object"] = crate_inputs
 
     crate_outputs = addOutputsResearchObject(
-        wf_crate, stagedExec.matCheckOutputs, outputsDir=outputsDir, do_attach=do_attach
+        wf_crate,
+        stagedExec.matCheckOutputs,
+        work_dir=stagedSetup.work_dir,
+        do_attach=do_attach,
     )
     crate_action["result"] = crate_outputs

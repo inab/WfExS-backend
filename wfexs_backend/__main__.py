@@ -551,7 +551,8 @@ def processStagedWorkdirCommand(
                                 )
                             )
                             wfInstance.createStageResearchObject(
-                                filename=args.staged_workdir_command_args[1]
+                                filename=args.staged_workdir_command_args[1],
+                                doMaterializedROCrate=args.doMaterializedROCrate,
                             )
                         else:
                             mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
@@ -563,7 +564,8 @@ def processStagedWorkdirCommand(
                                     )
                                 )
                                 wfInstance.createResultsResearchObject(
-                                    filename=args.staged_workdir_command_args[1]
+                                    filename=args.staged_workdir_command_args[1],
+                                    doMaterializedROCrate=args.doMaterializedROCrate,
                                 )
                             else:
                                 print(
@@ -740,7 +742,7 @@ def main() -> None:
         "cache_command_args", help="Optional cache element names", nargs="*"
     )
 
-    ap_w = genParserSub(sp, WfExS_Commands.StagedWorkDir)
+    ap_w = genParserSub(sp, WfExS_Commands.StagedWorkDir, crateParams=True)
     ap_w.add_argument(
         "staged_workdir_command",
         help="raw|Staged working directory command to perform\n\n"

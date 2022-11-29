@@ -24,29 +24,36 @@ import subprocess
 import tempfile
 from typing import (
     cast,
-    Optional,
-    Sequence,
-    Set,
-    Union,
+    TYPE_CHECKING,
 )
 from urllib import parse
 import uuid
 
-from typing_extensions import Final
-
 from .common import (
-    AbsPath,
-    AnyPath,
     Container,
-    ContainerFileNamingMethod,
-    ContainerLocalConfig,
-    ContainerTaggedName,
     ContainerType,
     DEFAULT_SINGULARITY_CMD,
-    Fingerprint,
-    RelPath,
-    URIType,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Optional,
+        Sequence,
+        Set,
+        Union,
+    )
+    from typing_extensions import Final
+
+    from .common import (
+        AbsPath,
+        AnyPath,
+        ContainerFileNamingMethod,
+        ContainerLocalConfig,
+        ContainerTaggedName,
+        Fingerprint,
+        RelPath,
+        URIType,
+    )
 
 from .container import (
     ContainerFactory,
@@ -60,7 +67,7 @@ from .utils.docker import DockerHelper
 
 
 class SingularityContainerFactory(ContainerFactory):
-    ACCEPTED_SING_SCHEMES: Final[Set[str]] = {
+    ACCEPTED_SING_SCHEMES: "Final[Set[str]]" = {
         "library",
         "docker",
         "shub",
@@ -72,10 +79,10 @@ class SingularityContainerFactory(ContainerFactory):
 
     def __init__(
         self,
-        cacheDir: Optional[AnyPath] = None,
-        local_config: Optional[ContainerLocalConfig] = None,
-        engine_name: str = "unset",
-        tempDir: Optional[AnyPath] = None,
+        cacheDir: "Optional[AnyPath]" = None,
+        local_config: "Optional[ContainerLocalConfig]" = None,
+        engine_name: "str" = "unset",
+        tempDir: "Optional[AnyPath]" = None,
     ):
         super().__init__(
             cacheDir=cacheDir,
@@ -130,16 +137,16 @@ class SingularityContainerFactory(ContainerFactory):
             )
 
     @classmethod
-    def ContainerType(cls) -> ContainerType:
+    def ContainerType(cls) -> "ContainerType":
         return ContainerType.Singularity
 
     def materializeContainers(
         self,
-        tagList: Sequence[ContainerTaggedName],
-        simpleFileNameMethod: ContainerFileNamingMethod,
-        containers_dir: Optional[Union[RelPath, AbsPath]] = None,
-        offline: bool = False,
-    ) -> Sequence[Container]:
+        tagList: "Sequence[ContainerTaggedName]",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        offline: "bool" = False,
+    ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
         """
@@ -155,18 +162,18 @@ class SingularityContainerFactory(ContainerFactory):
                 singTag = tag
                 isDocker = parsedTag.scheme == "docker"
             else:
-                singTag = cast(ContainerTaggedName, "docker://" + tag)
+                singTag = cast("ContainerTaggedName", "docker://" + tag)
                 # Assuming it is docker
                 isDocker = True
 
-            containerFilename = simpleFileNameMethod(cast(URIType, tag))
+            containerFilename = simpleFileNameMethod(cast("URIType", tag))
             containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
             localContainerPath = cast(
-                AbsPath,
+                "AbsPath",
                 os.path.join(self.engineContainersSymlinkDir, containerFilename),
             )
             localContainerPathMeta = cast(
-                AbsPath,
+                "AbsPath",
                 os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
             )
 
@@ -287,7 +294,7 @@ class SingularityContainerFactory(ContainerFactory):
                             )
 
                         imageSignature = cast(
-                            Fingerprint, ComputeDigestFromFile(tmpContainerPath)
+                            "Fingerprint", ComputeDigestFromFile(tmpContainerPath)
                         )
                         # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
                         canonicalContainerPath = os.path.join(
@@ -358,7 +365,7 @@ STDERR
                         )
                     )
                 canonicalContainerPathMeta = cast(
-                    AbsPath, canonicalContainerPath + self.META_JSON_POSTFIX
+                    "AbsPath", canonicalContainerPath + self.META_JSON_POSTFIX
                 )
                 shutil.move(tmpContainerPathMeta, canonicalContainerPathMeta)
 
@@ -375,23 +382,24 @@ STDERR
             # Then, compute the signature
             if imageSignature is None:
                 imageSignature = cast(
-                    Fingerprint,
+                    "Fingerprint",
                     ComputeDigestFromFile(localContainerPath, repMethod=nihDigester),
                 )
 
             # Hardlink or copy the container and its metadata
             if containers_dir is not None:
                 containerPath = cast(
-                    AbsPath, os.path.join(containers_dir, containerFilename)
+                    "AbsPath", os.path.join(containers_dir, containerFilename)
                 )
                 containerPathMeta = cast(
-                    AbsPath, os.path.join(containers_dir, containerFilenameMeta)
+                    "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
                 )
 
                 # Do not allow overwriting in offline mode
                 if not offline or not os.path.exists(containerPath):
                     link_or_copy(localContainerPath, containerPath)
                 if not offline or not os.path.exists(containerPathMeta):
+                    os.makedirs(os.path.dirname(localContainerPathMeta), exist_ok=True)
                     link_or_copy(localContainerPathMeta, containerPathMeta)
             else:
                 containerPath = localContainerPath

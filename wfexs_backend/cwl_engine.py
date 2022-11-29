@@ -244,6 +244,10 @@ class CWLWorkflowEngine(WorkflowEngine):
     def SupportedSecureExecContainerTypes(cls) -> Set[ContainerType]:
         return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
 
+    @property
+    def engine_url(self) -> "URIType":
+        return cast("URIType", "https://pypi.org/project/cwltool/")
+
     def identifyWorkflow(
         self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None
     ) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
@@ -297,13 +301,23 @@ class CWLWorkflowEngine(WorkflowEngine):
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        if self.engine_mode != EngineMode.Local:
-            raise WorkflowEngineException(
-                "Unsupported engine mode {} for {} engine".format(
-                    self.engine_mode, self.ENGINE_NAME
-                )
-            )
+        if self.engine_mode == EngineMode.Local:
+            return self._materializeEngineVersionLocal(engineVersion)
 
+        raise WorkflowEngineException(
+            "Unsupported engine mode {} for {} engine".format(
+                self.engine_mode, self.ENGINE_NAME
+            )
+        )
+
+    def _materializeEngineVersionLocal(
+        self, engineVersion: EngineVersion
+    ) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
+        """
+        Method to ensure the required engine version is materialized
+        It should raise an exception when the exact version is unavailable,
+        and no replacement could be fetched
+        """
         if self.DEVEL_CWLTOOL_VERSION is not None:
             cwltoolPackage = self.DEVEL_CWLTOOL_PACKAGE
             cwltoolMatchOp = "@"

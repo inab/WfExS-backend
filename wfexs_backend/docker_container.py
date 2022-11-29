@@ -24,25 +24,36 @@ import subprocess
 import tempfile
 from typing import (
     cast,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
+    TYPE_CHECKING,
 )
 import uuid
 
+if TYPE_CHECKING:
+    from typing import (
+        Mapping,
+        Optional,
+        Sequence,
+        Tuple,
+        Union,
+    )
+
+    from .common import (
+        AbsPath,
+        AnyPath,
+        ContainerFileNamingMethod,
+        ContainerLocalConfig,
+        ContainerOperatingSystem,
+        ContainerTaggedName,
+        ContainerType,
+        ExitVal,
+        ProcessorArchitecture,
+        RelPath,
+        URIType,
+    )
+
 from .common import (
-    AbsPath,
-    AnyPath,
     Container,
-    ContainerFileNamingMethod,
-    ContainerLocalConfig,
-    ContainerTaggedName,
-    ContainerType,
     DEFAULT_DOCKER_CMD,
-    RelPath,
-    URIType,
 )
 
 from .container import (
@@ -59,10 +70,10 @@ DOCKER_PROTO = "docker://"
 class DockerContainerFactory(ContainerFactory):
     def __init__(
         self,
-        cacheDir: Optional[AnyPath] = None,
-        local_config: Optional[ContainerLocalConfig] = None,
-        engine_name: str = "unset",
-        tempDir: Optional[AnyPath] = None,
+        cacheDir: "Optional[AnyPath]" = None,
+        local_config: "Optional[ContainerLocalConfig]" = None,
+        engine_name: "str" = "unset",
+        tempDir: "Optional[AnyPath]" = None,
     ):
         super().__init__(
             cacheDir=cacheDir,
@@ -74,12 +85,12 @@ class DockerContainerFactory(ContainerFactory):
         self.runtime_cmd = tools.get("dockerCommand", DEFAULT_DOCKER_CMD)
 
     @classmethod
-    def ContainerType(cls) -> ContainerType:
+    def ContainerType(cls) -> "ContainerType":
         return ContainerType.Docker
 
     def _inspect(
-        self, dockerTag: ContainerTaggedName, matEnv: Mapping[str, str]
-    ) -> Tuple[int, str, str]:
+        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying docker container {dockerTag}")
             d_retval = subprocess.Popen(
@@ -100,11 +111,11 @@ class DockerContainerFactory(ContainerFactory):
 
             self.logger.debug(f"docker inspect stderr: {d_err_v}")
 
-            return d_retval, d_out_v, d_err_v
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
 
     def _pull(
-        self, dockerTag: ContainerTaggedName, matEnv: Mapping[str, str]
-    ) -> Tuple[int, str, str]:
+        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"pulling docker container {dockerTag}")
             d_retval = subprocess.Popen(
@@ -125,14 +136,14 @@ class DockerContainerFactory(ContainerFactory):
 
             self.logger.debug(f"docker pull stderr: {d_err_v}")
 
-            return d_retval, d_out_v, d_err_v
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
 
     def _save(
         self,
-        dockerTag: ContainerTaggedName,
-        destfile: AbsPath,
-        matEnv: Mapping[str, str],
-    ) -> Tuple[int, str]:
+        dockerTag: "ContainerTaggedName",
+        destfile: "AbsPath",
+        matEnv: "Mapping[str, str]",
+    ) -> "Tuple[ExitVal, str]":
         with lzma.open(
             destfile, mode="wb"
         ) as d_out, tempfile.NamedTemporaryFile() as d_err:
@@ -154,15 +165,73 @@ class DockerContainerFactory(ContainerFactory):
 
             self.logger.debug(f"docker save stderr: {d_err_v}")
 
-            return d_retval, d_err_v
+            return cast("ExitVal", d_retval), d_err_v
+
+    def _version(
+        self,
+    ) -> "Tuple[ExitVal, str, str]":
+        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
+            self.logger.debug(f"querying docker version and details")
+            d_retval = subprocess.Popen(
+                [self.runtime_cmd, "version", "--format", "{{json .}}"],
+                stdout=d_out,
+                stderr=d_err,
+            ).wait()
+
+            self.logger.debug(f"docker version retval: {d_retval}")
+
+            with open(d_out.name, mode="r") as c_stF:
+                d_out_v = c_stF.read()
+            with open(d_err.name, "r") as c_stF:
+                d_err_v = c_stF.read()
+
+            self.logger.debug(f"docker version stdout: {d_out_v}")
+
+            self.logger.debug(f"docker version stderr: {d_err_v}")
+
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
+
+    @property
+    def architecture(self) -> "Tuple[ContainerOperatingSystem, ProcessorArchitecture]":
+        v_retval, payload, v_stderr = self._version()
+
+        if v_retval != 0:
+            errstr = """Could not get docker version. Retval {}
+======
+STDOUT
+======
+{}
+
+======
+STDERR
+======
+{}""".format(
+                v_retval, payload, v_stderr
+            )
+            raise ContainerEngineException(errstr)
+
+        try:
+            version_json = json.loads(payload)
+            arch = version_json["Client"]["Arch"]
+
+            # Trying to be coherent with Python
+            if arch == "amd64":
+                arch = "x86_64"
+            return cast("ContainerOperatingSystem", version_json["Client"]["Os"]), cast(
+                "ProcessorArchitecture", arch
+            )
+        except json.JSONDecodeError as je:
+            raise ContainerEngineException(
+                "Ill-formed answer from docker version"
+            ) from je
 
     def materializeContainers(
         self,
-        tagList: Sequence[ContainerTaggedName],
-        simpleFileNameMethod: ContainerFileNamingMethod,
-        containers_dir: Optional[Union[RelPath, AbsPath]] = None,
-        offline: bool = False,
-    ) -> Sequence[Container]:
+        tagList: "Sequence[ContainerTaggedName]",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        offline: "bool" = False,
+    ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
         """
@@ -173,7 +242,7 @@ class DockerContainerFactory(ContainerFactory):
         for tag in tagList:
             # It is an absolute URL, we are removing the docker://
             dockerTag = cast(
-                ContainerTaggedName,
+                "ContainerTaggedName",
                 tag[len(DOCKER_PROTO) :] if tag.startswith(DOCKER_PROTO) else tag,
             )
 
@@ -218,14 +287,14 @@ STDERR
                 fingerprint = manifest["RepoDigests"][0]
 
             # Last but one, let's save a copy of the container locally
-            containerFilename = simpleFileNameMethod(cast(URIType, tag))
+            containerFilename = simpleFileNameMethod(cast("URIType", tag))
             containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
             localContainerPath = cast(
-                AbsPath,
+                "AbsPath",
                 os.path.join(self.engineContainersSymlinkDir, containerFilename),
             )
             localContainerPathMeta = cast(
-                AbsPath,
+                "AbsPath",
                 os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
             )
 
@@ -273,7 +342,7 @@ STDERR
                 imageSignatureLocal = None
 
             # Only trust when they match
-            tmpContainerPath: Optional[str] = os.path.join(
+            tmpContainerPath: "Optional[str]" = os.path.join(
                 self.containersCacheDir, str(uuid.uuid4())
             )
             if os.path.isfile(canonicalContainerPath) and (
@@ -291,7 +360,7 @@ STDERR
             if tmpContainerPath is not None:
                 saveContainerPathMeta = True
                 d_retval, d_err_ev = self._save(
-                    dockerTag, cast(AbsPath, tmpContainerPath), matEnv
+                    dockerTag, cast("AbsPath", tmpContainerPath), matEnv
                 )
                 self.logger.debug("docker save retval: {}".format(d_retval))
                 self.logger.debug("docker save stderr: {}".format(d_err_v))
@@ -364,10 +433,10 @@ STDERR
             # Last, hardlink or copy the container and its metadata
             if containers_dir is not None:
                 containerPath = cast(
-                    AbsPath, os.path.join(containers_dir, containerFilename)
+                    "AbsPath", os.path.join(containers_dir, containerFilename)
                 )
                 containerPathMeta = cast(
-                    AbsPath, os.path.join(containers_dir, containerFilenameMeta)
+                    "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
                 )
 
                 # Do not allow overwriting in offline mode
@@ -382,7 +451,7 @@ STDERR
             containersList.append(
                 Container(
                     origTaggedName=tag,
-                    taggedName=cast(URIType, dockerTag),
+                    taggedName=cast("URIType", dockerTag),
                     signature=tagId,
                     fingerprint=fingerprint,
                     type=self.containerType,

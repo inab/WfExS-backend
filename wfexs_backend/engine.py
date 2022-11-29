@@ -25,46 +25,68 @@ import abc
 import glob
 import logging
 
-from typing import cast, Any, Callable, List, Mapping, MutableSequence
-from typing import Optional, Sequence, Set, Tuple, Type, Union
+from typing import (
+    cast,
+    TYPE_CHECKING,
+)
 
 from .common import (
-    AbstractGeneratedContent,
     AbstractWfExSException,
     AbstractWorkflowEngineType,
-    AbsPath,
-    AnyPath,
-    Container,
-    ContainerEngineVersionStr,
-    ContainerTaggedName,
     ContainerType,
     ContentKind,
     DEFAULT_CONTAINER_TYPE,
     DEFAULT_DOCKER_CMD,
     DEFAULT_ENGINE_MODE,
-    EngineLocalConfig,
     EngineMode,
-    EnginePath,
-    EngineVersion,
-    ExitVal,
-    ExpectedOutput,
-    Fingerprint,
     GeneratedContent,
     GeneratedDirectoryContent,
-    LocalWorkflow,
-    MaterializedInput,
-    MaterializedContent,
     MaterializedOutput,
     MaterializedWorkflowEngine,
-    RelPath,
-    StagedExecution,
-    StagedSetup,
-    SymbolicOutputName,
-    SymbolicParamName,
-    URIType,
-    WFLangVersion,
-    WorkflowEngineVersionStr,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Callable,
+        List,
+        Mapping,
+        MutableSequence,
+        Optional,
+        Sequence,
+        Set,
+        Tuple,
+        Type,
+        Union,
+    )
+
+    from .common import (
+        AbstractGeneratedContent,
+        AbsPath,
+        AnyPath,
+        Container,
+        ContainerEngineVersionStr,
+        ContainerOperatingSystem,
+        ContainerTaggedName,
+        EngineLocalConfig,
+        EnginePath,
+        EngineVersion,
+        ExitVal,
+        ExpectedOutput,
+        Fingerprint,
+        LocalWorkflow,
+        MaterializedInput,
+        MaterializedContent,
+        ProcessorArchitecture,
+        RelPath,
+        StagedExecution,
+        StagedSetup,
+        SymbolicOutputName,
+        SymbolicParamName,
+        URIType,
+        WFLangVersion,
+        WorkflowEngineVersionStr,
+    )
 
 from .container import ContainerFactory, NoContainerFactory
 from .singularity_container import SingularityContainerFactory
@@ -111,7 +133,7 @@ class WorkflowEngineException(AbstractWfExSException):
     pass
 
 
-CONTAINER_FACTORY_CLASSES: List[Type[ContainerFactory]] = [
+CONTAINER_FACTORY_CLASSES: "List[Type[ContainerFactory]]" = [
     SingularityContainerFactory,
     DockerContainerFactory,
     PodmanContainerFactory,
@@ -122,20 +144,20 @@ CONTAINER_FACTORY_CLASSES: List[Type[ContainerFactory]] = [
 class WorkflowEngine(AbstractWorkflowEngineType):
     def __init__(
         self,
-        cacheDir: Optional[AnyPath] = None,
-        workflow_config: Optional[Mapping[str, Any]] = None,
-        local_config: Optional[EngineLocalConfig] = None,
-        engineTweaksDir: Optional[AnyPath] = None,
-        cacheWorkflowDir: Optional[AnyPath] = None,
-        cacheWorkflowInputsDir: Optional[AnyPath] = None,
-        workDir: Optional[AnyPath] = None,
-        outputsDir: Optional[AnyPath] = None,
-        outputMetaDir: Optional[AnyPath] = None,
-        intermediateDir: Optional[AnyPath] = None,
-        tempDir: Optional[AnyPath] = None,
-        secure_exec: bool = False,
-        allowOther: bool = False,
-        config_directory: Optional[AnyPath] = None,
+        cacheDir: "Optional[AnyPath]" = None,
+        workflow_config: "Optional[Mapping[str, Any]]" = None,
+        local_config: "Optional[EngineLocalConfig]" = None,
+        engineTweaksDir: "Optional[AnyPath]" = None,
+        cacheWorkflowDir: "Optional[AnyPath]" = None,
+        cacheWorkflowInputsDir: "Optional[AnyPath]" = None,
+        workDir: "Optional[AnyPath]" = None,
+        outputsDir: "Optional[AnyPath]" = None,
+        outputMetaDir: "Optional[AnyPath]" = None,
+        intermediateDir: "Optional[AnyPath]" = None,
+        tempDir: "Optional[AnyPath]" = None,
+        secure_exec: "bool" = False,
+        allowOther: "bool" = False,
+        config_directory: "Optional[AnyPath]" = None,
     ):
         """
         Abstract init method
@@ -162,7 +184,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.local_config = local_config
 
         if config_directory is None:
-            config_directory = cast(AbsPath, os.getcwd())
+            config_directory = cast("AbsPath", os.getcwd())
         self.config_directory = config_directory
 
         # Getting a logger focused on specific classes
@@ -177,13 +199,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             cacheDir = local_config.get("cacheDir")
 
         if cacheDir is None:
-            cacheDir = cast(AbsPath, tempfile.mkdtemp(prefix="WfExS", suffix="backend"))
+            cacheDir = cast(
+                "AbsPath", tempfile.mkdtemp(prefix="WfExS", suffix="backend")
+            )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, cacheDir)
         else:
             if not os.path.isabs(cacheDir):
                 cacheDir = cast(
-                    AbsPath, os.path.normpath(os.path.join(config_directory, cacheDir))
+                    "AbsPath",
+                    os.path.normpath(os.path.join(config_directory, cacheDir)),
                 )
             # Be sure the directory exists
             os.makedirs(cacheDir, exist_ok=True)
@@ -195,20 +220,22 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         # Needed for those cases where alternate version of the workflow is generated
         if cacheWorkflowDir is None:
-            cacheWorkflowDir = cast(AbsPath, os.path.join(cacheDir, "wf-cache"))
+            cacheWorkflowDir = cast("AbsPath", os.path.join(cacheDir, "wf-cache"))
             os.makedirs(cacheWorkflowDir, exist_ok=True)
         self.cacheWorkflowDir = cacheWorkflowDir
 
         # Needed for those cases where there is a shared cache
         if cacheWorkflowInputsDir is None:
-            cacheWorkflowInputsDir = cast(AbsPath, os.path.join(cacheDir, "wf-inputs"))
+            cacheWorkflowInputsDir = cast(
+                "AbsPath", os.path.join(cacheDir, "wf-inputs")
+            )
             os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
         self.cacheWorkflowInputsDir = cacheWorkflowInputsDir
 
         # Setting up working directories, one per instance
         if workDir is None:
             workDir = cast(
-                AbsPath, tempfile.mkdtemp(prefix="WfExS-exec", suffix="workdir")
+                "AbsPath", tempfile.mkdtemp(prefix="WfExS-exec", suffix="workdir")
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, workDir)
@@ -217,7 +244,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # This directory should hold intermediate workflow steps results
         if intermediateDir is None:
             intermediateDir = cast(
-                AbsPath, os.path.join(workDir, WORKDIR_INTERMEDIATE_RELDIR)
+                "AbsPath", os.path.join(workDir, WORKDIR_INTERMEDIATE_RELDIR)
             )
         os.makedirs(intermediateDir, exist_ok=True)
         self.intermediateDir = intermediateDir
@@ -226,17 +253,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # be either symbolic links to the intermediate results directory
         # or newly generated content
         if outputsDir is None:
-            outputsDir = cast(AbsPath, os.path.join(workDir, WORKDIR_OUTPUTS_RELDIR))
+            outputsDir = cast("AbsPath", os.path.join(workDir, WORKDIR_OUTPUTS_RELDIR))
         elif not os.path.isabs(outputsDir):
-            outputsDir = cast(AbsPath, os.path.abspath(outputsDir))
+            outputsDir = cast("AbsPath", os.path.abspath(outputsDir))
         os.makedirs(outputsDir, exist_ok=True)
-        self.outputsDir = cast(AbsPath, outputsDir)
+        self.outputsDir = cast("AbsPath", outputsDir)
 
         # This directory will hold diverse metadata, like execution metadata
         # or newly generated content
         if outputMetaDir is None:
             outputMetaDir = cast(
-                AbsPath,
+                "AbsPath",
                 os.path.join(workDir, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR),
             )
         os.makedirs(outputMetaDir, exist_ok=True)
@@ -245,7 +272,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # This directory will hold stats metadata, as well as the dot representation
         # of the workflow execution
         outputStatsDir = cast(
-            AbsPath, os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
+            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
         )
         os.makedirs(outputStatsDir, exist_ok=True)
         self.outputStatsDir = outputStatsDir
@@ -255,7 +282,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # engine tweaks directory
         if engineTweaksDir is None:
             engineTweaksDir = cast(
-                AbsPath, os.path.join(workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
+                "AbsPath", os.path.join(workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
             )
         os.makedirs(engineTweaksDir, exist_ok=True)
         self.engineTweaksDir = engineTweaksDir
@@ -264,7 +291,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # WfExS or the engine itself. It should be set to TMPDIR on subprocess calls
         if tempDir is None:
             tempDir = cast(
-                AbsPath, tempfile.mkdtemp(prefix="WfExS-exec", suffix="tempdir")
+                "AbsPath", tempfile.mkdtemp(prefix="WfExS-exec", suffix="tempdir")
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, tempDir)
@@ -357,13 +384,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @classmethod
     def FromStagedSetup(
         cls,
-        staged_setup: StagedSetup,
-        cache_dir: Optional[AnyPath] = None,
-        cache_workflow_dir: Optional[AnyPath] = None,
-        cache_workflow_inputs_dir: Optional[AnyPath] = None,
-        local_config: Optional[EngineLocalConfig] = None,
-        config_directory: Optional[AnyPath] = None,
-    ) -> AbstractWorkflowEngineType:
+        staged_setup: "StagedSetup",
+        cache_dir: "Optional[AnyPath]" = None,
+        cache_workflow_dir: "Optional[AnyPath]" = None,
+        cache_workflow_inputs_dir: "Optional[AnyPath]" = None,
+        local_config: "Optional[EngineLocalConfig]" = None,
+        config_directory: "Optional[AnyPath]" = None,
+    ) -> "AbstractWorkflowEngineType":
         """
         Init method from staged setup instance
 
@@ -393,23 +420,23 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     @classmethod
     @abc.abstractmethod
-    def SupportedContainerTypes(cls) -> Set[ContainerType]:
+    def SupportedContainerTypes(cls) -> "Set[ContainerType]":
         pass
 
     @classmethod
     @abc.abstractmethod
-    def SupportedSecureExecContainerTypes(cls) -> Set[ContainerType]:
+    def SupportedSecureExecContainerTypes(cls) -> "Set[ContainerType]":
         pass
 
-    def supportsContainerType(self, containerType: ContainerType) -> bool:
+    def supportsContainerType(self, containerType: "ContainerType") -> "bool":
         return containerType in self.SupportedContainerTypes()
 
-    def supportsSecureExecContainerType(self, containerType: ContainerType) -> bool:
+    def supportsSecureExecContainerType(self, containerType: "ContainerType") -> "bool":
         return containerType in self.SupportedSecureExecContainerTypes()
 
     def getEmptyCrateAndComputerLanguage(
-        self, langVersion: Optional[Union[EngineVersion, WFLangVersion]]
-    ) -> ComputerLanguage:
+        self, langVersion: "Optional[Union[EngineVersion, WFLangVersion]]"
+    ) -> "ComputerLanguage":
         """
         Due the internal synergies between an instance of ComputerLanguage
         and the RO-Crate it is attached to, both of them should be created
@@ -434,8 +461,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     @abc.abstractmethod
     def identifyWorkflow(
-        self, localWf: LocalWorkflow, engineVer: Optional[EngineVersion] = None
-    ) -> Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]:
+        self, localWf: "LocalWorkflow", engineVer: "Optional[EngineVersion]" = None
+    ) -> "Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]":
         """
         This method should return the effective engine version needed
         to run it when this workflow engine recognizes the workflow type
@@ -444,8 +471,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     @abc.abstractmethod
     def materializeEngineVersion(
-        self, engineVersion: EngineVersion
-    ) -> Tuple[EngineVersion, EnginePath, Fingerprint]:
+        self, engineVersion: "EngineVersion"
+    ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -456,13 +483,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     @staticmethod
     def GetEngineVersion(
-        matWfEng: MaterializedWorkflowEngine,
-    ) -> WorkflowEngineVersionStr:
+        matWfEng: "MaterializedWorkflowEngine",
+    ) -> "WorkflowEngineVersionStr":
         return matWfEng.instance._get_engine_version_str(matWfEng)
 
     def materializeEngine(
-        self, localWf: LocalWorkflow, engineVersion: Optional[EngineVersion] = None
-    ) -> Optional[MaterializedWorkflowEngine]:
+        self, localWf: "LocalWorkflow", engineVersion: "Optional[EngineVersion]" = None
+    ) -> "Optional[MaterializedWorkflowEngine]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -472,7 +499,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # This method can be forced to materialize an specific engine version
         if engineVersion is None:
             # The identification could return an augmented LocalWorkflow instance
-            resLocalWf: Optional[LocalWorkflow]
+            resLocalWf: "Optional[LocalWorkflow]"
             engineVersion, resLocalWf = self.identifyWorkflow(localWf, engineVersion)
             if engineVersion is None:
                 return None
@@ -496,8 +523,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     @abc.abstractmethod
     def materializeWorkflow(
-        self, matWorfklowEngine: MaterializedWorkflowEngine, offline: bool = False
-    ) -> Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]:
+        self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
+    ) -> "Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
         localWorkflow directory, as well as the list of containers
@@ -507,14 +534,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         pass
 
-    def sideContainers(self) -> List[ContainerTaggedName]:
+    def sideContainers(self) -> "List[ContainerTaggedName]":
         """
         Containers needed by the engine to work
         """
         return list()
 
     @abc.abstractmethod
-    def simpleContainerFileName(self, imageUrl: URIType) -> RelPath:
+    def simpleContainerFileName(self, imageUrl: "URIType") -> "RelPath":
         """
         This method must be implemented to tell which names expect the workflow engine
         on its container cache directories when an image is locally materialized
@@ -524,10 +551,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     def materialize_containers(
         self,
-        listOfContainerTags: Sequence[ContainerTaggedName],
-        containersDir: Union[RelPath, AbsPath],
-        offline: bool = False,
-    ) -> Tuple[ContainerEngineVersionStr, Sequence[Container]]:
+        listOfContainerTags: "Sequence[ContainerTaggedName]",
+        containersDir: "AnyPath",
+        offline: "bool" = False,
+    ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         return (
             self.container_factory.engine_version(),
             self.container_factory.materializeContainers(
@@ -536,24 +563,25 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 containers_dir=containersDir,
                 offline=offline,
             ),
+            *self.container_factory.architecture,
         )
 
     @abc.abstractmethod
     def launchWorkflow(
         self,
-        matWfEng: MaterializedWorkflowEngine,
-        inputs: Sequence[MaterializedInput],
-        outputs: Sequence[ExpectedOutput],
-    ) -> StagedExecution:
+        matWfEng: "MaterializedWorkflowEngine",
+        inputs: "Sequence[MaterializedInput]",
+        outputs: "Sequence[ExpectedOutput]",
+    ) -> "StagedExecution":
         pass
 
     @classmethod
     def ExecuteWorkflow(
         cls,
-        matWfEng: MaterializedWorkflowEngine,
-        inputs: Sequence[MaterializedInput],
-        outputs: Sequence[ExpectedOutput],
-    ) -> StagedExecution:
+        matWfEng: "MaterializedWorkflowEngine",
+        inputs: "Sequence[MaterializedInput]",
+        outputs: "Sequence[ExpectedOutput]",
+    ) -> "StagedExecution":
 
         stagedExec = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
 
@@ -562,10 +590,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @classmethod
     def MaterializeWorkflowAndContainers(
         cls,
-        matWfEng: MaterializedWorkflowEngine,
-        containersDir: AbsPath,
-        offline: bool = False,
-    ) -> Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr]:
+        matWfEng: "MaterializedWorkflowEngine",
+        containersDir: "AbsPath",
+        offline: "bool" = False,
+    ) -> "Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr, ContainerOperatingSystem, ProcessorArchitecture]":
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
             matWfEng, offline=offline
         )
@@ -573,6 +601,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         (
             containerEngineStr,
             listOfContainers,
+            containerEngineOs,
+            arch,
         ) = matWfEngV2.instance.materialize_containers(
             listOfContainerTags, containersDir, offline=offline
         )
@@ -584,6 +614,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 (
                     _,
                     listOfOperationalContainers,
+                    _,
+                    _,
                 ) = matWfEngV2.instance.materialize_containers(
                     listOfOperationalContainerTags, containersDir, offline=offline
                 )
@@ -604,25 +636,25 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             operational_containers=listOfOperationalContainers,
         )
 
-        return matWfEngV3, containerEngineStr
+        return matWfEngV3, containerEngineStr, containerEngineOs, arch
 
     GuessedCardinalityMapping = {
         False: (0, 1),
         True: (0, sys.maxsize),
     }
 
-    GuessedOutputKindMapping: Mapping[str, ContentKind] = {
+    GuessedOutputKindMapping: "Mapping[str, ContentKind]" = {
         GeneratedDirectoryContent.__name__: ContentKind.Directory,
         GeneratedContent.__name__: ContentKind.File,
     }
 
     def identifyMaterializedOutputs(
         self,
-        matInputs: Sequence[MaterializedInput],
-        expectedOutputs: Sequence[ExpectedOutput],
-        outputsDir: AbsPath,
-        outputsMapping: Optional[Mapping[SymbolicOutputName, Any]] = None,
-    ) -> Sequence[MaterializedOutput]:
+        matInputs: "Sequence[MaterializedInput]",
+        expectedOutputs: "Sequence[ExpectedOutput]",
+        outputsDir: "AbsPath",
+        outputsMapping: "Optional[Mapping[SymbolicOutputName, Any]]" = None,
+    ) -> "Sequence[MaterializedOutput]":
         """
         This method is used to identify outputs by either file glob descriptions
         or matching with a mapping
@@ -630,16 +662,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if not isinstance(outputsMapping, dict):
             outputsMapping = {}
 
-        matInputHash: Mapping[
-            SymbolicParamName,
-            Union[
-                Sequence[bool],
-                Sequence[str],
-                Sequence[int],
-                Sequence[float],
-                Sequence[MaterializedContent],
-            ],
-        ] = {matInput.name: matInput.values for matInput in matInputs}
+        matInputHash: "Mapping[SymbolicParamName, Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[MaterializedContent]]]" = {
+            matInput.name: matInput.values for matInput in matInputs
+        }
 
         matOutputs = []
         # This is only applied when no outputs sections is specified
@@ -648,19 +673,20 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 # Engines like Nextflow
                 iEntry = 0
                 for entry in os.scandir(outputsDir):
-                    matValuesDef: Optional[
-                        MutableSequence[AbstractGeneratedContent]
-                    ] = None
-                    guessedOutputKindDef: ContentKind
+                    matValuesDef: "Optional[MutableSequence[AbstractGeneratedContent]]" = (
+                        None
+                    )
+                    guessedOutputKindDef: "ContentKind"
                     # We are avoiding to enter in loops around '.' and '..'
                     if entry.is_file():
                         matValuesDef = [
                             GeneratedContent(
-                                local=cast(AbsPath, entry.path),
+                                local=cast("AbsPath", entry.path),
                                 signature=cast(
-                                    Fingerprint,
+                                    "Fingerprint",
                                     ComputeDigestFromFile(
-                                        cast(AbsPath, entry.path), repMethod=nihDigester
+                                        cast("AbsPath", entry.path),
+                                        repMethod=nihDigester,
                                     ),
                                 ),
                             )
@@ -669,7 +695,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     elif entry.is_dir(follow_symlinks=False):
                         matValuesDef = [
                             GetGeneratedDirectoryContent(
-                                cast(AbsPath, entry.path), signatureMethod=nihDigester
+                                cast("AbsPath", entry.path), signatureMethod=nihDigester
                             )
                         ]
                         guessedOutputKindDef = ContentKind.Directory
@@ -678,7 +704,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         outputName = "unnamed_output_{}".format(iEntry)
                         iEntry += 1
                         matOutput = MaterializedOutput(
-                            name=cast(SymbolicOutputName, outputName),
+                            name=cast("SymbolicOutputName", outputName),
                             kind=guessedOutputKindDef,
                             expectedCardinality=self.GuessedCardinalityMapping[False],
                             values=matValuesDef,
@@ -688,7 +714,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             else:
                 # Engines like CWL
                 for outputName, outputVal in outputsMapping.items():
-                    matValues: Sequence[AbstractGeneratedContent] = CWLDesc2Content(
+                    matValues: "Sequence[AbstractGeneratedContent]" = CWLDesc2Content(
                         outputVal, self.logger, doGenerateSignatures=True
                     )
 
@@ -716,8 +742,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # This is only applied when the expected outputs is specified
         for expectedOutput in expectedOutputs:
             cannotBeEmpty = expectedOutput.cardinality[0] != 0
-            expMatContents = cast(MutableSequence[AbstractGeneratedContent], [])
-            expMatValues = cast(MutableSequence[str], [])
+            expMatContents = cast("MutableSequence[AbstractGeneratedContent]", [])
+            expMatValues = cast("MutableSequence[str]", [])
             if expectedOutput.fillFrom is not None:
                 matInputValues = matInputHash.get(expectedOutput.fillFrom)
                 if matInputValues is not None:
@@ -725,10 +751,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         # FIXME: Are these elements always paths??????
                         if isinstance(matchedPath, str):
                             try:
-                                theContent: AbstractGeneratedContent
+                                theContent: "AbstractGeneratedContent"
                                 if expectedOutput.kind == ContentKind.Directory:
                                     theContent = GetGeneratedDirectoryContent(
-                                        thePath=cast(AbsPath, matchedPath),
+                                        thePath=cast("AbsPath", matchedPath),
                                         uri=None,  # TODO: generate URIs when it is advised
                                         preferredFilename=expectedOutput.preferredFilename,
                                         signatureMethod=nihDigester,
@@ -736,10 +762,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     expMatContents.append(theContent)
                                 elif expectedOutput.kind == ContentKind.File:
                                     theContent = GeneratedContent(
-                                        local=cast(AbsPath, matchedPath),
+                                        local=cast("AbsPath", matchedPath),
                                         uri=None,  # TODO: generate URIs when it is advised
                                         signature=cast(
-                                            Fingerprint,
+                                            "Fingerprint",
                                             ComputeDigestFromFile(
                                                 matchedPath, repMethod=nihDigester
                                             ),
@@ -773,26 +799,19 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         f"Output {expectedOutput.name} got no path from filled input {expectedOutput.fillFrom}"
                     )
             elif expectedOutput.glob is not None:
-                filterMethod: Callable[
-                    [
-                        Union[
-                            Union[str, bytes, os.PathLike[str], os.PathLike[bytes]], int
-                        ]
-                    ],
-                    bool,
-                ]
+                filterMethod: "Callable[[Union[Union[str, bytes, os.PathLike[str], os.PathLike[bytes]], int]], bool]"
                 if expectedOutput.kind == ContentKind.Directory:
                     filterMethod = os.path.isdir
                 else:
                     filterMethod = os.path.isfile
-                matchedPaths: List[AbsPath] = []
+                matchedPaths: "MutableSequence[AbsPath]" = []
 
                 for matchingPath in glob.iglob(
                     os.path.join(outputsDir, expectedOutput.glob), recursive=True
                 ):
                     # Getting what it is only interesting for this
                     if filterMethod(matchingPath):
-                        matchedPaths.append(cast(AbsPath, matchingPath))
+                        matchedPaths.append(cast("AbsPath", matchingPath))
 
                 if len(matchedPaths) == 0 and cannotBeEmpty:
                     self.logger.warning(
@@ -802,7 +821,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     )
 
                 for matchedPath in matchedPaths:
-                    matchedContent: AbstractGeneratedContent
+                    matchedContent: "AbstractGeneratedContent"
                     if expectedOutput.kind == ContentKind.Directory:
                         matchedContent = GetGeneratedDirectoryContent(
                             matchedPath,
@@ -816,7 +835,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                             local=matchedPath,
                             uri=None,  # TODO: generate URIs when it is advised
                             signature=cast(
-                                Fingerprint,
+                                "Fingerprint",
                                 ComputeDigestFromFile(
                                     matchedPath, repMethod=nihDigester
                                 ),
@@ -842,7 +861,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     )
 
                 expMatContents = cast(
-                    MutableSequence[AbstractGeneratedContent],
+                    "MutableSequence[AbstractGeneratedContent]",
                     CWLDesc2Content(
                         outputVal,
                         self.logger,

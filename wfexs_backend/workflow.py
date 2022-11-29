@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import pathlib
+import platform
 import shutil
 import subprocess
 import sys
@@ -64,6 +65,7 @@ if TYPE_CHECKING:
         AbstractWorkflowEngineType,
         AnyPath,
         ContainerEngineVersionStr,
+        ContainerOperatingSystem,
         EngineVersion,
         ExportActionBlock,
         MaterializedOutput,
@@ -71,6 +73,7 @@ if TYPE_CHECKING:
         OutputsBlock,
         ParamsBlock,
         PlaceHoldersBlock,
+        ProcessorArchitecture,
         RelPath,
         RepoTag,
         RepoURL,
@@ -609,6 +612,9 @@ class WF:
         self.materializedEngine: "Optional[MaterializedWorkflowEngine]" = None
         self.containerEngineVersion: "Optional[ContainerEngineVersionStr]" = None
         self.workflowEngineVersion: "Optional[WorkflowEngineVersionStr]" = None
+
+        self.containerEngineOs: "Optional[ContainerOperatingSystem]" = None
+        self.arch: "Optional[ProcessorArchitecture]" = None
 
         self.stagedExecutions: "Optional[MutableSequence[StagedExecution]]" = None
         self.cacheROCrateFilename: "Optional[AbsPath]" = None
@@ -1156,6 +1162,8 @@ class WF:
             (
                 self.materializedEngine,
                 self.containerEngineVersion,
+                self.containerEngineOs,
+                self.arch,
             ) = WorkflowEngine.MaterializeWorkflowAndContainers(
                 self.materializedEngine, self.containersDir, offline=offline
             )
@@ -2413,6 +2421,8 @@ class WF:
                     "materializedEngine": self.materializedEngine,
                     "containers": self.materializedEngine.containers,
                     "containerEngineVersion": self.containerEngineVersion,
+                    "containerEngineOs": self.containerEngineOs,
+                    "arch": self.arch,
                     "workflowEngineVersion": self.workflowEngineVersion,
                     "materializedParams": self.materializedParams
                     # TODO: check nothing essential was left
@@ -2477,6 +2487,14 @@ class WF:
                     self.materializedEngine = stage["materializedEngine"]
                     self.materializedParams = stage["materializedParams"]
                     self.containerEngineVersion = stage.get("containerEngineVersion")
+                    self.containerEngineOs = stage.get("containerEngineOs")
+                    if self.containerEngineOs is None:
+                        self.containerEngineOs = cast(
+                            "ContainerOperatingSystem", platform.system().lower()
+                        )
+                    self.arch = stage.get("arch")
+                    if self.arch is None:
+                        self.arch = cast("ProcessorArchitecture", platform.machine())
                     self.workflowEngineVersion = stage.get("workflowEngineVersion")
 
                     # This is needed to properly set up the materializedEngine
@@ -2607,7 +2625,7 @@ class WF:
                             augmentedInputs=execution["augmentedInputs"],
                             matCheckOutputs=execution["matCheckOutputs"],
                             outputsDir=execution.get(
-                                "outputDir", WORKDIR_OUTPUTS_RELDIR
+                                "outputsDir", WORKDIR_OUTPUTS_RELDIR
                             ),
                             started=execution.get("started", executionMarshalled),
                             ended=execution.get("ended", executionMarshalled),
@@ -2886,6 +2904,9 @@ class WF:
         assert self.repoURL is not None
         assert self.repoTag is not None
         assert self.materializedParams is not None
+        assert self.stagedSetup.work_dir is not None
+        assert self.stagedSetup.inputs_dir is not None
+        assert self.stagedSetup.outputs_dir is not None
 
         wf_file = create_workflow_crate(
             self.repoURL,
@@ -2894,21 +2915,21 @@ class WF:
             self.materializedEngine,
             self.workflowEngineVersion,
             self.containerEngineVersion,
+            self.containerEngineOs,
+            self.arch,
+            work_dir=self.stagedSetup.work_dir,
+            do_attach=doMaterializedROCrate,
         )
         wfCrate = wf_file.crate
-
-        assert self.stagedSetup.inputs_dir is not None
-        assert self.stagedSetup.outputs_dir is not None
 
         addInputsResearchObject(
             wf_file,
             self.materializedParams,
-            inputsDir=self.stagedSetup.inputs_dir,
+            work_dir=self.stagedSetup.work_dir,
             do_attach=doMaterializedROCrate,
         )
         if self.outputs is not None:
             addExpectedOutputsResearchObject(wf_file, self.outputs)
-        # TODO: implement logic of doMaterializedROCrate
 
         # Save RO-crate as execution.crate.zip
         if filename is None:
@@ -2935,6 +2956,7 @@ class WF:
         assert self.materializedEngine is not None
         assert self.repoURL is not None
         assert self.repoTag is not None
+        assert self.stagedSetup.work_dir is not None
         assert (
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
@@ -2946,6 +2968,10 @@ class WF:
             self.materializedEngine,
             self.workflowEngineVersion,
             self.containerEngineVersion,
+            self.containerEngineOs,
+            self.arch,
+            work_dir=self.stagedSetup.work_dir,
+            do_attach=doMaterializedROCrate,
         )
         wfCrate = wf_file.crate
 
@@ -2956,15 +2982,12 @@ class WF:
                 stagedExec=stagedExec,
                 do_attach=doMaterializedROCrate,
             )
-        # TODO: implement logic of doMaterializedROCrate
 
         # Save RO-crate as execution.crate.zip
         if filename is None:
             assert self.outputsDir is not None
             filename = cast("AnyPath", os.path.join(self.outputsDir, "execution.crate"))
-        import pprint
 
-        pprint.pprint(wfCrate)
         wfCrate.write_zip(filename)
 
         self.logger.info("Execution RO-Crate created: {}".format(filename))
@@ -3124,11 +3147,12 @@ class WF:
 
         # Add inputs provenance to RO-crate
         assert self.stagedSetup.inputs_dir is not None
+        assert self.stagedSetup.work_dir is not None
         stagedExec = self.stagedExecutions[-1]
         addInputsResearchObject(
             wf_file,
             stagedExec.augmentedInputs,
-            self.stagedSetup.inputs_dir,
+            work_dir=self.stagedSetup.work_dir,
             do_attach=doMaterializedROCrate,
         )
 
@@ -3136,6 +3160,7 @@ class WF:
         # This code won't work, as it was not updated to deal with
         # the concept of multiple executions
         assert self.outputsDir is not None
+        assert self.stagedSetup.work_dir is not None
         outputsDir = cast(
             "AbsPath",
             os.path.normpath(os.path.join(self.outputsDir, stagedExec.outputs_dir)),
@@ -3143,7 +3168,7 @@ class WF:
         addOutputsResearchObject(
             wf_file,
             stagedExec.matCheckOutputs,
-            outputsDir=outputsDir,
+            work_dir=self.stagedSetup.work_dir,
             do_attach=doMaterializedROCrate,
         )
 
