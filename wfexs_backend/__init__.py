@@ -21,6 +21,8 @@ __license__ = "Apache 2.0"
 
 # https://www.python.org/dev/peps/pep-0396/
 __version__ = "0.5.6"
+__url__ = "https://github.com/inab/WfExS-backend"
+__official_name__ = "WfExS-backend"
 
 from typing import (
     cast,

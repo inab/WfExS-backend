@@ -29,6 +29,7 @@ sys.path.insert(0, setupDir)
 from wfexs_backend import __version__ as wfexs_backend_version
 from wfexs_backend import __author__ as wfexs_backend_author
 from wfexs_backend import __license__ as wfexs_backend_license
+from wfexs_backend import __url__ as wfexs_backend_url
 
 # Populating the long description
 with open(os.path.join(setupDir, "README.md"), mode="r", encoding="utf-8") as fh:
@@ -63,7 +64,7 @@ setuptools.setup(
     description="Workflow Execution Service backend",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/inab/WfExS-backend",
+    url=wfexs_backend_url,
     python_requires=">=3.7",
     packages=setuptools.find_packages(),
     install_requires=requirements,
