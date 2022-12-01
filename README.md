@@ -31,6 +31,8 @@ Additional present and future documentation is hosted at [docs](docs/index.md) s
 
 ### Presentations and outreach
 
+Fernández JM, Rodríguez-Navas L and Capella-Gutiérrez S. Secured and annotated execution of workflows with WfExS-backend [version 1; not peer reviewed]. F1000Research 2022, 11:1318 (poster) (https://doi.org/10.7490/f1000research.1119198.1) 
+
 Laura Rodríguez-Navas (2021): 
 [**WfExS: a software component to enable the use of RO-Crate in the EOSC-Life collaboratory**](https://osf.io/tb5ku/).  
 _FAIR Digital Object Forum_, [CWFR & FDO SEM meeting](https://osf.io/v8xjz/), 2021-07-02
