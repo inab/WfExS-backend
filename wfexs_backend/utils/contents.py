@@ -52,12 +52,15 @@ if TYPE_CHECKING:
         RelPath,
     )
 
+    from .digests import (
+        FingerprintMethod,
+    )
+
 from .digests import (
     nihDigester,
     ComputeDigestFromDirectory,
     ComputeDigestFromFile,
     ComputeDigestFromGeneratedContentList,
-    FingerprintMethod,
 )
 
 

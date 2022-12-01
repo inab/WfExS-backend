@@ -27,12 +27,14 @@
 								"enum": [
 									":working-directory:",
 									":stage-rocrate:",
-									":provenance-rocrate:"
+									":stage-rocrate:full",
+									":provenance-rocrate:",
+									":provenance-rocrate:full"
 								]
 							},
 							{
 								"type": "string",
-								"pattern": "^(param|output):[^:;]*$"
+								"pattern": "^(param|output):([^:;]+:)?[^:;]*$"
 							}
 						]
 					},

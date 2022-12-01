@@ -36,6 +36,7 @@ import uuid
 
 from typing import (
     cast,
+    Pattern,
     TYPE_CHECKING,
 )
 from urllib import parse
@@ -48,12 +49,15 @@ import crypt4gh.lib  # type: ignore[import]
 import crypt4gh.keys.kdf  # type: ignore[import]
 import crypt4gh.keys.c4gh  # type: ignore[import]
 
+from rocrate import rocrate  # type: ignore[import]
+
 from .common import (
     AbstractWfExSException,
     CacheType,
     ContentKind,
     DEFAULT_FUSERMOUNT_CMD,
     DEFAULT_PROGS,
+    IdentifiedWorkflow,
     LicensedURI,
     MaterializedContent,
     URIWithMetadata,
@@ -80,6 +84,8 @@ from .utils.misc import (
 from .utils.passphrase_wrapper import (
     WfExSPassGenSingleton,
 )
+
+from .fetchers.git import guess_repo_params
 
 from .fetchers import DEFAULT_SCHEME_HANDLERS
 from .fetchers.git import GitFetcher
@@ -108,7 +114,6 @@ if TYPE_CHECKING:
         MutableMapping,
         MutableSequence,
         Optional,
-        Pattern,
         Sequence,
         Set,
         Tuple,
@@ -130,6 +135,7 @@ if TYPE_CHECKING:
         ProgsMapping,
         ProtocolFetcher,
         RelPath,
+        RemoteRepo,
         RepoTag,
         RepoURL,
         SecurityContextConfig,
@@ -1297,6 +1303,145 @@ class WfExSBackend:
         )
 
         return repoDir, repoEffectiveCheckout
+
+    def getWorkflowRepoFromROCrateURL(
+        self,
+        roCrateURL: "URIType",
+        expectedEngineDesc: "Optional[WorkflowType]" = None,
+        offline: "bool" = False,
+    ) -> "Tuple[IdentifiedWorkflow, AbsPath]":
+        """
+
+        :param roCrateURL:
+        :param expectedEngineDesc: If defined, an instance of WorkflowType
+        :return:
+        """
+        roCrateFile = self.downloadROcrate(roCrateURL, offline=offline)
+        self.logger.info(
+            "downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile)
+        )
+
+        return (
+            self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc),
+            roCrateFile,
+        )
+
+    def getWorkflowRepoFromROCrateFile(
+        self,
+        roCrateFile: "AbsPath",
+        expectedEngineDesc: "Optional[WorkflowType]" = None,
+    ) -> "IdentifiedWorkflow":
+        """
+
+        :param roCrateFile:
+        :param expectedEngineDesc: If defined, an instance of WorkflowType
+        :return:
+        """
+        roCrateObj = rocrate.ROCrate(roCrateFile)
+
+        # TODO: get roCrateObj mainEntity programming language
+        # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
+        mainEntityProgrammingLanguageId = None
+        mainEntityProgrammingLanguageUrl = None
+        mainEntityIdHolder = None
+        mainEntityId = None
+        workflowPID = None
+        workflowUploadURL = None
+        workflowTypeId = None
+        for e in roCrateObj.get_entities():
+            if (
+                (mainEntityIdHolder is None)
+                and e["@type"] == "CreativeWork"
+                and ".json" in e["@id"]
+            ):
+                mainEntityIdHolder = e.as_jsonld()["about"]["@id"]
+            elif e["@id"] == mainEntityIdHolder:
+                eAsLD = e.as_jsonld()
+                mainEntityId = eAsLD["mainEntity"]["@id"]
+                workflowPID = eAsLD.get("identifier")
+            elif e["@id"] == mainEntityId:
+                eAsLD = e.as_jsonld()
+                workflowUploadURL = eAsLD.get("url")
+                workflowTypeId = eAsLD["programmingLanguage"]["@id"]
+            elif e["@id"] == workflowTypeId:
+                # A bit dirty, but it works
+                eAsLD = e.as_jsonld()
+                mainEntityProgrammingLanguageId = eAsLD.get("identifier", {}).get("@id")
+                mainEntityProgrammingLanguageUrl = eAsLD.get("url", {}).get("@id")
+
+        # Now, it is time to match the language id
+        engineDescById = None
+        engineDescByUrl = None
+        for possibleEngineDesc in WF.WORKFLOW_ENGINES:
+            if (engineDescById is None) and (
+                mainEntityProgrammingLanguageId is not None
+            ):
+                for pat in possibleEngineDesc.uriMatch:
+                    if isinstance(pat, Pattern):
+                        match = pat.search(mainEntityProgrammingLanguageId)
+                        if match:
+                            engineDescById = possibleEngineDesc
+                    elif pat == mainEntityProgrammingLanguageId:
+                        engineDescById = possibleEngineDesc
+
+            if (engineDescByUrl is None) and (
+                mainEntityProgrammingLanguageUrl == possibleEngineDesc.url
+            ):
+                engineDescByUrl = possibleEngineDesc
+
+        engineDesc: "WorkflowType"
+        if engineDescById is not None:
+            engineDesc = engineDescById
+        elif engineDescByUrl is not None:
+            engineDesc = engineDescByUrl
+        else:
+            raise WfExSBackendException(
+                "Found programming language {} (url {}) in RO-Crate manifest is not among the acknowledged ones".format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
+                )
+            )
+
+        if (
+            (engineDescById is not None)
+            and (engineDescByUrl is not None)
+            and engineDescById != engineDescByUrl
+        ):
+            self.logger.warning(
+                "Found programming language {} (url {}) leads to different engines".format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
+                )
+            )
+
+        if (expectedEngineDesc is not None) and engineDesc != expectedEngineDesc:
+            raise WfExSBackendException(
+                "Expected programming language {} does not match identified one {} in RO-Crate manifest".format(
+                    expectedEngineDesc.engineName, engineDesc.engineName
+                )
+            )
+
+        # This workflow URL, in the case of github, can provide the repo,
+        # the branch/tag/checkout , and the relative directory in the
+        # fetched content (needed by Nextflow)
+
+        # Some RO-Crates might have this value missing or ill-built
+        remote_repo: "Optional[RemoteRepo]" = None
+        if workflowUploadURL is not None:
+            remote_repo = guess_repo_params(
+                workflowUploadURL, logger=self.logger, fail_ok=True
+            )
+
+        if remote_repo is None:
+            remote_repo = guess_repo_params(
+                roCrateObj.root_dataset["isBasedOn"], logger=self.logger, fail_ok=True
+            )
+
+        if remote_repo is None:
+            raise WfExSBackendException(
+                "Unable to guess repository from RO-Crate manifest"
+            )
+
+        # It must return four elements:
+        return IdentifiedWorkflow(workflow_type=engineDesc, remote_repo=remote_repo)
 
     def downloadROcrate(
         self, roCrateURL: "URIType", offline: "bool" = False

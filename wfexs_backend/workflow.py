@@ -16,6 +16,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import atexit
 import copy
 import datetime
 import inspect
@@ -128,7 +129,6 @@ if TYPE_CHECKING:
 
 from urllib import parse
 
-from rocrate import rocrate  # type: ignore[import]
 from .ro_crate import (
     addInputsResearchObject,
     addOutputsResearchObject,
@@ -207,7 +207,7 @@ from .utils.contents import link_or_copy
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import config_validate
 
-from .fetchers.git import guess_repo_params, get_git_default_branch
+from .fetchers.git import guess_repo_params
 from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX
 
 from .nextflow_engine import NextflowWorkflowEngine
@@ -262,6 +262,9 @@ class WF:
     SECURITY_CONTEXT_SCHEMA: "Final[RelPath]" = cast("RelPath", "security-context.json")
     STAGE_DEFINITION_SCHEMA: "Final[RelPath]" = cast("RelPath", "stage-definition.json")
     EXPORT_ACTIONS_SCHEMA: "Final[RelPath]" = cast("RelPath", "export-actions.json")
+
+    STAGED_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "staged.crate")
+    EXECUTION_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "execution.crate")
 
     DEFAULT_RO_EXTENSION: "Final[str]" = ".crate.zip"
     DEFAULT_TRS_ENDPOINT: "Final[str]" = (
@@ -357,6 +360,9 @@ class WF:
 
         self.outputs: "Optional[Sequence[ExpectedOutput]]"
         self.default_actions: "Optional[Sequence[ExportAction]]"
+        self.trs_endpoint: "Optional[str]"
+        self.version_id: "Optional[WFVersionId]"
+        self.descriptor_type: "Optional[TRS_Workflow_Descriptor]"
         if workflow_id is not None:
             workflow_meta: "WritableWorkflowMetaConfigBlock" = {
                 "workflow_id": workflow_id
@@ -431,6 +437,10 @@ class WF:
                     trs_endpoint = trs_endpoint[0 : -len(self.TRS_TOOLS_PATH)]
 
             self.trs_endpoint = trs_endpoint
+        else:
+            self.trs_endpoint = None
+            self.version_id = None
+            self.descriptor_type = None
 
         if instanceId is not None:
             self.instanceId = instanceId
@@ -964,7 +974,14 @@ class WF:
             paranoid_mode=paranoidMode,
         )
 
-    def fetchWorkflow(self, offline: "bool" = False) -> None:
+    def fetchWorkflow(
+        self,
+        workflow_id: "WorkflowId",
+        version_id: "Optional[WFVersionId]",
+        trs_endpoint: "Optional[str]",
+        descriptor_type: "Optional[TRS_Workflow_Descriptor]",
+        offline: "bool" = False,
+    ) -> None:
         """
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
@@ -973,15 +990,21 @@ class WF:
         and the version will represent either the branch, tag or specific commit.
         So, the whole TRS fetching machinery is bypassed.workflowDir
         """
-        parsedRepoURL = parse.urlparse(self.id)
+        parsedRepoURL = parse.urlparse(str(workflow_id))
 
         # It is not an absolute URL, so it is being an identifier in the workflow
         i_workflow: "Optional[IdentifiedWorkflow]" = None
         engineDesc: "Optional[WorkflowType]" = None
         guessedRepo: "Optional[RemoteRepo]" = None
         if parsedRepoURL.scheme == "":
-            if (self.trs_endpoint is not None) and len(self.trs_endpoint) > 0:
-                i_workflow = self.getWorkflowRepoFromTRS(offline=offline)
+            if (trs_endpoint is not None) and len(trs_endpoint) > 0:
+                i_workflow = self.getWorkflowRepoFromTRS(
+                    trs_endpoint,
+                    workflow_id,
+                    version_id,
+                    descriptor_type,
+                    offline=offline,
+                )
             else:
                 raise WFException("trs_endpoint was not provided")
         else:
@@ -996,12 +1019,15 @@ class WF:
                 if guessedRepo.tag is None:
                     guessedRepo = RemoteRepo(
                         repo_url=guessedRepo.repo_url,
-                        tag=cast("RepoTag", self.version_id),
+                        tag=cast("RepoTag", version_id),
                         rel_path=guessedRepo.rel_path,
                     )
             else:
-                i_workflow = self.getWorkflowRepoFromROCrateURL(
-                    cast("URIType", self.id), offline=offline
+                (
+                    i_workflow,
+                    self.cacheROCrateFilename,
+                ) = self.wfexs.getWorkflowRepoFromROCrateURL(
+                    cast("URIType", workflow_id), offline=offline
                 )
 
         if i_workflow is not None:
@@ -1011,7 +1037,7 @@ class WF:
         if guessedRepo is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
             guessedRepo = RemoteRepo(
-                repo_url=cast("RepoURL", self.id), tag=cast("RepoTag", self.version_id)
+                repo_url=cast("RepoURL", workflow_id), tag=cast("RepoTag", version_id)
             )
 
         repoURL = guessedRepo.repo_url
@@ -1113,7 +1139,13 @@ class WF:
     def setupEngine(self, offline: "bool" = False) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
-            self.fetchWorkflow(offline=offline)
+            self.fetchWorkflow(
+                self.id,
+                self.version_id,
+                self.trs_endpoint,
+                self.descriptor_type,
+                offline=offline,
+            )
 
         assert (
             self.engine is not None
@@ -1144,7 +1176,7 @@ class WF:
                 )
         self.materializedEngine = matWfEngV2
 
-    def materializeWorkflow(self, offline: "bool" = False) -> None:
+    def materializeWorkflowAndContainers(self, offline: "bool" = False) -> None:
         if self.materializedEngine is None:
             self.setupEngine(offline=offline)
 
@@ -1879,14 +1911,16 @@ class WF:
 
         return theInputs, lastInput
 
-    def stageWorkDir(self) -> "StagedSetup":
+    def stageWorkDir(self, offline: "bool" = False) -> "StagedSetup":
         """
         This method is here to simplify the understanding of the needed steps
         """
-        self.fetchWorkflow()
-        self.setupEngine()
-        self.materializeWorkflow()
-        self.materializeInputs()
+        # This method is called from within setupEngine
+        # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
+        # This method is called from within materializeWorkflowAndContainers
+        # self.setupEngine(offline=offline)
+        self.materializeWorkflowAndContainers(offline=offline)
+        self.materializeInputs(offline=offline)
         self.marshallStage()
 
         return self.getStagedSetup()
@@ -1982,22 +2016,33 @@ class WF:
             whatToExport = []
             for encoded_name in actionDesc["what"]:
                 colPos = encoded_name.find(":")
+                rColPos = encoded_name.rfind(":")
                 assert colPos >= 0
 
+                # Directives like:
+                # * "working-directory"
+                # * "stage-rocrate"
+                # * "provenance-rocrate"
                 if colPos == 0:
+                    assert rColPos > colPos
+
                     if encoded_name[-1] != ":":
                         raise WFException(
                             f"Unexpected element to export {encoded_name}"
                         )
-                    rawItemType = encoded_name[1:-1]
+                    rawItemType = encoded_name[1:rColPos]
+                    blockName = encoded_name[rColPos + 1 :]
                     whatName = None
                 else:
                     rawItemType = encoded_name[0:colPos]
-                    whatName = encoded_name[colPos + 1 :]
+                    blockName = encoded_name[colPos + 1 : rColPos]
+                    whatName = encoded_name[rColPos + 1 :]
                     assert len(whatName) > 0
 
                 whatToExport.append(
-                    ExportItem(type=ExportItemType(rawItemType), name=whatName)
+                    ExportItem(
+                        type=ExportItemType(rawItemType), block=blockName, name=whatName
+                    )
                 )
 
             action = ExportAction(
@@ -2757,7 +2802,6 @@ class WF:
         retval: "MutableSequence[AnyContent]" = []
 
         materializedParamsDict: "Mapping[SymbolicParamName, MaterializedInput]" = dict()
-        matCheckOutputsDict: "Mapping[SymbolicOutputName, MaterializedOutput]" = dict()
         for item in items:
             if item.type == ExportItemType.Param:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
@@ -2824,16 +2868,18 @@ class WF:
                     and len(self.stagedExecutions) > 0
                 )
                 assert self.stagedSetup.outputs_dir is not None
-                if item.name is not None:
-                    # TODO: select which of the executions export
-                    stagedExec = self.stagedExecutions[-1]
-                    if not matCheckOutputsDict:
-                        matCheckOutputsDict = dict(
-                            map(lambda ao: (ao.name, ao), stagedExec.matCheckOutputs)
-                        )
-                    matCheckOutput = matCheckOutputsDict.get(
-                        cast("SymbolicOutputName", item.name)
-                    )
+                # TODO: select which of the executions export
+                stagedExec = self.stagedExecutions[-1]
+                # if item.block:
+                #    for p_stagedExec in self.stagedExecutions:
+                #        if
+
+                if item.name is not None and len(item.name) > 0:
+                    matCheckOutput: "Optional[MaterializedOutput]" = None
+                    for cand_matCheckOutput in stagedExec.matCheckOutputs:
+                        if cand_matCheckOutput.name == item.name:
+                            matCheckOutput = cand_matCheckOutput
+                            break
                     if matCheckOutput is None:
                         raise KeyError(
                             f"Output {item.name} to be exported does not exist"
@@ -2850,13 +2896,17 @@ class WF:
                         )
                     )
                 else:
+                    assert self.stagedSetup.work_dir is not None
                     # The whole output directory
-                    prettyFilename = cast(
-                        "RelPath", os.path.basename(self.stagedSetup.outputs_dir)
-                    )
+                    prettyFilename = cast("RelPath", stagedExec.outputsDir)
                     retval.append(
                         MaterializedContent(
-                            local=self.stagedSetup.outputs_dir,
+                            local=cast(
+                                "AbsPath",
+                                os.path.join(
+                                    self.stagedSetup.work_dir, stagedExec.outputsDir
+                                ),
+                            ),
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
@@ -2882,6 +2932,69 @@ class WF:
                         kind=ContentKind.Directory,
                     )
                 )
+            elif item.type in (
+                ExportItemType.StageCrate,
+                ExportItemType.ProvenanceCrate,
+            ):
+                if item.block not in ("", "full"):
+                    raise KeyError(
+                        f"'{item.block}' is not a valid variant for {item.type.value}"
+                    )
+
+                if item.type == ExportItemType.StageCrate:
+                    if not isinstance(
+                        self.getMarshallingStatus().stage, datetime.datetime
+                    ):
+                        raise WFException(
+                            f"Cannot export the prospective provenance crate from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                        )
+
+                    create_rocrate = self.createStageResearchObject
+                    rocrate_prefix = f"wfexs_stage_{item.block}_crate"
+                    pretty_relname = self.STAGED_CRATE_FILE
+                elif item.type == ExportItemType.ProvenanceCrate:
+                    if not isinstance(
+                        self.getMarshallingStatus().execution, datetime.datetime
+                    ):
+                        raise WFException(
+                            f"Cannot export the restrospective provenance crate from {self.stagedSetup.instance_id} until the workflow has been executed at least once"
+                        )
+
+                    create_rocrate = self.createResultsResearchObject
+                    rocrate_prefix = f"wfexs_prov_{item.block}_crate"
+                    pretty_relname = self.EXECUTION_CRATE_FILE
+                else:
+                    raise LookupError(
+                        f"Unexpected '{item.block}' variant for {item.type.value}"
+                    )
+
+                # Now, let's generate it
+                temp_handle, temp_rocrate_file = tempfile.mkstemp(
+                    prefix=rocrate_prefix, suffix=".zip"
+                )
+                os.close(temp_handle)
+                atexit.register(os.unlink, temp_rocrate_file)
+                create_rocrate(
+                    filename=cast("AbsPath", temp_rocrate_file),
+                    doMaterializedROCrate=item.block == "full",
+                )
+                retval.append(
+                    MaterializedContent(
+                        local=cast("AbsPath", temp_rocrate_file),
+                        licensed_uri=LicensedURI(
+                            uri=cast(
+                                "URIType",
+                                "wfexs:"
+                                + self.stagedSetup.instance_id
+                                + "/"
+                                + pretty_relname,
+                            )
+                        ),
+                        prettyFilename=pretty_relname,
+                        kind=ContentKind.File,
+                    )
+                )
+
             else:
                 # TODO
                 raise LookupError(f"Unimplemented management of item type {item.type}")
@@ -2934,7 +3047,9 @@ class WF:
         # Save RO-crate as execution.crate.zip
         if filename is None:
             assert self.outputsDir is not None
-            filename = cast("AnyPath", os.path.join(self.outputsDir, "staged.crate"))
+            filename = cast(
+                "AnyPath", os.path.join(self.outputsDir, self.STAGED_CRATE_FILE)
+            )
         wfCrate.write_zip(filename)
 
         self.logger.info("Staged RO-Crate created: {}".format(filename))
@@ -2986,7 +3101,9 @@ class WF:
         # Save RO-crate as execution.crate.zip
         if filename is None:
             assert self.outputsDir is not None
-            filename = cast("AnyPath", os.path.join(self.outputsDir, "execution.crate"))
+            filename = cast(
+                "AnyPath", os.path.join(self.outputsDir, self.EXECUTION_CRATE_FILE)
+            )
 
         wfCrate.write_zip(filename)
 
@@ -2994,203 +3111,29 @@ class WF:
 
         return filename
 
-    def createResultsResearchObjectOrig(
+    def getWorkflowRepoFromTRS(
         self,
-        filename: "Optional[AnyPath]" = None,
-        doMaterializedROCrate: "bool" = False,
-    ) -> "AnyPath":
-        """
-        Create RO-crate from execution provenance.
-        """
-        # TODO: implement deserialization
-        self.unmarshallExecute(offline=True, fail_ok=True)
-
-        assert self.localWorkflow is not None
-        assert self.materializedEngine is not None
-        assert self.repoURL is not None
-        assert (
-            isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
-        )
-        assert self.outputsDir is not None
-
-        # TODO: implement logic of doMaterializedROCrate
-
-        # TODO: digest the results from executeWorkflow plus all the provenance
-
-        # Create RO-crate using crate.zip downloaded from WorkflowHub
-        if os.path.isfile(str(self.cacheROCrateFilename)):
-            wfCrate = rocrate.ROCrate(self.cacheROCrateFilename, gen_preview=True)
-
-        # Create RO-Crate using rocrate class
-        # TODO no exists the version implemented for Nextflow in rocrate_api
-        else:
-            # FIXME: What to do when workflow is in git repository different from GitHub??
-            # FIXME: What to do when workflow is not in a git repository??
-            if self.localWorkflow.relPath is not None:
-                wf_path = os.path.join(
-                    self.localWorkflow.dir, self.localWorkflow.relPath
-                )
-            else:
-                wf_path = self.localWorkflow.dir
-            (
-                wfCrate,
-                compLang,
-            ) = self.materializedEngine.instance.getEmptyCrateAndComputerLanguage(
-                self.localWorkflow.langVersion
-            )
-
-            repoTag = (
-                self.repoTag
-                if self.repoTag is not None
-                else get_git_default_branch(self.repoURL)
-            )
-            wf_url = self.repoURL.replace(".git", "/") + "tree/" + repoTag
-            if self.localWorkflow.relPath is not None:
-                wf_url += "/" + os.path.dirname(self.localWorkflow.relPath)
-
-            # TODO create method to create wf_url
-            matWf = self.materializedEngine.workflow
-
-            assert (
-                matWf.effectiveCheckout is not None
-            ), "The effective checkout should be available"
-
-            parsed_repo_url = parse.urlparse(self.repoURL)
-            if parsed_repo_url.netloc == "github.com":
-                parsed_repo_path = parsed_repo_url.path.split("/")
-                repo_name = parsed_repo_path[2]
-                # TODO: should we urldecode repo_name?
-                if repo_name.endswith(".git"):
-                    repo_name = repo_name[:-4]
-                wf_entrypoint_path = [
-                    "",  # Needed to prepend a slash
-                    parsed_repo_path[1],
-                    # TODO: should we urlencode repo_name?
-                    repo_name,
-                    matWf.effectiveCheckout,
-                ]
-
-                if self.localWorkflow.relPath is not None:
-                    wf_entrypoint_path.append(self.localWorkflow.relPath)
-
-                wf_entrypoint_url = parse.urlunparse(
-                    (
-                        "https",
-                        "raw.githubusercontent.com",
-                        "/".join(wf_entrypoint_path),
-                        "",
-                        "",
-                        "",
-                    )
-                )
-
-            elif "gitlab" in parsed_repo_url.netloc:
-                parsed_repo_path = parsed_repo_url.path.split("/")
-                # FIXME: cover the case of nested groups
-                repo_name = parsed_repo_path[2]
-                if repo_name.endswith(".git"):
-                    repo_name = repo_name[:-4]
-                wf_entrypoint_path = [parsed_repo_path[1], repo_name]
-                if self.localWorkflow.relPath is not None:
-                    # TODO: should we urlencode self.repoTag?
-                    wf_entrypoint_path.extend(
-                        ["-", "raw", repoTag, self.localWorkflow.relPath]
-                    )
-
-                wf_entrypoint_url = parse.urlunparse(
-                    (
-                        parsed_repo_url.scheme,
-                        parsed_repo_url.netloc,
-                        "/".join(wf_entrypoint_path),
-                        "",
-                        "",
-                        "",
-                    )
-                )
-
-            else:
-                raise WFException(
-                    "FIXME: Unsupported http(s) git repository {}".format(self.repoURL)
-                )
-
-            # TODO assign something meaningful to cwl
-            cwl = True
-
-            workflow_path = pathlib.Path(wf_path)
-            wf_file = wfCrate.add_workflow(
-                str(workflow_path),
-                workflow_path.name,
-                fetch_remote=False,
-                main=True,
-                lang=compLang,
-                gen_cwl=(cwl is None),
-            )
-            # This is needed, as it is not automatically added when the
-            # `lang` argument in workflow creation was not a string
-            wfCrate.add(compLang)
-
-            # if the source is a remote URL then add https://schema.org/codeRepository
-            # property to it this can be checked by checking if the source is a URL
-            # instead of a local path
-            wf_file.properties()["url"] = wf_entrypoint_url
-            wf_file.properties()["codeRepository"] = wf_url
-            # if 'url' in wf_file.properties():
-            #    wf_file['codeRepository'] = wf_file['url']
-
-            # TODO: add extra files, like nextflow.config in the case of
-            # Nextflow workflows, the diagram, an abstract CWL
-            # representation of the workflow (when it is not a CWL workflow)
-            # etc...
-            # for file_entry in include_files:
-            #    wfCrate.add_file(file_entry)
-            wfCrate.isBasedOn = wf_url
-
-        # Add inputs provenance to RO-crate
-        assert self.stagedSetup.inputs_dir is not None
-        assert self.stagedSetup.work_dir is not None
-        stagedExec = self.stagedExecutions[-1]
-        addInputsResearchObject(
-            wf_file,
-            stagedExec.augmentedInputs,
-            work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
-        )
-
-        # Add outputs provenance to RO-crate
-        # This code won't work, as it was not updated to deal with
-        # the concept of multiple executions
-        assert self.outputsDir is not None
-        assert self.stagedSetup.work_dir is not None
-        outputsDir = cast(
-            "AbsPath",
-            os.path.normpath(os.path.join(self.outputsDir, stagedExec.outputs_dir)),
-        )
-        addOutputsResearchObject(
-            wf_file,
-            stagedExec.matCheckOutputs,
-            work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
-        )
-
-        # Save RO-crate as execution.crate.zip
-        if filename is None:
-            filename = cast("AnyPath", os.path.join(self.outputsDir, "execution.crate"))
-        wfCrate.write_zip(filename)
-        self.logger.info("Execution RO-Crate created: {}".format(filename))
-
-        return filename
-
-    def getWorkflowRepoFromTRS(self, offline: "bool" = False) -> "IdentifiedWorkflow":
+        trs_endpoint: "str",
+        workflow_id: "WorkflowId",
+        version_id: "Optional[WFVersionId]",
+        descriptor_type: "Optional[TRS_Workflow_Descriptor]",
+        offline: "bool" = False,
+    ) -> "IdentifiedWorkflow":
         """
 
         :return:
         """
         assert self.metaDir is not None
 
+        if isinstance(workflow_id, int):
+            workflow_id_str = str(workflow_id)
+        else:
+            workflow_id_str = workflow_id
+
         cacheHandler = self.wfexs.cacheHandler
         # Now, time to check whether it is a TRSv2
-        trs_endpoint_v2_meta_url = cast("URIType", self.trs_endpoint + "service-info")
-        trs_endpoint_v2_beta2_meta_url = cast("URIType", self.trs_endpoint + "metadata")
+        trs_endpoint_v2_meta_url = cast("URIType", trs_endpoint + "service-info")
+        trs_endpoint_v2_beta2_meta_url = cast("URIType", trs_endpoint + "metadata")
         trs_endpoint_meta_url = None
 
         # Needed to store this metadata
@@ -3222,7 +3165,7 @@ class WF:
             except WFException as wfebeta:
                 raise WFException(
                     "Unable to fetch metadata from {} in order to identify whether it is a working GA4GH TRSv2 endpoint. Exceptions:\n{}\n{}".format(
-                        self.trs_endpoint, wfe, wfebeta
+                        trs_endpoint, wfe, wfebeta
                     )
                 )
 
@@ -3247,7 +3190,8 @@ class WF:
         trs_tools_url = cast(
             "URIType",
             parse.urljoin(
-                self.trs_endpoint, self.TRS_TOOLS_PATH + parse.quote(self.id, safe="")
+                trs_endpoint,
+                self.TRS_TOOLS_PATH + parse.quote(workflow_id_str, safe=""),
             ),
         )
 
@@ -3270,7 +3214,7 @@ class WF:
         if toolDesc.get("toolclass", {}).get("name", "") != "Workflow":
             raise WFException(
                 "Tool {} from {} is not labelled as a workflow. Raw answer:\n{}".format(
-                    self.id, self.trs_endpoint, rawToolDesc
+                    workflow_id_str, trs_endpoint, rawToolDesc
                 )
             )
 
@@ -3278,24 +3222,24 @@ class WF:
         if len(possibleToolVersions) == 0:
             raise WFException(
                 "Version {} not found in workflow {} from {} . Raw answer:\n{}".format(
-                    self.version_id, self.id, self.trs_endpoint, rawToolDesc
+                    version_id, workflow_id_str, trs_endpoint, rawToolDesc
                 )
             )
 
         toolVersion = None
-        toolVersionId = self.version_id
+        toolVersionId = str(version_id) if isinstance(version_id, int) else version_id
         if (toolVersionId is not None) and len(toolVersionId) > 0:
             for possibleToolVersion in possibleToolVersions:
                 if isinstance(possibleToolVersion, dict):
                     possibleId = str(possibleToolVersion.get("id", ""))
                     possibleName = str(possibleToolVersion.get("name", ""))
-                    if self.version_id in (possibleId, possibleName):
+                    if version_id in (possibleId, possibleName):
                         toolVersion = possibleToolVersion
                         break
             else:
                 raise WFException(
                     "Version {} not found in workflow {} from {} . Raw answer:\n{}".format(
-                        self.version_id, self.id, self.trs_endpoint, rawToolDesc
+                        version_id, workflow_id_str, trs_endpoint, rawToolDesc
                     )
                 )
         else:
@@ -3312,7 +3256,7 @@ class WF:
         if toolVersion is None:
             raise WFException(
                 "No valid version was found in workflow {} from {} . Raw answer:\n{}".format(
-                    self.id, self.trs_endpoint, rawToolDesc
+                    workflow_id_str, trs_endpoint, rawToolDesc
                 )
             )
 
@@ -3321,12 +3265,12 @@ class WF:
         if not isinstance(toolDescriptorTypes, list):
             raise WFException(
                 'Version {} of workflow {} from {} has no valid "descriptor_type" (should be a list). Raw answer:\n{}'.format(
-                    self.version_id, self.id, self.trs_endpoint, rawToolDesc
+                    version_id, workflow_id_str, trs_endpoint, rawToolDesc
                 )
             )
 
         # Now, realize whether it matches
-        chosenDescriptorType = self.descriptor_type
+        chosenDescriptorType = descriptor_type
         if chosenDescriptorType is None:
             for candidateDescriptorType in self.RECOGNIZED_TRS_DESCRIPTORS.keys():
                 if candidateDescriptorType in toolDescriptorTypes:
@@ -3335,26 +3279,26 @@ class WF:
             else:
                 raise WFException(
                     'Version {} of workflow {} from {} has no acknowledged "descriptor_type". Raw answer:\n{}'.format(
-                        self.version_id, self.id, self.trs_endpoint, rawToolDesc
+                        version_id, workflow_id_str, trs_endpoint, rawToolDesc
                     )
                 )
         elif chosenDescriptorType not in toolVersion["descriptor_type"]:
             raise WFException(
                 "Descriptor type {} not available for version {} of workflow {} from {} . Raw answer:\n{}".format(
-                    self.descriptor_type,
-                    self.version_id,
-                    self.id,
-                    self.trs_endpoint,
+                    descriptor_type,
+                    version_id,
+                    workflow_id_str,
+                    trs_endpoint,
                     rawToolDesc,
                 )
             )
         elif chosenDescriptorType not in self.RECOGNIZED_TRS_DESCRIPTORS:
             raise WFException(
                 "Descriptor type {} is not among the acknowledged ones by this backend. Version {} of workflow {} from {} . Raw answer:\n{}".format(
-                    self.descriptor_type,
-                    self.version_id,
-                    self.id,
-                    self.trs_endpoint,
+                    descriptor_type,
+                    version_id,
+                    workflow_id_str,
+                    trs_endpoint,
                     rawToolDesc,
                 )
             )
@@ -3376,13 +3320,17 @@ class WF:
                 "URIType", toolFilesURL + "?" + parse.urlencode({"format": "zip"})
             )
 
-            return self.getWorkflowRepoFromROCrateURL(
+            (
+                i_workflow,
+                self.cacheROCrateFilename,
+            ) = self.wfexs.getWorkflowRepoFromROCrateURL(
                 roCrateURL,
                 expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
                     chosenDescriptorType
                 ],
                 offline=offline,
             )
+            return i_workflow
         else:
             self.logger.debug("TRS workflow")
             # Learning the available files and maybe
@@ -3427,138 +3375,3 @@ class WF:
                 )
 
         raise WFException("Unable to find a workflow in {}".format(trs_tools_url))
-
-    def getWorkflowRepoFromROCrateURL(
-        self,
-        roCrateURL: "URIType",
-        expectedEngineDesc: "Optional[WorkflowType]" = None,
-        offline: "bool" = False,
-    ) -> IdentifiedWorkflow:
-        """
-
-        :param roCrateURL:
-        :param expectedEngineDesc: If defined, an instance of WorkflowType
-        :return:
-        """
-        roCrateFile = self.wfexs.downloadROcrate(roCrateURL, offline=offline)
-        self.cacheROCrateFilename = roCrateFile
-        self.logger.info(
-            "downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile)
-        )
-
-        return self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc)
-
-    def getWorkflowRepoFromROCrateFile(
-        self,
-        roCrateFile: "AbsPath",
-        expectedEngineDesc: "Optional[WorkflowType]" = None,
-    ) -> "IdentifiedWorkflow":
-        """
-
-        :param roCrateFile:
-        :param expectedEngineDesc: If defined, an instance of WorkflowType
-        :return:
-        """
-        roCrateObj = rocrate.ROCrate(roCrateFile)
-
-        # TODO: get roCrateObj mainEntity programming language
-        # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
-        mainEntityProgrammingLanguageId = None
-        mainEntityProgrammingLanguageUrl = None
-        mainEntityIdHolder = None
-        mainEntityId = None
-        workflowPID = None
-        workflowUploadURL = None
-        workflowTypeId = None
-        for e in roCrateObj.get_entities():
-            if (
-                (mainEntityIdHolder is None)
-                and e["@type"] == "CreativeWork"
-                and ".json" in e["@id"]
-            ):
-                mainEntityIdHolder = e.as_jsonld()["about"]["@id"]
-            elif e["@id"] == mainEntityIdHolder:
-                eAsLD = e.as_jsonld()
-                mainEntityId = eAsLD["mainEntity"]["@id"]
-                workflowPID = eAsLD.get("identifier")
-            elif e["@id"] == mainEntityId:
-                eAsLD = e.as_jsonld()
-                workflowUploadURL = eAsLD.get("url")
-                workflowTypeId = eAsLD["programmingLanguage"]["@id"]
-            elif e["@id"] == workflowTypeId:
-                # A bit dirty, but it works
-                eAsLD = e.as_jsonld()
-                mainEntityProgrammingLanguageId = eAsLD.get("identifier", {}).get("@id")
-                mainEntityProgrammingLanguageUrl = eAsLD.get("url", {}).get("@id")
-
-        # Now, it is time to match the language id
-        engineDescById = None
-        engineDescByUrl = None
-        for possibleEngineDesc in self.WORKFLOW_ENGINES:
-            if (engineDescById is None) and (
-                mainEntityProgrammingLanguageId is not None
-            ):
-                for pat in possibleEngineDesc.uriMatch:
-                    if isinstance(pat, Pattern):
-                        match = pat.search(mainEntityProgrammingLanguageId)
-                        if match:
-                            engineDescById = possibleEngineDesc
-                    elif pat == mainEntityProgrammingLanguageId:
-                        engineDescById = possibleEngineDesc
-
-            if (engineDescByUrl is None) and (
-                mainEntityProgrammingLanguageUrl == possibleEngineDesc.url
-            ):
-                engineDescByUrl = possibleEngineDesc
-
-        engineDesc: "WorkflowType"
-        if engineDescById is not None:
-            engineDesc = engineDescById
-        elif engineDescByUrl is not None:
-            engineDesc = engineDescByUrl
-        else:
-            raise WFException(
-                "Found programming language {} (url {}) in RO-Crate manifest is not among the acknowledged ones".format(
-                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
-                )
-            )
-
-        if (
-            (engineDescById is not None)
-            and (engineDescByUrl is not None)
-            and engineDescById != engineDescByUrl
-        ):
-            self.logger.warning(
-                "Found programming language {} (url {}) leads to different engines".format(
-                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
-                )
-            )
-
-        if (expectedEngineDesc is not None) and engineDesc != expectedEngineDesc:
-            raise WFException(
-                "Expected programming language {} does not match identified one {} in RO-Crate manifest".format(
-                    expectedEngineDesc.engineName, engineDesc.engineName
-                )
-            )
-
-        # This workflow URL, in the case of github, can provide the repo,
-        # the branch/tag/checkout , and the relative directory in the
-        # fetched content (needed by Nextflow)
-
-        # Some RO-Crates might have this value missing or ill-built
-        remote_repo: "Optional[RemoteRepo]" = None
-        if workflowUploadURL is not None:
-            remote_repo = guess_repo_params(
-                workflowUploadURL, logger=self.logger, fail_ok=True
-            )
-
-        if remote_repo is None:
-            remote_repo = guess_repo_params(
-                roCrateObj.root_dataset["isBasedOn"], logger=self.logger, fail_ok=True
-            )
-
-        if remote_repo is None:
-            raise WFException("Unable to guess repository from RO-Crate manifest")
-
-        # It must return four elements:
-        return IdentifiedWorkflow(workflow_type=engineDesc, remote_repo=remote_repo)

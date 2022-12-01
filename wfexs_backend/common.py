@@ -797,6 +797,7 @@ class ExportItemType(enum.Enum):
 
 class ExportItem(NamedTuple):
     type: ExportItemType
+    block: Optional[str] = None
     name: Optional[Union[SymbolicParamName, SymbolicOutputName]] = None
 
 
