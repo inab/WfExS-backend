@@ -22,27 +22,35 @@ import os
 import shutil
 from typing import (
     cast,
-    Any,
-    List,
-    Mapping,
-    MutableSequence,
-    Optional,
-    Sequence,
-    Union,
+    TYPE_CHECKING,
 )
 
 from ..common import (
-    AbsPath,
-    AbstractGeneratedContent,
-    AnyPath,
     ContentKind,
-    ExpectedOutput,
-    Fingerprint,
     GeneratedContent,
     GeneratedDirectoryContent,
-    LicensedURI,
-    RelPath,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        List,
+        Mapping,
+        MutableSequence,
+        Optional,
+        Sequence,
+        Union,
+    )
+
+    from ..common import (
+        AbsPath,
+        AbstractGeneratedContent,
+        AnyPath,
+        ExpectedOutput,
+        Fingerprint,
+        LicensedURI,
+        RelPath,
+    )
 
 from .digests import (
     nihDigester,
@@ -54,35 +62,35 @@ from .digests import (
 
 
 def GetGeneratedDirectoryContent(
-    thePath: AbsPath,
-    uri: Optional[LicensedURI] = None,
-    preferredFilename: Optional[RelPath] = None,
-    signatureMethod: Optional[FingerprintMethod] = None,
-) -> GeneratedDirectoryContent:
+    thePath: "AbsPath",
+    uri: "Optional[LicensedURI]" = None,
+    preferredFilename: "Optional[RelPath]" = None,
+    signatureMethod: "Optional[FingerprintMethod]" = None,
+) -> "GeneratedDirectoryContent":
     """
     The signatureMethod tells whether to generate a signature and fill-in
     the new signature element from GeneratedDirectoryContent tuple
     """
-    theValues: MutableSequence[AbstractGeneratedContent] = []
+    theValues: "MutableSequence[AbstractGeneratedContent]" = []
     with os.scandir(thePath) as itEntries:
         for entry in itEntries:
             # Hidden files are skipped by default
             if not entry.name.startswith("."):
-                theValue: Optional[AbstractGeneratedContent] = None
+                theValue: "Optional[AbstractGeneratedContent]" = None
                 if entry.is_file():
-                    entry_path = cast(AbsPath, entry.path)
+                    entry_path = cast("AbsPath", entry.path)
                     theValue = GeneratedContent(
                         local=entry_path,
                         # uri=None,
                         signature=cast(
-                            Fingerprint,
+                            "Fingerprint",
                             ComputeDigestFromFile(
                                 entry_path, repMethod=signatureMethod
                             ),
                         ),
                     )
                 elif entry.is_dir():
-                    entry_path = cast(AbsPath, entry.path)
+                    entry_path = cast("AbsPath", entry.path)
                     theValue = GetGeneratedDirectoryContent(
                         entry_path, signatureMethod=signatureMethod
                     )
@@ -91,7 +99,7 @@ def GetGeneratedDirectoryContent(
                     theValues.append(theValue)
 
     # As this is a heavy operation, do it only when it is requested
-    signature: Optional[Fingerprint]
+    signature: "Optional[Fingerprint]"
     if callable(signatureMethod):
         signature = ComputeDigestFromDirectory(thePath, repMethod=signatureMethod)
     else:
@@ -107,20 +115,20 @@ def GetGeneratedDirectoryContent(
 
 
 def GetGeneratedDirectoryContentFromList(
-    thePath: AbsPath,
-    theValues: Sequence[AbstractGeneratedContent],
-    uri: Optional[LicensedURI] = None,
-    preferredFilename: Optional[RelPath] = None,
-    secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None,
-    signatureMethod: Optional[FingerprintMethod] = None,
-) -> GeneratedDirectoryContent:
+    thePath: "AbsPath",
+    theValues: "Sequence[AbstractGeneratedContent]",
+    uri: "Optional[LicensedURI]" = None,
+    preferredFilename: "Optional[RelPath]" = None,
+    secondaryFiles: "Optional[Sequence[AbstractGeneratedContent]]" = None,
+    signatureMethod: "Optional[FingerprintMethod]" = None,
+) -> "GeneratedDirectoryContent":
     """
     The signatureMethod tells whether to generate a signature and fill-in
     the new signature element from GeneratedDirectoryContent tuple
     """
 
     # As this is a heavy operation, do it only when it is requested
-    signature: Optional[Fingerprint]
+    signature: "Optional[Fingerprint]"
     if callable(signatureMethod):
         signature = ComputeDigestFromGeneratedContentList(
             thePath, theValues, repMethod=signatureMethod
@@ -146,13 +154,13 @@ CWLClass2WfExS = {
 
 
 def CWLDesc2Content(
-    cwlDescs: Union[Mapping[str, Any], List[Mapping[str, Any]]],
-    logger: logging.Logger,
-    expectedOutput: Optional[ExpectedOutput] = None,
-    doGenerateSignatures: bool = False,
-) -> Sequence[AbstractGeneratedContent]:
+    cwlDescs: "Union[Mapping[str, Any], List[Mapping[str, Any]]]",
+    logger: "logging.Logger",
+    expectedOutput: "Optional[ExpectedOutput]" = None,
+    doGenerateSignatures: "bool" = False,
+) -> "Sequence[AbstractGeneratedContent]":
     """ """
-    matValues: MutableSequence[AbstractGeneratedContent] = []
+    matValues: "MutableSequence[AbstractGeneratedContent]" = []
 
     if not isinstance(cwlDescs, list):
         cwlDescs = [cwlDescs]
@@ -173,7 +181,7 @@ def CWLDesc2Content(
 
         # What to do with auxiliary/secondary files?
         secondaryFilesRaw = cwlDesc.get("secondaryFiles")
-        secondaryFiles: Optional[Sequence[AbstractGeneratedContent]] = None
+        secondaryFiles: "Optional[Sequence[AbstractGeneratedContent]]" = None
         if secondaryFilesRaw:
             secondaryFiles = CWLDesc2Content(
                 secondaryFilesRaw, logger, doGenerateSignatures=doGenerateSignatures
@@ -181,7 +189,7 @@ def CWLDesc2Content(
         else:
             secondaryFiles = None
 
-        matValue: Optional[AbstractGeneratedContent] = None
+        matValue: "Optional[AbstractGeneratedContent]" = None
         if foundKind == ContentKind.Directory:
             theValues = CWLDesc2Content(
                 cwlDesc["listing"],
@@ -203,7 +211,7 @@ def CWLDesc2Content(
             matValue = GeneratedContent(
                 local=cwlDesc["path"],
                 signature=cast(
-                    Fingerprint,
+                    "Fingerprint",
                     ComputeDigestFromFile(cwlDesc["path"], repMethod=repMethod),
                 ),
                 secondaryFiles=secondaryFiles,
@@ -215,10 +223,10 @@ def CWLDesc2Content(
     return matValues
 
 
-def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
+def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) -> None:
     # We should not deal with symlinks
-    src = cast(AbsPath, os.path.realpath(src))
-    dest = cast(AbsPath, os.path.realpath(dest))
+    src = cast("AbsPath", os.path.realpath(src))
+    dest = cast("AbsPath", os.path.realpath(dest))
 
     # First, check whether inputs and content
     # are in the same filesystem
@@ -227,7 +235,7 @@ def link_or_copy(src: AnyPath, dest: AnyPath, force_copy: bool = False) -> None:
     dest_or_ancestor_exists = dest_exists
     dest_or_ancestor = dest
     while not dest_or_ancestor_exists:
-        dest_or_ancestor = cast(AbsPath, os.path.dirname(dest_or_ancestor))
+        dest_or_ancestor = cast("AbsPath", os.path.dirname(dest_or_ancestor))
         dest_or_ancestor_exists = os.path.exists(dest_or_ancestor)
     dest_st_dev = os.lstat(dest_or_ancestor).st_dev
 

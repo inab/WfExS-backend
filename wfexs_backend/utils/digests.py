@@ -24,60 +24,64 @@ import json
 import os
 from typing import (
     cast,
-    Any,
-    Callable,
-    IO,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Union,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Callable,
+        IO,
+        List,
+        Mapping,
+        Optional,
+        Sequence,
+        Tuple,
+        Union,
+    )
+    from ..common import (
+        AbstractGeneratedContent,
+        AnyPath,
+        Fingerprint,
+    )
+
+    FingerprintMethod = Callable[[str, bytes], Fingerprint]
+    RawFingerprintMethod = Callable[[str, bytes], bytes]
 
 from ..common import (
     scantree,
-    AnyPath,
-    Fingerprint,
     GeneratedContent,
 )
 
-# pylint: disable-next=unused-import
-from ..common import (
-    AbstractGeneratedContent,
-)
 
 # Next methods have been borrowed from FlowMaps
 DEFAULT_DIGEST_ALGORITHM = "sha256"
 DEFAULT_DIGEST_BUFFER_SIZE = 65536
 
-FingerprintMethod = Callable[[str, bytes], Fingerprint]
-RawFingerprintMethod = Callable[[str, bytes], bytes]
 
-
-def stringifyDigest(digestAlgorithm: str, digest: bytes) -> Fingerprint:
+def stringifyDigest(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
     return cast(
-        Fingerprint,
+        "Fingerprint",
         "{0}={1}".format(
             digestAlgorithm, str(base64.standard_b64encode(digest), "iso-8859-1")
         ),
     )
 
 
-def hexDigest(digestAlgorithm: str, digest: bytes) -> Fingerprint:
-    return cast(Fingerprint, digest.hex())
+def hexDigest(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
+    return cast("Fingerprint", digest.hex())
 
 
-def stringifyFilenameDigest(digestAlgorithm: str, digest: bytes) -> Fingerprint:
+def stringifyFilenameDigest(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
     return cast(
-        Fingerprint,
+        "Fingerprint",
         "{0}~{1}".format(
             digestAlgorithm, str(base64.urlsafe_b64encode(digest), "iso-8859-1")
         ),
     )
 
 
-def nullProcessDigest(digestAlgorithm: str, digest: bytes) -> bytes:
+def nullProcessDigest(digestAlgorithm: "str", digest: "bytes") -> "bytes":
     return digest
 
 
@@ -85,7 +89,7 @@ from rfc6920.methods import generate_nih_from_digest  # type: ignore[import]
 
 # As of https://datatracker.ietf.org/doc/html/rfc6920#page-17
 # rewrite the names of the algorithms
-VALID_NI_ALGOS: Mapping[str, str] = {
+VALID_NI_ALGOS: "Mapping[str, str]" = {
     "sha256": "sha-256",
     "sha256-128": "sha-256-128",
     "sha256_128": "sha-256-128",
@@ -100,18 +104,18 @@ VALID_NI_ALGOS: Mapping[str, str] = {
 }
 
 
-def nihDigester(digestAlgorithm: str, digest: bytes) -> Fingerprint:
+def nihDigester(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
     # Added fallback, in case it cannot translate the algorithm
     digestAlgorithm = VALID_NI_ALGOS.get(digestAlgorithm, digestAlgorithm)
 
-    return cast(Fingerprint, generate_nih_from_digest(digest, algo=digestAlgorithm))
+    return cast("Fingerprint", generate_nih_from_digest(digest, algo=digestAlgorithm))
 
 
 def ComputeDigestFromObject(
-    obj: Any,
-    digestAlgorithm: str = DEFAULT_DIGEST_ALGORITHM,
-    repMethod: FingerprintMethod = stringifyDigest,
-) -> Fingerprint:
+    obj: "Any",
+    digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
+    repMethod: "FingerprintMethod" = stringifyDigest,
+) -> "Fingerprint":
     """
     Accessory method used to compute the digest of an input file-like object
     """
@@ -122,11 +126,11 @@ def ComputeDigestFromObject(
 
 
 def ComputeDigestFromFileLike(
-    filelike: IO[bytes],
-    digestAlgorithm: str = DEFAULT_DIGEST_ALGORITHM,
-    bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE,
-    repMethod: Union[FingerprintMethod, RawFingerprintMethod] = stringifyDigest,
-) -> Union[Fingerprint, bytes]:
+    filelike: "IO[bytes]",
+    digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
+    bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
+    repMethod: "Union[FingerprintMethod, RawFingerprintMethod]" = stringifyDigest,
+) -> "Union[Fingerprint, bytes]":
     """
     Accessory method used to compute the digest of an input file-like object
     """
@@ -141,11 +145,11 @@ def ComputeDigestFromFileLike(
 
 @functools.lru_cache(maxsize=32)
 def ComputeDigestFromFile(
-    filename: AnyPath,
-    digestAlgorithm: str = DEFAULT_DIGEST_ALGORITHM,
-    bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE,
-    repMethod: Union[FingerprintMethod, RawFingerprintMethod] = stringifyDigest,
-) -> Optional[Union[Fingerprint, bytes]]:
+    filename: "AnyPath",
+    digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
+    bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
+    repMethod: "Union[FingerprintMethod, RawFingerprintMethod]" = stringifyDigest,
+) -> "Optional[Union[Fingerprint, bytes]]":
     """
     Accessory method used to compute the digest of an input file
     """
@@ -159,16 +163,16 @@ def ComputeDigestFromFile(
 
 
 def ComputeDigestFromDirectory(
-    dirname: AnyPath,
-    digestAlgorithm: str = DEFAULT_DIGEST_ALGORITHM,
-    bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE,
-    repMethod: FingerprintMethod = stringifyDigest,
-) -> Fingerprint:
+    dirname: "AnyPath",
+    digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
+    bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
+    repMethod: "FingerprintMethod" = stringifyDigest,
+) -> "Fingerprint":
     """
     Accessory method used to compute the digest of an input directory,
     based on the names and digest of the files in the directory
     """
-    cEntries: List[Tuple[bytes, bytes]] = []
+    cEntries: "List[Tuple[bytes, bytes]]" = []
     # First, gather and compute all the files
     for entry in scantree(dirname):
         if entry.is_file():
@@ -176,7 +180,7 @@ def ComputeDigestFromDirectory(
                 (
                     os.path.relpath(entry.path, dirname).encode("utf-8"),
                     cast(
-                        bytes,
+                        "bytes",
                         ComputeDigestFromFile(entry.path, repMethod=nullProcessDigest),
                     ),
                 )
@@ -195,17 +199,17 @@ def ComputeDigestFromDirectory(
 
 
 def ComputeDigestFromGeneratedContentList(
-    dirname: AnyPath,
-    theValues: Sequence[AbstractGeneratedContent],
-    digestAlgorithm: str = DEFAULT_DIGEST_ALGORITHM,
-    bufferSize: int = DEFAULT_DIGEST_BUFFER_SIZE,
-    repMethod: FingerprintMethod = stringifyDigest,
-) -> Fingerprint:
+    dirname: "AnyPath",
+    theValues: "Sequence[AbstractGeneratedContent]",
+    digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
+    bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
+    repMethod: "FingerprintMethod" = stringifyDigest,
+) -> "Fingerprint":
     """
     Accessory method used to compute the digest of an input directory,
     based on the names and digest of the files in the directory
     """
-    cEntries: List[Tuple[bytes, bytes]] = []
+    cEntries: "List[Tuple[bytes, bytes]]" = []
     # First, gather and compute all the files
     for theValue in theValues:
         if isinstance(theValue, GeneratedContent):
@@ -213,7 +217,7 @@ def ComputeDigestFromGeneratedContentList(
                 (
                     os.path.relpath(theValue.local, dirname).encode("utf-8"),
                     cast(
-                        bytes,
+                        "bytes",
                         ComputeDigestFromFile(
                             theValue.local, repMethod=nullProcessDigest
                         ),

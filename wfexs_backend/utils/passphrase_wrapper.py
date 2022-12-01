@@ -21,17 +21,27 @@ import random
 import tempfile
 from typing import (
     cast,
-    ClassVar,
-    Mapping,
-    MutableMapping,
     NamedTuple,
-    Optional,
-    Sequence,
-    Union,
+    TYPE_CHECKING,
 )
 import urllib.parse
 
-from typing_extensions import Final
+if TYPE_CHECKING:
+    from typing import (
+        ClassVar,
+        Mapping,
+        MutableMapping,
+        Optional,
+        Sequence,
+        Union,
+    )
+
+    from typing_extensions import Final
+
+    from ..common import (
+        AbsPath,
+        URIType,
+    )
 
 from funny_passphrase.generator import FunnyPassphraseGenerator
 from funny_passphrase.indexer import CompressedIndexedText
@@ -42,24 +52,20 @@ from ..cache_handler import (
     CacheOfflineException,
     SchemeHandlerCacheHandler,
 )
-from ..common import (
-    AbsPath,
-    URIType,
-)
 from ..fetchers.wiktionary import WiktionaryFetcher
 
 
 class RemoteWordlistResource(NamedTuple):
-    uri: str
-    substart: int = 0
-    subend: Optional[int] = None
+    uri: "str"
+    substart: "int" = 0
+    subend: "Optional[int]" = None
 
 
 class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
-    DEFAULT_PASSPHRASE_LENGTH: Final[int] = 6
-    WFEXS_PASSPHRASE_SCHEME: Final[str] = "wfexs.funny-passphrase"
+    DEFAULT_PASSPHRASE_LENGTH: "Final[int]" = 6
+    WFEXS_PASSPHRASE_SCHEME: "Final[str]" = "wfexs.funny-passphrase"
 
-    DEFAULT_WORD_SETS: Mapping[str, Sequence[RemoteWordlistResource]] = {
+    DEFAULT_WORD_SETS: "Mapping[str, Sequence[RemoteWordlistResource]]" = {
         "eff-long": [
             RemoteWordlistResource(
                 "https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt",
@@ -73,22 +79,34 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
             ),
         ],
         "adjectives": [
-            RemoteWordlistResource("wfexs.wiktionary:Spanish/adjectives"),
-            RemoteWordlistResource("wfexs.wiktionary:Catalan/adjectives"),
-            RemoteWordlistResource("wfexs.wiktionary:English/adjectives"),
+            RemoteWordlistResource(
+                WiktionaryFetcher.WIKTIONARY_PROTO + ":Spanish/adjectives"
+            ),
+            RemoteWordlistResource(
+                WiktionaryFetcher.WIKTIONARY_PROTO + ":Catalan/adjectives"
+            ),
+            RemoteWordlistResource(
+                WiktionaryFetcher.WIKTIONARY_PROTO + ":English/adjectives"
+            ),
         ],
         "nouns": [
-            RemoteWordlistResource("wfexs.wiktionary:Spanish/nouns"),
-            RemoteWordlistResource("wfexs.wiktionary:Catalan/nouns"),
-            RemoteWordlistResource("wfexs.wiktionary:English/nouns"),
+            RemoteWordlistResource(
+                WiktionaryFetcher.WIKTIONARY_PROTO + ":Spanish/nouns"
+            ),
+            RemoteWordlistResource(
+                WiktionaryFetcher.WIKTIONARY_PROTO + ":Catalan/nouns"
+            ),
+            RemoteWordlistResource(
+                WiktionaryFetcher.WIKTIONARY_PROTO + ":English/nouns"
+            ),
         ],
     }
 
     def __init__(
         self,
-        cacheHandler: SchemeHandlerCacheHandler,
-        cacheDir: Optional[AbsPath] = None,
-        word_sets: Mapping[str, Sequence[RemoteWordlistResource]] = DEFAULT_WORD_SETS,
+        cacheHandler: "SchemeHandlerCacheHandler",
+        cacheDir: "Optional[AbsPath]" = None,
+        word_sets: "Mapping[str, Sequence[RemoteWordlistResource]]" = DEFAULT_WORD_SETS,
     ):
         # The cache is an integral part, as it is where the
         # different components are going to be fetched
@@ -100,18 +118,19 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
         super().__init__(**cindex_sets)
 
     def _materialize_word_sets(
-        self, raw_word_sets: Mapping[str, Sequence[RemoteWordlistResource]]
-    ) -> Mapping[str, CompressedIndexedText]:
+        self, raw_word_sets: "Mapping[str, Sequence[RemoteWordlistResource]]"
+    ) -> "Mapping[str, CompressedIndexedText]":
         """
         Download and index each one of the components of the word sets
         """
-        word_sets: MutableMapping[str, CompressedIndexedText] = dict()
+        word_sets: "MutableMapping[str, CompressedIndexedText]" = dict()
         for wordlist_tag, word_set_uris in raw_word_sets.items():
             indexed_filenames = []
             for remote_wordlist in word_set_uris:
                 word_set_uri = remote_wordlist.uri
-                wordlist_internal_uri = URIType(
-                    f'{self.WFEXS_PASSPHRASE_SCHEME}:{urllib.parse.quote(word_set_uri, safe="")}'
+                wordlist_internal_uri = cast(
+                    "URIType",
+                    f'{self.WFEXS_PASSPHRASE_SCHEME}:{urllib.parse.quote(word_set_uri, safe="")}',
                 )
                 indexed_filename = None
                 try:
@@ -133,7 +152,9 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
                         metadata_array,
                         licences_t,
                     ) = self.cacheHandler.fetch(
-                        URIType(word_set_uri), destdir=self.cacheDir, offline=False
+                        cast("URIType", word_set_uri),
+                        destdir=self.cacheDir,
+                        offline=False,
                     )
 
                     # Prepare the compressed index
@@ -148,7 +169,9 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
                         indexed_filename, _ = self.cacheHandler.inject(
                             wordlist_internal_uri,
                             destdir=self.cacheDir,
-                            tempCachedFilename=cast(AbsPath, tmp_indexed_filename.name),
+                            tempCachedFilename=cast(
+                                "AbsPath", tmp_indexed_filename.name
+                            ),
                         )
 
                 assert indexed_filename is not None
@@ -161,8 +184,8 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
 
     def generate_passphrase_random(
         self,
-        chosen_wordlist: Optional[Union[str, int, Sequence[Union[str, int]]]] = None,
-        passphrase_length: int = DEFAULT_PASSPHRASE_LENGTH,
+        chosen_wordlist: "Optional[Union[str, int, Sequence[Union[str, int]]]]" = None,
+        passphrase_length: "int" = DEFAULT_PASSPHRASE_LENGTH,
     ) -> str:
         """
         This method is needed to hook into the funny passphrase library
@@ -172,7 +195,7 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
         wordlists_tags = self.word_set_tags()
         if get_random == 0:
             if not isinstance(chosen_wordlist, list):
-                chosen_wordlist = [cast(Union[str, int], chosen_wordlist)]
+                chosen_wordlist = [cast("Union[str, int]", chosen_wordlist)]
 
             # Validating the wordlist
             for chosen in chosen_wordlist:
@@ -188,7 +211,7 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
 
         return self.generate_passphrase(
             num=passphrase_length,
-            subset=cast(Sequence[Union[str, int]], chosen_wordlist),
+            subset=cast("Sequence[Union[str, int]]", chosen_wordlist),
         )
 
     def generate_nickname(self) -> str:
@@ -204,12 +227,12 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
 
 
 class WfExSPassGenSingleton(WfExSPassphraseGenerator):
-    __instance: ClassVar[Optional[WfExSPassphraseGenerator]] = None
+    __instance: "ClassVar[Optional[WfExSPassphraseGenerator]]" = None
 
-    def __new__(cls) -> WfExSPassphraseGenerator:  # type: ignore
+    def __new__(cls) -> "WfExSPassphraseGenerator":  # type: ignore
         if cls.__instance is None:
             cachePath = cast(
-                AbsPath,
+                "AbsPath",
                 xdg.BaseDirectory.save_cache_path("es.elixir.WfExSPassGenSingleton"),
             )
 

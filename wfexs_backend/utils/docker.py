@@ -19,19 +19,24 @@ import abc
 import json
 import logging
 from typing import (
-    MutableMapping,
     NamedTuple,
-    Optional,
-    Tuple,
+    TYPE_CHECKING,
 )
 import urllib.parse
+
+if TYPE_CHECKING:
+    from typing import (
+        MutableMapping,
+        Optional,
+        Tuple,
+    )
+
+    from typing_extensions import Final
 
 from dxf import DXF, _schema2_mimetype as DockerManifestV2MIMEType  # type: ignore[import]
 
 # Needed for proper error handling
 import requests
-
-from typing_extensions import Final
 
 
 class DockerHelperException(Exception):
@@ -39,22 +44,22 @@ class DockerHelperException(Exception):
 
 
 class Credentials(NamedTuple):
-    domain: Optional[str] = None
-    username: Optional[str] = None
-    password: Optional[str] = None
+    domain: "Optional[str]" = None
+    username: "Optional[str]" = None
+    password: "Optional[str]" = None
 
 
 # This is needed to obtain the remote repo digest
 class DXFFat(DXF):  # type: ignore
     # See https://docs.docker.com/registry/spec/manifest-v2-2/ for
     # "fat" manifest description
-    FAT_schema2_mimetype: Final[
-        str
-    ] = "application/vnd.docker.distribution.manifest.list.v2+json"
+    FAT_schema2_mimetype: "Final[str]" = (
+        "application/vnd.docker.distribution.manifest.list.v2+json"
+    )
 
     def get_fat_manifest_and_response(
-        self, alias: str, http_method: str = "get"
-    ) -> Tuple[str, requests.Response]:
+        self, alias: "str", http_method: "str" = "get"
+    ) -> "Tuple[str, requests.Response]":
         """
         Request the "fat" manifest for an alias, which returns the list
         of all the available architectures, and returns the manifest and
@@ -80,8 +85,8 @@ class DXFFat(DXF):  # type: ignore
         return r.content.decode("utf-8"), r
 
     def get_fat_manifest_and_dcd(
-        self, alias: str, http_method: str = "get"
-    ) -> Tuple[str, Optional[str]]:
+        self, alias: "str", http_method: "str" = "get"
+    ) -> "Tuple[str, Optional[str]]":
         """
         Request the "fat" manifest for an alias, which returns the list
         of all the available architectures, and returns the manifest and
@@ -99,7 +104,7 @@ class DXFFat(DXF):  # type: ignore
         )
         return fat_manifest, r.headers.get("Docker-Content-Digest")
 
-    def get_fat_manifest(self, alias: str) -> str:
+    def get_fat_manifest(self, alias: "str") -> "str":
         """
         Get the "fat" manifest for an alias
 
@@ -112,7 +117,7 @@ class DXFFat(DXF):  # type: ignore
         fat_manifest, _ = self.get_fat_manifest_and_response(alias)
         return fat_manifest
 
-    def _get_fat_dcd(self, alias: str) -> Optional[str]:
+    def _get_fat_dcd(self, alias: "str") -> "Optional[str]":
         """
         Get the Docker-Content-Digest header for the "fat manifest"
         of an alias.
@@ -133,15 +138,15 @@ class DXFFat(DXF):  # type: ignore
 
 
 class DockerHelper(abc.ABC):
-    DEFAULT_DOCKER_REGISTRY: Final[str] = "docker.io"
-    DOCKER_REGISTRY: Final[str] = "registry-1.docker.io"
+    DEFAULT_DOCKER_REGISTRY: "Final[str]" = "docker.io"
+    DOCKER_REGISTRY: "Final[str]" = "registry-1.docker.io"
 
-    DEFAULT_ALIAS: Final[str] = "latest"
+    DEFAULT_ALIAS: "Final[str]" = "latest"
 
     def __init__(self) -> None:
         self.logger = logging.getLogger(self.__class__.__name__)
         # Default credentials are no credentials
-        self.creds: MutableMapping[Optional[str], Credentials] = {
+        self.creds: "MutableMapping[Optional[str], Credentials]" = {
             None: Credentials(None, None, None)
         }
 
@@ -149,19 +154,19 @@ class DockerHelper(abc.ABC):
         self.choose_domain()
 
     def add_creds(
-        self, username: str, password: str, domain: Optional[str] = None
+        self, username: "str", password: "str", domain: "Optional[str]" = None
     ) -> None:
         self.creds[domain] = Credentials(
             domain=domain, username=username, password=password
         )
 
-    def choose_domain(self, domain_name: Optional[str] = None) -> None:
+    def choose_domain(self, domain_name: "Optional[str]" = None) -> None:
         if domain_name not in self.creds:
             domain_name = None
 
         self.domain = self.creds[domain_name]
 
-    def _auth(self, dxf: DXFFat, response: requests.Response) -> None:
+    def _auth(self, dxf: "DXFFat", response: "requests.Response") -> None:
         """Helper method for DXF machinery"""
 
         dxf.authenticate(
@@ -171,7 +176,7 @@ class DockerHelper(abc.ABC):
             response=response,
         )
 
-    def query_tag(self, tag: str) -> Tuple[str, str, str, Optional[str]]:
+    def query_tag(self, tag: "str") -> "Tuple[str, str, str, Optional[str]]":
         parsedTag = urllib.parse.urlparse(tag)
         if parsedTag.scheme == "":
             docker_tag = "docker://" + tag

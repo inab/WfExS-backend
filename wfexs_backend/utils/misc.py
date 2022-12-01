@@ -24,32 +24,41 @@ import os
 import re
 
 from typing import (
-    Any,
-    Dict,
-    Iterator,
-    List,
-    Mapping,
-    Optional,
-    Pattern,
-    Sequence,
-    TextIO,
-    Tuple,
-    Union,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Dict,
+        Iterator,
+        List,
+        Mapping,
+        Optional,
+        Pattern,
+        Sequence,
+        TextIO,
+        Tuple,
+        Union,
+    )
+
+    from ..common import (
+        RelPath,
+    )
 
 import jsonschema
 
-from ..common import AbstractWfExSException, RelPath
+from ..common import AbstractWfExSException
 
 
 def translate_glob_args(
-    args: Union[Iterator[str], Sequence[str]]
-) -> List[Pattern[str]]:
+    args: "Union[Iterator[str], Sequence[str]]",
+) -> "List[Pattern[str]]":
     return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
 
 
 class DatetimeEncoder(json.JSONEncoder):
-    def default(self, obj: Any) -> Any:
+    def default(self, obj: "Any") -> "Any":
         if isinstance(obj, datetime.datetime):
             return obj.isoformat()
         # Let the base class default method raise the TypeError
@@ -59,7 +68,7 @@ class DatetimeEncoder(json.JSONEncoder):
 # Next implementation of datetime.datetime.fromisoformat has been
 # borrowed from cpython, so the code does not depend on Python 3.7+
 # https://github.com/python/cpython/blob/998ae1fa3fb05a790071217cf8f6ae3a928da13f/Lib/datetime.py#L1721
-def datetimeFromISOFormat(date_string: str) -> datetime.datetime:
+def datetimeFromISOFormat(date_string: "str") -> "datetime.datetime":
     """Construct a datetime from the output of datetime.isoformat()."""
     if not isinstance(date_string, str):
         raise TypeError("fromisoformat: argument must be str")
@@ -98,7 +107,7 @@ def datetimeFromISOFormat(date_string: str) -> datetime.datetime:
     )
 
 
-def _parse_isoformat_date(dtstr: str) -> List[int]:
+def _parse_isoformat_date(dtstr: "str") -> "List[int]":
     # It is assumed that this function will only be called with a
     # string of length exactly 10, and (though this is not used) ASCII-only
     year = int(dtstr[0:4])
@@ -115,7 +124,9 @@ def _parse_isoformat_date(dtstr: str) -> List[int]:
     return [year, month, day]
 
 
-def _parse_isoformat_time(tstr: str) -> Tuple[List[int], Optional[datetime.timezone]]:
+def _parse_isoformat_time(
+    tstr: "str",
+) -> "Tuple[List[int], Optional[datetime.timezone]]":
     # Format supported is HH[:MM[:SS[.fff[fff]]]][+HH:MM[:SS[.ffffff]]]
     len_str = len(tstr)
     if len_str < 2:
@@ -161,7 +172,7 @@ def _parse_isoformat_time(tstr: str) -> Tuple[List[int], Optional[datetime.timez
     return time_comps, tzi
 
 
-def _parse_hh_mm_ss_ff(tstr: str) -> List[int]:
+def _parse_hh_mm_ss_ff(tstr: "str") -> "List[int]":
     # Parses things of the form HH[:MM[:SS[.fff[fff]]]]
     len_str = len(tstr)
 
@@ -202,10 +213,10 @@ def _parse_hh_mm_ss_ff(tstr: str) -> List[int]:
 
 
 def load_with_datetime(
-    pairs: Sequence[Tuple[str, Any]], tz: Optional[datetime.tzinfo] = None
-) -> Mapping[str, Any]:
+    pairs: "Sequence[Tuple[str, Any]]", tz: "Optional[datetime.tzinfo]" = None
+) -> "Mapping[str, Any]":
     """Load with dates"""
-    d: Dict[str, Any] = {}
+    d: "Dict[str, Any]" = {}
     for k, v in pairs:
         if isinstance(v, str):
             try:
@@ -221,8 +232,8 @@ def load_with_datetime(
 
 
 def jsonFilterDecodeFromStream(
-    stream: TextIO, tz: Optional[datetime.tzinfo] = None
-) -> Any:
+    stream: "TextIO", tz: "Optional[datetime.tzinfo]" = None
+) -> "Any":
     """
     Decode JSON content from a stream, translating ISO8601 dates to strings
     """
@@ -237,9 +248,9 @@ SCHEMAS_REL_DIR = "schemas"
 
 
 def config_validate(
-    configToValidate: Union[Mapping[str, Any], Sequence[Mapping[str, Any]]],
-    relSchemaFile: RelPath,
-) -> List[Any]:
+    configToValidate: "Union[Mapping[str, Any], Sequence[Mapping[str, Any]]]",
+    relSchemaFile: "RelPath",
+) -> "List[Any]":
     # Locating the schemas directory, where all the schemas should be placed
     schemaFile = os.path.join(
         os.path.dirname(__file__), "..", SCHEMAS_REL_DIR, relSchemaFile
