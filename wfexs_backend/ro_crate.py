@@ -46,6 +46,7 @@ from .utils.digests import (
     ComputeDigestFromDirectory,
     ComputeDigestFromFile,
     hexDigest,
+    unstringifyDigest,
 )
 from .common import (
     AbstractGeneratedContent,
@@ -227,7 +228,10 @@ def add_GeneratedContent_to_crate(
     the_content_uri = (
         the_content.uri.uri if the_content.uri is not None else the_content.signature
     )
+    assert the_content.signature is not None
     digest, algo = extract_digest(the_content.signature)
+    if digest is None:
+        digest, algo = unstringifyDigest(the_content.signature)
     crate_file = add_file_to_crate(
         crate,
         the_path=the_content.local,
@@ -731,7 +735,10 @@ def add_containers_to_workflow(
 
             if do_attach and container.localPath is not None:
                 the_size = os.stat(container.localPath).st_size
+                assert container.signature is not None
                 digest, algo = extract_digest(container.signature)
+                if digest is None:
+                    digest, algo = unstringifyDigest(container.signature)
                 the_signature = hexDigest(algo, digest)
 
                 software_container = SoftwareContainer(

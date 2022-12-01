@@ -68,6 +68,11 @@ def stringifyDigest(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
     )
 
 
+def unstringifyDigest(digestion: "Fingerprint") -> "Tuple[bytes, str]":
+    algo, b64digest = digestion.split("=", 1)
+    return base64.b64decode(b64digest), algo
+
+
 def hexDigest(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
     return cast("Fingerprint", digest.hex())
 
