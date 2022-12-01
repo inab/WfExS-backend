@@ -22,43 +22,52 @@ import logging
 import os
 from typing import (
     cast,
-    Any,
-    MutableSet,
     NamedTuple,
-    Optional,
-    Sequence,
-    Tuple,
     TYPE_CHECKING,
 )
 import urllib.parse
 import uuid
 
 from extended_nc_client.extended_nc_client import (
-    DAVRequestResponse,
     ExtendedNextcloudClient,
 )
 
 from ..common import (
-    AbsPath,
-    AnyContent,
     MaterializedContent,
-    RelPath,
-    SecurityContextConfig,
-    SymbolicName,
-    URIType,
     URIWithMetadata,
 )
 
-from . import AbstractExportPlugin, ExportPluginException
-
 if TYPE_CHECKING:
+    from typing import (
+        Any,
+        MutableSet,
+        Optional,
+        Sequence,
+        Tuple,
+    )
+
+    from extended_nc_client.extended_nc_client import (
+        DAVRequestResponse,
+    )
+
+    from ..common import (
+        AbsPath,
+        AnyContent,
+        RelPath,
+        SecurityContextConfig,
+        SymbolicName,
+        URIType,
+    )
+
     from ..workflow import WF
+
+from . import AbstractExportPlugin, ExportPluginException
 
 
 class ExportMapping(NamedTuple):
-    local_filename: AbsPath
-    remote_dirname: RelPath
-    remote_basename: RelPath
+    local_filename: "AbsPath"
+    remote_dirname: "RelPath"
+    remote_basename: "RelPath"
 
 
 class NextcloudContentExporter:
@@ -69,11 +78,11 @@ class NextcloudContentExporter:
 
     def __init__(
         self,
-        nextcloud_url: URIType,
-        nextcloud_user: str,
-        nextcloud_token: str,
-        nextcloud_base_directory: AbsPath,
-        retention_tag_name: Optional[str] = None,
+        nextcloud_url: "URIType",
+        nextcloud_user: "str",
+        nextcloud_token: "str",
+        nextcloud_base_directory: "AbsPath",
+        retention_tag_name: "Optional[str]" = None,
     ):
         import inspect
 
@@ -86,7 +95,7 @@ class NextcloudContentExporter:
 
         # This set is used to record the directories which have already
         # been created (or ensured they exist)
-        self._ensured_paths: MutableSet[str] = set()
+        self._ensured_paths: "MutableSet[str]" = set()
 
         self.nextcloud_url = nextcloud_url
         self.nextcloud_user = nextcloud_user
@@ -110,18 +119,18 @@ class NextcloudContentExporter:
         self.ret_tag_id = retention_tag_id
 
     def create_remote_path(
-        self, reldir: Optional[RelPath] = None, name: Optional[RelPath] = None
-    ) -> Tuple[Any, AbsPath, RelPath]:
+        self, reldir: "Optional[RelPath]" = None, name: "Optional[RelPath]" = None
+    ) -> "Tuple[Any, AbsPath, RelPath]":
         # If the name is not defined, generate a random, new one
         if name is None:
-            name = cast(RelPath, str(uuid.uuid4()))
+            name = cast("RelPath", str(uuid.uuid4()))
 
         if reldir:
-            relretval = cast(RelPath, reldir + "/" + name)
+            relretval = cast("RelPath", reldir + "/" + name)
         else:
             relretval = name
 
-        retval = cast(AbsPath, self.base_directory + "/" + relretval)
+        retval = cast("AbsPath", self.base_directory + "/" + relretval)
         retvalobj = None
 
         if retval not in self._ensured_paths:
@@ -145,10 +154,10 @@ class NextcloudContentExporter:
 
         return retvalobj, retval, relretval
 
-    def _chunked_uploader(self, fmapping: ExportMapping) -> DAVRequestResponse:
+    def _chunked_uploader(self, fmapping: "ExportMapping") -> "DAVRequestResponse":
         local_file, uplodir, destname = fmapping
         if destname is None:
-            destname = cast(RelPath, os.path.basename(local_file))
+            destname = cast("RelPath", os.path.basename(local_file))
 
         destpath = urllib.parse.quote(self.base_directory) + "/"
         if uplodir:
@@ -169,8 +178,8 @@ class NextcloudContentExporter:
         return retval
 
     def _chunked_file_batch_uploader(
-        self, files_to_process: Sequence[ExportMapping]
-    ) -> Sequence[DAVRequestResponse]:
+        self, files_to_process: "Sequence[ExportMapping]"
+    ) -> "Sequence[DAVRequestResponse]":
         retvals = []
         self.logger.debug(f"{len(files_to_process)} files to upload")
         for fmapping in files_to_process:
@@ -183,10 +192,10 @@ class NextcloudContentExporter:
 
     def mappings_uploader(
         self,
-        contents_to_process: Sequence[ExportMapping],
-        uplodir: Optional[str] = None,
-        destname: Optional[str] = None,
-    ) -> Tuple[Sequence[DAVRequestResponse], Optional[AbsPath], Optional[RelPath]]:
+        contents_to_process: "Sequence[ExportMapping]",
+        uplodir: "Optional[str]" = None,
+        destname: "Optional[str]" = None,
+    ) -> "Tuple[Sequence[DAVRequestResponse], Optional[AbsPath], Optional[RelPath]]":
         files_to_process = []
         dirs_to_process = []
 
@@ -201,7 +210,7 @@ class NextcloudContentExporter:
             assert retval_relreldir is not None
             local_filename = mapping.local_filename
             remote_dirname = cast(
-                RelPath,
+                "RelPath",
                 os.path.join(retval_relreldir, mapping.remote_dirname.lstrip("/")),
             )
             remote_basename = mapping.remote_basename
@@ -239,17 +248,17 @@ class NextcloudContentExporter:
                         if entry.is_file():
                             files_to_process.append(
                                 ExportMapping(
-                                    local_filename=cast(AbsPath, entry.path),
+                                    local_filename=cast("AbsPath", entry.path),
                                     remote_dirname=rel_remote_path,
-                                    remote_basename=cast(RelPath, entry.name),
+                                    remote_basename=cast("RelPath", entry.name),
                                 )
                             )
                         elif entry.is_dir():
                             new_dirs_to_process.append(
                                 ExportMapping(
-                                    local_filename=cast(AbsPath, entry.path),
+                                    local_filename=cast("AbsPath", entry.path),
                                     remote_dirname=rel_remote_path,
-                                    remote_basename=cast(RelPath, entry.name),
+                                    remote_basename=cast("RelPath", entry.name),
                                 )
                             )
 
@@ -257,7 +266,7 @@ class NextcloudContentExporter:
             dirs_to_process = new_dirs_to_process
 
         # No work, then return
-        retvals: Sequence[DAVRequestResponse]
+        retvals: "Sequence[DAVRequestResponse]"
         if len(files_to_process) == 0 and len(dirs_to_process) == 0:
             retvals = []
         else:
@@ -266,8 +275,8 @@ class NextcloudContentExporter:
         return retvals, retval_reldir, retval_relreldir
 
     def create_share_links(
-        self, relpath: str, emails: Sequence[str], expire_in: Optional[int] = None
-    ) -> Sequence[Optional[URIType]]:
+        self, relpath: "str", emails: "Sequence[str]", expire_in: "Optional[int]" = None
+    ) -> "Sequence[Optional[URIType]]":
         retvals = []
         permissions = ExtendedNextcloudClient.OCS_PERMISSION_READ
         the_path = urllib.parse.quote(self.base_directory + "/" + relpath)
@@ -286,7 +295,7 @@ class NextcloudContentExporter:
                 expire_date=expire_at,
             )
             if not isinstance(share_info, bool):
-                retvals.append(cast(URIType, share_info.get_link()))
+                retvals.append(cast("URIType", share_info.get_link()))
         else:
             for email in emails:
                 share_info = self.enc.share_file(
@@ -304,7 +313,7 @@ class NextcloudContentExporter:
                             self.enc._webdav_url + "/", "index.php/s/" + share_token
                         )
 
-                    retvals.append(cast(URIType, share_link))
+                    retvals.append(cast("URIType", share_link))
 
         return retvals
 
@@ -314,10 +323,10 @@ class NextcloudExportPlugin(AbstractExportPlugin):
     Class to model exporting results to a Nextcloud instance
     """
 
-    PLUGIN_NAME: SymbolicName = cast(SymbolicName, "nextcloud")
+    PLUGIN_NAME = cast("SymbolicName", "nextcloud")
 
     def __init__(
-        self, wfInstance: "WF", setup_block: Optional[SecurityContextConfig] = None
+        self, wfInstance: "WF", setup_block: "Optional[SecurityContextConfig]" = None
     ):
         super().__init__(wfInstance, setup_block)
 
@@ -334,10 +343,10 @@ class NextcloudExportPlugin(AbstractExportPlugin):
 
     def push(
         self,
-        items: Sequence[AnyContent],
-        preferred_scheme: Optional[str] = None,
-        preferred_id: Optional[str] = None,
-    ) -> Sequence[URIWithMetadata]:
+        items: "Sequence[AnyContent]",
+        preferred_scheme: "Optional[str]" = None,
+        preferred_id: "Optional[str]" = None,
+    ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the nextflow share
         """
@@ -369,20 +378,20 @@ class NextcloudExportPlugin(AbstractExportPlugin):
                 # Outside the relative directory
                 if relitem.startswith(os.path.pardir):
                     # This is needed to avoid collisions
-                    prefname: Optional[RelPath]
+                    prefname: "Optional[RelPath]"
                     if isinstance(item, MaterializedContent):
                         prefname = item.prettyFilename
                     else:
                         prefname = item.preferredFilename
 
                     if prefname is None:
-                        prefname = cast(RelPath, os.path.basename(item.local))
+                        prefname = cast("RelPath", os.path.basename(item.local))
                     relitem = str(i_item) + "_" + prefname
                 mappings.append(
                     ExportMapping(
-                        local_filename=cast(AbsPath, item.local),
-                        remote_dirname=cast(RelPath, os.path.dirname(relitem)),
-                        remote_basename=cast(RelPath, os.path.basename(relitem)),
+                        local_filename=cast("AbsPath", item.local),
+                        remote_dirname=cast("RelPath", os.path.dirname(relitem)),
+                        remote_basename=cast("RelPath", os.path.basename(relitem)),
                     )
                 )
         else:
@@ -391,11 +400,11 @@ class NextcloudExportPlugin(AbstractExportPlugin):
             else:
                 prefname = item.preferredFilename
             if prefname is None:
-                prefname = cast(RelPath, os.path.basename(items[0].local))
+                prefname = cast("RelPath", os.path.basename(items[0].local))
             mappings.append(
                 ExportMapping(
-                    local_filename=cast(AbsPath, items[0].local),
-                    remote_dirname=cast(RelPath, ""),
+                    local_filename=cast("AbsPath", items[0].local),
+                    remote_dirname=cast("RelPath", ""),
                     remote_basename=prefname,
                 )
             )

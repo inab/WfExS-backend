@@ -19,16 +19,34 @@ from __future__ import absolute_import
 
 import abc
 import logging
-from typing import Any, Mapping, Optional, Sequence, TYPE_CHECKING, Union
-from typing import cast
-from typing_extensions import Final
-
-from ..common import AbsPath, RelPath, ExportItem, SymbolicName
-from ..common import SecurityContextConfig, URIWithMetadata
-from ..common import MaterializedInput, MaterializedOutput
-from ..common import AnyContent
+from typing import (
+    cast,
+    TYPE_CHECKING,
+)
 
 if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Mapping,
+        Optional,
+        Sequence,
+        Union,
+    )
+
+    from typing_extensions import Final
+
+    from ..common import (
+        AbsPath,
+        AnyContent,
+        ExportItem,
+        MaterializedInput,
+        MaterializedOutput,
+        RelPath,
+        SecurityContextConfig,
+        SymbolicName,
+        URIWithMetadata,
+    )
+
     from ..workflow import WF
 
 
@@ -41,10 +59,10 @@ class AbstractExportPlugin(abc.ABC):
     Abstract class to model stateful export plugins
     """
 
-    PLUGIN_NAME: SymbolicName = cast(SymbolicName, "")
+    PLUGIN_NAME = cast("SymbolicName", "")
 
     def __init__(
-        self, wfInstance: "WF", setup_block: Optional[SecurityContextConfig] = None
+        self, wfInstance: "WF", setup_block: "Optional[SecurityContextConfig]" = None
     ):
         import inspect
 
@@ -61,15 +79,15 @@ class AbstractExportPlugin(abc.ABC):
     @abc.abstractmethod
     def push(
         self,
-        items: Sequence[AnyContent],
-        preferred_scheme: Optional[str] = None,
-        preferred_id: Optional[str] = None,
-    ) -> Sequence[URIWithMetadata]:
+        items: "Sequence[AnyContent]",
+        preferred_scheme: "Optional[str]" = None,
+        preferred_id: "Optional[str]" = None,
+    ) -> "Sequence[URIWithMetadata]":
         """
         This is the method to be implemented by the stateful pusher
         """
         pass
 
     @classmethod
-    def PluginName(cls) -> SymbolicName:
+    def PluginName(cls) -> "SymbolicName":
         return cls.PLUGIN_NAME

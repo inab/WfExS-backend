@@ -22,30 +22,36 @@ import shutil
 import tempfile
 from typing import (
     cast,
-    Optional,
-    Sequence,
     TYPE_CHECKING,
 )
 import urllib.parse
 
 from ..common import (
-    AbsPath,
-    AnyContent,
     CacheType,
     MaterializedContent,
-    RelPath,
-    SecurityContextConfig,
-    SymbolicName,
-    URIType,
-    URIWithMetadata,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Optional,
+        Sequence,
+    )
+
+    from ..common import (
+        AbsPath,
+        AnyContent,
+        RelPath,
+        SecurityContextConfig,
+        SymbolicName,
+        URIType,
+        URIWithMetadata,
+    )
+
+    from ..workflow import WF
 
 from ..utils.contents import link_or_copy
 
 from . import AbstractExportPlugin
-
-if TYPE_CHECKING:
-    from ..workflow import WF
 
 
 class CacheExportPlugin(AbstractExportPlugin):
@@ -53,19 +59,19 @@ class CacheExportPlugin(AbstractExportPlugin):
     Class to model exporting results to WfExS-backend cache
     """
 
-    PLUGIN_NAME: SymbolicName = cast(SymbolicName, "cache")
+    PLUGIN_NAME = cast("SymbolicName", "cache")
 
     def __init__(
-        self, wfInstance: "WF", setup_block: Optional[SecurityContextConfig] = None
+        self, wfInstance: "WF", setup_block: "Optional[SecurityContextConfig]" = None
     ):
         super().__init__(wfInstance, setup_block)
 
     def push(
         self,
-        items: Sequence[AnyContent],
-        preferred_scheme: Optional[str] = None,
-        preferred_id: Optional[str] = None,
-    ) -> Sequence[URIWithMetadata]:
+        items: "Sequence[AnyContent]",
+        preferred_scheme: "Optional[str]" = None,
+        preferred_id: "Optional[str]" = None,
+    ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the cache
         """
@@ -98,23 +104,23 @@ class CacheExportPlugin(AbstractExportPlugin):
                     # Outside the relative directory
                     if relitem.startswith(os.path.pardir):
                         # This is needed to avoid collisions
-                        prefname: Optional[RelPath]
+                        prefname: "Optional[RelPath]"
                         if isinstance(item, MaterializedContent):
                             prefname = item.prettyFilename
                         else:
                             prefname = item.preferredFilename
 
                         if prefname is None:
-                            prefname = cast(RelPath, os.path.basename(item.local))
+                            prefname = cast("RelPath", os.path.basename(item.local))
                         relitem = str(i_item) + "_" + prefname
-                    dest = cast(AbsPath, os.path.join(tmpdir, relitem))
+                    dest = cast("AbsPath", os.path.join(tmpdir, relitem))
                     link_or_copy(item.local, dest)
             else:
                 source = items[0].local
 
             # Generated file URI injecting the preferred id an scheme
             uri_to_fetch = cast(
-                URIType,
+                "URIType",
                 urllib.parse.urlunparse(
                     urllib.parse.ParseResult(
                         scheme="file",
