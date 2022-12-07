@@ -95,6 +95,9 @@ from .fetchers.trs_files import SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
 from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
 from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
 from .fetchers.fasp import FASPFetcher
+from .fetchers.doi import SCHEME_HANDLERS as DOI_SCHEME_HANDLERS
+from .fetchers.zenodo import SCHEME_HANDLERS as ZENODO_SCHEME_HANDLERS
+from .fetchers.b2share import SCHEME_HANDLERS as B2SHARE_SCHEME_HANDLERS
 
 from .pushers.cache_export import CacheExportPlugin
 from .pushers.nextcloud_export import NextcloudExportPlugin
@@ -540,6 +543,11 @@ class WfExSBackend:
         self.addSchemeHandlers(S3_SCHEME_HANDLERS, fetchers_setup_block)
         self.addSchemeHandlers(GS_SCHEME_HANDLERS, fetchers_setup_block)
         self.addStatefulSchemeHandlers(FASPFetcher, fetchers_setup_block)
+
+        self.addSchemeHandlers(DOI_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(ZENODO_SCHEME_HANDLERS, fetchers_setup_block)
+
+        self.addSchemeHandlers(B2SHARE_SCHEME_HANDLERS, fetchers_setup_block)
 
         # These ones should have prevalence over other custom ones
         self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
