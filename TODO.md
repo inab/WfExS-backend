@@ -51,6 +51,8 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
   - [ ] **Step 7.i**: Upload to osf.io .
   
+  - [ ] **Setp 7.j**: Explore datacite doi service.
+  
 - [ ] **Step 8**: (partially implemented) Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
 
 - [x] **Step 9**: Generate RO-Crate from execution provenance and exported results.
@@ -81,3 +83,4 @@ references to the inputs, that we are going to use to instantiate the workflows.
   - Example of the kind of entries being understood:
     - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902
     - https://dockstore.org/api/api/ga4gh/v2/tools/#workflow/github.com/smc-rna-challenge/zhanghj-8639902/zhanghj-8639902/versions/master/CWL/files
+    - trs://dockstore.org/api/%23workflow%2Fgithub.com%2Fnf-core%2Frnaseq/3.9
