@@ -22,33 +22,42 @@ import json
 
 from typing import (
     cast,
-    Mapping,
-    Optional,
+    TYPE_CHECKING,
 )
+
+from ..common import (
+    URIWithMetadata,
+)
+
+if TYPE_CHECKING:
+    from typing import (
+        Mapping,
+        Optional,
+    )
+
+    from ..common import (
+        AbsPath,
+        ProtocolFetcher,
+        ProtocolFetcherReturn,
+        SecurityContextConfig,
+        URIType,
+    )
 
 from urllib import parse
 import urllib.error
 
 from . import fetchClassicURL, FetcherException
 
-from ..common import (
-    AbsPath,
-    ProtocolFetcher,
-    ProtocolFetcherReturn,
-    SecurityContextConfig,
-    URIType,
-    URIWithMetadata,
-)
 
-
+PRIDE_PROJECT_SCHEME = "pride.project"
 PRIDE_PROJECTS_REST = "https://www.ebi.ac.uk/pride/ws/archive/v2/projects/"
 
 
 def fetchPRIDEProject(
-    remote_file: URIType,
-    cachedFilename: AbsPath,
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "AbsPath",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     """
     Method to resolve contents from PRIDE project ids
 
@@ -57,9 +66,22 @@ def fetchPRIDEProject(
     :param secContext: The security context containing the credentials
     """
 
-    parsedInputURL = parse.urlparse(remote_file)
-    projectId = parsedInputURL.path
-    metadata_url = cast(URIType, parse.urljoin(PRIDE_PROJECTS_REST, projectId))
+    # Dealing with an odd behaviour from urlparse
+    for det in ("/", "?", "#"):
+        if det in remote_file:
+            parsedInputURL = urllib.parse.urlparse(remote_file)
+            break
+    else:
+        parsedInputURL = urllib.parse.urlparse(remote_file + "#")
+    parsed_steps = parsedInputURL.path.split("/")
+
+    if len(parsed_steps) < 1 or parsed_steps[0] == "":
+        raise FetcherException(
+            f"{remote_file} is not a valid {PRIDE_PROJECT_SCHEME} CURIE. It should start with something like {PRIDE_PROJECT_SCHEME}:project_id"
+        )
+
+    projectId = parsed_steps[0]
+    metadata_url = cast("URIType", parse.urljoin(PRIDE_PROJECTS_REST, projectId))
 
     gathered_meta = {"fetched": metadata_url}
     metadata_array = [URIWithMetadata(remote_file, gathered_meta)]
@@ -79,6 +101,7 @@ def fetchPRIDEProject(
 
     try:
         for addAtt in metadata["additionalAttributes"]:
+            # https://github.com/PRIDE-Utilities/pride-ontology/blob/3b9cc024ea7d16481a04d9e583c0188205145db4/pride_cv.obo#L2620
             if (
                 addAtt.get("@type") == "CvParam"
                 and addAtt.get("accession") == "PRIDE:0000411"
@@ -93,10 +116,20 @@ def fetchPRIDEProject(
             "Error processing PRIDE project metadata for {} : {}".format(remote_file, e)
         )
 
-    return pride_project_url, metadata_array, None
+    if len(parsed_steps) > 1:
+        # Needed to avoid path handling problems
+        if pride_project_url[-1] != "/":
+            pride_project_url += "/"
+        composed_pride_project_url = parse.urljoin(
+            pride_project_url, "/".join(parsed_steps[1:])
+        )
+    else:
+        composed_pride_project_url = pride_project_url
+
+    return composed_pride_project_url, metadata_array, None
 
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS: Mapping[str, ProtocolFetcher] = {
-    "pride.project": fetchPRIDEProject,
+SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
+    PRIDE_PROJECT_SCHEME: fetchPRIDEProject,
 }
