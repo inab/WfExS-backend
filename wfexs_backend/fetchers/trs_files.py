@@ -187,23 +187,57 @@ def fetchTRSFiles(
     os.makedirs(cachedFilename, exist_ok=True)
     absdirs = set()
     emptyWorkflow = True
+    # First pass, identify primary descriptor / workflow entrypoint
+    # and learn whether the destination paths should be sanitized
+    deepest_file_rel = 1
+    for file_desc in metadata:
+        file_rel_path = file_desc.get("path")
+        if file_rel_path is not None:
+            # BEWARE! The relpath could contain references to parent directories
+            # escaping from the URL to be built and from the download "sandbox"
+            # Avoid absolute paths corner case before splitting
+            file_rel_path_steps = file_rel_path.lstrip("/").split("/")
+
+            file_rel_depth = (
+                len(file_rel_path_steps)
+                - file_rel_path_steps.count(".")
+                - file_rel_path_steps.count("")
+                - 2 * file_rel_path_steps.count("..")
+            )
+            if file_rel_depth < deepest_file_rel:
+                deepest_file_rel = file_rel_depth
+
+    # We have to create anonymous directories to avoid leaving the download "sandbox"
+    abs_download_dir = cachedFilename
+    if deepest_file_rel < 1:
+        for depth in range(deepest_file_rel, 1):
+            abs_download_dir = cast(
+                "AbsPath", os.path.join(abs_download_dir, f"unnamed{depth}")
+            )
+
+    # Second pass, fetching the contents, sanitizing the destination paths
     for file_desc in metadata:
         file_rel_path = file_desc.get("path")
         if file_rel_path is not None:
             emptyWorkflow = False
 
-            file_url = cast("URIType", descriptor_base_url + file_rel_path)
-            absfile = cast("AbsPath", os.path.join(cachedFilename, file_rel_path))
+            # BEWARE! The relpath could contain references to parent directories
+            # escaping from the URL to be built and from the download "sandbox"
+            file_url = cast(
+                "URIType", descriptor_base_url + parse.quote(file_rel_path, safe="/")
+            )
+            absfile = cast(
+                "AbsPath", os.path.join(abs_download_dir, file_rel_path.lstrip("/"))
+            )
 
             # Intermediate path creation
-            reldir = os.path.dirname(file_rel_path)
-            if len(reldir) > 0:
-                absdir = os.path.join(cachedFilename, reldir)
-                if absdir not in absdirs:
-                    absdirs.add(absdir)
-                    os.makedirs(absdir, exist_ok=True)
+            absdir = os.path.dirname(absfile)
+            if absdir not in absdirs:
+                absdirs.add(absdir)
+                os.makedirs(absdir, exist_ok=True)
+            real_rel_path = os.path.relpath(os.path.normpath(absfile), cachedFilename)
 
-            # it is fetched twice, one for the metadata,
+            # When it is the primary descriptor, it is fetched twice
             if file_desc.get("file_type") == "PRIMARY_DESCRIPTOR":
                 descriptorMeta = io.BytesIO()
                 _, metaprimary, _ = fetchClassicURL(file_url, descriptorMeta)
@@ -211,13 +245,13 @@ def fetchTRSFiles(
 
                 # This metadata can help a lot to get the workflow repo
                 metadataPD = json.loads(descriptorMeta.getvalue().decode("utf-8"))
-                topMeta["workflow_entrypoint"] = file_rel_path
+                topMeta["workflow_entrypoint"] = cast("URIType", real_rel_path)
                 topMeta["remote_workflow_entrypoint"] = metadataPD.get("url")
 
                 del descriptorMeta
                 del metadataPD
 
-            # and another for the raw content (in case no workflow repo is identified)
+            # Getting the raw content
             _, metaelem, _ = fetchClassicURL(
                 file_url, absfile, {"headers": {"Accept": "text/plain"}}
             )
