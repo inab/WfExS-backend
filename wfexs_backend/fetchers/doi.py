@@ -56,6 +56,7 @@ DOI_HANDLE_REST = "https://doi.org/api/handles/"
 
 ZENODO_RECORD_PREFIX = "/record/"
 B2SHARE_RECORD_PREFIX = "/records/"
+OSF_IO_RECORD_PREFIX = "/"
 WORKFLOWHUB_RECORD_PREFIX = "/workflows/"
 
 
@@ -83,8 +84,7 @@ def fetchDOI(
             f"{remote_file} is not a valid {DOI_SCHEME} CURIE. It should start with something like {DOI_SCHEME}:prefix/suffix"
         )
 
-    doi_id = "/".join(parsed_steps[0:2])
-    # take only the first 2 elements
+    doi_id = parsedInputURL.path
 
     metadata_ra_url = cast("URIType", parse.urljoin(DOI_RA_REST, doi_id))
 
@@ -192,6 +192,14 @@ def fetchDOI(
                 "b2share:" + doi_resolved_parsed.path[len(B2SHARE_RECORD_PREFIX) :]
             )
         elif (
+            doi_resolved_parsed.netloc == "osf.io"
+            and doi_resolved_parsed.path.startswith(OSF_IO_RECORD_PREFIX)
+        ):
+            doi_resolved_url = (
+                "osf.io:"
+                + doi_resolved_parsed.path[len(OSF_IO_RECORD_PREFIX) :].split("/")[0]
+            )
+        elif (
             doi_resolved_parsed.netloc == "workflowhub.eu"
             and doi_resolved_parsed.path.startswith(WORKFLOWHUB_RECORD_PREFIX)
         ):
@@ -207,16 +215,7 @@ def fetchDOI(
                 if len(version_a) > 0:
                     doi_resolved_url += "/" + parse.quote(version_a[0], safe="")
 
-    if len(parsed_steps) > 2:
-        # Needed to avoid path handling problems
-        if doi_resolved_url[-1] != "/":
-            doi_resolved_url += "/"
-        # We cannot use urljoin because it does not support dealing with CURIEs
-        composed_doi_resolved_url = doi_resolved_url + "/".join(parsed_steps[2:])
-    else:
-        composed_doi_resolved_url = doi_resolved_url
-
-    return cast("URIType", composed_doi_resolved_url), metadata_array, None
+    return cast("URIType", doi_resolved_url), metadata_array, None
 
 
 # These are schemes from identifiers.org

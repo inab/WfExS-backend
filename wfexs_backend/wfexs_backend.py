@@ -98,6 +98,7 @@ from .fetchers.fasp import FASPFetcher
 from .fetchers.doi import SCHEME_HANDLERS as DOI_SCHEME_HANDLERS
 from .fetchers.zenodo import SCHEME_HANDLERS as ZENODO_SCHEME_HANDLERS
 from .fetchers.b2share import SCHEME_HANDLERS as B2SHARE_SCHEME_HANDLERS
+from .fetchers.osf_io import SCHEME_HANDLERS as OSF_IO_SCHEME_HANDLERS
 
 from .pushers.cache_export import CacheExportPlugin
 from .pushers.nextcloud_export import NextcloudExportPlugin
@@ -548,6 +549,7 @@ class WfExSBackend:
         self.addSchemeHandlers(ZENODO_SCHEME_HANDLERS, fetchers_setup_block)
 
         self.addSchemeHandlers(B2SHARE_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(OSF_IO_SCHEME_HANDLERS, fetchers_setup_block)
 
         # These ones should have prevalence over other custom ones
         self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
