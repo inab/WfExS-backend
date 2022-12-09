@@ -50,7 +50,9 @@ if TYPE_CHECKING:
     )
 
     from .common import (
+        AbsPath,
         SymbolicName,
+        URIType,
     )
 
     from .workflow import WF
@@ -292,6 +294,7 @@ def processCacheCommand(
     assert cPath is not None
     retval = 0
     if args.cache_command in (WfExS_Cache_Commands.List, WfExS_Cache_Commands.Status):
+        the_path: "Union[AbsPath, str, URIType]"
         if logLevel <= logging.INFO:
             contentsI = sorted(
                 cH.list(
@@ -304,8 +307,22 @@ def processCacheCommand(
             )
             for entryI in contentsI:
                 if args.cache_command == WfExS_Cache_Commands.List:
+                    if "resolves_to" in entryI[1]:
+                        the_path = (
+                            " ".join(entryI[1]["resolves_to"])
+                            if isinstance(entryI[1]["resolves_to"], list)
+                            else cast("URIType", entryI[1]["resolves_to"])
+                        )
+                        the_type = "uri"
+                    elif "path" in entryI[1]:
+                        the_path = entryI[1]["path"].get("absolute", "????")
+                        the_type = "path"
+                    else:
+                        the_path = "(not recorded)"
+                        the_type = "???"
+
                     print(
-                        f"({entryI[1]['stamp']}) {entryI[0].uri} => {entryI[1]['path']['absolute']}"
+                        f"({entryI[1]['stamp']}) {entryI[0].uri} => {the_type} {the_path}"
                     )
                 else:
                     json.dump(
@@ -328,8 +345,22 @@ def processCacheCommand(
             )
             for entryD in contentsD:
                 if args.cache_command == WfExS_Cache_Commands.List:
+                    if "resolves_to" in entryD[1]:
+                        the_path = (
+                            " ".join(entryD[1]["resolves_to"])
+                            if isinstance(entryD[1]["resolves_to"], list)
+                            else cast("URIType", entryD[1]["resolves_to"])
+                        )
+                        the_type = "uri"
+                    elif "path" in entryD[1]:
+                        the_path = entryD[1]["path"].get("absolute", "????")
+                        the_type = "path"
+                    else:
+                        the_path = "(not recorded)"
+                        the_type = "???"
+
                     print(
-                        f"({entryD[1]['stamp']}) {entryD[0].uri} => {entryD[1]['path']['absolute']}"
+                        f"({entryD[1]['stamp']}) {entryD[0].uri} => {the_type} {the_path}"
                     )
                 else:
                     print(entryD[0])
