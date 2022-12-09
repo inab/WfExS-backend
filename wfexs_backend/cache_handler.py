@@ -248,6 +248,9 @@ class SchemeHandlerCacheHandler:
 
         return instStatefulFetcher
 
+    def getRegisteredSchemes(self) -> "Sequence[str]":
+        return list(self.schemeHandlers.keys())
+
     def _genUriMetaCachedFilename(
         self, hashDir: "AbsPath", the_remote_file: "URIType"
     ) -> "Tuple[AbsPath, RelPath, AbsPath]":

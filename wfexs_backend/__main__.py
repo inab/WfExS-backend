@@ -86,6 +86,14 @@ class WfExS_Commands(StrDocEnum):
         "config-validate",
         "Validate the configuration files to be used for staging and execution",
     )
+    ListFetchers = (
+        "list-fetchers",
+        "List the supported fetchers / schemes",
+    )
+    ListPushers = (
+        "list-exporters",
+        "List the supported export plugins",
+    )
     Stage = (
         "stage",
         "Prepare the staging (working) directory for workflow execution, fetching dependencies and contents",
@@ -121,6 +129,7 @@ if TYPE_CHECKING:
 
 class WfExS_Cache_Commands(StrDocEnum):
     List = ("ls", "List the cache entries")
+    Status = ("status", "Show the cache entries metadata")
     Inject = ("inject", "Inject a new entry in the cache")
     Fetch = (
         "fetch",
@@ -253,6 +262,23 @@ def genParserSub(
     return ap_
 
 
+def processListFetchersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
+    fetchable_schemes = wfBackend.listFetchableSchemes()
+    print(f"{len(fetchable_schemes)} supported fetchers")
+    for fetchable_scheme in fetchable_schemes:
+        print(f"\t{fetchable_scheme}")
+
+    return 0
+
+
+def processListPushersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
+    export_plugin_names = wfBackend.listExportPluginNames()
+    print(f"{len(export_plugin_names)} supported export plugins")
+    for export_plugin_name in export_plugin_names:
+        print(f"\t{export_plugin_name}")
+    return 0
+
+
 def processCacheCommand(
     wfBackend: "WfExSBackend", args: "argparse.Namespace", logLevel: "int"
 ) -> "int":
@@ -265,40 +291,48 @@ def processCacheCommand(
     cH, cPath = wfBackend.getCacheHandler(args.cache_type)
     assert cPath is not None
     retval = 0
-    if args.cache_command == WfExS_Cache_Commands.List:
+    if args.cache_command in (WfExS_Cache_Commands.List, WfExS_Cache_Commands.Status):
         if logLevel <= logging.INFO:
             contentsI = sorted(
-                map(
-                    lambda l: l[1],
-                    cH.list(
-                        *args.cache_command_args,
-                        destdir=cPath,
-                        acceptGlob=args.filesAsGlobs,
-                        cascade=args.doCacheCascade,
-                    ),
+                cH.list(
+                    *args.cache_command_args,
+                    destdir=cPath,
+                    acceptGlob=args.filesAsGlobs,
+                    cascade=args.doCacheCascade,
                 ),
-                key=lambda x: x["stamp"],
+                key=lambda x: x[1]["stamp"],
             )
             for entryI in contentsI:
-                json.dump(
-                    entryI, sys.stdout, cls=DatetimeEncoder, indent=4, sort_keys=True
-                )
-                print()
+                if args.cache_command == WfExS_Cache_Commands.List:
+                    print(
+                        f"({entryI[1]['stamp']}) {entryI[0].uri} => {entryI[1]['path']['absolute']}"
+                    )
+                else:
+                    json.dump(
+                        entryI[1],
+                        sys.stdout,
+                        cls=DatetimeEncoder,
+                        indent=4,
+                        sort_keys=True,
+                    )
+                    print()
         else:
             contentsD = sorted(
-                map(
-                    lambda l: l[0],
-                    cH.list(
-                        *args.cache_command_args,
-                        destdir=cPath,
-                        acceptGlob=args.filesAsGlobs,
-                        cascade=args.doCacheCascade,
-                    ),
+                cH.list(
+                    *args.cache_command_args,
+                    destdir=cPath,
+                    acceptGlob=args.filesAsGlobs,
+                    cascade=args.doCacheCascade,
                 ),
-                key=lambda x: x.uri,
+                key=lambda x: x[0].uri,
             )
             for entryD in contentsD:
-                print(entryD)
+                if args.cache_command == WfExS_Cache_Commands.List:
+                    print(
+                        f"({entryD[1]['stamp']}) {entryD[0].uri} => {entryD[1]['path']['absolute']}"
+                    )
+                else:
+                    print(entryD[0])
 
     elif args.cache_command == WfExS_Cache_Commands.Remove:
         print(
@@ -787,6 +821,8 @@ def main() -> None:
         "export_contents_command_args", help="Optional export names", nargs="*"
     )
 
+    ap_lf = genParserSub(sp, WfExS_Commands.ListFetchers)
+    ap_lp = genParserSub(sp, WfExS_Commands.ListPushers)
     ap_cv = genParserSub(sp, WfExS_Commands.ConfigValidate, preStageParams=True)
 
     ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)
@@ -906,6 +942,8 @@ def main() -> None:
     if command in (
         WfExS_Commands.Init,
         WfExS_Commands.Cache,
+        WfExS_Commands.ListFetchers,
+        WfExS_Commands.ListPushers,
         WfExS_Commands.Stage,
         WfExS_Commands.Execute,
     ):
@@ -928,6 +966,12 @@ def main() -> None:
 
     # Cache handling commands
     print('* Command "{}".'.format(command), file=sys.stderr)
+    if command == WfExS_Commands.ListFetchers:
+        sys.exit(processListFetchersCommand(wfBackend, logLevel))
+
+    if command == WfExS_Commands.ListPushers:
+        sys.exit(processListPushersCommand(wfBackend, logLevel))
+
     if command == WfExS_Commands.Cache:
         sys.exit(processCacheCommand(wfBackend, args, logLevel))
 

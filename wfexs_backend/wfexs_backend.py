@@ -603,6 +603,9 @@ class WfExSBackend:
     def addExportPlugin(self, exportClazz: "Type[AbstractExportPlugin]") -> None:
         self._export_plugins[exportClazz.PluginName()] = exportClazz
 
+    def listExportPluginNames(self) -> "Sequence[SymbolicName]":
+        return list(self._export_plugins.keys())
+
     def instantiateExportPlugin(
         self,
         wfInstance: "WF",
@@ -694,6 +697,9 @@ class WfExSBackend:
                     instSchemeHandlers[lScheme] = instSchemeHandler
 
             self.cacheHandler.addRawSchemeHandlers(instSchemeHandlers)
+
+    def listFetchableSchemes(self) -> "Sequence[str]":
+        return self.cacheHandler.getRegisteredSchemes()
 
     def newSetup(
         self,
