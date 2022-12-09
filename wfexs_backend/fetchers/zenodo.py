@@ -172,6 +172,7 @@ def fetchZenodo(
                 kind = ContentKind.File
                 break
             elif key.startswith(prefix_slash):
+                the_files.append(the_file)
                 kind = ContentKind.Directory
 
     if kind is None:
