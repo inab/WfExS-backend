@@ -64,10 +64,10 @@ python WfExS-backend.py --full-help
 ```
 usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
                         [--full-help]
-                        {init,cache,staged-workdir,export,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+                        {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.6.0 (532266dd5b0945cb1f1801a376428437e1ab3571)
+WfExS (workflow execution service) backend 0.9.0-13-g8307be2 (8307be297a96268c13b5df8d8cd1b708d9916a2d)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -86,11 +86,13 @@ optional arguments:
 commands:
   Command to run. It must be one of these
 
-  {init,cache,staged-workdir,export,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+  {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
     init                Init local setup
     cache               Cache handling subcommands
     staged-workdir      Staged working directories handling subcommands
     export              Staged working directories export subcommands
+    list-fetchers       List the supported fetchers / schemes
+    list-exporters      List the supported export plugins
     config-validate     Validate the configuration files to be used for staging and execution
     stage               Prepare the staging (working) directory for workflow execution, fetching dependencies and contents
     mount-workdir       Mount the encrypted staging directory on secure staging scenarios
@@ -108,14 +110,15 @@ optional arguments:
 
 Subparser 'cache'
 usage: WfExS-backend.py cache [-h] [-r] [--cascade] [-g]
-                              {ls,inject,fetch,rm,validate} {input,ro-crate,ga4gh-trs,workflow}
+                              {ls,status,inject,fetch,rm,validate} {input,ro-crate,ga4gh-trs,workflow}
                               [cache_command_args [cache_command_args ...]]
 
 positional arguments:
-  {ls,inject,fetch,rm,validate}
+  {ls,status,inject,fetch,rm,validate}
                         Cache command to perform
                         
                         ls          List the cache entries
+                        status      Show the cache entries metadata
                         inject      Inject a new entry in the cache
                         fetch       Fetch a new cache entry, giving as input both the URI and optionally both a security context file and a security context name
                         rm          Remove an entry from the cache
@@ -186,6 +189,18 @@ optional arguments:
                         Configuration file, describing exports which can be done (default: None)
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
+
+Subparser 'list-fetchers'
+usage: WfExS-backend.py list-fetchers [-h]
+
+optional arguments:
+  -h, --help  show this help message and exit
+
+Subparser 'list-exporters'
+usage: WfExS-backend.py list-exporters [-h]
+
+optional arguments:
+  -h, --help  show this help message and exit
 
 Subparser 'config-validate'
 usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX]
