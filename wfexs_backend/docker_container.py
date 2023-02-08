@@ -44,7 +44,6 @@ if TYPE_CHECKING:
         ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
-        ContainerType,
         ExitVal,
         ProcessorArchitecture,
         RelPath,
