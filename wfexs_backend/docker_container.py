@@ -53,6 +53,7 @@ if TYPE_CHECKING:
 
 from .common import (
     Container,
+    ContainerType,
     DEFAULT_DOCKER_CMD,
 )
 
