@@ -34,7 +34,7 @@ jobs:
           pip freeze > constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
-        uses: pilosus/action-pip-license-checker@v0.6.3
+        uses: pilosus/action-pip-license-checker@v1.0.0
         with:
           requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
@@ -83,7 +83,9 @@ jobs:
           cache: 'pip'
           architecture: x64
           cache-dependency-path: 'dev-requirements.txt'
-        
+      - name: Install development dependencies
+        run: |
+          pip install -r dev-requirements.txt
       - name: Generate HTML documentation from internal JSON Schemas
         id: doc-generate-html-if-changed
         if: steps.changed_schemas.outputs.any_changed == 'true'
