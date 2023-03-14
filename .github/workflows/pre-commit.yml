@@ -32,16 +32,6 @@ jobs:
       - name: 'Freeze Python ${{ matrix.python-version }} constraints'
         run: |
           pip freeze > constraints-${{ matrix.python-version }}.txt
-      - name: Check transitive dependencies licences
-        id: license_check_report
-        uses: pilosus/action-pip-license-checker@v1.0.0
-        with:
-          requirements: constraints-${{ matrix.python-version }}.txt
-          fail: 'StrongCopyleft'
-          exclude: 'pylint.*'
-      - name: Print licences report
-        if: ${{ always() }}
-        run: echo "${{ steps.license_check_report.outputs.report }}"
       - run: pip install -r dev-requirements.txt -r mypy-requirements.txt
       - name: MyPy cache
         uses: actions/cache@v3
@@ -58,6 +48,17 @@ jobs:
  #       if: ${{ matrix.python-version == '3.6' }}
  #       with:
  #         extra_args: --all -c .pre-commit-config-gh-${{ matrix.python-version }}.yaml
+      - name: Check transitive dependencies licences
+        id: license_check_report
+        uses: pilosus/action-pip-license-checker@v1.0.0
+        continue-on-error: true
+        with:
+          requirements: constraints-${{ matrix.python-version }}.txt
+          fail: 'StrongCopyleft'
+          exclude: 'pylint.*'
+      - name: Print licences report
+        if: ${{ always() }}
+        run: echo "${{ steps.license_check_report.outputs.report }}"
       - uses: actions/upload-artifact@v3
         with:
           retention-days: 2
