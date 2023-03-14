@@ -395,10 +395,10 @@ class NextcloudExportPlugin(AbstractExportPlugin):
                     )
                 )
         else:
-            if isinstance(item, MaterializedContent):
-                prefname = item.prettyFilename
+            if isinstance(items[0], MaterializedContent):
+                prefname = items[0].prettyFilename
             else:
-                prefname = item.preferredFilename
+                prefname = items[0].preferredFilename
             if prefname is None:
                 prefname = cast("RelPath", os.path.basename(items[0].local))
             mappings.append(
