@@ -38,6 +38,7 @@ import rocrate.model.entity  # type:ignore
 import rocrate.model.dataset  # type:ignore
 import rocrate.model.computationalworkflow  # type:ignore
 import rocrate.model.softwareapplication  # type:ignore
+import rocrate.model.creativework  # type:ignore
 import rocrate.rocrate  # type:ignore
 
 
@@ -177,6 +178,24 @@ class SoftwareContainer(rocrate.model.file.File):  # type: ignore[misc]
         }
 
 
+class Collection(rocrate.model.creativework.CreativeWork):  # type: ignore[misc]
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        main_entity: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset, None]",
+        identifier: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        pv_properties: "MutableMapping[str, Any]" = {}
+
+        if properties is not None:
+            pv_properties.update(properties)
+        super().__init__(crate, identifier=identifier, properties=pv_properties)
+
+        if main_entity is not None:
+            self["mainEntity"] = main_entity
+
+
 def add_file_to_crate(
     crate: "rocrate.rocrate.ROCrate",
     the_path: "str",
@@ -224,11 +243,12 @@ def add_GeneratedContent_to_crate(
     the_content: "GeneratedContent",
     work_dir: "AbsPath",
     do_attach: "bool" = True,
-) -> "rocrate.model.file.File":
+) -> "Union[rocrate.model.file.File, Collection]":
     the_content_uri = (
         the_content.uri.uri if the_content.uri is not None else the_content.signature
     )
     assert the_content.signature is not None
+
     digest, algo = extract_digest(the_content.signature)
     if digest is None:
         digest, algo = unstringifyDigest(the_content.signature)
@@ -241,12 +261,64 @@ def add_GeneratedContent_to_crate(
         do_attach=do_attach,
     )
 
-    return crate_file
+    # The corner case of output files with secondary files
+    if (
+        isinstance(the_content.secondaryFiles, list)
+        and len(the_content.secondaryFiles) > 0
+    ):
+        crate_coll = add_collection_to_crate(crate, crate_file)
+
+        for secFile in the_content.secondaryFiles:
+            gen_content: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset]"
+            if isinstance(secFile, GeneratedContent):
+                gen_content = add_GeneratedContent_to_crate(
+                    crate, secFile, work_dir, do_attach=do_attach
+                )
+            else:
+                # elif isinstance(secFile, GeneratedDirectoryContent):
+                gen_dir_content, _ = add_GeneratedDirectoryContent_as_dataset(
+                    crate, secFile, work_dir, do_attach=do_attach
+                )
+                assert gen_dir_content is not None
+                gen_content = gen_dir_content
+
+            crate_coll.append_to("hasPart", gen_content)
+
+        return crate_coll
+    else:
+        return crate_file
 
 
 def add_wfexs_to_crate(
     crate: "rocrate.rocrate.ROCrate",
 ) -> "rocrate.model.softwareapplication.SoftwareApplication":
+    # First, the profiles to be attached to the root dataset
+    wrroc_profiles = [
+        rocrate.model.creativework.CreativeWork(
+            crate,
+            identifier="https://w3id.org/ro/wfrun/process/0.1",
+            properties={"name": "ProcessRun Crate", "version": "0.1"},
+        ),
+        rocrate.model.creativework.CreativeWork(
+            crate,
+            identifier="https://w3id.org/ro/wfrun/workflow/0.1",
+            properties={"name": "Workflow Run Crate", "version": "0.1"},
+        ),
+        rocrate.model.creativework.CreativeWork(
+            crate,
+            identifier="https://w3id.org/ro/wfrun/provenance/0.1",
+            properties={"name": "Provenance Run Crate", "version": "0.1"},
+        ),
+        rocrate.model.creativework.CreativeWork(
+            crate,
+            identifier="https://w3id.org/workflowhub/workflow-ro-crate/1.0",
+            properties={"name": "Workflow RO-Crate", "version": "1.0"},
+        ),
+    ]
+    crate.add(*wrroc_profiles)
+    crate.root_dataset.append_to("conformsTo", wrroc_profiles)
+
+    # Now, WfExS reference as such
     wf_wfexs = rocrate.model.softwareapplication.SoftwareApplication(
         crate, identifier=wfexs_backend_url
     )
@@ -256,6 +328,16 @@ def add_wfexs_to_crate(
     wf_wfexs.version = get_WfExS_version()
 
     return wf_wfexs
+
+
+def add_collection_to_crate(
+    crate: "rocrate.rocrate.ROCrate",
+    main_entity: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset,None]" = None,
+) -> "Collection":
+    wf_coll = Collection(crate, main_entity)
+    wf_coll = crate.add(wf_coll)
+
+    return wf_coll
 
 
 def create_workflow_crate(
@@ -544,7 +626,7 @@ def add_GeneratedDirectoryContent_as_dataset(
     the_content: "GeneratedDirectoryContent",
     work_dir: "AbsPath",
     do_attach: "bool" = True,
-) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
+) -> "Union[Tuple[Union[rocrate.model.dataset.Dataset, Collection], Sequence[rocrate.model.file.File]], Tuple[None, None]]":
     if os.path.isdir(the_content.local):
         the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
         an_uri = (
@@ -579,11 +661,36 @@ def add_GeneratedDirectoryContent_as_dataset(
                     if the_val_dataset is not None:
                         assert the_subfiles_crates is not None
                         crate_dataset.append_to("hasPart", the_val_dataset)
-                        crate_dataset.append_tp("hasPart", the_subfiles_crates)
+                        crate_dataset.append_to("hasPart", the_subfiles_crates)
 
                         the_files_crates.extend(the_subfiles_crates)
 
-        return crate_dataset, the_files_crates
+        # The very corner case of output directories with secondary files
+        if (
+            isinstance(the_content.secondaryFiles, list)
+            and len(the_content.secondaryFiles) > 0
+        ):
+            crate_coll = add_collection_to_crate(crate, crate_dataset)
+
+            for secFile in the_content.secondaryFiles:
+                gen_content: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset]"
+                if isinstance(secFile, GeneratedContent):
+                    gen_content = add_GeneratedContent_to_crate(
+                        crate, secFile, work_dir, do_attach=do_attach
+                    )
+                else:
+                    # elif isinstance(secFile, GeneratedDirectoryContent):
+                    gen_dir_content, _ = add_GeneratedDirectoryContent_as_dataset(
+                        crate, secFile, work_dir, do_attach=do_attach
+                    )
+                    assert gen_dir_content is not None
+                    gen_content = gen_dir_content
+
+                crate_coll.append_to("hasPart", gen_content)
+
+            return crate_coll, the_files_crates
+        else:
+            return crate_dataset, the_files_crates
 
     return None, None
 
@@ -619,7 +726,9 @@ def addInputsResearchObject(
         elif isinstance(itemInValue0, float):
             additional_type = "Float"
         elif isinstance(itemInValue0, MaterializedContent):
-            if itemInValue0.kind == ContentKind.File:
+            if len(in_item.values) > 1:
+                additional_type = "Collection"
+            elif itemInValue0.kind == ContentKind.File:
                 additional_type = "File"
             elif itemInValue0.kind == ContentKind.Directory:
                 additional_type = "Dataset"
@@ -633,7 +742,13 @@ def addInputsResearchObject(
         crate.add(formal_parameter)
         wf_crate.append_to("input", formal_parameter)
 
-        if additional_type in ("File", "Dataset"):
+        crate_coll: "Union[Collection, rocrate.model.dataset.Dataset, rocrate.model.dataset.File, PropertyValue]"
+        if len(in_item.values) > 1:
+            crate_coll = add_collection_to_crate(crate)
+        else:
+            crate_coll = None
+        if additional_type in ("File", "Dataset", "Collection"):
+
             for itemInValues in cast("Sequence[MaterializedContent]", in_item.values):
                 # TODO: embed metadata_array in some way
                 assert isinstance(itemInValues, MaterializedContent)
@@ -651,9 +766,10 @@ def addInputsResearchObject(
                         do_attach=do_attach,
                     )
 
-                    crate_file.append_to("exampleOfWork", formal_parameter)
-                    formal_parameter.append_to("workExample", crate_file)
-                    crate_inputs.append(crate_file)
+                    if isinstance(crate_coll, Collection):
+                        crate_coll.append_to("hasPart", crate_file)
+                    else:
+                        crate_coll = crate_file
 
                 elif os.path.isdir(itemInLocalSource):
                     crate_dataset, _ = add_directory_as_dataset(
@@ -670,12 +786,14 @@ def addInputsResearchObject(
 
                     if crate_dataset is not None:
                         crate_dataset["name"] = the_name + "/"
-                        crate_dataset.append_to("exampleOfWork", formal_parameter)
-                        formal_parameter.append_to("workExample", crate_dataset)
-                        crate_inputs.append(crate_dataset)
+                        if isinstance(crate_coll, Collection):
+                            crate_coll.append_to("hasPart", crate_dataset)
+                        else:
+                            crate_coll = crate_dataset
 
                 else:
                     pass  # TODO: raise exception
+
         else:
             for itemInAtomicValues in cast(
                 "Sequence[Union[bool,str,float,int]]", in_item.values
@@ -683,9 +801,65 @@ def addInputsResearchObject(
                 assert isinstance(itemInAtomicValues, (bool, str, float, int))
                 parameter_value = PropertyValue(crate, in_item.name, itemInAtomicValues)
                 crate_pv = crate.add(parameter_value)
-                crate_pv.append_to("exampleOfWork", formal_parameter)
-                formal_parameter.append_to("workExample", crate_pv)
-                crate_inputs.append(crate_pv)
+                if isinstance(crate_coll, Collection):
+                    crate_coll.append_to("hasPart", crate_pv)
+                else:
+                    crate_coll = crate_pv
+
+        # Avoiding corner cases
+        if crate_coll is not None:
+            # And now, let's process the secondary inputs
+            if (
+                isinstance(in_item.secondaryInputs, list)
+                and len(in_item.secondaryInputs) > 0
+            ):
+                sec_crate_coll = add_collection_to_crate(crate, crate_coll)
+
+                for secInput in in_item.secondaryInputs:
+                    sec_crate_elem: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset, Collection, None]"
+
+                    secInputLocalSource = secInput.local  # local source
+                    secInputURISource = secInput.licensed_uri.uri  # uri source
+                    if os.path.isfile(secInputLocalSource):
+                        # This is needed to avoid including the input
+                        sec_crate_elem = add_file_to_crate(
+                            crate,
+                            the_path=secInputLocalSource,
+                            the_uri=secInputURISource,
+                            the_name=cast(
+                                "RelPath",
+                                os.path.relpath(secInputLocalSource, work_dir),
+                            ),
+                            do_attach=do_attach,
+                        )
+
+                    elif os.path.isdir(secInputLocalSource):
+                        sec_crate_elem, _ = add_directory_as_dataset(
+                            crate, secInputLocalSource, secInputURISource
+                        )
+                        # crate_dataset = crate.add_dataset(
+                        #    source=secInputURISource,
+                        #    fetch_remote=False,
+                        #    validate_url=False,
+                        #    do_attach=do_attach,
+                        #    # properties=file_properties,
+                        # )
+                        the_sec_name = os.path.relpath(secInputLocalSource, work_dir)
+
+                        if sec_crate_elem is not None:
+                            sec_crate_elem["name"] = the_sec_name + "/"
+                    else:
+                        sec_crate_elem = None
+
+                    if sec_crate_elem is not None:
+                        sec_crate_coll.append_to("hasPart", sec_crate_elem)
+
+                # Last, put it in place
+                crate_coll = sec_crate_coll
+
+            crate_coll.append_to("exampleOfWork", formal_parameter)
+            formal_parameter.append_to("workExample", crate_coll)
+            crate_inputs.append(crate_coll)
 
         # TODO digest other types of inputs
     return crate_inputs
@@ -831,9 +1005,9 @@ def addOutputsResearchObject(
             wf_crate.id + "#output:" + urllib.parse.quote(out_item.name, safe="")
         )
         if out_item.kind == ContentKind.File:
-            additional_type = "File"
+            additional_type = "Collection" if len(out_item.values) > 1 else "File"
         elif out_item.kind == ContentKind.Directory:
-            additional_type = "Dataset"
+            additional_type = "Collection" if len(out_item.values) > 1 else "Dataset"
         elif len(out_item.values) > 0:
             itemOutValue0 = out_item.values[0]
             if isinstance(itemOutValue0, int):
@@ -860,18 +1034,24 @@ def addOutputsResearchObject(
         if len(out_item.values) == 0:
             continue
 
-        if additional_type in ("File", "Dataset"):
+        if additional_type in ("File", "Dataset", "Collection"):
+            crate_coll: "Union[Collection, rocrate.model.dataset.Dataset, rocrate.model.dataset.File]"
+            if len(out_item.values) > 1:
+                crate_coll = add_collection_to_crate(crate)
+            else:
+                crate_coll = None
             for itemOutValues in cast(
                 "Sequence[AbstractGeneratedContent]", out_item.values
             ):
-
-                assert isinstance(
-                    itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
-                )
                 if not isinstance(
                     itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
                 ):
                     logger.error("FIXME: elements of incorrect types")
+
+                assert isinstance(
+                    itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
+                )
+
                 itemOutLocalSource = itemOutValues.local  # local source
                 # TODO: use exported results logs to complement this
                 itemOutURISource = None
@@ -885,9 +1065,10 @@ def addOutputsResearchObject(
                         )
 
                         if crate_dataset is not None:
-                            crate_dataset.append_to("exampleOfWork", formal_parameter)
-                            formal_parameter.append_to("workExample", crate_dataset)
-                            crate_outputs.append(crate_dataset)
+                            if isinstance(crate_coll, Collection):
+                                crate_coll.append_to("hasPart", crate_dataset)
+                            else:
+                                crate_coll = crate_dataset
 
                     else:
                         errmsg = (
@@ -905,9 +1086,10 @@ def addOutputsResearchObject(
                             do_attach=do_attach,
                         )
 
-                        crate_file.append_to("exampleOfWork", formal_parameter)
-                        formal_parameter.append_to("workExample", crate_file)
-                        crate_outputs.append(crate_file)
+                        if isinstance(crate_coll, Collection):
+                            crate_coll.append_to("hasPart", crate_file)
+                        else:
+                            crate_coll = crate_file
 
                     else:
                         errmsg = (
@@ -919,6 +1101,18 @@ def addOutputsResearchObject(
                 else:
                     pass
                     # TODO digest other types of outputs
+
+            # Last rites to set all of them properly
+            if crate_coll is not None:
+                if (
+                    isinstance(crate_coll, Collection)
+                    and additional_type != "Collection"
+                ):
+                    formal_parameter["additionalType"] = "Collection"
+
+                crate_coll.append_to("exampleOfWork", formal_parameter)
+                formal_parameter.append_to("workExample", crate_coll)
+                crate_outputs.append(crate_coll)
 
     return crate_outputs
 
