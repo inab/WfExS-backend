@@ -36,7 +36,12 @@ repos:
         pass_filenames: false
         args: [ wfexs_backend/schemas ]
 
-  - repo: https://github.com/ambv/black
+  - repo: https://github.com/jmfernandez/pre-commit_mirrors-actionlint.git
+    rev: v1.6.23
+    hooks:
+      - id: actionlint
+
+  - repo: https://github.com/ambv/black.git
     rev: 22.6.0
     hooks:
       - id: black
