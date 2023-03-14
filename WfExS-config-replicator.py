@@ -99,11 +99,11 @@ def loadXLSXParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
     for sheet in sheets:
         gotHeader = False
         headerMap: "MutableMapping[int,str]" = {}
-        for row in sheet.rows:
+        for cells_in_row in sheet.iter_rows():
             # Either get the header or the data
             if gotHeader:
                 params: "MutableMapping[str, MutableSequence[Any]]" = dict()
-                for cell in row:
+                for cell in cells_in_row:
                     headerName = headerMap.get(cell.col_idx)
                     if headerName is not None:
                         theVal = cell.value
@@ -111,7 +111,7 @@ def loadXLSXParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
 
                 paramsArray.append(params)
             else:
-                for cell in row:
+                for cell in cells_in_row:
                     headerName = cell.value
                     if headerName is not None:
                         if not isinstance(headerName, str):
