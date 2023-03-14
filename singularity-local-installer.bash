@@ -112,6 +112,10 @@ if [ -n "$doInstallGo" ] ; then
 			# Deriving the right name
 			GO_ARCH=amd64
 		;;
+		aarch64)
+			# Deriving the right name
+			GO_ARCH=arm64
+		;;
 	esac
 	goSoftDir="${downloadDir}/soft"
 	goBundle=go${GO_VER}.${GO_OS}-${GO_ARCH}.tar.gz
