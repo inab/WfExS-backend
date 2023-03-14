@@ -9,7 +9,7 @@ aioftp
 openpyxl
 xlrd2
 dulwich
-python-dxf
+python-dxf >= 10.0.0
 genluhn >= 0.3.0
 rfc6920 >= 0.1.3
 rocrate >= 0.7.0

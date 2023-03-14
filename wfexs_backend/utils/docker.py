@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
@@ -19,6 +20,7 @@ import abc
 import json
 import logging
 from typing import (
+    cast,
     NamedTuple,
     TYPE_CHECKING,
 )
@@ -33,7 +35,13 @@ if TYPE_CHECKING:
 
     from typing_extensions import Final
 
-from dxf import DXF, _schema2_mimetype as DockerManifestV2MIMEType  # type: ignore[import]
+    from dxf import DXFBase
+
+from dxf import (
+    DXF,
+    _schema2_mimetype as DockerManifestV2MIMEType,
+    _schema2_list_mimetype as DockerFAT_schema2_mimetype,
+)
 
 # Needed for proper error handling
 import requests
@@ -50,12 +58,9 @@ class Credentials(NamedTuple):
 
 
 # This is needed to obtain the remote repo digest
-class DXFFat(DXF):  # type: ignore
+class DXFFat(DXF):
     # See https://docs.docker.com/registry/spec/manifest-v2-2/ for
     # "fat" manifest description
-    FAT_schema2_mimetype: "Final[str]" = (
-        "application/vnd.docker.distribution.manifest.list.v2+json"
-    )
 
     def get_fat_manifest_and_response(
         self, alias: "str", http_method: "str" = "get"
@@ -72,15 +77,16 @@ class DXFFat(DXF):  # type: ignore
         :returns: Tuple containing the "fat" manifest as a string (JSON)
         and the `requests.Response <http://docs.python-requests.org/en/master/api/#requests.Response>`_
         """
+        r: "requests.Response"
         try:
-            headersFATV2 = {"Accept": self.FAT_schema2_mimetype}
-            r = self._request(http_method, "manifests/" + alias, headers=headersFATV2)
+            headersFATV2 = {"Accept": DockerFAT_schema2_mimetype}
+            r = self._request(http_method, "manifests/" + alias, headers=headersFATV2)  # type: ignore[no-untyped-call]
         except requests.exceptions.HTTPError as he:
             if he.response.status_code != 404:
                 raise he
 
             headersV2 = {"Accept": DockerManifestV2MIMEType}
-            r = self._request(http_method, "manifests/" + alias, headers=headersV2)
+            r = self._request(http_method, "manifests/" + alias, headers=headersV2)  # type: ignore[no-untyped-call]
 
         return r.content.decode("utf-8"), r
 
@@ -136,6 +142,11 @@ class DXFFat(DXF):  # type: ignore
         _, fat_dcd = self.get_fat_manifest_and_dcd(alias, http_method="head")
         return fat_dcd
 
+    def get_fingerprint(self, alias: "str") -> "Optional[str]":
+        dcd: "Optional[str]"
+        _, dcd = self._get_alias(alias, manifest=None, verify=True, sizes=False, get_digest=False, get_dcd=True)  # type: ignore[no-untyped-call]
+        return dcd
+
 
 class DockerHelper(abc.ABC):
     DEFAULT_DOCKER_REGISTRY: "Final[str]" = "docker.io"
@@ -166,7 +177,7 @@ class DockerHelper(abc.ABC):
 
         self.domain = self.creds[domain_name]
 
-    def _auth(self, dxf: "DXFFat", response: "requests.Response") -> None:
+    def _auth(self, dxf: "DXFBase", response: "requests.Response") -> None:
         """Helper method for DXF machinery"""
 
         dxf.authenticate(
@@ -240,7 +251,7 @@ class DockerHelper(abc.ABC):
             manifest_str, partial_fingerprint = dxffat.get_fat_manifest_and_dcd(alias)
             manifest = json.loads(manifest_str)
             if manifest.get("schemaVersion", 1) == 1:
-                partial_fingerprint = dxffat._get_dcd(alias)
+                partial_fingerprint = dxffat.get_fingerprint(alias)
         except Exception as e:
             raise DockerHelperException(
                 f"Unable to obtain fingerprint from {tag}. Reason {e}"
