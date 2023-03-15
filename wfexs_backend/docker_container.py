@@ -44,7 +44,6 @@ if TYPE_CHECKING:
         ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
-        ContainerType,
         ExitVal,
         ProcessorArchitecture,
         RelPath,
@@ -53,6 +52,7 @@ if TYPE_CHECKING:
 
 from .common import (
     Container,
+    ContainerType,
     DEFAULT_DOCKER_CMD,
 )
 
