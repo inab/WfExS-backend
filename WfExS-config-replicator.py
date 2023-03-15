@@ -112,11 +112,8 @@ def loadXLSXParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
                 paramsArray.append(params)
             else:
                 for cell in cells_in_row:
-                    headerName = cell.value
-                    if headerName is not None:
-                        if not isinstance(headerName, str):
-                            headerName = str(headerName)
-                        headerName = headerName.strip()
+                    if cell.value is not None:
+                        headerName = str(cell.value).strip()
                         if len(headerName) > 0:
                             gotHeader = True
                             # The column index is 1-based
