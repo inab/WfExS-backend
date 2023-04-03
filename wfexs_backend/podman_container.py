@@ -44,7 +44,6 @@ if TYPE_CHECKING:
         ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
-        ContainerType,
         ExitVal,
         ProcessorArchitecture,
         RelPath,
@@ -54,6 +53,7 @@ if TYPE_CHECKING:
 from .common import (
     DEFAULT_PODMAN_CMD,
     Container,
+    ContainerType,
 )
 from .container import (
     ContainerFactory,
