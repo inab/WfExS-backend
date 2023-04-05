@@ -10,12 +10,24 @@
 			"format": "uri",
 			"minLength": 1
 		},
+		"PlaceholderURI": {
+			"type": "string",
+			"pattern": "$\\{[^}]+\\}",
+			"minLength": 1
+		},
 		"LicensedURI": {
 			"type": "object",
 			"properties": {
 				"uri": {
 					"description": "The URI of the resource",
-					"$ref": "#/definitions/PlainURI"
+					"anyOf": [
+						{
+							"$ref": "#/definitions/PlainURI"
+						},
+						{
+							"$ref": "#/definitions/PlaceholderURI"
+						}
+					]
 				},
 				"licences": {
 					"type": "array",
@@ -90,6 +102,9 @@
 					"$ref": "#/definitions/PlainURI"
 				},
 				{
+					"$ref": "#/definitions/PlaceholderURI"
+				},
+				{
 					"$ref": "#/definitions/LicensedURI"
 				},
 				{
@@ -103,6 +118,9 @@
 								"$ref": "#/definitions/PlainURI"
 							},
 							{
+								"$ref": "#/definitions/PlaceholderURI"
+							},
+							{
 								"description": "This element is an array of alternate URLs, so any of them provide the very same resources",
 								"type": "array",
 								"items": {
@@ -112,6 +130,9 @@
 										},
 										{
 											"$ref": "#/definitions/PlainURI"
+										},
+										{
+											"$ref": "#/definitions/PlaceholderURI"
 										}
 									]
 								},
