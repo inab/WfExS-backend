@@ -625,7 +625,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if containers_path is None:
             containers_path = self.container_factory.cacheDir
         if self.container_factory.containerType == ContainerType.Singularity:
-            instEnv["NXF_SINGULARITY_CACHEDIR"] = containers_path
+            # See https://github.com/nextflow-io/nextflow/commit/91e9ee7c3c2ed4e63559339ae1a1d2c7d5f25953
+            if nextflow_version >= "21.09.0-edge":
+                env_sing_key = "NXF_SINGULARITY_LIBRARYDIR"
+            else:
+                env_sing_key = "NXF_SINGULARITY_CACHEDIR"
+
+            instEnv[env_sing_key] = containers_path
 
         # This is done only once
         retval = 0
