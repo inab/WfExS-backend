@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -75,6 +75,15 @@ class ContainerEngineException(ContainerFactoryException):
     """
     Exceptions fired by instances of ContainerFactory when calling the
     container engine
+    """
+
+    pass
+
+
+class ContainerNotFoundException(ContainerFactoryException):
+    """
+    Exceptions fired by instances of ContainerFactory
+    when the container image or its metadata could not be found
     """
 
     pass

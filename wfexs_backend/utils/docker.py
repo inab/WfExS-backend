@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,6 +27,9 @@ import urllib.parse
 
 if TYPE_CHECKING:
     from typing import (
+        Any,
+        Union,
+        Mapping,
         MutableMapping,
         Optional,
         Tuple,
@@ -39,9 +41,13 @@ if TYPE_CHECKING:
 
 from dxf import (
     DXF,
+    _verify_manifest,
+    hash_bytes as dxf_hash_bytes,
     _schema2_mimetype as DockerManifestV2MIMEType,
     _schema2_list_mimetype as DockerFAT_schema2_mimetype,
 )
+
+import dxf.exceptions
 
 # Needed for proper error handling
 import requests
@@ -90,6 +96,40 @@ class DXFFat(DXF):
 
         return r.content.decode("utf-8"), r
 
+    def get_parsed_manifest_and_dcd(
+        self, alias: "str"
+    ) -> "Union[Tuple[Mapping[str, Any], Optional[str]], Tuple[None, None]]":
+        # Based on  DXF._get_alias
+        # https://github.com/davedoesdev/dxf/blob/89d4c9bafd75f0fbc028b3f83c0e10350505cd32/dxf/__init__.py#L616-L679
+        try:
+            manifest, r = self.get_manifest_and_response(alias)
+        except requests.exceptions.HTTPError as he:
+            if he.response.status_code != 404:
+                raise he
+
+            return None, None
+
+        content = r.content
+        parsed_manifest = json.loads(manifest)
+
+        if parsed_manifest["schemaVersion"] == 1:
+            # https://github.com/docker/distribution/issues/1662#issuecomment-213101772
+            # "A schema1 manifest should always produce the same image id but
+            # defining the steps to produce directly from the manifest is not
+            # straight forward."
+            dcd_h = r.headers.get("Docker-Content-Digest")
+            _, dcd = _verify_manifest(
+                manifest,
+                parsed_manifest,
+                content_digest=dcd_h,
+                verify=True,
+                get_content_digest=True,
+            )  # type: ignore[no-untyped-call]
+        else:
+            dcd = dxf_hash_bytes(manifest.encode("utf8"))
+
+        return parsed_manifest, dcd
+
     def get_fat_manifest_and_dcd(
         self, alias: "str", http_method: "str" = "get"
     ) -> "Tuple[str, Optional[str]]":
@@ -122,25 +162,6 @@ class DXFFat(DXF):
         """
         fat_manifest, _ = self.get_fat_manifest_and_response(alias)
         return fat_manifest
-
-    def _get_fat_dcd(self, alias: "str") -> "Optional[str]":
-        """
-        Get the Docker-Content-Digest header for the "fat manifest"
-        of an alias.
-
-        :param alias: Alias name.
-        :type alias: str
-
-        :rtype: str
-        :returns: DCD header for the alias.
-        """
-        # https://docs.docker.com/registry/spec/api/#deleting-an-image
-        # Note When deleting a manifest from a registry version 2.3 or later,
-        # the following header must be used when HEAD or GET-ing the manifest
-        # to obtain the correct digest to delete:
-        # Accept: application/vnd.docker.distribution.manifest.v2+json
-        _, fat_dcd = self.get_fat_manifest_and_dcd(alias, http_method="head")
-        return fat_dcd
 
     def get_fingerprint(self, alias: "str") -> "Optional[str]":
         dcd: "Optional[str]"
@@ -187,7 +208,9 @@ class DockerHelper(abc.ABC):
             response=response,
         )
 
-    def query_tag(self, tag: "str") -> "Tuple[str, str, str, Optional[str]]":
+    def query_tag(
+        self, tag: "str"
+    ) -> "Optional[Tuple[str, str, str, Mapping[str, Any], Optional[str]]]":
         parsedTag = urllib.parse.urlparse(tag)
         if parsedTag.scheme == "":
             docker_tag = "docker://" + tag
@@ -248,16 +271,15 @@ class DockerHelper(abc.ABC):
 
         try:
             # This is needed for the cases of compatibility "FAT" manifest
-            manifest_str, partial_fingerprint = dxffat.get_fat_manifest_and_dcd(alias)
-            manifest = json.loads(manifest_str)
-            if manifest.get("schemaVersion", 1) == 1:
-                partial_fingerprint = dxffat.get_fingerprint(alias)
+            manifest, partial_fingerprint = dxffat.get_parsed_manifest_and_dcd(alias)
+            if manifest is None:
+                return None
         except Exception as e:
             raise DockerHelperException(
                 f"Unable to obtain fingerprint from {tag}. Reason {e}"
-            )
+            ) from e
 
-        return registryServer, repo, alias, partial_fingerprint
+        return registryServer, repo, alias, manifest, partial_fingerprint
 
         # print(dxf.list_aliases())
         #

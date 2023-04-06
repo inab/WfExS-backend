@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,6 +59,7 @@ from .container import (
     ContainerFactory,
     ContainerEngineException,
     ContainerFactoryException,
+    ContainerNotFoundException,
 )
 
 from .utils.contents import link_or_copy
@@ -151,10 +152,12 @@ class SingularityContainerFactory(ContainerFactory):
         It is assured the containers are materialized
         """
         containersList = []
+        notFoundContainersList = []
 
         matEnv = dict(os.environ)
         matEnv.update(self.environment)
         dhelp = DockerHelper()
+
         for tag in tagList:
             # It is not an absolute URL, we are prepending the docker://
             parsedTag = parse.urlparse(tag)
@@ -192,15 +195,23 @@ class SingularityContainerFactory(ContainerFactory):
                     metadata = json.load(tcpm)
                     if "registryServer" in metadata:
                         registryServer = metadata["registryServer"]
+                        registryType = metadata.get("registryType", "docker")
                         repo = metadata["repo"]
-                        alias = metadata["alias"]
-                        partial_fingerprint = metadata["dcd"]
-                        fingerprint = repo + "@" + partial_fingerprint
+                        alias = metadata.get("alias")
+                        partial_fingerprint = metadata.get("dcd")
+                        manifest = metadata.get("manifest")
+                        if partial_fingerprint is not None:
+                            fingerprint = repo + "@" + partial_fingerprint
+                        else:
+                            # TODO: is there a better alternative?
+                            fingerprint = tag
                     else:
                         registryServer = ""
+                        registryType = None
                         repo = ""
                         alias = ""
                         partial_fingerprint = ""
+                        manifest = None
                         fingerprint = tag
             elif offline:
                 raise ContainerFactoryException(
@@ -220,27 +231,46 @@ class SingularityContainerFactory(ContainerFactory):
                     )
                 )
 
+                tag_details = None
+                if isDocker:
+                    tag_details = dhelp.query_tag(singTag)
+                    if tag_details is None:
+                        notFoundContainersList.append((tag, singTag))
+                        # Next, as this one was not found
+                        continue
+
                 with open(tmpContainerPathMeta, mode="w", encoding="utf8") as tcpm:
-                    if isDocker:
+                    if tag_details:
                         (
                             registryServer,
                             repo,
                             alias,
+                            manifest,
                             partial_fingerprint,
-                        ) = dhelp.query_tag(singTag)
+                        ) = tag_details
                         json.dump(
                             {
                                 "registryServer": registryServer,
+                                "registryType": "docker",
                                 "repo": repo,
                                 "alias": alias,
                                 "dcd": partial_fingerprint,
+                                "manifest": manifest,
                             },
                             tcpm,
                         )
                         fingerprint = repo + "@" + partial_fingerprint
                     else:
                         # TODO: Which metadata could we add for other schemes?
-                        json.dump({}, tcpm)
+                        json.dump(
+                            {
+                                "registryServer": parsedTag.netloc,
+                                "registryType": parsedTag.scheme,
+                                "repo": singTag,
+                                "alias": None,
+                            },
+                            tcpm,
+                        )
                         fingerprint = tag
 
             canonicalContainerPath = None
@@ -413,6 +443,11 @@ STDERR
                     type=self.containerType,
                     localPath=containerPath,
                 )
+            )
+
+        if len(notFoundContainersList) > 0:
+            raise ContainerNotFoundException(
+                f"Could not fetch metadata for next tags because they were not found:\n{', '.join(map(lambda nfc: nfc[0] + ' => ' + nfc[1], notFoundContainersList))}"
             )
 
         return containersList
