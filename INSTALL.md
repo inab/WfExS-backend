@@ -134,6 +134,12 @@ If you have lots of cores, fast disks and docker installed, you can locally run 
 act -j pre-commit
 ```
 
+## Measuring code complexity (mccabe plugin from flake8)
+
+```bash
+flake8 --ignore E501 wfexs_backend
+```
+
 # License
 * © 2020-2022 Barcelona Supercomputing Center (BSC), ES
 
