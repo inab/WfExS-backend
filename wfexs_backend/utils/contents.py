@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -227,6 +227,10 @@ def CWLDesc2Content(
 
 
 def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) -> None:
+    assert os.path.exists(
+        src
+    ), f"File {src} must exist to be linked or copied {os.path.exists(src)} {os.path.lexists(src)}"
+
     # We should not deal with symlinks
     src = cast("AbsPath", os.path.realpath(src))
     dest = cast("AbsPath", os.path.realpath(dest))
