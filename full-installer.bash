@@ -6,7 +6,9 @@ JDK_MAJOR_VER=11
 JDK_VER=${JDK_MAJOR_VER}.0.11
 JDK_REV=9
 OPENJ9_VER=0.26.0
-GOCRYPTFS_VER=v2.2.1
+
+GO_VER=1.17.13
+GOCRYPTFS_VER=v2.3.1
 STATIC_BASH_VER=5.1.004-1.2.2
 BUSYBOX_VER=1.35.0
 
@@ -23,7 +25,8 @@ case "${wfexsDir}" in
 		;;
 esac
 
-for cmd in curl tar gzip mktemp grep ; do
+failed=
+for cmd in mktemp ; do
 	type -a "$cmd" 2> /dev/null
 	retval=$?
 	if [ "$retval" -ne 0 ] ; then
@@ -44,12 +47,13 @@ cleanup() {
 	# This is needed in order to avoid
 	# potential "permission denied" messages
 	chmod -R u+w "${downloadDir}"
+	#echo "The downloadDir is ${downloadDir}"
 	rm -rf "${downloadDir}"
 }
 
 trap cleanup EXIT ERR
 
-set -e
+set -eu
 
 # It is assumed that sourcing this script a python environment
 # will be created with all the needed dependencies
@@ -59,7 +63,18 @@ if [ $# -gt 0 ]; then
 fi
 source "${wfexsDir}/basic-installer.bash"
 
+GO_VER=1.17.13
+
+
+
+declare -A archesJDK=(
+	[x86_64]=x64
+)
+
+platformArchJDK="${archesJDK[$platformArch]:-$platformArch}"
+
 # Now, it is time to install the binaries
+OPENJDK_INSTALLED=
 if [ -x "${envDir}/bin/java" ] ; then
 	if "${envDir}/bin/java" -version 2>&1 | grep -qF "${JDK_VER}+${JDK_REV}" ; then
 		OPENJDK_INSTALLED=1
@@ -79,8 +94,9 @@ else
 	#else
 	#	OPENJDK_URL="https://download.java.net/java/GA/jdk${JDK_MAJOR_VER}/${JDK_REV}/GPL/openjdk-${JDK_VER}_linux-x64_bin.tar.gz"
 	#fi
-	OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}_openj9-${OPENJ9_VER}/OpenJDK${JDK_MAJOR_VER}U-jdk_x64_linux_openj9_${JDK_VER}_${JDK_REV}_openj9-${OPENJ9_VER}.tar.gz"
-	( cd "${downloadDir}" && curl -L -O "${OPENJDK_URL}" )
+	#OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}_openj9-${OPENJ9_VER}/OpenJDK${JDK_MAJOR_VER}U-jdk_x64_linux_openj9_${JDK_VER}_${JDK_REV}_openj9-${OPENJ9_VER}.tar.gz"
+	OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}_openj9-${OPENJ9_VER}/OpenJDK${JDK_MAJOR_VER}U-jdk_${platformArchJDK}_${platformOS}_openj9_${JDK_VER}_${JDK_REV}_openj9-${OPENJ9_VER}.tar.gz"
+	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${OPENJDK_URL}" )
 	tar -x -C "${envDir}" -f "${downloadDir}"/OpenJDK*.tar.gz
 	for path in bin lib ; do
 		for elem in "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/${path}/* ; do
@@ -103,6 +119,7 @@ else
 fi
 
 # Checking gocryptfs is installed and the latest version
+GOCRYPTFS_INSTALLED=
 if [ -x "${envDir}/bin/gocryptfs" ] ; then
 	if "${envDir}/bin/gocryptfs" -version | grep -qF "${GOCRYPTFS_VER}" ; then
 		GOCRYPTFS_INSTALLED=1
@@ -112,18 +129,23 @@ fi
 if [ -n "${GOCRYPTFS_INSTALLED}" ] ; then
 	echo "GoCryptFS ${GOCRYPTFS_VER} already installed"
 else
-	pythonSystem="$(python -c 'import platform; print(platform.system().lower())')"
-	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_${pythonSystem}-static_amd64.tar.gz"
+	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_${platformOS}-static_${platformArchGO}.tar.gz"
 	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
-	( cd "${downloadDir}" && curl -L -O "${gocryptfs_url}" )
-	tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz
+	set +e
+	trap - ERR
+	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${gocryptfs_url}" && tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz )
+	retval=$?
+	trap cleanup ERR
+	set -e
+	if [ "$retval" -ne 0 ] ; then
+		# Get compiler
+		checkInstallGO "${GO_VER}" "${platformOS}" "${platformArchGO}" "${downloadDir}"
+		# Compile it
+		gocryptfs_src_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_src-deps.tar.gz"
+		echo "Compiling gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_src_url}"
+		( cd "${downloadDir}" && curl -f -L -O "${gocryptfs_src_url}" && tar xf gocryptfs*deps.tar.gz && cd gocryptfs*deps && ./build.bash && cp -p gocryptfs gocryptfs-xray/gocryptfs-xray "${envDir}/bin" )
+	fi
 fi
-
-declare -a platformSuffixes=(
-	$(python -c 'import platform; print("{0}-{1} {1}-{0}".format(platform.system().lower(), platform.machine()))')
-)
-platformSuffix="${platformSuffixes[0]}"
-platformSuffixRev="${platformSuffixes[1]}"
 
 staticBash="bash-${platformSuffix}"
 if [ -x "${envDir}/bin/${staticBash}" ] ; then
@@ -131,9 +153,17 @@ if [ -x "${envDir}/bin/${staticBash}" ] ; then
 else
 	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/${staticBash}"
 	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
-	( cd "${downloadDir}" && curl -L -O "${static_bash_url}" )
-	mv "${downloadDir}/${staticBash}" "${envDir}/bin/${staticBash}"
-	chmod +x "${envDir}/bin/${staticBash}"
+	trap - ERR
+	( cd "${downloadDir}" && curl -f -L -O "${static_bash_url}" )
+	retval=$?
+	trap cleanup ERR
+	if [ "$retval" -eq 0 ] ; then
+		mv "${downloadDir}/${staticBash}" "${envDir}/bin/${staticBash}"
+		chmod +x "${envDir}/bin/${staticBash}"
+	else
+		echo "Error while fetching static ${staticBash} from ${static_bash_url}"
+		exit 1
+	fi
 fi
 
 for binName in ps ; do
@@ -143,8 +173,16 @@ for binName in ps ; do
 	else
 		static_bin_url="https://busybox.net/downloads/binaries/${BUSYBOX_VER}-${platformSuffixRev}-musl/busybox_${binName^^}"
 		echo "Installing busybox ${binName} ${BUSYBOX_VER} from ${static_bin_url}"
-		( cd "${downloadDir}" && curl -L -o "${staticBin}" "${static_bin_url}" )
-		mv "${downloadDir}/${staticBin}" "${envDir}/bin/${staticBin}"
-		chmod +x "${envDir}/bin/${staticBin}"
+		trap - ERR
+		( cd "${downloadDir}" && curl -f -L -o "${staticBin}" "${static_bin_url}" )
+		retval=$?
+		trap cleanup ERR
+		if [ "$retval" -eq 0 ] ; then
+			mv "${downloadDir}/${staticBin}" "${envDir}/bin/${staticBin}"
+			chmod +x "${envDir}/bin/${staticBin}"
+		else
+			echo "Error while fetching static ${binName} from ${static_bin_url}"
+			exit 1
+		fi
 	fi
 done
