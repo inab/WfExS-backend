@@ -37,6 +37,7 @@ trap cleanup EXIT ERR
 
 set -e
 
+doForce=
 if [ $# -gt 0 ]; then
 	if [ "$1" == "force" ] ; then
 		doForce=1
@@ -61,17 +62,22 @@ fi
 if [ $# -gt 0 ]; then
 	shift $#
 fi
-source "$wfexsDir"/basic-installer.bash
-
 # Second, let's load the environment in order to install
 # singularity in the python profile
-envDir="$(python -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
-if [ -z "${envDir}" ] ; then
-	envDir="${wfexsDir}/.pyWEenv"
+source "$wfexsDir"/basic-installer.bash
 
-	# Activating the python environment
-	envActivate="${envDir}/bin/activate"
-	source "${envActivate}"
+failed=
+for cmd in mksquashfs ; do
+	type -a "$cmd" 2> /dev/null
+	retval=$?
+	if [ "$retval" -ne 0 ] ; then
+		failed=1
+		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
+	fi
+done
+
+if [ -n "$failed" ] ; then
+	exit 1
 fi
 
 # Now, it is time to check singularity binaries availability
@@ -83,52 +89,7 @@ if [ -z "$doForce" ] ; then
 fi
 
 # Compilation artifacts should go to the temporary download directory
-GOPATH="${downloadDir}/go"
-export GOPATH
-PATH="${GOPATH}/bin:${PATH}"
-
-# Third, check whether there is an available go compiler
-if type -a go >& /dev/null ; then
-	goVer="$(go version)"
-	case "$goVer" in
-		"go version go1"*)
-			# Go is available
-			true
-		;;
-		*)
-			doInstallGo=1
-		;;
-	esac
-else
-	doInstallGo=1
-fi
-
-if [ -n "$doInstallGo" ] ; then
-	# Fetch and install go
-	GO_OS="$(python -c 'import platform; print(platform.system().lower())')"
-	GO_ARCH="$(python -c 'import platform; print(platform.machine())')"
-	case "$GO_ARCH" in
-		x86_64)
-			# Deriving the right name
-			GO_ARCH=amd64
-		;;
-		aarch64)
-			# Deriving the right name
-			GO_ARCH=arm64
-		;;
-	esac
-	goSoftDir="${downloadDir}/soft"
-	goBundle=go${GO_VER}.${GO_OS}-${GO_ARCH}.tar.gz
-	# Fetching go
-	( cd "${downloadDir}" && curl -L -O https://dl.google.com/go/"${goBundle}" )
-	# Installing go in the temporary directory
-	mkdir -p "${goSoftDir}"
-	tar -x -z -C "${goSoftDir}" -f "${downloadDir}/${goBundle}"
-	# Removing go bundle
-	rm "${downloadDir}/${goBundle}"
-	
-	PATH="${goSoftDir}/go/bin:${PATH}"
-fi
+checkInstallGO "${GO_VER}" "${platformOS}" "${platformArchGO}" "${downloadDir}"
 
 # Fetch and compile singularity
 singularityBundlePrefix=singularity-ce-"${SINGULARITY_VER}"
