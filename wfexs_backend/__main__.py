@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -493,16 +493,19 @@ def processStagedWorkdirCommand(
             ),
             key=lambda x: x[2],
         )
-        for instance_id, nickname, creation, wfSetup, _ in contents:
+        for instance_id, nickname, creation, wfSetup, wfInstance in contents:
             is_encrypted: "Union[bool, str]"
+            wfPID = None
             if wfSetup is None:
                 is_damaged = True
                 is_encrypted = "(unknown)"
             else:
                 is_damaged = wfSetup.is_damaged
                 is_encrypted = wfSetup.is_encrypted
+                if wfInstance is not None:
+                    wfPID = wfInstance.getPID()
             print(
-                f"{instance_id}\t{nickname}\t{creation.isoformat()}\t{is_encrypted}\t{is_damaged}"
+                f"{instance_id}\t{nickname}\t{creation.isoformat()}\t{'(unknown)' if wfPID is None else wfPID}\t{is_encrypted}\t{not is_damaged}"
             )
 
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Remove:

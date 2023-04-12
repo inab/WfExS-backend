@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         Any,
         Iterable,
         Mapping,
+        MutableMapping,
         MutableSequence,
         Optional,
         Sequence,
@@ -127,7 +128,7 @@ if TYPE_CHECKING:
     WFVersionId = Union[str, int]
     WorkflowId = Union[str, int]
 
-from urllib import parse
+import urllib.parse
 
 from .ro_crate import (
     addInputsResearchObject,
@@ -208,7 +209,10 @@ from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtup
 from .utils.misc import config_validate
 
 from .fetchers.git import guess_repo_params
-from .fetchers.trs_files import INTERNAL_TRS_SCHEME_PREFIX
+from .fetchers.trs_files import (
+    TRS_SCHEME_PREFIX,
+    INTERNAL_TRS_SCHEME_PREFIX,
+)
 
 from .nextflow_engine import NextflowWorkflowEngine
 from .cwl_engine import CWLWorkflowEngine
@@ -363,6 +367,7 @@ class WF:
         self.trs_endpoint: "Optional[str]"
         self.version_id: "Optional[WFVersionId]"
         self.descriptor_type: "Optional[TRS_Workflow_Descriptor]"
+        self.id: "Optional[Union[str, int]]"
         if workflow_id is not None:
             workflow_meta: "WritableWorkflowMetaConfigBlock" = {
                 "workflow_id": workflow_id
@@ -439,6 +444,7 @@ class WF:
             self.trs_endpoint = trs_endpoint
         else:
             self.trs_endpoint = None
+            self.id = None
             self.version_id = None
             self.descriptor_type = None
 
@@ -638,6 +644,46 @@ class WF:
         self.exportMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
 
     FUSE_SYSTEM_CONF = "/etc/fuse.conf"
+
+    def getPID(self) -> "Optional[str]":
+        """
+        It provides the most permanent workflow id it can generate from
+        the details in the YAML
+        """
+        the_pid: "Optional[str]"
+        if self.id is not None:
+            the_pid = str(self.id)
+            parsedRepoURL = urllib.parse.urlparse(the_pid)
+
+            # If it is not an URI / CURIE
+            if parsedRepoURL.scheme == "":
+                if (self.trs_endpoint is not None) and len(self.trs_endpoint) > 0:
+                    parsedTRSURL = urllib.parse.urlparse(self.trs_endpoint)
+                    trs_steps: "Sequence[str]" = parsedTRSURL.path.split("/")
+                    pid_steps = ["", urllib.parse.quote(the_pid, safe="")]
+
+                    if self.version_id is not None:
+                        pid_steps.append(
+                            urllib.parse.quote(str(self.version_id), safe="")
+                        )
+
+                    the_pid = urllib.parse.urlunparse(
+                        urllib.parse.ParseResult(
+                            scheme=TRS_SCHEME_PREFIX,
+                            netloc=parsedTRSURL.netloc,
+                            path="/".join(pid_steps),
+                            params="",
+                            query="",
+                            fragment="",
+                        )
+                    )
+                else:
+                    self.logger.debug("trs_endpoint was not provided")
+                    the_pid = None
+        else:
+            the_pid = None
+
+        return the_pid
 
     def setupWorkdir(self, doSecureWorkDir: "bool", fail_ok: "bool" = False) -> "bool":
         uniqueRawWorkDir = self.rawWorkDir
@@ -990,7 +1036,7 @@ class WF:
         and the version will represent either the branch, tag or specific commit.
         So, the whole TRS fetching machinery is bypassed.workflowDir
         """
-        parsedRepoURL = parse.urlparse(str(workflow_id))
+        parsedRepoURL = urllib.parse.urlparse(str(workflow_id))
 
         # It is not an absolute URL, so it is being an identifier in the workflow
         i_workflow: "Optional[IdentifiedWorkflow]" = None
@@ -1047,7 +1093,7 @@ class WF:
         repoDir: "Optional[AbsPath]" = None
         repoEffectiveCheckout: "Optional[RepoTag]" = None
         if ":" in repoURL:
-            parsedRepoURL = parse.urlparse(repoURL)
+            parsedRepoURL = urllib.parse.urlparse(repoURL)
             if len(parsedRepoURL.scheme) > 0:
                 self.repoURL = repoURL
                 self.repoTag = repoTag
@@ -1139,6 +1185,7 @@ class WF:
     def setupEngine(self, offline: "bool" = False) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
+            assert self.id is not None
             self.fetchWorkflow(
                 self.id,
                 self.version_id,
@@ -1225,7 +1272,9 @@ class WF:
         for path in paths:
             # We are sending the context name thinking in the future,
             # as it could contain potential hints for authenticated access
-            fileuri = parse.urlunparse(("file", "", os.path.abspath(path), "", "", ""))
+            fileuri = urllib.parse.urlunparse(
+                ("file", "", os.path.abspath(path), "", "", "")
+            )
             matContent = self.wfexs.downloadContent(
                 cast("URIType", fileuri),
                 dest=storeDir,
@@ -1365,7 +1414,6 @@ class WF:
         hardenPrettyLocal: "bool" = False,
         prettyRelname: "Optional[RelPath]" = None,
     ) -> "Sequence[MaterializedContent]":
-
         # Embedding the context
         alt_remote_file = self.buildLicensedURI(remote_file, contextName=contextName)
         matContent = self.wfexs.downloadContent(
@@ -1412,7 +1460,7 @@ class WF:
         remote_pairs = []
         if globExplode is not None:
             prettyLocalPath = pathlib.Path(prettyLocal)
-            matParse = parse.urlparse(matContent.licensed_uri.uri)
+            matParse = urllib.parse.urlparse(matContent.licensed_uri.uri)
             for exp in prettyLocalPath.glob(globExplode):
                 relPath = exp.relative_to(prettyLocalPath)
                 relName = cast("RelPath", str(relPath))
@@ -1420,9 +1468,9 @@ class WF:
                 if relExpPath[-1] != "/":
                     relExpPath += "/"
                 relExpPath += "/".join(
-                    map(lambda part: parse.quote_plus(part), relPath.parts)
+                    map(lambda part: urllib.parse.quote_plus(part), relPath.parts)
                 )
-                expUri = parse.urlunparse(
+                expUri = urllib.parse.urlunparse(
                     (
                         matParse.scheme,
                         matParse.netloc,
@@ -2104,7 +2152,6 @@ class WF:
         action_ids: "Sequence[SymbolicName]" = [],
         fail_ok: "bool" = False,
     ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
-
         if exportActionsFile is not None:
             with open(exportActionsFile, mode="r", encoding="utf-8") as eaf:
                 raw_actions = unmarshall_namedtuple(yaml.safe_load(eaf))
@@ -2133,7 +2180,6 @@ class WF:
         action_ids: "Sequence[SymbolicName]" = [],
         fail_ok: "bool" = False,
     ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
-
         # The precondition
         if self.unmarshallExport(offline=True, fail_ok=True) is None:
             # TODO
@@ -2254,7 +2300,7 @@ class WF:
                 or os.path.getsize(workflow_meta_filename) == 0
             ):
                 with open(workflow_meta_filename, mode="w", encoding="utf-8") as wmF:
-                    workflow_meta = {
+                    workflow_meta: "MutableMapping[str, Any]" = {
                         "workflow_id": self.id,
                         "paranoid_mode": self.paranoidMode,
                     }
@@ -3189,9 +3235,9 @@ class WF:
         # Now, check the tool does exist in the TRS, and the version
         trs_tools_url = cast(
             "URIType",
-            parse.urljoin(
+            urllib.parse.urljoin(
                 trs_endpoint,
-                self.TRS_TOOLS_PATH + parse.quote(workflow_id_str, safe=""),
+                self.TRS_TOOLS_PATH + urllib.parse.quote(workflow_id_str, safe=""),
             ),
         )
 
@@ -3306,9 +3352,9 @@ class WF:
         toolFilesURL = (
             trs_tools_url
             + "/versions/"
-            + parse.quote(toolVersionId, safe="")
+            + urllib.parse.quote(toolVersionId, safe="")
             + "/"
-            + parse.quote(chosenDescriptorType, safe="")
+            + urllib.parse.quote(chosenDescriptorType, safe="")
             + "/files"
         )
 
@@ -3317,7 +3363,8 @@ class WF:
             self.logger.debug("WorkflowHub workflow")
             # And this is the moment where the RO-Crate must be fetched
             roCrateURL = cast(
-                "URIType", toolFilesURL + "?" + parse.urlencode({"format": "zip"})
+                "URIType",
+                toolFilesURL + "?" + urllib.parse.urlencode({"format": "zip"}),
             )
 
             (
