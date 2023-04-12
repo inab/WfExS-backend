@@ -40,7 +40,7 @@ checkInstallGO() {
 	GOPATH="${downloadDir}/go"
 	export GOPATH
 	
-	local doInstallGo
+	local doInstallGo=
 	if type -a go >& /dev/null ; then
 		local goVer="$(go version)"
 		case "$goVer" in
