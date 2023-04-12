@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,46 +31,54 @@ import stat
 
 from typing import (
     cast,
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    IO,
-    List,
-    Mapping,
-    MutableMapping,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
     TYPE_CHECKING,
-    Union,
 )
 
 from typing_extensions import (
-    NotRequired,
     TypedDict,
 )
 
 if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Callable,
+        Dict,
+        Iterable,
+        IO,
+        List,
+        Mapping,
+        MutableMapping,
+        Optional,
+        Sequence,
+        Tuple,
+        Type,
+        Union,
+    )
+
+    from typing_extensions import (
+        NotRequired,
+    )
+
     from _typeshed import SupportsRead
     from ssl import SSLContext
     from mypy_extensions import DefaultNamedArg
+
+    from ..common import (
+        AbsPath,
+        ProgsMapping,
+        ProtocolFetcher,
+        ProtocolFetcherReturn,
+        SecurityContextConfig,
+        SymbolicName,
+        URIType,
+    )
 
 from urllib import request, parse
 import urllib.error
 
 from ..common import (
     AbstractWfExSException,
-    AbsPath,
     ContentKind,
-    ProgsMapping,
-    ProtocolFetcher,
-    ProtocolFetcherReturn,
-    RelPath,
-    SecurityContextConfig,
-    SymbolicName,
-    URIType,
     URIWithMetadata,
 )
 
@@ -97,8 +105,8 @@ class AbstractStatefulFetcher(abc.ABC):
 
     def __init__(
         self,
-        progs: ProgsMapping = dict(),
-        setup_block: Optional[Mapping[str, Any]] = None,
+        progs: "ProgsMapping" = dict(),
+        setup_block: "Optional[Mapping[str, Any]]" = None,
     ):
         import inspect
 
@@ -114,10 +122,10 @@ class AbstractStatefulFetcher(abc.ABC):
     @abc.abstractmethod
     def fetch(
         self,
-        remote_file: URIType,
-        cachedFilename: AbsPath,
-        secContext: Optional[SecurityContextConfig] = None,
-    ) -> ProtocolFetcherReturn:
+        remote_file: "URIType",
+        cachedFilename: "AbsPath",
+        secContext: "Optional[SecurityContextConfig]" = None,
+    ) -> "ProtocolFetcherReturn":
         """
         This is the method to be implemented by the stateful fetcher
         """
@@ -130,13 +138,13 @@ class AbstractStatefulFetcher(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def GetNeededPrograms(cls) -> Sequence[SymbolicName]:
+    def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return tuple()
 
     @staticmethod
     def ParseAndRemoveCredentials(
-        remote_file: URIType,
-    ) -> Tuple[parse.ParseResult, URIType]:
+        remote_file: "URIType",
+    ) -> "Tuple[parse.ParseResult, URIType]":
         parsedInputURL = parse.urlparse(remote_file)
         if parsedInputURL.username is not None:
             assert parsedInputURL.hostname is not None
@@ -145,7 +153,7 @@ class AbstractStatefulFetcher(abc.ABC):
                 netloc += ":" + str(parsedInputURL.port)
             # Now the credentials are properly removed
             remote_file = cast(
-                URIType,
+                "URIType",
                 parse.urlunparse(
                     (
                         parsedInputURL.scheme,
@@ -162,22 +170,32 @@ class AbstractStatefulFetcher(abc.ABC):
 
 
 class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
-    @abc.abstractmethod
     def fetch(
         self,
-        remote_file: URIType,
-        cachedFilename: Union[AbsPath, io.BytesIO],
-        secContext: Optional[SecurityContextConfig] = None,
-    ) -> ProtocolFetcherReturn:
+        remote_file: "URIType",
+        cachedFilename: "AbsPath",
+        secContext: "Optional[SecurityContextConfig]" = None,
+    ) -> "ProtocolFetcherReturn":
+        with open(cachedFilename, mode="wb") as dS:
+            return self.streamfetch(remote_file, dS, secContext=secContext)
+
+    @abc.abstractmethod
+    def streamfetch(
+        self,
+        remote_file: "URIType",
+        dest_stream: "IO[bytes]",
+        secContext: "Optional[SecurityContextConfig]" = None,
+    ) -> "ProtocolFetcherReturn":
         """
-        This is the method to be implemented by the stateful fetcher
+        This is the method to be implemented by the stateful streaming fetcher
+        which can receive as destination either a file
         """
         pass
 
 
 def get_opener_with_auth(
-    top_level_url: str, username: str, password: str
-) -> request.OpenerDirector:
+    top_level_url: "str", username: "str", password: "str"
+) -> "request.OpenerDirector":
     """
     Taken from https://stackoverflow.com/a/44239906
     """
@@ -198,10 +216,10 @@ def get_opener_with_auth(
 
 
 def fetchClassicURL(
-    remote_file: URIType,
-    cachedFilename: Union[AbsPath, io.BytesIO],
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "Union[AbsPath, IO[bytes]]",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     """
     Method to fetch contents from http, https and ftp
 
@@ -259,25 +277,20 @@ def fetchClassicURL(
         #     netloc += ':' + str(parsedInputURL.port)
         #
         # # Now the credentials are properly set up
-        # remote_file = cast(URIType, parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
+        # remote_file = cast("URIType", parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
         #                                 parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
 
     # Preparing where it is going to be written
-    download_file: Union[
-        io.TextIOBase, io.BufferedIOBase, io.RawIOBase, io.IOBase, io.BufferedWriter
-    ]
-    if isinstance(
-        cachedFilename, (io.TextIOBase, io.BufferedIOBase, io.RawIOBase, io.IOBase)
-    ):
-        download_file = cachedFilename
-    else:
+    download_file: "IO[bytes]"
+    if isinstance(cachedFilename, str):
         download_file = open(cachedFilename, "wb")
+    else:
+        download_file = cachedFilename
 
     uri_with_metadata = None
     try:
         req_remote = request.Request(remote_file, headers=headers, method=method)
         with opener(req_remote) as url_response:
-
             uri_with_metadata = URIWithMetadata(
                 uri=url_response.url, metadata=dict(url_response.headers.items())
             )
@@ -305,17 +318,17 @@ def fetchClassicURL(
 
 
 class FTPConnBlock(TypedDict):
-    HOST: str
-    PORT: NotRequired[int]
-    USER: NotRequired[str]
-    PASSWORD: NotRequired[str]
+    HOST: "str"
+    PORT: "NotRequired[int]"
+    USER: "NotRequired[str]"
+    PASSWORD: "NotRequired[str]"
 
 
 def fetchFTPURL(
-    remote_file: URIType,
-    cachedFilename: AbsPath,
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "AbsPath",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     """
     Method to fetch contents from ftp
 
@@ -366,17 +379,17 @@ def fetchFTPURL(
 
 
 def sftpCopy(
-    sftp: paramiko.SFTPClient,
-    sshPath: AbsPath,
-    localPath: AbsPath,
-    sshStat: Optional[paramiko.SFTPAttributes] = None,
-) -> Tuple[Union[int, bool], Optional[ContentKind]]:
+    sftp: "paramiko.SFTPClient",
+    sshPath: "AbsPath",
+    localPath: "AbsPath",
+    sshStat: "Optional[paramiko.SFTPAttributes]" = None,
+) -> "Tuple[Union[int, bool], Optional[ContentKind]]":
     if sshStat is None:
         sshStat = sftp.stat(sshPath)
 
     # Trios
     transTrios = []
-    recur: List[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]] = []
+    recur: "List[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]]" = []
     kind: Optional[ContentKind] = None
     if sshStat.st_mode is not None:
         if stat.S_ISREG(sshStat.st_mode):
@@ -388,8 +401,8 @@ def sftpCopy(
             recur = []
             # List of remote files
             for filename in sftp.listdir(sshPath):
-                rPath = cast(AbsPath, os.path.join(sshPath, filename))
-                lPath = cast(AbsPath, os.path.join(localPath, filename))
+                rPath = cast("AbsPath", os.path.join(sshPath, filename))
+                lPath = cast("AbsPath", os.path.join(localPath, filename))
                 rStat = sftp.stat(rPath)
 
                 if rStat.st_mode is not None:
@@ -431,17 +444,17 @@ def sftpCopy(
 
 
 class SSHConnBlock(TypedDict):
-    pkey: NotRequired[paramiko.pkey.PKey]
-    username: NotRequired[str]
-    password: NotRequired[str]
+    pkey: "NotRequired[paramiko.pkey.PKey]"
+    username: "NotRequired[str]"
+    password: "NotRequired[str]"
 
 
 # TODO: test this codepath
 def fetchSSHURL(
-    remote_file: URIType,
-    cachedFilename: AbsPath,
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "AbsPath",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     """
     Method to fetch contents from ssh / sftp servers
 
@@ -495,7 +508,7 @@ def fetchSSHURL(
     sshPort = (
         parsedInputURL.port if parsedInputURL.port is not None else DEFAULT_SSH_PORT
     )
-    sshPath = cast(AbsPath, parsedInputURL.path)
+    sshPath = cast("AbsPath", parsedInputURL.path)
 
     t = None
     try:
@@ -524,10 +537,10 @@ def fetchSSHURL(
 
 
 def fetchFile(
-    remote_file: URIType,
-    cachedFilename: AbsPath,
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "AbsPath",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     """
     Method to fetch contents from local contents, optionally impersonating
     the original CURIE (useful for cache exports)
@@ -538,7 +551,7 @@ def fetchFile(
     """
 
     parsedInputURL = parse.urlparse(remote_file)
-    localPath = cast(AbsPath, parsedInputURL.path)
+    localPath = cast("AbsPath", parsedInputURL.path)
     if not os.path.exists(localPath):
         raise FetcherException("Local path {} is not available".format(localPath))
 
@@ -562,7 +575,7 @@ def fetchFile(
         if new_remote_file:
             nP = parse.urlparse(new_remote_file[0])
             if nP.scheme:
-                the_remote_file = cast(URIType, new_remote_file[0])
+                the_remote_file = cast("URIType", new_remote_file[0])
                 force_copy = True
                 metadata["injected"] = True
                 metadata["impersonated"] = True
@@ -571,7 +584,7 @@ def fetchFile(
     return kind, [URIWithMetadata(the_remote_file, metadata)], None
 
 
-DEFAULT_SCHEME_HANDLERS: Mapping[str, ProtocolFetcher] = {
+DEFAULT_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
     "http": fetchClassicURL,
     "https": fetchClassicURL,
     "ftp": fetchFTPURL,
