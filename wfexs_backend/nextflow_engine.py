@@ -193,29 +193,37 @@ class NextflowWorkflowEngine(WorkflowEngine):
             self.java_cmd = abs_java_cmd
 
         # Obtaining the full path to static bash
-        for default_static_bash_cmd in DEFAULT_STATIC_BASH_CMDS:
-            self.static_bash_cmd = shutil.which(
-                toolsSect.get("staticBashCommand", default_static_bash_cmd)
-            )
+        staticBashPaths = []
+        stBash = toolsSect.get("staticBashCommand")
+        if stBash is not None:
+            staticBashPaths.append(stBash)
+        staticBashPaths.extend(DEFAULT_STATIC_BASH_CMDS)
+
+        for static_bash_cmd in staticBashPaths:
+            self.static_bash_cmd = shutil.which(static_bash_cmd)
             if self.static_bash_cmd is not None:
                 break
 
         if self.static_bash_cmd is None:
             self.logger.warning(
-                f"Static bash command is not available (looked for {DEFAULT_STATIC_BASH_CMDS}). It could be needed for some images"
+                f"Static bash command is not available (looked for {staticBashPaths}). It could be needed for some images"
             )
 
         # Obtaining the full path to static ps
-        for default_static_ps_cmd in DEFAULT_STATIC_PS_CMDS:
-            self.static_ps_cmd = shutil.which(
-                toolsSect.get("staticPsCommand", default_static_ps_cmd)
-            )
+        staticPsPaths = []
+        stPs = toolsSect.get("staticPsCommand")
+        if stPs is not None:
+            staticPsPaths.append(stPs)
+        staticPsPaths.extend(DEFAULT_STATIC_PS_CMDS)
+
+        for static_ps_cmd in staticPsPaths:
+            self.static_ps_cmd = shutil.which(static_ps_cmd)
             if self.static_ps_cmd is not None:
                 break
 
         if self.static_ps_cmd is None:
             self.logger.warning(
-                f"Static ps command is not available (looked for {DEFAULT_STATIC_PS_CMDS}). It could be needed for some images"
+                f"Static ps command is not available (looked for {staticPsPaths}). It could be needed for some images"
             )
 
         # Deciding whether to unset JAVA_HOME
