@@ -37,7 +37,7 @@ repos:
         args: [ wfexs_backend/schemas ]
 
   - repo: https://github.com/jmfernandez/pre-commit_mirrors-actionlint.git
-    rev: v1.6.23
+    rev: v1.6.24
     hooks:
       - id: actionlint
 
