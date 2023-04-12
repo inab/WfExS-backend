@@ -1,3 +1,4 @@
+mypy-extensions
 # typing libraries, needed by mypy
 types-boto3
 types-certifi

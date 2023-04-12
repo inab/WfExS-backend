@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,12 +20,28 @@ from botocore import UNSIGNED
 from botocore.client import Config
 import botocore.exceptions
 from urllib.parse import urlparse
+
 from typing import (
-    Any,
-    Mapping,
-    MutableSequence,
-    Optional,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Mapping,
+        MutableSequence,
+        Optional,
+    )
+
+    from ..common import (
+        AbsPath,
+        ProtocolFetcher,
+        ProtocolFetcherReturn,
+        SecurityContextConfig,
+        URIType,
+    )
+
+
 import os
 import shutil
 import logging
@@ -33,12 +49,7 @@ import logging
 from . import FetcherException
 
 from ..common import (
-    AbsPath,
     ContentKind,
-    ProtocolFetcher,
-    ProtocolFetcherReturn,
-    SecurityContextConfig,
-    URIType,
     URIWithMetadata,
 )
 
@@ -47,10 +58,10 @@ logger = logging.getLogger(__name__)
 
 
 def downloadContentFrom_s3(
-    remote_file: URIType,
-    cachedFilename: AbsPath,
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "AbsPath",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     urlParse = urlparse(remote_file)
     bucket = urlParse.netloc
     prefix = urlParse.path
@@ -128,4 +139,4 @@ def downloadContentFrom_s3(
     return kind, [URIWithMetadata(remote_file, metadata)], None
 
 
-S3_SCHEME_HANDLERS: Mapping[str, ProtocolFetcher] = {"s3": downloadContentFrom_s3}
+S3_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {"s3": downloadContentFrom_s3}

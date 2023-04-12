@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,12 +23,45 @@ import pathlib
 from typing import (
     cast,
     TYPE_CHECKING,
-    Any,
-    Mapping,
-    MutableMapping,
-    MutableSequence,
-    Sequence,
 )
+
+if TYPE_CHECKING:
+    import datetime
+
+    from typing import (
+        Any,
+        Mapping,
+        MutableMapping,
+        MutableSequence,
+        Optional,
+        Sequence,
+        Tuple,
+        Union,
+    )
+
+    from .common import (
+        AbsPath,
+        AbstractGeneratedContent,
+        Container,
+        ContainerEngineVersionStr,
+        ContainerOperatingSystem,
+        ExpectedOutput,
+        Fingerprint,
+        LocalWorkflow,
+        MaterializedInput,
+        MaterializedOutput,
+        MaterializedWorkflowEngine,
+        ProcessorArchitecture,
+        RelPath,
+        RepoTag,
+        RepoURL,
+        StagedExecution,
+        StagedSetup,
+        SymbolicOutputName,
+        URIType,
+        WorkflowEngineVersionStr,
+    )
+
 import urllib.parse
 import uuid
 
@@ -50,47 +83,17 @@ from .utils.digests import (
     unstringifyDigest,
 )
 from .common import (
-    AbstractGeneratedContent,
     AbstractWfExSException,
     ContainerType,
     ContentKind,
-    Fingerprint,
     GeneratedContent,
     GeneratedDirectoryContent,
     MaterializedContent,
-    MaterializedOutput,
-    StagedExecution,
-    SymbolicOutputName,
 )
 
 from . import __url__ as wfexs_backend_url
 from . import __official_name__ as wfexs_backend_name
 from . import get_WfExS_version
-
-if TYPE_CHECKING:
-    import datetime
-    from typing import (
-        Optional,
-        Tuple,
-        Union,
-    )
-    from .common import (
-        AbsPath,
-        Container,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
-        ExpectedOutput,
-        LocalWorkflow,
-        MaterializedInput,
-        MaterializedWorkflowEngine,
-        ProcessorArchitecture,
-        RelPath,
-        RepoTag,
-        RepoURL,
-        StagedSetup,
-        URIType,
-        WorkflowEngineVersionStr,
-    )
 
 logger = logging.getLogger()
 
@@ -150,7 +153,6 @@ class Action(rocrate.model.entity.Entity):  # type: ignore[misc]
         identifier: "Optional[str]" = None,
         properties: "Optional[Mapping[str, Any]]" = None,
     ):
-
         pv_properties = {
             "name": name,
         }
@@ -232,7 +234,9 @@ def add_file_to_crate(
     the_file_crate.append_to("contentSize", the_size, compact=True)
     the_file_crate.append_to("sha256", the_signature, compact=True)
     the_file_crate.append_to(
-        "encodingFormat", magic.from_file(the_path, mime=True), compact=True
+        "encodingFormat",
+        magic.from_file(the_path, mime=True),  # type: ignore[no-untyped-call]
+        compact=True,
     )
 
     return the_file_crate
@@ -357,7 +361,7 @@ def create_workflow_crate(
     else:
         wf_local_path = localWorkflow.dir
 
-    (wfCrate, compLang,) = materializedEngine.instance.getEmptyCrateAndComputerLanguage(
+    (wfCrate, compLang) = materializedEngine.instance.getEmptyCrateAndComputerLanguage(
         localWorkflow.langVersion
     )
 
@@ -748,7 +752,6 @@ def addInputsResearchObject(
         else:
             crate_coll = None
         if additional_type in ("File", "Dataset", "Collection"):
-
             for itemInValues in cast("Sequence[MaterializedContent]", in_item.values):
                 # TODO: embed metadata_array in some way
                 assert isinstance(itemInValues, MaterializedContent)
@@ -927,7 +930,7 @@ def add_containers_to_workflow(
                         "sha256": the_signature,
                         "encodingFormat": magic.from_file(
                             container.localPath, mime=True
-                        ),
+                        ),  # type: ignore[no-untyped-call]
                     },
                 )
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,20 +18,29 @@
 from __future__ import absolute_import
 
 from typing import (
-    Any,
-    Mapping,
-    Optional,
-    Sequence,
     TYPE_CHECKING,
-)
-
-from typing_extensions import (
-    Final,
 )
 
 if TYPE_CHECKING:
     from typing import (
+        Any,
+        Mapping,
+        Optional,
+        Sequence,
         Type,
+    )
+
+    from typing_extensions import (
+        Final,
+    )
+
+    from ..common import (
+        AbsPath,
+        ProgsMapping,
+        ProtocolFetcherReturn,
+        SecurityContextConfig,
+        SymbolicName,
+        URIType,
     )
 
 import urllib.parse
@@ -39,16 +48,9 @@ import urllib.parse
 from wiktionary_fetcher import store_terms
 
 from ..common import (
-    AbsPath,
     ContentKind,
-    ProgsMapping,
-    ProtocolFetcherReturn,
-    SecurityContextConfig,
-    SymbolicName,
-    URIType,
     URIWithMetadata,
 )
-
 
 from . import (
     AbstractStatefulFetcher,
@@ -57,10 +59,10 @@ from . import (
 
 
 class WiktionaryFetcher(AbstractStatefulFetcher):
-    WIKTIONARY_PROTO: Final[str] = "wfexs.wiktionary"
+    WIKTIONARY_PROTO: "Final[str]" = "wfexs.wiktionary"
 
     def __init__(
-        self, progs: ProgsMapping, setup_block: Optional[Mapping[str, Any]] = None
+        self, progs: "ProgsMapping", setup_block: "Optional[Mapping[str, Any]]" = None
     ):
         super().__init__(progs=progs, setup_block=setup_block)
 
@@ -72,15 +74,15 @@ class WiktionaryFetcher(AbstractStatefulFetcher):
         }
 
     @classmethod
-    def GetNeededPrograms(cls) -> Sequence[SymbolicName]:
+    def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return tuple()
 
     def fetch(
         self,
-        remote_file: URIType,
-        cachedFilename: AbsPath,
-        secContext: Optional[SecurityContextConfig] = None,
-    ) -> ProtocolFetcherReturn:
+        remote_file: "URIType",
+        cachedFilename: "AbsPath",
+        secContext: "Optional[SecurityContextConfig]" = None,
+    ) -> "ProtocolFetcherReturn":
         parsedInputURL = urllib.parse.urlparse(remote_file)
 
         if parsedInputURL.scheme != self.WIKTIONARY_PROTO:

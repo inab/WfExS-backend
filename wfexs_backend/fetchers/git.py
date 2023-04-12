@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 
 import atexit
 import hashlib
-import logging
 import os
 import shutil
 import subprocess
@@ -25,44 +24,52 @@ import tempfile
 from typing import (
     cast,
     TYPE_CHECKING,
-    Any,
-    Mapping,
-    MutableMapping,
-    Optional,
-    Tuple,
-    Type,
-    Union,
-    Sequence,
 )
+
+if TYPE_CHECKING:
+    import logging
+
+    from typing import (
+        Any,
+        Mapping,
+        MutableMapping,
+        Optional,
+        Tuple,
+        Type,
+        Union,
+        Sequence,
+    )
+
+    from typing_extensions import Final
+
+    from ..common import (
+        AbsPath,
+        AnyPath,
+        ProgsMapping,
+        ProtocolFetcherReturn,
+        RelPath,
+        RepoTag,
+        RepoURL,
+        SecurityContextConfig,
+        SymbolicName,
+        URIType,
+    )
+
+
 from urllib import parse, request
 
 import dulwich.porcelain
-from typing_extensions import Final
 
 from . import AbstractStatefulFetcher, FetcherException
 
 from ..common import (
-    AbsPath,
     ContentKind,
-    ProgsMapping,
-    ProtocolFetcherReturn,
-    RelPath,
     RemoteRepo,
-    RepoTag,
     RepoType,
-    RepoURL,
-    SecurityContextConfig,
-    SymbolicName,
-    URIType,
     URIWithMetadata,
 )
 
 from ..utils.contents import link_or_copy
-
-if TYPE_CHECKING:
-    from ..common import (
-        AnyPath,
-    )
 
 GITHUB_SCHEME = "github"
 GITHUB_NETLOC = "github.com"
@@ -73,17 +80,17 @@ class GitGuessException(FetcherException):
 
 
 class GitFetcher(AbstractStatefulFetcher):
-    GIT_PROTO: Final[str] = "git"
-    GIT_PROTO_PREFIX: Final[str] = GIT_PROTO + "+"
-    DEFAULT_GIT_CMD: Final[SymbolicName] = cast(SymbolicName, "git")
+    GIT_PROTO: "Final[str]" = "git"
+    GIT_PROTO_PREFIX: "Final[str]" = GIT_PROTO + "+"
+    DEFAULT_GIT_CMD: "Final[SymbolicName]" = cast("SymbolicName", "git")
 
     def __init__(
-        self, progs: ProgsMapping, setup_block: Optional[Mapping[str, Any]] = None
+        self, progs: "ProgsMapping", setup_block: "Optional[Mapping[str, Any]]" = None
     ):
         super().__init__(progs=progs, setup_block=setup_block)
 
         self.git_cmd = self.progs.get(
-            self.DEFAULT_GIT_CMD, cast(RelPath, self.DEFAULT_GIT_CMD)
+            self.DEFAULT_GIT_CMD, cast("RelPath", self.DEFAULT_GIT_CMD)
         )
 
     @classmethod
@@ -96,21 +103,17 @@ class GitFetcher(AbstractStatefulFetcher):
         }
 
     @classmethod
-    def GetNeededPrograms(cls) -> Sequence[SymbolicName]:
+    def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return (cls.DEFAULT_GIT_CMD,)
 
     def doMaterializeRepo(
         self,
-        repoURL: RepoURL,
-        repoTag: Optional[RepoTag] = None,
-        repo_tag_destdir: Optional[AbsPath] = None,
-        base_repo_destdir: Optional[AbsPath] = None,
-        doUpdate: Optional[bool] = True,
-    ) -> Tuple[
-        AbsPath,
-        RepoTag,
-        MutableMapping[str, Union[RepoURL, Optional[RepoTag], RelPath, AbsPath]],
-    ]:
+        repoURL: "RepoURL",
+        repoTag: "Optional[RepoTag]" = None,
+        repo_tag_destdir: "Optional[AbsPath]" = None,
+        base_repo_destdir: "Optional[AbsPath]" = None,
+        doUpdate: "Optional[bool]" = True,
+    ) -> "Tuple[AbsPath, RepoTag, MutableMapping[str, Union[RepoURL, Optional[RepoTag], RelPath, AbsPath]]]":
         """
 
         :param repoURL:
@@ -123,7 +126,7 @@ class GitFetcher(AbstractStatefulFetcher):
         if repo_tag_destdir is None:
             if base_repo_destdir is None:
                 repo_tag_destdir = cast(
-                    AbsPath, tempfile.mkdtemp(prefix="wfexs", suffix=".git")
+                    "AbsPath", tempfile.mkdtemp(prefix="wfexs", suffix=".git")
                 )
                 atexit.register(shutil.rmtree, repo_tag_destdir)
             else:
@@ -144,7 +147,7 @@ class GitFetcher(AbstractStatefulFetcher):
                     b"" if repoTag is None else repoTag.encode("utf-8")
                 ).hexdigest()
                 repo_tag_destdir = cast(
-                    AbsPath, os.path.join(repo_destdir, repo_hashed_tag_id)
+                    "AbsPath", os.path.join(repo_destdir, repo_hashed_tag_id)
                 )
 
         self.logger.debug(f"Repo dir {repo_tag_destdir}")
@@ -186,7 +189,6 @@ class GitFetcher(AbstractStatefulFetcher):
 
         if doRepoUpdate:
             with tempfile.NamedTemporaryFile() as git_stdout, tempfile.NamedTemporaryFile() as git_stderr:
-
                 # First, (bare) clone
                 retval = 0
                 if gitclone_params is not None:
@@ -246,11 +248,11 @@ class GitFetcher(AbstractStatefulFetcher):
             cwd=repo_tag_destdir,
         ) as revproc:
             if revproc.stdout is not None:
-                repo_effective_checkout = cast(RepoTag, revproc.stdout.read().rstrip())
+                repo_effective_checkout = cast(
+                    "RepoTag", revproc.stdout.read().rstrip()
+                )
 
-        metadata: MutableMapping[
-            str, Union[RepoURL, Optional[RepoTag], RelPath, AbsPath]
-        ] = {
+        metadata: "MutableMapping[str, Union[RepoURL, Optional[RepoTag], RelPath, AbsPath]]" = {
             "repo": repoURL,
             "tag": repoTag,
             "checkout": repo_effective_checkout,
@@ -259,8 +261,8 @@ class GitFetcher(AbstractStatefulFetcher):
         return repo_tag_destdir, repo_effective_checkout, metadata
 
     def find_repo_in_uri(
-        self, remote_file: URIType
-    ) -> Tuple[Optional[RepoType], Optional[URIType], Optional[Sequence[str]]]:
+        self, remote_file: "URIType"
+    ) -> "Tuple[Optional[RepoType], Optional[URIType], Optional[Sequence[str]]]":
         """
         This method helps identifying the repo root and repo type from an URL
         """
@@ -268,9 +270,9 @@ class GitFetcher(AbstractStatefulFetcher):
         parsedInputURL = parse.urlparse(remote_file)
         sp_path = parsedInputURL.path.split("/")
 
-        shortest_pre_path: Optional[URIType] = None
-        longest_post_path: Optional[Sequence[str]] = None
-        repo_type: Optional[RepoType] = None
+        shortest_pre_path: "Optional[URIType]" = None
+        longest_post_path: "Optional[Sequence[str]]" = None
+        repo_type: "Optional[RepoType]" = None
         for pos in range(len(sp_path), 0, -1):
             pre_path = "/".join(sp_path[:pos])
             if pre_path == "":
@@ -288,7 +290,7 @@ class GitFetcher(AbstractStatefulFetcher):
 
             # It is considered a git repo!
             if retval == 0:
-                shortest_pre_path = cast(URIType, pre_path)
+                shortest_pre_path = cast("URIType", pre_path)
                 longest_post_path = sp_path[pos:]
                 if repo_type is None:
                     # Metadata is all we really need
@@ -326,10 +328,10 @@ class GitFetcher(AbstractStatefulFetcher):
 
     def fetch(
         self,
-        remote_file: URIType,
-        cachedFilename: AbsPath,
-        secContext: Optional[SecurityContextConfig] = None,
-    ) -> ProtocolFetcherReturn:
+        remote_file: "URIType",
+        cachedFilename: "AbsPath",
+        secContext: "Optional[SecurityContextConfig]" = None,
+    ) -> "ProtocolFetcherReturn":
         parsedInputURL = parse.urlparse(remote_file)
 
         # These are the usual URIs which can be understood by pip
@@ -347,10 +349,10 @@ class GitFetcher(AbstractStatefulFetcher):
             gitScheme = parsedInputURL.scheme
 
         # Getting the tag or branch
-        repoTag: Optional[RepoTag]
+        repoTag: "Optional[RepoTag]"
         if "@" in parsedInputURL.path:
             gitPath, repoTag = cast(
-                Tuple[str, RepoTag], tuple(parsedInputURL.path.split("@", 1))
+                "Tuple[str, RepoTag]", tuple(parsedInputURL.path.split("@", 1))
             )
         else:
             gitPath = parsedInputURL.path
@@ -367,19 +369,19 @@ class GitFetcher(AbstractStatefulFetcher):
 
         # Now, reassemble the repoURL, to be used by git client
         repoURL = cast(
-            RepoURL,
+            "RepoURL",
             parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, "", "", "")),
         )
 
         repo_tag_destdir, repo_effective_checkout, metadata = self.doMaterializeRepo(
             repoURL, repoTag=repoTag
         )
-        metadata["relpath"] = cast(RelPath, repoRelPath)
+        metadata["relpath"] = cast("RelPath", repoRelPath)
 
-        preferredName: Optional[RelPath]
+        preferredName: "Optional[RelPath]"
         if repoRelPath is not None:
             cachedContentPath = os.path.join(repo_tag_destdir, repoRelPath)
-            preferredName = cast(RelPath, repoRelPath.split("/")[-1])
+            preferredName = cast("RelPath", repoRelPath.split("/")[-1])
         else:
             cachedContentPath = repo_tag_destdir
             preferredName = None
@@ -412,13 +414,12 @@ REFS_HEADS_PREFIX = b"refs/heads/"
 
 
 def get_git_default_branch(
-    repoURL: str, git_cmd: str = GitFetcher.DEFAULT_GIT_CMD
-) -> RepoTag:
-
-    remote_refs_dict: Mapping[bytes, bytes]
+    repoURL: "str", git_cmd: "str" = GitFetcher.DEFAULT_GIT_CMD
+) -> "RepoTag":
+    remote_refs_dict: "Mapping[bytes, bytes]"
     remote_refs_dict = dulwich.porcelain.ls_remote(repoURL)
     head_remote_ref = remote_refs_dict[HEAD_LABEL]
-    b_default_repo_tag: Optional[str] = None
+    b_default_repo_tag: "Optional[str]" = None
     for remote_label, remote_ref in remote_refs_dict.items():
         if remote_ref == head_remote_ref and remote_label.startswith(REFS_HEADS_PREFIX):
             b_default_repo_tag = remote_label[len(REFS_HEADS_PREFIX) :].decode(
@@ -426,7 +427,7 @@ def get_git_default_branch(
             )
             break
 
-    # b_default_repo_tag: Optional[Any]
+    # b_default_repo_tag: "Optional[Any]"
     # with tempfile.NamedTemporaryFile() as db_err, subprocess.Popen(
     #    [git_cmd,'ls-remote','--symref',repoURL,'HEAD'],
     #    stdout=subprocess.PIPE,
@@ -447,18 +448,18 @@ def get_git_default_branch(
             f"No tag was obtained while getting default branch name from {repoURL}"
         )
 
-    return cast(RepoTag, b_default_repo_tag)
+    return cast("RepoTag", b_default_repo_tag)
 
 
 def guess_repo_params(
-    wf_url: Union[URIType, parse.ParseResult],
-    logger: logging.Logger,
-    fail_ok: bool = False,
-) -> Optional[RemoteRepo]:
+    wf_url: "Union[URIType, parse.ParseResult]",
+    logger: "logging.Logger",
+    fail_ok: "bool" = False,
+) -> "Optional[RemoteRepo]":
     repoURL = None
     repoTag = None
     repoRelPath = None
-    repoType: Optional[RepoType] = None
+    repoType: "Optional[RepoType]" = None
 
     # Deciding which is the input
     if isinstance(wf_url, parse.ParseResult):
@@ -587,14 +588,14 @@ def guess_repo_params(
         return None
 
     return RemoteRepo(
-        repo_url=cast(RepoURL, repoURL),
-        tag=cast(Optional[RepoTag], repoTag),
-        rel_path=cast(Optional[RelPath], repoRelPath),
+        repo_url=cast("RepoURL", repoURL),
+        tag=cast("Optional[RepoTag]", repoTag),
+        rel_path=cast("Optional[RelPath]", repoRelPath),
         repo_type=repoType,
     )
 
 
 # See above
-SCHEME_HANDLERS: Mapping[
-    str, Type[AbstractStatefulFetcher]
-] = GitFetcher.GetSchemeHandlers()
+SCHEME_HANDLERS: "Mapping[str, Type[AbstractStatefulFetcher]]" = (
+    GitFetcher.GetSchemeHandlers()
+)

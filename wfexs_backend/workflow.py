@@ -65,10 +65,12 @@ if TYPE_CHECKING:
     from .common import (
         AbsPath,
         AbstractWorkflowEngineType,
+        AnyContent,
         AnyPath,
         ContainerEngineVersionStr,
         ContainerOperatingSystem,
         EngineVersion,
+        ExitVal,
         ExportActionBlock,
         MaterializedOutput,
         MutableParamsBlock,
@@ -82,6 +84,8 @@ if TYPE_CHECKING:
         SecurityContextConfig,
         SecurityContextConfigBlock,
         SymbolicName,
+        SymbolicParamName,
+        SymbolicOutputName,
         TRS_Workflow_Descriptor,
         WfExSInstanceId,
         WorkflowConfigBlock,
@@ -175,14 +179,6 @@ from .common import (
     MaterializedWorkflowEngine,
     RemoteRepo,
     StagedSetup,
-)
-
-# These imports are needed to properly unmarshall from YAML
-from .common import (  # pylint: disable=unused-import
-    AnyContent,
-    ExitVal,
-    SymbolicParamName,
-    SymbolicOutputName,
 )
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS

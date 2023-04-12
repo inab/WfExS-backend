@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,47 +20,50 @@ import subprocess
 import tempfile
 from typing import (
     cast,
-    Any,
-    Mapping,
-    Optional,
-    Sequence,
+    TYPE_CHECKING,
 )
 
-# This is needed to have proper pylint validation in python 3.6
-# pylint: disable-next=unused-import
-from typing import (
-    Type,
-)
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Mapping,
+        Optional,
+        Sequence,
+        Type,
+    )
 
-from typing_extensions import Final
+    from typing_extensions import Final
+
+    from ..common import (
+        AbsPath,
+        ProgsMapping,
+        ProtocolFetcherReturn,
+        RelPath,
+        SecurityContextConfig,
+        SymbolicName,
+        URIType,
+    )
 
 from . import AbstractStatefulFetcher, FetcherException
 
 from ..common import (
-    AbsPath,
     ContentKind,
-    ProgsMapping,
-    ProtocolFetcherReturn,
-    RelPath,
-    SecurityContextConfig,
-    SymbolicName,
-    URIType,
     URIWithMetadata,
 )
 
 
 class FASPFetcher(AbstractStatefulFetcher):
-    FASP_PROTO: Final[str] = "fasp"
-    DEFAULT_LIMIT_THROUGHPUT: Final[str] = "100m"
-    DEFAULT_ASPERA_CMD: Final[SymbolicName] = cast(SymbolicName, "ascp")
+    FASP_PROTO: "Final[str]" = "fasp"
+    DEFAULT_LIMIT_THROUGHPUT: "Final[str]" = "100m"
+    DEFAULT_ASPERA_CMD: "Final[SymbolicName]" = cast("SymbolicName", "ascp")
 
     def __init__(
-        self, progs: ProgsMapping, setup_block: Optional[Mapping[str, Any]] = None
+        self, progs: "ProgsMapping", setup_block: "Optional[Mapping[str, Any]]" = None
     ):
         super().__init__(progs=progs, setup_block=setup_block)
 
         self.ascp_cmd = self.progs.get(
-            self.DEFAULT_ASPERA_CMD, cast(RelPath, self.DEFAULT_ASPERA_CMD)
+            self.DEFAULT_ASPERA_CMD, cast("RelPath", self.DEFAULT_ASPERA_CMD)
         )
         self.limit_throughput = self.setup_block.get(
             "limit-throughput", self.DEFAULT_LIMIT_THROUGHPUT
@@ -74,15 +77,15 @@ class FASPFetcher(AbstractStatefulFetcher):
         }
 
     @classmethod
-    def GetNeededPrograms(cls) -> Sequence[SymbolicName]:
+    def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return (cls.DEFAULT_ASPERA_CMD,)
 
     def fetch(
         self,
-        remote_file: URIType,
-        cachedFilename: AbsPath,
-        secContext: Optional[SecurityContextConfig] = None,
-    ) -> ProtocolFetcherReturn:
+        remote_file: "URIType",
+        cachedFilename: "AbsPath",
+        secContext: "Optional[SecurityContextConfig]" = None,
+    ) -> "ProtocolFetcherReturn":
         # Sanitizing possible ill-formed inputs
         if not isinstance(secContext, dict):
             secContext = {}

@@ -21,4 +21,3 @@ pyncclient-ext >= 0.1.2
 wiktionary-term-fetcher >= 0.1.1
 funny-passphrase >= 0.2.3
 pyxdg
-mypy-extensions

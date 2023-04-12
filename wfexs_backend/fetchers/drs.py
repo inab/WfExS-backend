@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,11 +22,24 @@ import json
 
 from typing import (
     cast,
-    Mapping,
-    MutableSequence,
-    Optional,
-    Tuple,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Mapping,
+        MutableSequence,
+        Optional,
+        Tuple,
+    )
+
+    from ..common import (
+        AbsPath,
+        ProtocolFetcher,
+        ProtocolFetcherReturn,
+        SecurityContextConfig,
+        URIType,
+    )
 
 from urllib import parse
 import urllib.error
@@ -38,12 +51,7 @@ import yaml
 from . import fetchClassicURL, FetcherException
 
 from ..common import (
-    AbsPath,
     LicensedURI,
-    ProtocolFetcher,
-    ProtocolFetcherReturn,
-    SecurityContextConfig,
-    URIType,
     URIWithMetadata,
 )
 
@@ -52,12 +60,12 @@ N2T_NET_SERVICE = "https://n2t.net/"
 
 
 def query_n2t(
-    scheme: str,
-    the_id: str,
-    remote_file: URIType,
-    metadata_array: MutableSequence[URIWithMetadata] = [],
-) -> Tuple[URIType, MutableSequence[URIWithMetadata]]:
-    query_url = cast(URIType, N2T_NET_SERVICE + scheme + ":")
+    scheme: "str",
+    the_id: "str",
+    remote_file: "URIType",
+    metadata_array: "MutableSequence[URIWithMetadata]" = [],
+) -> "Tuple[URIType, MutableSequence[URIWithMetadata]]":
+    query_url = cast("URIType", N2T_NET_SERVICE + scheme + ":")
     gathered_meta = {"fetched": query_url}
 
     n2t_io = io.BytesIO()
@@ -99,14 +107,14 @@ def query_n2t(
             f"Ill-formed redirect answer for n2t.net query about {remote_file} ({scheme})"
         )
 
-    return cast(URIType, redir_pat.replace("$id", the_id)), metadata_array
+    return cast("URIType", redir_pat.replace("$id", the_id)), metadata_array
 
 
 def downloadContentFromDRS(
-    remote_file: URIType,
-    cachedFilename: AbsPath,
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "AbsPath",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     upperSecContext = dict()
 
     parsedInputURL = parse.urlparse(remote_file)
@@ -117,8 +125,8 @@ def downloadContentFromDRS(
             f"Unexpected scheme {parsedInputURL.scheme}, expected {DRS_SCHEME}"
         )
 
-    retURL: MutableSequence[LicensedURI] = []
-    metadata_array: MutableSequence[URIWithMetadata] = []
+    retURL: "MutableSequence[LicensedURI]" = []
+    metadata_array: "MutableSequence[URIWithMetadata]" = []
 
     # Detecting compact version of DRS
     # https://ga4gh.github.io/data-repository-service-schemas/preview/release/drs-1.1.0/docs/#_appendix_compact_identifier_based_uris
@@ -181,7 +189,9 @@ def downloadContentFromDRS(
         )
 
         # Now, get the object metadata
-        object_metadata_url = cast(URIType, drs_service_prefix + "objects/" + object_id)
+        object_metadata_url = cast(
+            "URIType", drs_service_prefix + "objects/" + object_id
+        )
 
         gathered_meta = {"fetched": object_metadata_url}
         metadata = None
@@ -214,7 +224,7 @@ def downloadContentFromDRS(
             customSecContext = None
             if (object_url is None) and (access_id is not None):
                 object_access_metadata_url = cast(
-                    URIType,
+                    "URIType",
                     object_metadata_url + "/access/" + parse.quote(access_id, safe=""),
                 )
 
@@ -248,6 +258,6 @@ def downloadContentFromDRS(
     return retURL, metadata_array, None
 
 
-SCHEME_HANDLERS: Mapping[str, ProtocolFetcher] = {
+SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
     DRS_SCHEME: downloadContentFromDRS,
 }

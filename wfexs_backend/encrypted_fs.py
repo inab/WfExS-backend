@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,13 +20,20 @@ import enum
 import subprocess
 import tempfile
 
-from typing import cast
+from typing import (
+    cast,
+    TYPE_CHECKING,
+)
+
+if TYPE_CHECKING:
+    from .common import (
+        AbsPath,
+        AnyPath,
+        RelPath,
+    )
 
 from .common import (
-    AbsPath,
     AbstractWfExSException,
-    AnyPath,
-    RelPath,
 )
 
 
@@ -42,8 +49,8 @@ class EncryptedFSType(enum.Enum):
 
 DEFAULT_ENCRYPTED_FS_TYPE = EncryptedFSType.EncFS
 DEFAULT_ENCRYPTED_FS_CMD = {
-    EncryptedFSType.EncFS: cast(RelPath, "encfs"),
-    EncryptedFSType.GoCryptFS: cast(RelPath, "gocryptfs"),
+    EncryptedFSType.EncFS: cast("RelPath", "encfs"),
+    EncryptedFSType.GoCryptFS: cast("RelPath", "gocryptfs"),
 }
 
 # Idle timeout, in minutes
@@ -51,16 +58,15 @@ DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT = 5
 
 
 def _mountEncFS(
-    encfs_cmd: AnyPath,
-    encfs_idleMinutes: int,
-    uniqueEncWorkDir: AbsPath,
-    uniqueWorkDir: AbsPath,
-    uniqueRawWorkDir: AbsPath,
-    clearPass: str,
-    allowOther: bool = False,
+    encfs_cmd: "AnyPath",
+    encfs_idleMinutes: "int",
+    uniqueEncWorkDir: "AbsPath",
+    uniqueWorkDir: "AbsPath",
+    uniqueRawWorkDir: "AbsPath",
+    clearPass: "str",
+    allowOther: "bool" = False,
 ) -> None:
     with tempfile.NamedTemporaryFile() as encfs_init_stdout, tempfile.NamedTemporaryFile() as encfs_init_stderr:
-
         encfsCommand = [
             encfs_cmd,
             "-i",
@@ -99,16 +105,15 @@ def _mountEncFS(
 
 
 def _mountGoCryptFS(
-    gocryptfs_cmd: AnyPath,
-    gocryptfs_idleMinutes: int,
-    uniqueEncWorkDir: AbsPath,
-    uniqueWorkDir: AbsPath,
-    uniqueRawWorkDir: AbsPath,
-    clearPass: str,
-    allowOther: bool = False,
+    gocryptfs_cmd: "AnyPath",
+    gocryptfs_idleMinutes: "int",
+    uniqueEncWorkDir: "AbsPath",
+    uniqueWorkDir: "AbsPath",
+    uniqueRawWorkDir: "AbsPath",
+    clearPass: "str",
+    allowOther: "bool" = False,
 ) -> None:
     with tempfile.NamedTemporaryFile() as gocryptfs_init_stdout, tempfile.NamedTemporaryFile() as gocryptfs_init_stderr:
-
         # First, detect whether there is an already created filesystem
         gocryptfsInfo = [gocryptfs_cmd, "-info", uniqueEncWorkDir]
 

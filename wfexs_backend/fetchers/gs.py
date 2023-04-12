@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,21 +20,29 @@ from urllib.parse import urlparse
 import logging
 import os
 from typing import (
-    Any,
-    Mapping,
-    MutableSequence,
-    Optional,
+    TYPE_CHECKING,
 )
+
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Mapping,
+        MutableSequence,
+        Optional,
+    )
+
+    from ..common import (
+        AbsPath,
+        ProtocolFetcher,
+        ProtocolFetcherReturn,
+        SecurityContextConfig,
+        URIType,
+    )
 
 from . import FetcherException
 
 from ..common import (
-    AbsPath,
     ContentKind,
-    ProtocolFetcher,
-    ProtocolFetcherReturn,
-    SecurityContextConfig,
-    URIType,
     URIWithMetadata,
 )
 
@@ -42,10 +50,10 @@ logger = logging.getLogger()
 
 
 def downloadContentFrom_gs(
-    remote_file: URIType,
-    cachedFilename: AbsPath,
-    secContext: Optional[SecurityContextConfig] = None,
-) -> ProtocolFetcherReturn:
+    remote_file: "URIType",
+    cachedFilename: "AbsPath",
+    secContext: "Optional[SecurityContextConfig]" = None,
+) -> "ProtocolFetcherReturn":
     """
     Method to download contents from Google Storage.
 
@@ -133,4 +141,4 @@ def downloadContentFrom_gs(
     return kind, [URIWithMetadata(remote_file, metadata)], None
 
 
-GS_SCHEME_HANDLERS: Mapping[str, ProtocolFetcher] = {"gs": downloadContentFrom_gs}
+GS_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {"gs": downloadContentFrom_gs}
