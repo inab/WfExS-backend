@@ -118,14 +118,13 @@ class DXFFat(DXF):
             # defining the steps to produce directly from the manifest is not
             # straight forward."
             dcd_h = r.headers.get("Docker-Content-Digest")
-            # type: ignore[no-untyped-call]
-            _, dcd = _verify_manifest(
+            _, dcd = _verify_manifest(  # type: ignore[no-untyped-call]
                 manifest,
                 parsed_manifest,
                 content_digest=dcd_h,
                 verify=True,
                 get_content_digest=True,
-            )  # type: ignore[no-untyped-call]
+            )
         else:
             dcd = dxf_hash_bytes(manifest.encode("utf8"))
 

@@ -21,7 +21,14 @@ repos:
         require_serial: true
 #        entry: ./basic-installer.bash mypy --strict
         entry: mypy --strict --show-error-codes --no-warn-unused-ignores
-    
+# Main problem: python executable path, used to find the environment is hard
+#  - repo: https://github.com/pre-commit/mirrors-mypy.git
+#    rev: v1.2.0
+#    hooks:
+#      - id: mypy
+#        exclude: "^[^/]*env/|dev-[^/]*/"
+#        require_serial: true
+#        args: [--strict, --show-error-codes, --no-warn-unused-ignores, --python-executable, .pyWEenv/bin/python]
 #  - repo: meta
   - repo: https://github.com/inab/python-extended-json-schema-validator.git
     rev: v0.13.0
