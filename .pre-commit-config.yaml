@@ -24,7 +24,7 @@ repos:
     
 #  - repo: meta
   - repo: https://github.com/inab/python-extended-json-schema-validator.git
-    rev: v0.11.0
+    rev: v0.13.0
     hooks:
 #      - id: identity
       - id: jsonschema_dir_validate

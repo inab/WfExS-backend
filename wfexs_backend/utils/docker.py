@@ -164,11 +164,6 @@ class DXFFat(DXF):
         fat_manifest, _ = self.get_fat_manifest_and_response(alias)
         return fat_manifest
 
-    def get_fingerprint(self, alias: "str") -> "Optional[str]":
-        dcd: "Optional[str]"
-        _, dcd = self._get_alias(alias, manifest=None, verify=True, sizes=False, get_digest=False, get_dcd=True)  # type: ignore[no-untyped-call]
-        return dcd
-
 
 class DockerHelper(abc.ABC):
     DEFAULT_DOCKER_REGISTRY: "Final[str]" = "docker.io"
