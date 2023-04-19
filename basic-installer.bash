@@ -112,7 +112,7 @@ else
 	echo "Creating WfExS-backend python virtual environment at ${envDir}"
 
 	# Checking whether the environment exists
-	if [ ! -f "${envActivate}" ] ; then
+	if [ ! -f "${envDir}" ] ; then
 		python3 -m venv "${envDir}"
 	fi
 
