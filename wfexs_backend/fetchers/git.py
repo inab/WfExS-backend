@@ -33,6 +33,7 @@ if TYPE_CHECKING:
         Any,
         Mapping,
         MutableMapping,
+        MutableSequence,
         Optional,
         Tuple,
         Type,
@@ -411,21 +412,39 @@ class GitFetcher(AbstractStatefulFetcher):
 
 HEAD_LABEL = b"HEAD"
 REFS_HEADS_PREFIX = b"refs/heads/"
+REFS_TAGS_PREFIX = b"refs/tags/"
 
 
-def get_git_default_branch(
+def get_git_default_and_branches(
     repoURL: "str", git_cmd: "str" = GitFetcher.DEFAULT_GIT_CMD
-) -> "RepoTag":
+) -> "Tuple[RepoTag, Sequence[RepoTag]]":
+    """
+    It returns both the default branch and the list of valid branches and tags
+    """
     remote_refs_dict: "Mapping[bytes, bytes]"
     remote_refs_dict = dulwich.porcelain.ls_remote(repoURL)
+
     head_remote_ref = remote_refs_dict[HEAD_LABEL]
+    repo_branches: "MutableSequence[str]" = []
     b_default_repo_tag: "Optional[str]" = None
     for remote_label, remote_ref in remote_refs_dict.items():
-        if remote_ref == head_remote_ref and remote_label.startswith(REFS_HEADS_PREFIX):
-            b_default_repo_tag = remote_label[len(REFS_HEADS_PREFIX) :].decode(
-                "utf-8", errors="continue"
-            )
-            break
+        bb_repo_tag = None
+        if remote_label.startswith(REFS_HEADS_PREFIX):
+            # It is a branch
+            bb_repo_tag = remote_label[len(REFS_HEADS_PREFIX) :]
+        elif remote_label.startswith(REFS_TAGS_PREFIX):
+            # It is a tag
+            bb_repo_tag = remote_label[len(REFS_TAGS_PREFIX) :]
+
+        if bb_repo_tag is not None:
+            b_repo_tag = bb_repo_tag.decode("utf-8", errors="continue")
+            repo_branches.append(b_repo_tag)
+            if (
+                b_default_repo_tag is None
+                and remote_label.startswith(REFS_HEADS_PREFIX)
+                and remote_ref == head_remote_ref
+            ):
+                b_default_repo_tag = b_repo_tag
 
     # b_default_repo_tag: "Optional[Any]"
     # with tempfile.NamedTemporaryFile() as db_err, subprocess.Popen(
@@ -448,7 +467,7 @@ def get_git_default_branch(
             f"No tag was obtained while getting default branch name from {repoURL}"
         )
 
-    return cast("RepoTag", b_default_repo_tag)
+    return cast("RepoTag", b_default_repo_tag), cast("Sequence[RepoTag]", repo_branches)
 
 
 def guess_repo_params(
@@ -497,7 +516,7 @@ def guess_repo_params(
             (gitScheme, parsed_wf_url.netloc, gitPath, "", "", "")
         )
         if repoTag is None:
-            repoTag = get_git_default_branch(repoURL)
+            repoTag, _ = get_git_default_and_branches(repoURL)
         repoType = RepoType.Raw
 
     elif parsed_wf_url.scheme == GITHUB_SCHEME:
@@ -505,7 +524,7 @@ def guess_repo_params(
 
         gh_path_split = parsed_wf_url.path.split("/")
         gh_path = "/".join(gh_path_split[:2])
-        gh_post_path = gh_path_split[2:]
+        gh_post_path = list(map(parse.unquote_plus, gh_path_split[2:]))
         if len(gh_post_path) > 0:
             repoTag = gh_post_path[0]
             if len(gh_post_path) > 1:
@@ -522,7 +541,7 @@ def guess_repo_params(
             )
         )
         if repoTag is None:
-            repoTag = get_git_default_branch(repoURL)
+            repoTag, _ = get_git_default_and_branches(repoURL)
 
     # TODO handling other popular cases, like bitbucket
     elif parsed_wf_url.netloc == GITHUB_NETLOC:
@@ -546,16 +565,33 @@ def guess_repo_params(
             )
 
             # And now, guessing the tag and the relative path
+            # WARNING! This code can have problems with tags which contain slashes
+            default_repoTag, repo_branches_tags = get_git_default_and_branches(repoURL)
             if len(wf_path) >= 5 and (wf_path[3] in ("blob", "tree")):
-                repoTag = wf_path[4]
+                wf_path_tag = list(map(parse.unquote_plus, wf_path[4:]))
 
-                if len(wf_path) >= 6:
-                    repoRelPath = "/".join(wf_path[5:])
+                tag_relpath = "/".join(wf_path_tag)
+                for repo_branch_tag in repo_branches_tags:
+                    if repo_branch_tag == tag_relpath or tag_relpath.startswith(
+                        repo_branch_tag + "/"
+                    ):
+                        repoTag = repo_branch_tag
+                        if len(tag_relpath) > len(repo_branch_tag):
+                            tag_relpath = tag_relpath[len(repo_branch_tag) + 1]
+                            if len(tag_relpath) > 0:
+                                repoRelPath = tag_relpath
+                        break
+                else:
+                    # Fallback
+                    repoTag = wf_path_tag[0]
+                    if len(wf_path_tag) > 0:
+                        repoRelPath = "/".join(wf_path_tag[1:])
             else:
-                repoTag = get_git_default_branch(repoURL)
+                repoTag = default_repoTag
+
         repoType = RepoType.GitHub
     elif parsed_wf_url.netloc == "raw.githubusercontent.com":
-        wf_path = parsed_wf_url.path.split("/")
+        wf_path = list(map(parse.unquote_plus, parsed_wf_url.path.split("/")))
         if len(wf_path) >= 3:
             # Rebuilding it
             repoGitPath = wf_path[:3]
@@ -567,13 +603,29 @@ def guess_repo_params(
             )
 
             # And now, guessing the tag/checkout and the relative path
+            # WARNING! This code can have problems with tags which contain slashes
+            default_repoTag, repo_branches_tags = get_git_default_and_branches(repoURL)
             if len(wf_path) >= 4:
-                repoTag = wf_path[3]
-
-                if len(wf_path) >= 5:
-                    repoRelPath = "/".join(wf_path[4:])
+                # Validate against existing branch and tag names
+                tag_relpath = "/".join(wf_path[3:])
+                for repo_branch_tag in repo_branches_tags:
+                    if repo_branch_tag == tag_relpath or tag_relpath.startswith(
+                        repo_branch_tag + "/"
+                    ):
+                        repoTag = repo_branch_tag
+                        if len(tag_relpath) > len(repo_branch_tag):
+                            tag_relpath = tag_relpath[len(repo_branch_tag) + 1]
+                            if len(tag_relpath) > 0:
+                                repoRelPath = tag_relpath
+                        break
+                else:
+                    # Fallback
+                    repoTag = wf_path[3]
+                    if len(wf_path) > 4:
+                        repoRelPath = "/".join(wf_path[4:])
             else:
-                repoTag = get_git_default_branch(repoURL)
+                repoTag = default_repoTag
+
         repoType = RepoType.GitHub
     elif not fail_ok:
         raise FetcherException(
