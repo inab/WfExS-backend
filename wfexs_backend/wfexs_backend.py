@@ -1247,7 +1247,7 @@ class WfExSBackend:
                 secContext=secContext,
             )
         else:
-            workflow_dir, repo, effective_checkout = self.cacheWorkflow(
+            workflow_dir, repo, _, effective_checkout = self.cacheWorkflow(
                 workflow_id=cast("WorkflowId", remote_file),
                 ignoreCache=ignoreCache,
                 offline=offline,
@@ -1303,7 +1303,8 @@ class WfExSBackend:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         ignoreCache: "bool" = False,
         offline: "bool" = False,
-    ) -> "Tuple[AbsPath, RemoteRepo, Optional[RepoTag]]":
+        meta_dir: "Optional[AbsPath]" = None,
+    ) -> "Tuple[AbsPath, RemoteRepo, Optional[WorkflowType], Optional[RepoTag]]":
         """
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
@@ -1327,6 +1328,7 @@ class WfExSBackend:
                     descriptor_type,
                     ignoreCache=ignoreCache,
                     offline=offline,
+                    meta_dir=meta_dir,
                 )
             else:
                 raise WFException("trs_endpoint was not provided")
@@ -1395,7 +1397,7 @@ class WfExSBackend:
             repo_type=repoType,
         )
 
-        return repoDir, repo, repoEffectiveCheckout
+        return repoDir, repo, engineDesc, repoEffectiveCheckout
 
     TRS_METADATA_FILE: "Final[RelPath]" = cast("RelPath", "trs_metadata.json")
     TRS_QUERY_CACHE_FILE: "Final[RelPath]" = cast("RelPath", "trs_result.json")

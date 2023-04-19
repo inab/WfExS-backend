@@ -1020,6 +1020,7 @@ class WF:
         trs_endpoint: "Optional[str]",
         descriptor_type: "Optional[TRS_Workflow_Descriptor]",
         offline: "bool" = False,
+        ignoreCache: "bool" = False,
     ) -> None:
         """
         Fetch the whole workflow description based on the data obtained
@@ -1029,80 +1030,21 @@ class WF:
         and the version will represent either the branch, tag or specific commit.
         So, the whole TRS fetching machinery is bypassed.workflowDir
         """
-        parsedRepoURL = urllib.parse.urlparse(str(workflow_id))
 
-        # It is not an absolute URL, so it is being an identifier in the workflow
-        i_workflow: "Optional[IdentifiedWorkflow]" = None
-        engineDesc: "Optional[WorkflowType]" = None
-        guessedRepo: "Optional[RemoteRepo]" = None
-        if parsedRepoURL.scheme == "":
-            if (trs_endpoint is not None) and len(trs_endpoint) > 0:
-                i_workflow = self.getWorkflowRepoFromTRS(
-                    trs_endpoint,
-                    workflow_id,
-                    version_id,
-                    descriptor_type,
-                    offline=offline,
-                )
-            else:
-                raise WFException("trs_endpoint was not provided")
-        else:
-            engineDesc = None
+        assert self.metaDir is not None
 
-            # Trying to be smarter
-            guessedRepo = guess_repo_params(
-                parsedRepoURL, logger=self.logger, fail_ok=True
-            )
-
-            if guessedRepo is not None:
-                if guessedRepo.tag is None:
-                    guessedRepo = RemoteRepo(
-                        repo_url=guessedRepo.repo_url,
-                        tag=cast("RepoTag", version_id),
-                        rel_path=guessedRepo.rel_path,
-                    )
-            else:
-                (
-                    i_workflow,
-                    self.cacheROCrateFilename,
-                ) = self.wfexs.getWorkflowRepoFromROCrateURL(
-                    cast("URIType", workflow_id), offline=offline
-                )
-
-        if i_workflow is not None:
-            guessedRepo = i_workflow.remote_repo
-            engineDesc = i_workflow.workflow_type
-
-        if guessedRepo is None:
-            # raise WFException('Unable to guess repository from RO-Crate manifest')
-            guessedRepo = RemoteRepo(
-                repo_url=cast("RepoURL", workflow_id), tag=cast("RepoTag", version_id)
-            )
-
-        repoURL = guessedRepo.repo_url
-        repoTag = guessedRepo.tag
-        repoRelPath = guessedRepo.rel_path
-
-        repoDir: "Optional[AbsPath]" = None
-        repoEffectiveCheckout: "Optional[RepoTag]" = None
-        if ":" in repoURL:
-            parsedRepoURL = urllib.parse.urlparse(repoURL)
-            if len(parsedRepoURL.scheme) > 0:
-                self.repoURL = repoURL
-                self.repoTag = repoTag
-                # It can be either a relative path to a directory or to a file
-                # It could be even empty!
-                if repoRelPath == "":
-                    repoRelPath = None
-                self.repoRelPath = repoRelPath
-
-                repoDir, repoEffectiveCheckout = self.wfexs.doMaterializeRepo(
-                    repoURL, repoTag
-                )
-
-        # For the cases of pure TRS repos, like Dockstore
-        if repoDir is None:
-            repoDir = cast("AbsPath", repoURL)
+        repoDir, repo, engineDesc, repoEffectiveCheckout = self.wfexs.cacheWorkflow(
+            workflow_id=workflow_id,
+            version_id=version_id,
+            trs_endpoint=trs_endpoint,
+            descriptor_type=descriptor_type,
+            ignoreCache=ignoreCache,
+            offline=offline,
+            meta_dir=self.metaDir,
+        )
+        self.repoURL = repo.repo_url
+        self.repoTag = repo.tag
+        self.repoRelPath = repo.rel_path
 
         # Workflow Language version cannot be assumed here yet
         # A copy of the workflows is kept
@@ -1116,7 +1058,7 @@ class WF:
         # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
             dir=self.workflowDir,
-            relPath=repoRelPath,
+            relPath=self.repoRelPath,
             effectiveCheckout=repoEffectiveCheckout,
         )
         self.logger.info(
@@ -1125,11 +1067,11 @@ class WF:
             )
         )
 
-        if repoRelPath is not None:
-            if not os.path.exists(os.path.join(self.workflowDir, repoRelPath)):
+        if self.repoRelPath is not None:
+            if not os.path.exists(os.path.join(self.workflowDir, self.repoRelPath)):
                 raise WFException(
                     "Relative path {} cannot be found in materialized workflow repository {}".format(
-                        repoRelPath, self.workflowDir
+                        self.repoRelPath, self.workflowDir
                     )
                 )
         # A valid engine must be identified from the fetched content
@@ -1155,7 +1097,7 @@ class WF:
                     pass
             else:
                 raise WFException(
-                    "No engine recognized a workflow at {}".format(repoURL)
+                    "No engine recognized a workflow at {}".format(self.repoURL)
                 )
         else:
             self.logger.debug("Fixed engine " + engineDesc.trs_descriptor)
@@ -1164,7 +1106,7 @@ class WF:
             if engineVer is None:
                 raise WFException(
                     "Engine {} did not recognize a workflow at {}".format(
-                        engine.workflowType.engineName, repoURL
+                        engine.workflowType.engineName, self.repoURL
                     )
                 )
 
@@ -1175,7 +1117,7 @@ class WF:
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
 
-    def setupEngine(self, offline: "bool" = False) -> None:
+    def setupEngine(self, offline: "bool" = False, ignoreCache: "bool" = False) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
             assert self.id is not None
@@ -1185,6 +1127,7 @@ class WF:
                 self.trs_endpoint,
                 self.descriptor_type,
                 offline=offline,
+                ignoreCache=ignoreCache,
             )
 
         assert (
@@ -1216,9 +1159,11 @@ class WF:
                 )
         self.materializedEngine = matWfEngV2
 
-    def materializeWorkflowAndContainers(self, offline: "bool" = False) -> None:
+    def materializeWorkflowAndContainers(
+        self, offline: "bool" = False, ignoreCache: "bool" = False
+    ) -> None:
         if self.materializedEngine is None:
-            self.setupEngine(offline=offline)
+            self.setupEngine(offline=offline, ignoreCache=ignoreCache)
 
         assert (
             self.materializedEngine is not None
@@ -1305,7 +1250,9 @@ class WF:
 
         return lastInput
 
-    def materializeInputs(self, offline: "bool" = False, lastInput: "int" = 0) -> None:
+    def materializeInputs(
+        self, offline: "bool" = False, ignoreCache: "bool" = False, lastInput: "int" = 0
+    ) -> None:
         assert (
             self.inputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
@@ -1315,6 +1262,7 @@ class WF:
             self.formatted_params,
             workflowInputs_destdir=self.inputsDir,
             offline=offline,
+            ignoreCache=ignoreCache,
             lastInput=lastInput,
         )
         self.materializedParams = theParams
@@ -1406,6 +1354,7 @@ class WF:
         prefix: "str" = "",
         hardenPrettyLocal: "bool" = False,
         prettyRelname: "Optional[RelPath]" = None,
+        ignoreCache: "bool" = False,
     ) -> "Sequence[MaterializedContent]":
         # Embedding the context
         alt_remote_file = self.buildLicensedURI(remote_file, contextName=contextName)
@@ -1413,7 +1362,7 @@ class WF:
             alt_remote_file,
             dest=storeDir,
             offline=offline,
-            ignoreCache=not cacheable,
+            ignoreCache=ignoreCache or not cacheable,
             registerInCache=cacheable,
         )
 
@@ -1702,6 +1651,7 @@ class WF:
         prefix: "str" = "",
         lastInput: "int" = 0,
         offline: "bool" = False,
+        ignoreCache: "bool" = False,
     ) -> "Tuple[Sequence[MaterializedInput], int]":
         """
         Fetch the input files for the workflow execution.
@@ -1848,6 +1798,7 @@ class WF:
                                     globExplode,
                                     prefix=str(lastInput) + "_",
                                     prettyRelname=pretty_relname,
+                                    ignoreCache=ignoreCache,
                                 )
                                 remote_pairs.extend(t_remote_pairs)
 
@@ -1879,6 +1830,7 @@ class WF:
                                         inputDestDir,
                                         globExplode,
                                         prefix=str(lastInput) + "_",
+                                        ignoreCache=ignoreCache,
                                     )
                                     secondary_remote_pairs.extend(
                                         t_secondary_remote_pairs
@@ -1943,6 +1895,7 @@ class WF:
                         prefix=linearKey + ".",
                         lastInput=lastInput,
                         offline=offline,
+                        ignoreCache=ignoreCache,
                     )
                     theInputs.extend(newInputsAndParams)
             else:
@@ -1952,7 +1905,9 @@ class WF:
 
         return theInputs, lastInput
 
-    def stageWorkDir(self, offline: "bool" = False) -> "StagedSetup":
+    def stageWorkDir(
+        self, offline: "bool" = False, ignoreCache: "bool" = False
+    ) -> "StagedSetup":
         """
         This method is here to simplify the understanding of the needed steps
         """
@@ -1960,8 +1915,8 @@ class WF:
         # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
         # This method is called from within materializeWorkflowAndContainers
         # self.setupEngine(offline=offline)
-        self.materializeWorkflowAndContainers(offline=offline)
-        self.materializeInputs(offline=offline)
+        self.materializeWorkflowAndContainers(offline=offline, ignoreCache=ignoreCache)
+        self.materializeInputs(offline=offline, ignoreCache=ignoreCache)
         self.marshallStage()
 
         return self.getStagedSetup()
@@ -3149,26 +3104,3 @@ class WF:
         self.logger.info("Execution RO-Crate created: {}".format(filename))
 
         return filename
-
-    def getWorkflowRepoFromTRS(
-        self,
-        trs_endpoint: "str",
-        workflow_id: "WorkflowId",
-        version_id: "Optional[WFVersionId]",
-        descriptor_type: "Optional[TRS_Workflow_Descriptor]",
-        offline: "bool" = False,
-    ) -> "IdentifiedWorkflow":
-        """
-
-        :return:
-        """
-        assert self.metaDir is not None
-
-        return self.wfexs.getWorkflowRepoFromTRS(
-            trs_endpoint=trs_endpoint,
-            workflow_id=workflow_id,
-            version_id=version_id,
-            descriptor_type=descriptor_type,
-            offline=offline,
-            meta_dir=self.metaDir,
-        )
