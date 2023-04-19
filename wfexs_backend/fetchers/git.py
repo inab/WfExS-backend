@@ -577,7 +577,7 @@ def guess_repo_params(
                     ):
                         repoTag = repo_branch_tag
                         if len(tag_relpath) > len(repo_branch_tag):
-                            tag_relpath = tag_relpath[len(repo_branch_tag) + 1]
+                            tag_relpath = tag_relpath[len(repo_branch_tag) + 1 :]
                             if len(tag_relpath) > 0:
                                 repoRelPath = tag_relpath
                         break
@@ -614,7 +614,7 @@ def guess_repo_params(
                     ):
                         repoTag = repo_branch_tag
                         if len(tag_relpath) > len(repo_branch_tag):
-                            tag_relpath = tag_relpath[len(repo_branch_tag) + 1]
+                            tag_relpath = tag_relpath[len(repo_branch_tag) + 1 :]
                             if len(tag_relpath) > 0:
                                 repoRelPath = tag_relpath
                         break
