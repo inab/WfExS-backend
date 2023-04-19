@@ -32,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import types
+import urllib.parse
 import uuid
 
 from typing import (
@@ -60,6 +61,7 @@ from .common import (
     IdentifiedWorkflow,
     LicensedURI,
     MaterializedContent,
+    RemoteRepo,
     URIWithMetadata,
 )
 
@@ -105,7 +107,13 @@ from .pushers.nextcloud_export import NextcloudExportPlugin
 
 from .workflow import (
     WF,
+    WFException,
 )
+
+from .fetchers.trs_files import (
+    INTERNAL_TRS_SCHEME_PREFIX,
+)
+
 
 if TYPE_CHECKING:
     from typing import (
@@ -715,7 +723,6 @@ class WfExSBackend:
         workflow_config: "Optional[WorkflowConfigBlock]" = None,
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
     ) -> "WF":
-
         """
         Init function, which delegates on WF class
         """
@@ -1230,19 +1237,33 @@ class WfExSBackend:
         :param secContext: The security context which has to be passed to
         the fetchers, in case they have to be used
         """
-        return self.cacheHandler.fetch(
-            remote_file,
-            destdir=self.cachePathMap[cacheType],
-            offline=offline,
-            ignoreCache=ignoreCache,
-            registerInCache=registerInCache,
-            secContext=secContext,
-        )
+        if cacheType != CacheType.Workflow:
+            return self.cacheHandler.fetch(
+                remote_file,
+                destdir=self.cachePathMap[cacheType],
+                offline=offline,
+                ignoreCache=ignoreCache,
+                registerInCache=registerInCache,
+                secContext=secContext,
+            )
+        else:
+            workflow_dir, repo, effective_checkout = self.cacheWorkflow(
+                workflow_id=cast("WorkflowId", remote_file),
+                ignoreCache=ignoreCache,
+                offline=offline,
+            )
+            return (
+                ContentKind.Directory
+                if os.path.isdir(workflow_dir)
+                else ContentKind.File,
+                workflow_dir,
+                [],
+                tuple(),
+            )
 
     def instantiateEngine(
         self, engineDesc: "WorkflowType", stagedSetup: "StagedSetup"
     ) -> "AbstractWorkflowEngineType":
-
         return engineDesc.clazz.FromStagedSetup(
             staged_setup=stagedSetup,
             cache_dir=self.cacheDir,
@@ -1273,6 +1294,392 @@ class WfExSBackend:
             )
 
         self.cacheHandler.addRawSchemeHandlers({scheme.lower(): handler})
+
+    def cacheWorkflow(
+        self,
+        workflow_id: "WorkflowId",
+        version_id: "Optional[WFVersionId]" = None,
+        trs_endpoint: "Optional[str]" = None,
+        descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
+        ignoreCache: "bool" = False,
+        offline: "bool" = False,
+    ) -> "Tuple[AbsPath, RemoteRepo, Optional[RepoTag]]":
+        """
+        Fetch the whole workflow description based on the data obtained
+        from the TRS where it is being published.
+
+        If the workflow id is an URL, it is supposed to be a git repository,
+        and the version will represent either the branch, tag or specific commit.
+        So, the whole TRS fetching machinery is bypassed.workflowDir
+        """
+        parsedRepoURL = urllib.parse.urlparse(str(workflow_id))
+
+        # It is not an absolute URL, so it is being an identifier in the workflow
+        i_workflow: "Optional[IdentifiedWorkflow]" = None
+        engineDesc: "Optional[WorkflowType]" = None
+        guessedRepo: "Optional[RemoteRepo]" = None
+        if parsedRepoURL.scheme == "":
+            if (trs_endpoint is not None) and len(trs_endpoint) > 0:
+                i_workflow = self.getWorkflowRepoFromTRS(
+                    trs_endpoint,
+                    workflow_id,
+                    version_id,
+                    descriptor_type,
+                    ignoreCache=ignoreCache,
+                    offline=offline,
+                )
+            else:
+                raise WFException("trs_endpoint was not provided")
+        else:
+            engineDesc = None
+
+            # Trying to be smarter
+            guessedRepo = guess_repo_params(
+                parsedRepoURL, logger=self.logger, fail_ok=True
+            )
+
+            if guessedRepo is not None:
+                if guessedRepo.tag is None:
+                    guessedRepo = RemoteRepo(
+                        repo_url=guessedRepo.repo_url,
+                        tag=cast("RepoTag", version_id),
+                        rel_path=guessedRepo.rel_path,
+                    )
+            else:
+                (
+                    i_workflow,
+                    self.cacheROCrateFilename,
+                ) = self.getWorkflowRepoFromROCrateURL(
+                    cast("URIType", workflow_id),
+                    offline=offline,
+                    ignoreCache=ignoreCache,
+                )
+
+        if i_workflow is not None:
+            guessedRepo = i_workflow.remote_repo
+            engineDesc = i_workflow.workflow_type
+
+        if guessedRepo is None:
+            # raise WFException('Unable to guess repository from RO-Crate manifest')
+            guessedRepo = RemoteRepo(
+                repo_url=cast("RepoURL", workflow_id), tag=cast("RepoTag", version_id)
+            )
+
+        repoURL = guessedRepo.repo_url
+        repoTag = guessedRepo.tag
+        repoRelPath = guessedRepo.rel_path
+        repoType = guessedRepo.repo_type
+
+        repoDir: "Optional[AbsPath]" = None
+        repoEffectiveCheckout: "Optional[RepoTag]" = None
+        if ":" in repoURL:
+            parsedRepoURL = urllib.parse.urlparse(repoURL)
+            if len(parsedRepoURL.scheme) > 0:
+                # It can be either a relative path to a directory or to a file
+                # It could be even empty!
+                if repoRelPath == "":
+                    repoRelPath = None
+
+                repoDir, repoEffectiveCheckout = self.doMaterializeRepo(
+                    repoURL, repoTag
+                )
+
+        # For the cases of pure TRS repos, like Dockstore
+        if repoDir is None:
+            repoDir = cast("AbsPath", repoURL)
+
+        repo = RemoteRepo(
+            repo_url=repoURL,
+            tag=repoTag,
+            rel_path=repoRelPath,
+            repo_type=repoType,
+        )
+
+        return repoDir, repo, repoEffectiveCheckout
+
+    TRS_METADATA_FILE: "Final[RelPath]" = cast("RelPath", "trs_metadata.json")
+    TRS_QUERY_CACHE_FILE: "Final[RelPath]" = cast("RelPath", "trs_result.json")
+
+    def getWorkflowRepoFromTRS(
+        self,
+        trs_endpoint: "str",
+        workflow_id: "WorkflowId",
+        version_id: "Optional[WFVersionId]",
+        descriptor_type: "Optional[TRS_Workflow_Descriptor]",
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        meta_dir: "Optional[AbsPath]" = None,
+    ) -> "IdentifiedWorkflow":
+        """
+
+        :return:
+        """
+
+        # If nothing is set, just create a temporary directory
+        if meta_dir is None:
+            meta_dir = cast(
+                "AbsPath", tempfile.mkdtemp(prefix="WfExS", suffix="TRSFetched")
+            )
+            # Assuring this temporal directory is removed at the end
+            atexit.register(shutil.rmtree, meta_dir)
+        else:
+            # Assuring the destination directory does exist
+            os.makedirs(meta_dir, exist_ok=True)
+
+        if isinstance(workflow_id, int):
+            workflow_id_str = str(workflow_id)
+        else:
+            workflow_id_str = workflow_id
+
+        # Now, time to check whether it is a TRSv2
+        trs_endpoint_v2_meta_url = cast("URIType", trs_endpoint + "service-info")
+        trs_endpoint_v2_beta2_meta_url = cast("URIType", trs_endpoint + "metadata")
+        trs_endpoint_meta_url = None
+
+        # Needed to store this metadata
+        trsMetadataCache = os.path.join(meta_dir, self.TRS_METADATA_FILE)
+
+        try:
+            (
+                metaContentKind,
+                cachedTRSMetaFile,
+                trsMetaMeta,
+                trsMetaLicences,
+            ) = self.cacheHandler.fetch(
+                trs_endpoint_v2_meta_url,
+                destdir=meta_dir,
+                offline=offline,
+                ignoreCache=ignoreCache,
+            )
+            trs_endpoint_meta_url = trs_endpoint_v2_meta_url
+        except WFException as wfe:
+            try:
+                (
+                    metaContentKind,
+                    cachedTRSMetaFile,
+                    trsMetaMeta,
+                    trsMetaLicences,
+                ) = self.cacheHandler.fetch(
+                    trs_endpoint_v2_beta2_meta_url,
+                    destdir=meta_dir,
+                    offline=offline,
+                    ignoreCache=ignoreCache,
+                )
+                trs_endpoint_meta_url = trs_endpoint_v2_beta2_meta_url
+            except WFException as wfebeta:
+                raise WFException(
+                    "Unable to fetch metadata from {} in order to identify whether it is a working GA4GH TRSv2 endpoint. Exceptions:\n{}\n{}".format(
+                        trs_endpoint, wfe, wfebeta
+                    )
+                )
+
+        # Giving a friendly name
+        if not os.path.exists(trsMetadataCache):
+            os.symlink(os.path.basename(cachedTRSMetaFile), trsMetadataCache)
+
+        with open(trsMetadataCache, mode="r", encoding="utf-8") as ctmf:
+            trs_endpoint_meta = json.load(ctmf)
+
+        # Minimal check
+        trs_version = trs_endpoint_meta.get("api_version")
+        if trs_version is None:
+            trs_version = trs_endpoint_meta.get("type", {}).get("version")
+
+        if trs_version is None:
+            raise WFException(
+                "Unable to identify TRS version from {}".format(trs_endpoint_meta_url)
+            )
+
+        # Now, check the tool does exist in the TRS, and the version
+        trs_tools_url = cast(
+            "URIType",
+            urllib.parse.urljoin(
+                trs_endpoint,
+                WF.TRS_TOOLS_PATH + urllib.parse.quote(workflow_id_str, safe=""),
+            ),
+        )
+
+        trsQueryCache = os.path.join(meta_dir, self.TRS_QUERY_CACHE_FILE)
+        _, cachedTRSQueryFile, _, _ = self.cacheHandler.fetch(
+            trs_tools_url, destdir=meta_dir, offline=offline, ignoreCache=ignoreCache
+        )
+        # Giving a friendly name
+        if not os.path.exists(trsQueryCache):
+            os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
+
+        with open(trsQueryCache, mode="r", encoding="utf-8") as tQ:
+            rawToolDesc = tQ.read()
+
+        # If the tool does not exist, an exception will be thrown before
+        jd = json.JSONDecoder()
+        toolDesc = jd.decode(rawToolDesc)
+
+        # If the tool is not a workflow, complain
+        if toolDesc.get("toolclass", {}).get("name", "") != "Workflow":
+            raise WFException(
+                "Tool {} from {} is not labelled as a workflow. Raw answer:\n{}".format(
+                    workflow_id_str, trs_endpoint, rawToolDesc
+                )
+            )
+
+        possibleToolVersions = toolDesc.get("versions", [])
+        if len(possibleToolVersions) == 0:
+            raise WFException(
+                "Version {} not found in workflow {} from {} . Raw answer:\n{}".format(
+                    version_id, workflow_id_str, trs_endpoint, rawToolDesc
+                )
+            )
+
+        toolVersion = None
+        toolVersionId = str(version_id) if isinstance(version_id, int) else version_id
+        if (toolVersionId is not None) and len(toolVersionId) > 0:
+            for possibleToolVersion in possibleToolVersions:
+                if isinstance(possibleToolVersion, dict):
+                    possibleId = str(possibleToolVersion.get("id", ""))
+                    possibleName = str(possibleToolVersion.get("name", ""))
+                    if version_id in (possibleId, possibleName):
+                        toolVersion = possibleToolVersion
+                        break
+            else:
+                raise WFException(
+                    "Version {} not found in workflow {} from {} . Raw answer:\n{}".format(
+                        version_id, workflow_id_str, trs_endpoint, rawToolDesc
+                    )
+                )
+        else:
+            toolVersionId = ""
+            for possibleToolVersion in possibleToolVersions:
+                possibleToolVersionId = str(possibleToolVersion.get("id", ""))
+                if (
+                    len(possibleToolVersionId) > 0
+                    and toolVersionId < possibleToolVersionId
+                ):
+                    toolVersion = possibleToolVersion
+                    toolVersionId = possibleToolVersionId
+
+        if toolVersion is None:
+            raise WFException(
+                "No valid version was found in workflow {} from {} . Raw answer:\n{}".format(
+                    workflow_id_str, trs_endpoint, rawToolDesc
+                )
+            )
+
+        # The version has been found
+        toolDescriptorTypes = toolVersion.get("descriptor_type", [])
+        if not isinstance(toolDescriptorTypes, list):
+            raise WFException(
+                'Version {} of workflow {} from {} has no valid "descriptor_type" (should be a list). Raw answer:\n{}'.format(
+                    version_id, workflow_id_str, trs_endpoint, rawToolDesc
+                )
+            )
+
+        # Now, realize whether it matches
+        chosenDescriptorType = descriptor_type
+        if chosenDescriptorType is None:
+            for candidateDescriptorType in WF.RECOGNIZED_TRS_DESCRIPTORS.keys():
+                if candidateDescriptorType in toolDescriptorTypes:
+                    chosenDescriptorType = candidateDescriptorType
+                    break
+            else:
+                raise WFException(
+                    'Version {} of workflow {} from {} has no acknowledged "descriptor_type". Raw answer:\n{}'.format(
+                        version_id, workflow_id_str, trs_endpoint, rawToolDesc
+                    )
+                )
+        elif chosenDescriptorType not in toolVersion["descriptor_type"]:
+            raise WFException(
+                "Descriptor type {} not available for version {} of workflow {} from {} . Raw answer:\n{}".format(
+                    descriptor_type,
+                    version_id,
+                    workflow_id_str,
+                    trs_endpoint,
+                    rawToolDesc,
+                )
+            )
+        elif chosenDescriptorType not in WF.RECOGNIZED_TRS_DESCRIPTORS:
+            raise WFException(
+                "Descriptor type {} is not among the acknowledged ones by this backend. Version {} of workflow {} from {} . Raw answer:\n{}".format(
+                    descriptor_type,
+                    version_id,
+                    workflow_id_str,
+                    trs_endpoint,
+                    rawToolDesc,
+                )
+            )
+
+        toolFilesURL = (
+            trs_tools_url
+            + "/versions/"
+            + urllib.parse.quote(toolVersionId, safe="")
+            + "/"
+            + urllib.parse.quote(chosenDescriptorType, safe="")
+            + "/files"
+        )
+
+        # Detecting whether RO-Crate trick will work
+        if trs_endpoint_meta.get("organization", {}).get("name") == "WorkflowHub":
+            self.logger.debug("WorkflowHub workflow")
+            # And this is the moment where the RO-Crate must be fetched
+            roCrateURL = cast(
+                "URIType",
+                toolFilesURL + "?" + urllib.parse.urlencode({"format": "zip"}),
+            )
+
+            (
+                i_workflow,
+                self.cacheROCrateFilename,
+            ) = self.getWorkflowRepoFromROCrateURL(
+                roCrateURL,
+                expectedEngineDesc=WF.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType],
+                offline=offline,
+                ignoreCache=ignoreCache,
+            )
+            return i_workflow
+        else:
+            self.logger.debug("TRS workflow")
+            # Learning the available files and maybe
+            # which is the entrypoint to the workflow
+            _, trsFilesDir, trsFilesMeta, _ = self.cacheFetch(
+                cast("URIType", INTERNAL_TRS_SCHEME_PREFIX + ":" + toolFilesURL),
+                CacheType.TRS,
+                offline=offline,
+                ignoreCache=ignoreCache,
+            )
+
+            expectedEngineDesc = WF.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
+            remote_workflow_entrypoint = trsFilesMeta[0].metadata.get(
+                "remote_workflow_entrypoint"
+            )
+            if remote_workflow_entrypoint is not None:
+                # Give it a chance to identify the original repo of the workflow
+                repo = guess_repo_params(
+                    remote_workflow_entrypoint, logger=self.logger, fail_ok=True
+                )
+
+                if repo is not None:
+                    self.logger.debug(
+                        "Derived repository {} ({} , rel {}) from {}".format(
+                            repo.repo_url, repo.tag, repo.rel_path, trs_tools_url
+                        )
+                    )
+                    return IdentifiedWorkflow(
+                        workflow_type=expectedEngineDesc, remote_repo=repo
+                    )
+
+            workflow_entrypoint = trsFilesMeta[0].metadata.get("workflow_entrypoint")
+            if workflow_entrypoint is not None:
+                self.logger.debug(
+                    "Using raw files from TRS tool {}".format(trs_tools_url)
+                )
+                return IdentifiedWorkflow(
+                    workflow_type=expectedEngineDesc,
+                    remote_repo=RemoteRepo(
+                        repo_url=cast("RepoURL", trsFilesDir),
+                        rel_path=workflow_entrypoint,
+                    ),
+                )
+
+        raise WFException("Unable to find a workflow in {}".format(trs_tools_url))
 
     def doMaterializeRepo(
         self,
@@ -1325,6 +1732,7 @@ class WfExSBackend:
         roCrateURL: "URIType",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
         offline: "bool" = False,
+        ignoreCache: "bool" = False,
     ) -> "Tuple[IdentifiedWorkflow, AbsPath]":
         """
 
@@ -1332,7 +1740,9 @@ class WfExSBackend:
         :param expectedEngineDesc: If defined, an instance of WorkflowType
         :return:
         """
-        roCrateFile = self.downloadROcrate(roCrateURL, offline=offline)
+        roCrateFile = self.cacheROcrate(
+            roCrateURL, offline=offline, ignoreCache=ignoreCache
+        )
         self.logger.info(
             "downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile)
         )
@@ -1459,8 +1869,13 @@ class WfExSBackend:
         # It must return four elements:
         return IdentifiedWorkflow(workflow_type=engineDesc, remote_repo=remote_repo)
 
-    def downloadROcrate(
-        self, roCrateURL: "URIType", offline: "bool" = False
+    DEFAULT_RO_EXTENSION: "Final[str]" = ".crate.zip"
+
+    def cacheROcrate(
+        self,
+        roCrateURL: "URIType",
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
     ) -> "AbsPath":
         """
         Download RO-crate from WorkflowHub (https://dev.workflowhub.eu/)
@@ -1475,7 +1890,10 @@ class WfExSBackend:
 
         try:
             roCK, roCrateFile, _, _ = self.cacheHandler.fetch(
-                roCrateURL, destdir=self.cacheROCrateDir, offline=offline
+                roCrateURL,
+                destdir=self.cacheROCrateDir,
+                offline=offline,
+                ignoreCache=ignoreCache,
             )
         except Exception as e:
             raise WfExSBackendException(
@@ -1484,7 +1902,7 @@ class WfExSBackend:
 
         crate_hashed_id = hashlib.sha1(roCrateURL.encode("utf-8")).hexdigest()
         cachedFilename = os.path.join(
-            self.cacheROCrateDir, crate_hashed_id + WF.DEFAULT_RO_EXTENSION
+            self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION
         )
         if not os.path.exists(cachedFilename):
             os.symlink(os.path.basename(roCrateFile), cachedFilename)
