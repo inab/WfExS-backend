@@ -122,7 +122,7 @@ class DXFFat(DXF):
                 manifest,
                 parsed_manifest,
                 content_digest=dcd_h,
-                verify=True,
+                verify=False,
                 get_content_digest=True,
             )
         else:
