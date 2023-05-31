@@ -66,7 +66,7 @@ import urllib.parse
 import uuid
 
 import magic  # type: ignore
-from rfc6920.methods import extract_digest  # type: ignore[import]
+from rfc6920.methods import extract_digest
 import rocrate.model.entity  # type:ignore
 import rocrate.model.dataset  # type:ignore
 import rocrate.model.computationalworkflow  # type:ignore
@@ -113,6 +113,8 @@ class FormalParameter(rocrate.model.entity.Entity):  # type: ignore[misc]
     ):
         fp_properties = {
             "name": name,
+            # As of https://www.researchobject.org/ro-crate/1.1/workflows.html#describing-inputs-and-outputs
+            "conformsTo": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE/",
         }
 
         if additional_type is not None:
@@ -255,6 +257,7 @@ def add_GeneratedContent_to_crate(
     digest, algo = extract_digest(the_content.signature)
     if digest is None:
         digest, algo = unstringifyDigest(the_content.signature)
+    assert algo is not None
     crate_file = add_file_to_crate(
         crate,
         the_path=the_content.local,
@@ -320,7 +323,6 @@ def add_wfexs_to_crate(
     ]
     crate.add(*wrroc_profiles)
     crate.root_dataset.append_to("conformsTo", wrroc_profiles)
-    crate.root_dataset.append_to()
 
     # Now, WfExS reference as such
     wf_wfexs = rocrate.model.softwareapplication.SoftwareApplication(
@@ -467,6 +469,12 @@ def create_workflow_crate(
         gen_cwl=False,
     )
 
+    wf_file.append_to(
+        "conformsTo",
+        # As of https://www.researchobject.org/ro-crate/1.1/workflows.html#complying-with-bioschemas-computational-workflow-profile
+        {"@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"},
+    )
+
     weng_crate = rocrate.model.softwareapplication.SoftwareApplication(
         wfCrate, identifier=materializedEngine.instance.engine_url
     )
@@ -500,16 +508,27 @@ def create_workflow_crate(
 
     rel_entities = []
     if lW.relPathFiles:
+        logging.error(f"RPF {lW.relPathFiles}")
         for rel_file in lW.relPathFiles:
-            rocrate_file_id = rocrate_wf_folder + "/" + rel_file
-            if rocrate_file_id != rocrate_wf_id:
-                the_entity = add_file_to_crate(
+            # First, are we dealing with relative files or with URIs?
+            p_rel_file = urllib.parse.urlparse(rel_file)
+            if p_rel_file.scheme != "":
+                the_entity = rocrate.model.creativework.CreativeWork(
                     wfCrate,
-                    the_path=os.path.join(lW.dir, rel_file),
-                    the_name=cast("RelPath", rocrate_wf_folder + "/" + rel_file),
-                    the_uri=cast("URIType", rocrate_file_id),
+                    identifier=rel_file,
                 )
+                wfCrate.add(the_entity)
                 rel_entities.append(the_entity)
+            else:
+                rocrate_file_id = rocrate_wf_folder + "/" + rel_file
+                if rocrate_file_id != rocrate_wf_id:
+                    the_entity = add_file_to_crate(
+                        wfCrate,
+                        the_path=os.path.join(lW.dir, rel_file),
+                        the_name=cast("RelPath", rocrate_wf_folder + "/" + rel_file),
+                        the_uri=cast("URIType", rocrate_file_id),
+                    )
+                    rel_entities.append(the_entity)
 
     if local_rocrate_wf_id != rocrate_wf_id:
         local_wf_file_pre = wfCrate.get(local_rocrate_wf_id)
@@ -904,6 +923,7 @@ def add_containers_to_workflow(
                 digest, algo = extract_digest(container.signature)
                 if digest is None:
                     digest, algo = unstringifyDigest(container.signature)
+                assert algo is not None
                 the_signature = hexDigest(algo, digest)
 
                 software_container = SoftwareContainer(
@@ -1129,7 +1149,7 @@ def add_execution_to_crate(
         crate, stagedExec.outputsDir, stagedExec.started, stagedExec.ended
     )
     crate.add(crate_action)
-    crate.append_to("mentions", crate_action)
+    wf_crate.append_to("mentions", crate_action)
     crate_action["instrument"] = wf_crate
 
     crate_inputs = addInputsResearchObject(

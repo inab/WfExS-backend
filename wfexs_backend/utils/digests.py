@@ -39,6 +39,11 @@ if TYPE_CHECKING:
         Tuple,
         Union,
     )
+
+    from typing_extensions import (
+        Protocol,
+    )
+
     from ..common import (
         AbstractGeneratedContent,
         AnyPath,
@@ -47,6 +52,11 @@ if TYPE_CHECKING:
 
     FingerprintMethod = Callable[[str, bytes], Fingerprint]
     RawFingerprintMethod = Callable[[str, bytes], bytes]
+
+    class Hexable(Protocol):
+        def hex(self) -> "str":
+            ...
+
 
 from ..common import (
     scantree,
@@ -73,7 +83,7 @@ def unstringifyDigest(digestion: "Fingerprint") -> "Tuple[bytes, str]":
     return base64.b64decode(b64digest), algo
 
 
-def hexDigest(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
+def hexDigest(digestAlgorithm: "str", digest: "Hexable") -> "Fingerprint":
     return cast("Fingerprint", digest.hex())
 
 
