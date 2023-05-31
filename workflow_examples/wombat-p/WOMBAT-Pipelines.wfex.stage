@@ -3,20 +3,26 @@ workflow_config:
   secure: false
   writable_containers: true
   nextflow:
-    version: 20.01.0
+    version: 21.10.3
     profile: docker
 # All the inputs must be URLs or CURIEs from identifiers.org
 params:
-  worflow: "all"
-  sdrf:
-    c-l-a-s-s: File
-    url: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/dev/data/sdrf_UPS.tsv
   fasta:
     c-l-a-s-s: File
-    url: https://raw.githubusercontent.com/wombat-p/MaxQuant-Workflow/dev/data/yeast_UPS.fasta
+    url: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/test_data/ABRF_iPRG_2012_target.fasta
+  raws:
+    c-l-a-s-s: File
+    url:
+      - https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/test_data/OVEMB150205_12.raw
+      - https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/test_data/OVEMB150205_14.raw
+  exp_design:
+    c-l-a-s-s: File
+    url: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/test_data/exp_design.txt
   parameters:
     c-l-a-s-s: File
-    url: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/test_data/test_params.yml   
+    url: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/dev/test_data/test_params.yml
+  run_statistics: false
+  workflow: "all"
 outputs:
   outdir:
     c-l-a-s-s: Directory

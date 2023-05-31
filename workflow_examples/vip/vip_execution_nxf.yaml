@@ -1,0 +1,114 @@
+workflow_id: https://raw.githubusercontent.com/molgenis/vip/compatibility%2Fwfexs/vip_vcf.nf
+workflow_config:
+  secure: false
+  containerType: none
+  nextflow:
+    version: 21.10.6
+# All the inputs must be URLs or CURIEs from identifiers.org
+placeholders:
+  assembly: "GRCh37"
+  annotate_ver: 20230116
+  resources_prefix: file:///scratch/laura/vip/resources
+  singularity_image_dir: file:///scratch/laura/vip/images
+  //public_resources_prefix: https://download.molgeniscloud.org/downloads/vip/resources
+params:
+  // assembly: "{assembly}"
+  input:
+    c-l-a-s-s: File
+    url: file:///scratch/laura/vip/FAM0001816_subset_v2.vcf.gz
+    secondary-urls: file:///scratch/laura/vip/FAM0001815_subset_v2.vcf.gz.tbi
+
+  GRCh37.reference.fasta:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/human_g1k_v37.fasta.gz"
+  GRCh37.reference.fastaFai:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/human_g1k_v37.fasta.gz.fai"
+  GRCh37.reference.fastaGzi:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/human_g1k_v37.fasta.gz.gzi"
+
+  vcf.gvcf_merge_preset: "gatk"
+  vcf.start: ""
+  vcf.annotate.annotsv_cache_dir:
+    c-l-a-s-s: Directory
+    url: "{resources_prefix}/annotsv/v3.2.3"
+  vcf.annotate.vep_buffer_size: 1000
+  vcf.annotate.vep_cache_dir:
+    c-l-a-s-s: Directory
+    url: "{resources_prefix}/vep/cache"
+  vcf.annotate.vep_plugin_dir:
+    c-l-a-s-s: Directory
+    url: "{resources_prefix}/vep/plugins"
+  vcf.annotate.vep_plugin_hpo:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/hpo_{annotate_ver}.tsv"
+  vcf.annotate.vep_plugin_inheritance:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/inheritance_{annotate_ver}.tsv"
+  vcf.annotate.vep_plugin_vkgl_mode: 1
+  vcf.annotate.GRCh37.capice_model:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/capice_model_v5.0.0-v1.ubj"
+  vcf.annotate.GRCh37.vep_custom_gnomad:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/gnomad.total.r2.1.1.sites.stripped.patch1.vcf.gz"
+  vcf.annotate.GRCh37.vep_custom_clinvar:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/clinvar_20230115.vcf.gz"
+  vcf.annotate.GRCh37.vep_custom_phylop:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/hg19.100way.phyloP100way.bw"
+  vcf.annotate.GRCh37.vep_plugin_spliceai_indel:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/spliceai_scores.masked.indel.hg19.vcf.gz"
+  vcf.annotate.GRCh37.vep_plugin_spliceai_snv:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/spliceai_scores.masked.snv.hg19.vcf.gz"
+  vcf.annotate.GRCh37.vep_plugin_utrannotator:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/uORF_5UTR_PUBLIC.txt"
+  vcf.annotate.GRCh37.vep_plugin_vkgl:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/vkgl_consensus_20230101.tsv"
+  vcf.classify.annotate_labels: 0
+  vcf.classify.annotate_path: 1
+  vcf.classify.GRCh37.decision_tree:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/decision_tree_{assembly}.json"
+  vcf.classify_samples.annotate_labels: 0
+  vcf.classify_samples.annotate_path: 1
+  vcf.classify_samples.GRCh37.decision_tree:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/decision_tree_samples.json"
+  vcf.filter.classes: "VUS,LP,P"
+  vcf.filter.consequences: true
+  vcf.filter_samples.classes: "MV,OK"
+  vcf.report.max_records: ""
+  vcf.report.max_samples: ""
+  vcf.report.template: ""
+  vcf.report.GRCh37.genes:
+    c-l-a-s-s: File
+    url: "{resources_prefix}/GRCh37/GCF_000001405.25_GRCh37.p13_genomic_g1k.gff.gz"
+
+  CMD_ANNOTSV: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/annotsv-3.2.3.sif AnnotSV"
+  CMD_BCFTOOLS: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/bcftools-1.14.sif bcftools"
+  CMD_CAPICE: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/capice-5.1.0.sif capice"
+  CMD_GLNEXUS: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/glnexus_v1.4.1.sif glnexus_cli"
+  CMD_VEP: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/vep-107.0.sif vep"
+  CMD_FILTERVEP: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/vep-107.0.sif filter_vep"
+  CMD_BGZIP: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/vep-107.0.sif bgzip"
+  CMD_SAMTOOLS: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/samtools-1.16.sif samtools"
+  CMD_VCFREPORT: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/vcf-report-5.2.1.sif"
+  CMD_VCFDECISIONTREE: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/vcf-decision-tree-3.5.2.sif"
+  CMD_VCFINHERITANCEMATCHER: "singularity exec --bind {singularity_image_dir} {singularity_image_dir}/vcf-inheritance-matcher-2.1.5.sif"
+
+  output:
+    c-l-a-s-s: Directory
+    autoFill: true
+    autoPrefix: true
+
+outputs:
+  output:
+    c-l-a-s-s: Directory
+    glob: "*"
