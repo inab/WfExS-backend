@@ -113,7 +113,6 @@ class FormalParameter(rocrate.model.entity.Entity):  # type: ignore[misc]
     ):
         fp_properties = {
             "name": name,
-            "conformsTo": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE/",
         }
 
         if additional_type is not None:
@@ -300,18 +299,18 @@ def add_wfexs_to_crate(
     wrroc_profiles = [
         rocrate.model.creativework.CreativeWork(
             crate,
-            identifier="https://w3id.org/ro/wfrun/process/0.1",
-            properties={"name": "ProcessRun Crate", "version": "0.1"},
+            identifier="https://w3id.org/ro/wfrun/process/0.2",
+            properties={"name": "ProcessRun Crate", "version": "0.2"},
         ),
         rocrate.model.creativework.CreativeWork(
             crate,
-            identifier="https://w3id.org/ro/wfrun/workflow/0.1",
-            properties={"name": "Workflow Run Crate", "version": "0.1"},
+            identifier="https://w3id.org/ro/wfrun/workflow/0.2",
+            properties={"name": "Workflow Run Crate", "version": "0.2"},
         ),
         rocrate.model.creativework.CreativeWork(
             crate,
-            identifier="https://w3id.org/ro/wfrun/provenance/0.1",
-            properties={"name": "Provenance Run Crate", "version": "0.1"},
+            identifier="https://w3id.org/ro/wfrun/provenance/0.2",
+            properties={"name": "Provenance Run Crate", "version": "0.2"},
         ),
         rocrate.model.creativework.CreativeWork(
             crate,
@@ -321,6 +320,7 @@ def add_wfexs_to_crate(
     ]
     crate.add(*wrroc_profiles)
     crate.root_dataset.append_to("conformsTo", wrroc_profiles)
+    crate.root_dataset.append_to()
 
     # Now, WfExS reference as such
     wf_wfexs = rocrate.model.softwareapplication.SoftwareApplication(
@@ -467,11 +467,6 @@ def create_workflow_crate(
         gen_cwl=False,
     )
 
-    wf_file.append_to(
-        "conformsTo",
-        {"@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"},
-    )
-
     weng_crate = rocrate.model.softwareapplication.SoftwareApplication(
         wfCrate, identifier=materializedEngine.instance.engine_url
     )
@@ -536,13 +531,6 @@ def create_workflow_crate(
         # Transferring the properties
         for prop_name in ("contentSize", "encodingFormat", "identifier", "sha256"):
             local_wf_file[prop_name] = local_wf_file_pre[prop_name]
-
-        local_wf_file.append_to(
-            "conformsTo",
-            {
-                "@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"
-            },
-        )
 
         wf_file["isBasedOn"] = local_wf_file
 
@@ -1141,6 +1129,7 @@ def add_execution_to_crate(
         crate, stagedExec.outputsDir, stagedExec.started, stagedExec.ended
     )
     crate.add(crate_action)
+    crate.append_to("mentions", crate_action)
     crate_action["instrument"] = wf_crate
 
     crate_inputs = addInputsResearchObject(
