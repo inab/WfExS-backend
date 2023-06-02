@@ -121,7 +121,6 @@ if TYPE_CHECKING:
         ClassVar,
         IO,
         Iterator,
-        List,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -1223,7 +1222,7 @@ class WfExSBackend:
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         secContext: "Optional[SecurityContextConfig]" = None,
-    ) -> "Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]":
+    ) -> "Tuple[ContentKind, AbsPath, Sequence[URIWithMetadata], Tuple[URIType, ...]]":
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
 

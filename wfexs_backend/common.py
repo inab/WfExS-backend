@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Callable,
-        Dict,
         List,
         Mapping,
         MutableMapping,
@@ -48,6 +47,10 @@ if TYPE_CHECKING:
     # pylint: disable-next=unused-import
     from typing import (
         Iterator,
+    )
+
+    from typing_extensions import (
+        TypeAlias,
     )
 
 if TYPE_CHECKING:
@@ -87,7 +90,7 @@ if TYPE_CHECKING:
     # This is an absolute path
     AbsPath = NewType("AbsPath", str)
     # This is either a relative or an absolute path
-    AnyPath = Union[RelPath, AbsPath]
+    AnyPath: TypeAlias = Union[RelPath, AbsPath]
 
 DEFAULT_DOCKER_CMD = cast("SymbolicName", "docker")
 DEFAULT_SINGULARITY_CMD = cast("SymbolicName", "singularity")
@@ -97,7 +100,7 @@ DEFAULT_JAVA_CMD = cast("SymbolicName", "java")
 DEFAULT_FUSERMOUNT_CMD = cast("SymbolicName", "fusermount")
 
 if TYPE_CHECKING:
-    ProgsMapping = MutableMapping[SymbolicName, AnyPath]
+    ProgsMapping: TypeAlias = MutableMapping[SymbolicName, AnyPath]
 
 DEFAULT_PROGS: "ProgsMapping" = {
     DEFAULT_DOCKER_CMD: cast("RelPath", DEFAULT_DOCKER_CMD),
@@ -156,27 +159,28 @@ if TYPE_CHECKING:
     # Exit value from any kind of execution
     ExitVal = NewType("ExitVal", int)
 
-    SecurityContextConfig = Dict[str, Any]
-    SecurityContextConfigBlock = MutableMapping[str, SecurityContextConfig]
+    SecurityContextConfig: TypeAlias = Mapping[str, Any]
+    WritableSecurityContextConfig: TypeAlias = MutableMapping[str, Any]
+    SecurityContextConfigBlock: TypeAlias = Mapping[str, SecurityContextConfig]
 
     # TODO: study using TypedDict
-    LocalConfig = Mapping[str, Any]
-    ContainerLocalConfig = Mapping[str, Any]
-    EngineLocalConfig = Mapping[str, Any]
-    WorkflowConfigBlock = Mapping[str, Any]
-    WorkflowMetaConfigBlock = Mapping[str, Any]
-    WritableWorkflowMetaConfigBlock = MutableMapping[str, Any]
-    WfExSConfigBlock = Mapping[str, Any]
-    WritableWfExSConfigBlock = MutableMapping[str, Any]
-    ExportActionBlock = Mapping[str, Any]
-    ParamsBlock = Mapping[str, Any]
-    MutableParamsBlock = MutableMapping[str, Any]
-    OutputsBlock = Mapping[str, Any]
-    PlaceHoldersBlock = Mapping[str, Union[int, float, str]]
+    LocalConfig: TypeAlias = Mapping[str, Any]
+    ContainerLocalConfig: TypeAlias = Mapping[str, Any]
+    EngineLocalConfig: TypeAlias = Mapping[str, Any]
+    WorkflowConfigBlock: TypeAlias = Mapping[str, Any]
+    WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
+    WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
+    WfExSConfigBlock: TypeAlias = Mapping[str, Any]
+    WritableWfExSConfigBlock: TypeAlias = MutableMapping[str, Any]
+    ExportActionBlock: TypeAlias = Mapping[str, Any]
+    ParamsBlock: TypeAlias = Mapping[str, Any]
+    MutableParamsBlock: TypeAlias = MutableMapping[str, Any]
+    OutputsBlock: TypeAlias = Mapping[str, Any]
+    PlaceHoldersBlock: TypeAlias = Mapping[str, Union[int, float, str]]
 
     # As each workflow engine can have its own naming convention, leave them to
     # provide it
-    ContainerFileNamingMethod = Callable[[URIType], RelPath]
+    ContainerFileNamingMethod: TypeAlias = Callable[[URIType], RelPath]
 
 
 ## BEWARE!!!! The names of these keys MUST NOT CHANGE
@@ -260,7 +264,7 @@ class LicensedURI(NamedTuple):
 
 
 if TYPE_CHECKING:
-    AnyURI = Union[URIType, LicensedURI]
+    AnyURI: TypeAlias = Union[URIType, LicensedURI]
 
 
 class URIWithMetadata(NamedTuple):
@@ -301,12 +305,12 @@ class MaterializedContent(NamedTuple):
 if TYPE_CHECKING:
     from mypy_extensions import DefaultNamedArg
 
-    ProtocolFetcherReturn = Tuple[
+    ProtocolFetcherReturn: TypeAlias = Tuple[
         Union[AnyURI, ContentKind, Sequence[AnyURI]],
         Sequence[URIWithMetadata],
         Optional[Tuple[URIType, ...]],
     ]
-    ProtocolFetcher = Callable[
+    ProtocolFetcher: TypeAlias = Callable[
         [
             URIType,
             AbsPath,
@@ -315,7 +319,7 @@ if TYPE_CHECKING:
         ProtocolFetcherReturn,
     ]
 
-    MaterializedInputValues = Union[
+    MaterializedInputValues: TypeAlias = Union[
         Sequence[bool],
         Sequence[str],
         Sequence[int],
@@ -447,7 +451,7 @@ class GeneratedDirectoryContent(AbstractGeneratedContent):
 
 
 if TYPE_CHECKING:
-    AnyContent = Union[MaterializedContent, AbstractGeneratedContent]
+    AnyContent: TypeAlias = Union[MaterializedContent, AbstractGeneratedContent]
 
 
 class MaterializedOutput(NamedTuple):
@@ -580,7 +584,7 @@ class AbstractWorkflowEngineType(abc.ABC):
 
 
 if TYPE_CHECKING:
-    TRS_Workflow_Descriptor = str
+    TRS_Workflow_Descriptor: TypeAlias = str
 
 
 class WorkflowType(NamedTuple):

@@ -26,14 +26,19 @@ __official_name__ = "WfExS-backend"
 
 from typing import (
     cast,
-    MutableMapping,
-    Optional,
-    Sequence,
-    Tuple,
+    TYPE_CHECKING,
 )
 
+if TYPE_CHECKING:
+    from typing import (
+        MutableMapping,
+        Optional,
+        Sequence,
+        Tuple,
+    )
 
-def describeGitRepo(repo: str) -> Tuple[str, str]:
+
+def describeGitRepo(repo: "str") -> "Tuple[str, str]":
     """Describe the repository version.
 
     Args:
@@ -45,16 +50,18 @@ def describeGitRepo(repo: str) -> Tuple[str, str]:
     import datetime
     import dulwich.objects
     import dulwich.porcelain
-    import dulwich.repo
-    import dulwich.walk
     import time
 
+    if TYPE_CHECKING:
+        import dulwich.repo
+        import dulwich.walk
+
     # Get the repository
-    r: dulwich.repo.Repo
+    r: "dulwich.repo.Repo"
     with dulwich.porcelain.open_repo_closing(repo) as r:  # type:ignore
         # Get a list of all tags
         refs = r.get_refs()
-        tags: MutableMapping[str, Tuple[datetime.datetime, str]] = {}
+        tags: "MutableMapping[str, Tuple[datetime.datetime, str]]" = {}
         for keyb, value in refs.items():
             key = keyb.decode()
             obj = r.get_object(value)
@@ -68,7 +75,7 @@ def describeGitRepo(repo: str) -> Tuple[str, str]:
                     commit = obj
                 elif isinstance(obj, dulwich.objects.Tag):
                     commit_o = obj.object
-                    commit = cast(dulwich.objects.Commit, r.get_object(commit_o[1]))
+                    commit = cast("dulwich.objects.Commit", r.get_object(commit_o[1]))
                 else:
                     continue
             except AttributeError:
@@ -78,7 +85,7 @@ def describeGitRepo(repo: str) -> Tuple[str, str]:
                 commit.id.decode("ascii"),
             )
 
-        sorted_tags: Sequence[Tuple[str, Tuple[datetime.datetime, str]]] = sorted(
+        sorted_tags: "Sequence[Tuple[str, Tuple[datetime.datetime, str]]]" = sorted(
             tags.items(), key=lambda tag: tag[1][0], reverse=True
         )
 
@@ -96,7 +103,7 @@ def describeGitRepo(repo: str) -> Tuple[str, str]:
         commit_count = 0
 
         # Walk through all commits
-        walker: dulwich.walk.Walker
+        walker: "dulwich.walk.Walker"
         walker = r.get_walker()  # type: ignore[no-untyped-call]
         skipFirst = True
         for entry in walker:
@@ -125,12 +132,12 @@ def describeGitRepo(repo: str) -> Tuple[str, str]:
 
 
 # It returns something similar to 'git describe --tags'
-def get_WfExS_version() -> Tuple[str, Optional[str]]:
+def get_WfExS_version() -> "Tuple[str, Optional[str]]":
     import os
     import sys
     import dulwich.errors
 
-    vertuple: Tuple[str, Optional[str]]
+    vertuple: "Tuple[str, Optional[str]]"
     vertuple = __version__, None
     executable = os.path.basename(sys.argv[0])
     # try:

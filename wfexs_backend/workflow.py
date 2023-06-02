@@ -92,6 +92,7 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
         WorkflowMetaConfigBlock,
         WorkflowType,
+        WritableSecurityContextConfig,
         WritableWorkflowMetaConfigBlock,
         URIType,
     )
@@ -2161,10 +2162,14 @@ class WF:
                 elems = self.locateExportItems(action.what)
 
                 # check the security context is available
-                a_setup_block: "Optional[SecurityContextConfig]" = action.setup
-                if a_setup_block is not None:
+                a_setup_block: "Optional[WritableSecurityContextConfig]"
+                if action.setup is not None:
                     # Clone it
-                    a_setup_block = a_setup_block.copy()
+                    a_setup_block = cast(
+                        "WritableSecurityContextConfig", copy.copy(action.setup)
+                    )
+                else:
+                    a_setup_block = None
 
                 if action.context_name is None:
                     pass
@@ -2176,7 +2181,9 @@ class WF:
                         )
                     # Merging both setup blocks
                     if a_setup_block is None:
-                        a_setup_block = setup_block
+                        a_setup_block = cast(
+                            "WritableSecurityContextConfig", copy.copy(setup_block)
+                        )
                     else:
                         a_setup_block.update(setup_block)
                 else:

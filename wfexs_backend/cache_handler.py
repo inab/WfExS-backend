@@ -17,6 +17,7 @@
 
 from __future__ import absolute_import
 
+import copy
 import datetime
 import hashlib
 import inspect
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Iterator,
-        List,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         ProtocolFetcher,
         RelPath,
         SecurityContextConfig,
+        WritableSecurityContextConfig,
         URIType,
     )
 
@@ -533,7 +534,7 @@ class SchemeHandlerCacheHandler:
         self,
         the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
         destdir: "Optional[AbsPath]" = None,
-        fetched_metadata_array: "Optional[List[URIWithMetadata]]" = None,
+        fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
         finalCachedFilename: "Optional[AbsPath]" = None,
         tempCachedFilename: "Optional[AbsPath]" = None,
         inputKind: "Optional[ContentKind]" = None,
@@ -579,7 +580,7 @@ class SchemeHandlerCacheHandler:
         hashDir: "AbsPath",
         the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
         destdir: "AbsPath",
-        fetched_metadata_array: "Optional[List[URIWithMetadata]]" = None,
+        fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
         finalCachedFilename: "Optional[AbsPath]" = None,
         tempCachedFilename: "Optional[AbsPath]" = None,
         inputKind: "Optional[Union[ContentKind, AnyURI, Sequence[AnyURI]]]" = None,
@@ -802,7 +803,7 @@ class SchemeHandlerCacheHandler:
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         secContext: "Optional[SecurityContextConfig]" = None,
-    ) -> "Tuple[ContentKind, AbsPath, List[URIWithMetadata], Tuple[URIType, ...]]":
+    ) -> "Tuple[ContentKind, AbsPath, Sequence[URIWithMetadata], Tuple[URIType, ...]]":
         if destdir is None:
             destdir = self.cacheDir
 
@@ -856,7 +857,7 @@ class SchemeHandlerCacheHandler:
         metadata_array = []
         licences: "MutableSequence[URIType]" = []
         # The security context could be augmented, so avoid side effects
-        currentSecContext = dict() if secContext is None else secContext.copy()
+        currentSecContext = dict() if secContext is None else copy.copy(secContext)
 
         relFinalCachedFilename: "Optional[RelPath]"
         finalCachedFilename: "Optional[AbsPath]"
@@ -933,7 +934,7 @@ class SchemeHandlerCacheHandler:
                     inputKindRaw = metaStructure.get("kind")
                     if inputKindRaw is None:
                         inputKind = cast(
-                            "Union[URIType, List[URIType]]",
+                            "Union[URIType, Sequence[URIType]]",
                             metaStructure["resolves_to"],
                         )
                     else:
@@ -977,7 +978,9 @@ class SchemeHandlerCacheHandler:
                     break
                 else:
                     # Prepare the attachedSecContext
-                    usableSecContext = currentSecContext.copy()
+                    usableSecContext = cast(
+                        "WritableSecurityContextConfig", copy.copy(currentSecContext)
+                    )
                     if attachedSecContext is not None:
                         usableSecContext.update(attachedSecContext)
 

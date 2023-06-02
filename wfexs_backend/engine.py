@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Callable,
-        List,
         Mapping,
         MutableSequence,
         Optional,
@@ -133,7 +132,7 @@ class WorkflowEngineException(AbstractWfExSException):
     pass
 
 
-CONTAINER_FACTORY_CLASSES: "List[Type[ContainerFactory]]" = [
+CONTAINER_FACTORY_CLASSES: "Sequence[Type[ContainerFactory]]" = [
     SingularityContainerFactory,
     DockerContainerFactory,
     PodmanContainerFactory,
@@ -528,7 +527,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @abc.abstractmethod
     def materializeWorkflow(
         self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
-    ) -> "Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]":
+    ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
         localWorkflow directory, as well as the list of containers
@@ -538,7 +537,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         pass
 
-    def sideContainers(self) -> "List[ContainerTaggedName]":
+    def sideContainers(self) -> "Sequence[ContainerTaggedName]":
         """
         Containers needed by the engine to work
         """

@@ -49,7 +49,6 @@ from .common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
-        List,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -58,6 +57,10 @@ if TYPE_CHECKING:
         Set,
         Tuple,
         Union,
+    )
+
+    from typing_extensions import (
+        TypeAlias,
     )
 
     from .common import (
@@ -77,7 +80,7 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
-    ExecInputVal = Union[
+    ExecInputVal: TypeAlias = Union[
         bool,
         int,
         float,
@@ -133,7 +136,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     PODMAN_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20210921111717")
     NO_WRAPPER_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20210921111717")
-    CWLTOOL_MAX_PYVER: "List[Tuple[Optional[int], Optional[int], EngineVersion]]" = [
+    CWLTOOL_MAX_PYVER: "Sequence[Tuple[Optional[int], Optional[int], EngineVersion]]" = [
         (3, None, NO_WRAPPER_CWLTOOL_VERSION),
         (3, 6, cast("EngineVersion", "3.1.20220116183622")),
         (None, None, DEFAULT_CWLTOOL_VERSION),
@@ -176,7 +179,6 @@ class CWLWorkflowEngine(WorkflowEngine):
         allowOther: "bool" = False,
         config_directory: "Optional[AnyPath]" = None,
     ):
-
         super().__init__(
             cacheDir=cacheDir,
             workflow_config=workflow_config,
@@ -490,7 +492,6 @@ class CWLWorkflowEngine(WorkflowEngine):
     def __get_engine_version_str_local(
         self, matWfEng: "MaterializedWorkflowEngine"
     ) -> "WorkflowEngineVersionStr":
-
         # CWLWorkflowEngine directory is needed
         cwltool_install_dir = matWfEng.engine_path
 
@@ -612,7 +613,7 @@ STDERR
 
     def materializeWorkflow(
         self, matWorkflowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
-    ) -> "Tuple[MaterializedWorkflowEngine, List[ContainerTaggedName]]":
+    ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
         localWorkflow directory, as well as the list of containers.
@@ -730,7 +731,7 @@ STDERR
         )
         return newWfEngine, list(containerTags)
 
-    def sideContainers(self) -> "List[ContainerTaggedName]":
+    def sideContainers(self) -> "Sequence[ContainerTaggedName]":
         """
         Containers needed by the engine to work
         """

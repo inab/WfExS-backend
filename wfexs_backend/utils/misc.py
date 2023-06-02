@@ -30,10 +30,9 @@ from typing import (
 if TYPE_CHECKING:
     from typing import (
         Any,
-        Dict,
         Iterator,
-        List,
         Mapping,
+        MutableMapping,
         Optional,
         Pattern,
         Sequence,
@@ -42,18 +41,20 @@ if TYPE_CHECKING:
         Union,
     )
 
+    from jsonschema.exceptions import ValidationError
+
     from ..common import (
         RelPath,
     )
 
-import jsonschema
+import jsonschema.validators
 
 from ..common import AbstractWfExSException
 
 
 def translate_glob_args(
     args: "Union[Iterator[str], Sequence[str]]",
-) -> "List[Pattern[str]]":
+) -> "Sequence[Pattern[str]]":
     return list(map(lambda e: re.compile(fnmatch.translate(e)), args))
 
 
@@ -92,7 +93,7 @@ def datetimeFromISOFormat(date_string: "str") -> "datetime.datetime":
         except ValueError as ve2:
             raise ValueError(f"Invalid isoformat string: {date_string!r}") from ve2
     else:
-        time_components = [0, 0, 0, 0]
+        time_components = (0, 0, 0, 0)
         tzi = None
 
     return datetime.datetime(
@@ -107,7 +108,7 @@ def datetimeFromISOFormat(date_string: "str") -> "datetime.datetime":
     )
 
 
-def _parse_isoformat_date(dtstr: "str") -> "List[int]":
+def _parse_isoformat_date(dtstr: "str") -> "Tuple[int, int, int]":
     # It is assumed that this function will only be called with a
     # string of length exactly 10, and (though this is not used) ASCII-only
     year = int(dtstr[0:4])
@@ -121,12 +122,12 @@ def _parse_isoformat_date(dtstr: "str") -> "List[int]":
 
     day = int(dtstr[8:10])
 
-    return [year, month, day]
+    return (year, month, day)
 
 
 def _parse_isoformat_time(
     tstr: "str",
-) -> "Tuple[List[int], Optional[datetime.timezone]]":
+) -> "Tuple[Tuple[int, int, int, int], Optional[datetime.timezone]]":
     # Format supported is HH[:MM[:SS[.fff[fff]]]][+HH:MM[:SS[.ffffff]]]
     len_str = len(tstr)
     if len_str < 2:
@@ -172,7 +173,7 @@ def _parse_isoformat_time(
     return time_comps, tzi
 
 
-def _parse_hh_mm_ss_ff(tstr: "str") -> "List[int]":
+def _parse_hh_mm_ss_ff(tstr: "str") -> "Tuple[int, int, int, int]":
     # Parses things of the form HH[:MM[:SS[.fff[fff]]]]
     len_str = len(tstr)
 
@@ -209,14 +210,14 @@ def _parse_hh_mm_ss_ff(tstr: "str") -> "List[int]":
             if len_remainder == 3:
                 time_comps[3] *= 1000
 
-    return time_comps
+    return (time_comps[0], time_comps[1], time_comps[2], time_comps[3])
 
 
 def load_with_datetime(
     pairs: "Sequence[Tuple[str, Any]]", tz: "Optional[datetime.tzinfo]" = None
 ) -> "Mapping[str, Any]":
     """Load with dates"""
-    d: "Dict[str, Any]" = {}
+    d: "MutableMapping[str, Any]" = {}
     for k, v in pairs:
         if isinstance(v, str):
             try:
@@ -250,7 +251,7 @@ SCHEMAS_REL_DIR = "schemas"
 def config_validate(
     configToValidate: "Union[Mapping[str, Any], Sequence[Mapping[str, Any]]]",
     relSchemaFile: "RelPath",
-) -> "List[Any]":
+) -> "Sequence[ValidationError]":
     # Locating the schemas directory, where all the schemas should be placed
     schemaFile = os.path.join(
         os.path.dirname(__file__), "..", SCHEMAS_REL_DIR, relSchemaFile

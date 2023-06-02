@@ -34,7 +34,6 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
-        List,
         Mapping,
         MutableSequence,
         Optional,
@@ -157,7 +156,7 @@ CWLClass2WfExS = {
 
 
 def CWLDesc2Content(
-    cwlDescs: "Union[Mapping[str, Any], List[Mapping[str, Any]]]",
+    cwlDescs: "Union[Mapping[str, Any], Sequence[Mapping[str, Any]]]",
     logger: "logging.Logger",
     expectedOutput: "Optional[ExpectedOutput]" = None,
     doGenerateSignatures: "bool" = False,
@@ -166,7 +165,7 @@ def CWLDesc2Content(
     matValues: "MutableSequence[AbstractGeneratedContent]" = []
 
     if not isinstance(cwlDescs, list):
-        cwlDescs = [cwlDescs]
+        cwlDescs = [cast("Mapping[str, Any]", cwlDescs)]
 
     if doGenerateSignatures:
         repMethod = nihDigester

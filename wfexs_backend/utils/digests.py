@@ -32,8 +32,8 @@ if TYPE_CHECKING:
         Any,
         Callable,
         IO,
-        List,
         Mapping,
+        MutableSequence,
         Optional,
         Sequence,
         Tuple,
@@ -42,6 +42,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Protocol,
+        TypeAlias,
     )
 
     from ..common import (
@@ -50,8 +51,8 @@ if TYPE_CHECKING:
         Fingerprint,
     )
 
-    FingerprintMethod = Callable[[str, bytes], Fingerprint]
-    RawFingerprintMethod = Callable[[str, bytes], bytes]
+    FingerprintMethod: TypeAlias = Callable[[str, bytes], Fingerprint]
+    RawFingerprintMethod: TypeAlias = Callable[[str, bytes], bytes]
 
     class Hexable(Protocol):
         def hex(self) -> "str":
@@ -187,7 +188,7 @@ def ComputeDigestFromDirectory(
     Accessory method used to compute the digest of an input directory,
     based on the names and digest of the files in the directory
     """
-    cEntries: "List[Tuple[bytes, bytes]]" = []
+    cEntries: "MutableSequence[Tuple[bytes, bytes]]" = []
     # First, gather and compute all the files
     for entry in scantree(dirname):
         if entry.is_file():
@@ -202,7 +203,7 @@ def ComputeDigestFromDirectory(
             )
 
     # Second, sort by the relative path, bytes encoded in utf-8
-    cEntries.sort(key=lambda e: e[0])
+    cEntries = sorted(cEntries, key=lambda e: e[0])
 
     # Third, digest compute
     h = hashlib.new(digestAlgorithm)
@@ -224,7 +225,7 @@ def ComputeDigestFromGeneratedContentList(
     Accessory method used to compute the digest of an input directory,
     based on the names and digest of the files in the directory
     """
-    cEntries: "List[Tuple[bytes, bytes]]" = []
+    cEntries: "MutableSequence[Tuple[bytes, bytes]]" = []
     # First, gather and compute all the files
     for theValue in theValues:
         if isinstance(theValue, GeneratedContent):
@@ -241,7 +242,7 @@ def ComputeDigestFromGeneratedContentList(
             )
 
     # Second, sort by the relative path, bytes encoded in utf-8
-    cEntries.sort(key=lambda e: e[0])
+    cEntries = sorted(cEntries, key=lambda e: e[0])
 
     # Third, digest compute
     h = hashlib.new(digestAlgorithm)

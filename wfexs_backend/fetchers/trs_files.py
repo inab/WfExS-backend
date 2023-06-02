@@ -38,7 +38,6 @@ from ..common import (
 
 if TYPE_CHECKING:
     from typing import (
-        List,
         Mapping,
         MutableSequence,
         Optional,
@@ -74,7 +73,7 @@ def fetchTRSFiles(
     """
 
     parsedInputURL = parse.urlparse(remote_file)
-    path_steps: "List[str]" = parsedInputURL.path.split("/")
+    path_steps: "Sequence[str]" = parsedInputURL.path.split("/")
     embedded_remote_file = parsedInputURL.path
 
     metadata_array: "MutableSequence[URIWithMetadata]" = []
@@ -95,7 +94,7 @@ def fetchTRSFiles(
                 f"Ill-formed TRS CURIE {remote_file}. It should be in the format of {TRS_SCHEME_PREFIX}://id/version or {TRS_SCHEME_PREFIX}://prefix-with-slashes/id/version"
             )
 
-        version_steps = path_steps[0:-2]
+        version_steps = cast("MutableSequence[str]", path_steps[0:-2])
         version_steps.extend(
             ["ga4gh", "trs", "v2", "tools", path_steps[-2], "versions", path_steps[-1]]
         )
@@ -130,7 +129,8 @@ def fetchTRSFiles(
             ) from he
 
         # At last, we can finish building the URL
-        new_path_steps = version_steps + [
+        new_path_steps = [
+            *version_steps,
             version_metadata["descriptor_type"][0],
             "files",
         ]
@@ -149,7 +149,8 @@ def fetchTRSFiles(
             ),
         )
 
-        descriptor_steps = version_steps + [
+        descriptor_steps = [
+            *version_steps,
             version_metadata["descriptor_type"][0],
             "descriptor",
         ]

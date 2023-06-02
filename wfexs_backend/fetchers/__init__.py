@@ -42,12 +42,11 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Callable,
-        Dict,
         Iterable,
         IO,
-        List,
         Mapping,
         MutableMapping,
+        MutableSequence,
         Optional,
         Sequence,
         Tuple,
@@ -389,7 +388,9 @@ def sftpCopy(
 
     # Trios
     transTrios = []
-    recur: "List[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]]" = []
+    recur: "MutableSequence[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]]" = (
+        []
+    )
     kind: Optional[ContentKind] = None
     if sshStat.st_mode is not None:
         if stat.S_ISREG(sshStat.st_mode):

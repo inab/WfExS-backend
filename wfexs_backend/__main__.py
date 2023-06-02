@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         NotRequired,
+        TypeAlias,
         TypedDict,
     )
 
@@ -57,7 +58,7 @@ if TYPE_CHECKING:
 
     from .workflow import WF
 
-    Callable_WfExS_CacheType = Callable[[str], WfExS_CacheType]
+    Callable_WfExS_CacheType: TypeAlias = Callable[[str], WfExS_CacheType]
 
     class BasicLoggingConfigDict(TypedDict):
         filename: NotRequired[str]
@@ -126,7 +127,7 @@ class WfExS_Commands(StrDocEnum):
 
 
 if TYPE_CHECKING:
-    Callable_WfExS_Commands = Callable[[str], WfExS_Commands]
+    Callable_WfExS_Commands: TypeAlias = Callable[[str], WfExS_Commands]
 
 
 class WfExS_Cache_Commands(StrDocEnum):
