@@ -223,8 +223,8 @@ def add_file_to_crate(
             uri_key = "identifier"
 
         the_file_crate[uri_key] = the_uri
-    elif the_name is not None:
-        the_file_crate["name"] = the_name
+    if the_name is not None:
+        the_file_crate["alternateName"] = the_name
 
     if the_size is None:
         the_size = os.stat(the_path).st_size
@@ -543,9 +543,11 @@ def create_workflow_crate(
         )
         local_wf_file["codeRepository"] = repoURL
         local_wf_file["version"] = materializedEngine.workflow.effectiveCheckout
-        local_wf_file["name"] = "Unconsolidated Workflow Entrypoint"
+        local_wf_file["description"] = "Unconsolidated Workflow Entrypoint"
         local_wf_file["url"] = wf_entrypoint_url
         local_wf_file["hasPart"] = rel_entities
+        if localWorkflow.relPath is not None:
+            local_wf_file["alternateName"] = localWorkflow.relPath
 
         # Transferring the properties
         for prop_name in ("contentSize", "encodingFormat", "identifier", "sha256"):
@@ -563,9 +565,11 @@ def create_workflow_crate(
     else:
         wf_file["codeRepository"] = repoURL
         wf_file["version"] = materializedEngine.workflow.effectiveCheckout
-        wf_file["name"] = "Workflow Entrypoint"
+        wf_file["description"] = "Workflow Entrypoint"
         wf_file["url"] = wf_entrypoint_url
         wf_file["hasPart"] = rel_entities
+        if matWf.relPath is not None:
+            wf_file["alternateName"] = matWf.relPath
 
     # if 'url' in wf_file.properties():
     #    wf_file['codeRepository'] = wf_file['url']
@@ -652,7 +656,7 @@ def add_GeneratedDirectoryContent_as_dataset(
             validate_url=False,
             # properties=file_properties,
         )
-        crate_dataset["name"] = os.path.relpath(the_content.local, work_dir)
+        crate_dataset["alternateName"] = os.path.relpath(the_content.local, work_dir)
 
         if isinstance(the_content.values, list):
             for the_val in the_content.values:
@@ -795,7 +799,7 @@ def addInputsResearchObject(
                     the_name = os.path.relpath(itemInLocalSource, work_dir)
 
                     if crate_dataset is not None:
-                        crate_dataset["name"] = the_name + "/"
+                        crate_dataset["alternateName"] = the_name + "/"
                         if isinstance(crate_coll, Collection):
                             crate_coll.append_to("hasPart", crate_dataset)
                         else:
@@ -857,7 +861,7 @@ def addInputsResearchObject(
                         the_sec_name = os.path.relpath(secInputLocalSource, work_dir)
 
                         if sec_crate_elem is not None:
-                            sec_crate_elem["name"] = the_sec_name + "/"
+                            sec_crate_elem["alternateName"] = the_sec_name + "/"
                     else:
                         sec_crate_elem = None
 
