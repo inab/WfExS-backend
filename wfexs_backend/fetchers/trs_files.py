@@ -194,6 +194,13 @@ def fetchTRSFiles(
     for file_desc in metadata:
         file_rel_path = file_desc.get("path")
         if file_rel_path is not None:
+            frp_parsed = parse.urlparse(file_rel_path)
+            if frp_parsed.scheme in ("http", "https", "ftp"):
+                # An absolute URL, like in the case of DDBJ TRS implementation
+                # A mixure of resource might be catastrophic, the code is doing
+                # its best effort
+                file_rel_path = os.path.join(frp_parsed.netloc, frp_parsed.params)
+
             # BEWARE! The relpath could contain references to parent directories
             # escaping from the URL to be built and from the download "sandbox"
             # Avoid absolute paths corner case before splitting
@@ -224,12 +231,25 @@ def fetchTRSFiles(
 
             # BEWARE! The relpath could contain references to parent directories
             # escaping from the URL to be built and from the download "sandbox"
-            file_url = cast(
-                "URIType", descriptor_base_url + parse.quote(file_rel_path, safe="/")
-            )
-            absfile = cast(
-                "AbsPath", os.path.join(abs_download_dir, file_rel_path.lstrip("/"))
-            )
+            frp_parsed = parse.urlparse(file_rel_path)
+            is_abs_url = frp_parsed.scheme in ("http", "https", "ftp")
+            if is_abs_url:
+                # An absolute URL, like in the case of DDBJ TRS implementation
+                file_url = cast("URIType", file_rel_path)
+                absfile = cast(
+                    "AbsPath",
+                    os.path.join(
+                        abs_download_dir, frp_parsed.netloc, frp_parsed.path.lstrip("/")
+                    ),
+                )
+            else:
+                file_url = cast(
+                    "URIType",
+                    descriptor_base_url + parse.quote(file_rel_path, safe="/"),
+                )
+                absfile = cast(
+                    "AbsPath", os.path.join(abs_download_dir, file_rel_path.lstrip("/"))
+                )
 
             # Intermediate path creation
             absdir = os.path.dirname(absfile)
@@ -240,21 +260,25 @@ def fetchTRSFiles(
 
             # When it is the primary descriptor, it is fetched twice
             if file_desc.get("file_type") == "PRIMARY_DESCRIPTOR":
-                descriptorMeta = io.BytesIO()
-                _, metaprimary, _ = fetchClassicURL(file_url, descriptorMeta)
-                metadata_array.extend(metaprimary)
-
-                # This metadata can help a lot to get the workflow repo
-                metadataPD = json.loads(descriptorMeta.getvalue().decode("utf-8"))
                 topMeta["workflow_entrypoint"] = cast("URIType", real_rel_path)
-                topMeta["remote_workflow_entrypoint"] = metadataPD.get("url")
+                if is_abs_url:
+                    topMeta["remote_workflow_entrypoint"] = file_url
+                else:
+                    descriptorMeta = io.BytesIO()
+                    _, metaprimary, _ = fetchClassicURL(file_url, descriptorMeta)
+                    metadata_array.extend(metaprimary)
 
-                del descriptorMeta
-                del metadataPD
+                    # This metadata can help a lot to get the workflow repo
+                    metadataPD = json.loads(descriptorMeta.getvalue().decode("utf-8"))
+                    topMeta["remote_workflow_entrypoint"] = metadataPD.get("url")
 
+                    del descriptorMeta
+                    del metadataPD
+
+            accept_val = "*/*" if is_abs_url else "text/plain"
             # Getting the raw content
             _, metaelem, _ = fetchClassicURL(
-                file_url, absfile, {"headers": {"Accept": "text/plain"}}
+                file_url, absfile, {"headers": {"Accept": accept_val}}
             )
             metadata_array.extend(metaelem)
 
