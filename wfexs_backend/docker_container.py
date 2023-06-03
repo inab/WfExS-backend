@@ -138,6 +138,31 @@ class DockerContainerFactory(ContainerFactory):
 
             return cast("ExitVal", d_retval), d_out_v, d_err_v
 
+    def _rmi(
+        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
+        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
+            self.logger.debug(f"removing docker container {dockerTag}")
+            d_retval = subprocess.Popen(
+                [self.runtime_cmd, "rmi", dockerTag],
+                env=matEnv,
+                stdout=d_out,
+                stderr=d_err,
+            ).wait()
+
+            self.logger.debug(f"docker rmi {dockerTag} retval: {d_retval}")
+
+            with open(d_out.name, mode="r") as c_stF:
+                d_out_v = c_stF.read()
+            with open(d_err.name, "r") as c_stF:
+                d_err_v = c_stF.read()
+
+            self.logger.debug(f"docker rmi stdout: {d_out_v}")
+
+            self.logger.debug(f"docker rmi stderr: {d_err_v}")
+
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
+
     def _save(
         self,
         dockerTag: "ContainerTaggedName",
@@ -231,6 +256,7 @@ STDERR
         simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
         offline: "bool" = False,
+        force: "bool" = False,
     ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
@@ -247,10 +273,25 @@ STDERR
             )
 
             self.logger.info(f"downloading docker container: {tag}")
-            d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
+            if force:
+                if offline:
+                    raise ContainerFactoryException(
+                        f"Banned remove podman containers in offline mode from {tag}"
+                    )
+
+                # Blindly remove
+                _, _, _ = self._rmi(dockerTag, matEnv)
+                d_retval = -1
+            else:
+                d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
 
             # Time to pull the image
             if d_retval != 0:
+                if offline:
+                    raise ContainerFactoryException(
+                        f"Banned pull podman containers in offline mode from {tag}"
+                    )
+
                 d_retval, d_out_v, d_err_v = self._pull(dockerTag, matEnv)
                 if d_retval == 0:
                     # Second try

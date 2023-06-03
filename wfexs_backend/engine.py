@@ -585,7 +585,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         inputs: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
-
         stagedExec = matWfEng.instance.launchWorkflow(matWfEng, inputs, outputs)
 
         return stagedExec

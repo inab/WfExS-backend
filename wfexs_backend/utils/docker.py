@@ -63,6 +63,14 @@ class Credentials(NamedTuple):
     password: "Optional[str]" = None
 
 
+class DockerTagMetadata(NamedTuple):
+    registryServer: "str"
+    repo: "str"
+    alias: "str"
+    manifest: "Mapping[str, Any]"
+    partial_fingerprint: "str"
+
+
 # This is needed to obtain the remote repo digest
 class DXFFat(DXF):
     # See https://docs.docker.com/registry/spec/manifest-v2-2/ for
@@ -98,7 +106,7 @@ class DXFFat(DXF):
 
     def get_parsed_manifest_and_dcd(
         self, alias: "str"
-    ) -> "Union[Tuple[Mapping[str, Any], Optional[str]], Tuple[None, None]]":
+    ) -> "Union[Tuple[Mapping[str, Any], str], Tuple[None, None]]":
         # Based on  DXF._get_alias
         # https://github.com/davedoesdev/dxf/blob/89d4c9bafd75f0fbc028b3f83c0e10350505cd32/dxf/__init__.py#L616-L679
         try:
@@ -125,6 +133,7 @@ class DXFFat(DXF):
                 verify=False,
                 get_content_digest=True,
             )
+            assert dcd is not None, f"Empty dcd for {alias}"
         else:
             dcd = dxf_hash_bytes(manifest.encode("utf8"))
 
@@ -203,9 +212,7 @@ class DockerHelper(abc.ABC):
             response=response,
         )
 
-    def query_tag(
-        self, tag: "str"
-    ) -> "Optional[Tuple[str, str, str, Mapping[str, Any], Optional[str]]]":
+    def query_tag(self, tag: "str") -> "Optional[DockerTagMetadata]":
         parsedTag = urllib.parse.urlparse(tag)
         if parsedTag.scheme == "":
             docker_tag = "docker://" + tag
@@ -269,12 +276,20 @@ class DockerHelper(abc.ABC):
             manifest, partial_fingerprint = dxffat.get_parsed_manifest_and_dcd(alias)
             if manifest is None:
                 return None
+
+            assert partial_fingerprint is not None
         except Exception as e:
             raise DockerHelperException(
                 f"Unable to obtain fingerprint from {tag}. Reason {e}"
             ) from e
 
-        return registryServer, repo, alias, manifest, partial_fingerprint
+        return DockerTagMetadata(
+            registryServer=registryServer,
+            repo=repo,
+            alias=alias,
+            manifest=manifest,
+            partial_fingerprint=partial_fingerprint,
+        )
 
         # print(dxf.list_aliases())
         #

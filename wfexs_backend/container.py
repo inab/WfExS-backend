@@ -249,6 +249,7 @@ STDERR
         simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
         offline: "bool" = False,
+        force: "bool" = False,
     ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
@@ -285,6 +286,7 @@ class NoContainerFactory(ContainerFactory):
         simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
+        force: "bool" = False,
     ) -> "Sequence[Container]":
         """
         It is assured the no-containers are materialized
