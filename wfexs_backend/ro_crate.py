@@ -962,8 +962,12 @@ def add_containers_to_workflow(
             software_container["softwareVersion"] = container.fingerprint
             if containerEngineOs is not None:
                 software_container["operatingSystem"] = containerEngineOs
-            if arch is not None:
-                software_container["processorRequirements"] = arch
+            # Getting the processor architecture of the container
+            container_arch = container.architecture
+            if container_arch is None:
+                container_arch = arch
+            if container_arch is not None:
+                software_container["processorRequirements"] = container_arch
             software_container["softwareRequirements"] = crate_cont_type
 
             crate_cont = crate.add(software_container)

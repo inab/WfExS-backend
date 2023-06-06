@@ -19,6 +19,7 @@ from __future__ import absolute_import
 import json
 import os
 import os.path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -59,6 +60,7 @@ if TYPE_CHECKING:
         ContainerLocalConfig,
         ContainerTaggedName,
         Fingerprint,
+        ProcessorArchitecture,
         RelPath,
         URIType,
     )
@@ -162,6 +164,119 @@ class SingularityContainerFactory(ContainerFactory):
     @classmethod
     def ContainerType(cls) -> "ContainerType":
         return ContainerType.Singularity
+
+    def _getContainerArchitecture(
+        self, container_filename: "AnyPath", matEnv: "Mapping[str, str]" = {}
+    ) -> "Optional[ProcessorArchitecture]":
+        with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
+            self.logger.debug(f"Describing container {container_filename}")
+            # Singularity command line borrowed from
+            # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
+            s_retval = subprocess.Popen(
+                [self.runtime_cmd, "sif", "list", container_filename],
+                env=matEnv,
+                stdout=s_out,
+                stderr=s_err,
+            ).wait()
+
+            self.logger.debug(f"singularity sif list retval: {s_retval}")
+
+            with open(s_out.name, "r") as c_stF:
+                s_out_v = c_stF.read()
+            with open(s_err.name, "r") as c_stF:
+                s_err_v = c_stF.read()
+
+            self.logger.debug(f"singularity sif list stdout: {s_out_v}")
+
+            self.logger.debug(f"singularity sif list stderr: {s_err_v}")
+
+            if s_retval != 0:
+                errstr = """Could not describe singularity image {}. Retval {}
+======
+STDOUT
+======
+{}
+
+======
+STDERR
+======
+{}""".format(
+                    container_filename, s_retval, s_out_v, s_err_v
+                )
+                raise ContainerEngineException(errstr)
+
+            # The default for images translated from docker are usually these
+            data_bundle_id = "4"
+            type_column_id = 3
+            column_id = 0
+            parse_header = True
+            with open(s_out.name, mode="r") as c_stF:
+                for line in c_stF:
+                    if line.startswith("-"):
+                        continue
+
+                    cells = re.split(r"\s*\|\s*", line.strip())
+                    if parse_header:
+                        for i_cell, cell_name in enumerate(cells):
+                            if cell_name.startswith("TYPE"):
+                                type_column_id = i_cell
+                            elif cell_name.startswith("ID"):
+                                column_id = i_cell
+                        parse_header = False
+                    elif cells[type_column_id].startswith("FS"):
+                        data_bundle_id = cells[column_id]
+                        break
+
+        # Now, the details
+        architecture = None
+        with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
+            self.logger.debug(
+                f"Learning container architecture from {container_filename}"
+            )
+            # Singularity command line borrowed from
+            # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
+            s_retval = subprocess.Popen(
+                [self.runtime_cmd, "sif", "info", data_bundle_id, container_filename],
+                env=matEnv,
+                stdout=s_out,
+                stderr=s_err,
+            ).wait()
+
+            self.logger.debug(f"singularity sif info retval: {s_retval}")
+
+            with open(s_out.name, "r") as c_stF:
+                s_out_v = c_stF.read()
+            with open(s_err.name, "r") as c_stF:
+                s_err_v = c_stF.read()
+
+            self.logger.debug(f"singularity sif info stdout: {s_out_v}")
+
+            self.logger.debug(f"singularity sif info stderr: {s_err_v}")
+
+            if s_retval != 0:
+                errstr = """Could not describe bundle {}  from singularity image {}. Retval {}
+======
+STDOUT
+======
+{}
+
+======
+STDERR
+======
+{}""".format(
+                    data_bundle_id, container_filename, s_retval, s_out_v, s_err_v
+                )
+                raise ContainerEngineException(errstr)
+
+            # Learning the architecture
+            with open(s_out.name, mode="r") as c_stF:
+                for line in c_stF:
+                    key, value = re.split(r":\s*", line.strip(), maxsplit=1)
+                    if key == "Architecture":
+                        architecture = value
+                        break
+
+        return cast("ProcessorArchitecture", architecture)
 
     def _materializeSingleContainer(
         self,
@@ -501,6 +616,7 @@ STDERR
             taggedName=cast("URIType", singTag),
             signature=imageSignature,
             fingerprint=fingerprint,
+            architecture=self._getContainerArchitecture(containerPath, matEnv),
             type=self.containerType,
             localPath=containerPath,
         )

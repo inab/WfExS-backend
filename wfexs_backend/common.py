@@ -707,6 +707,7 @@ class Container(NamedTuple):
     origTaggedName: "str"
     taggedName: "URIType"
     type: "ContainerType"
+    architecture: "Optional[ProcessorArchitecture]" = None
     localPath: "Optional[AbsPath]" = None
     signature: "Optional[Fingerprint]" = None
     fingerprint: "Optional[Fingerprint]" = None
