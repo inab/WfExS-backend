@@ -218,7 +218,8 @@ def add_file_to_crate(
     )
     if do_attach:
         if the_uri.startswith("http") or the_uri.startswith("ftp"):
-            uri_key = "url"
+            # See https://github.com/ResearchObject/ro-crate/pull/259
+            uri_key = "contentUrl"
         else:
             uri_key = "identifier"
 
@@ -451,7 +452,6 @@ def create_workflow_crate(
     workflow_path = pathlib.Path(matWf_local_path)
     if matWf_local_path != wf_local_path:
         rocrate_wf_id = rocrate_wf_folder + "/" + os.path.basename(matWf_local_path)
-        logger.debug(f"OYE {matWf_local_path}")
     else:
         rocrate_wf_id = (
             rocrate_wf_folder + "/" + os.path.relpath(matWf_local_path, matWf.dir)
@@ -544,7 +544,8 @@ def create_workflow_crate(
         local_wf_file["codeRepository"] = repoURL
         local_wf_file["version"] = materializedEngine.workflow.effectiveCheckout
         local_wf_file["description"] = "Unconsolidated Workflow Entrypoint"
-        local_wf_file["url"] = wf_entrypoint_url
+        local_wf_file["contentUrl"] = wf_entrypoint_url
+        local_wf_file["url"] = wf_url
         local_wf_file["hasPart"] = rel_entities
         if localWorkflow.relPath is not None:
             local_wf_file["alternateName"] = localWorkflow.relPath
@@ -566,7 +567,7 @@ def create_workflow_crate(
         wf_file["codeRepository"] = repoURL
         wf_file["version"] = materializedEngine.workflow.effectiveCheckout
         wf_file["description"] = "Workflow Entrypoint"
-        wf_file["url"] = wf_entrypoint_url
+        wf_file["url"] = wf_url
         wf_file["hasPart"] = rel_entities
         if matWf.relPath is not None:
             wf_file["alternateName"] = matWf.relPath
