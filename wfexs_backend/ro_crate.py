@@ -590,6 +590,10 @@ def add_directory_as_dataset(
     itemInURISource: "URIType",
     do_attach: "bool" = True,
 ) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
+    # FUTURE IMPROVEMENT
+    # Describe datasets referred from DOIs
+    # as in https://github.com/ResearchObject/ro-crate/pull/255/files
+
     if os.path.isdir(itemInLocalSource):
         the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
         crate_dataset = crate.add_dataset(
