@@ -86,7 +86,7 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str]":
             )
 
         sorted_tags: "Sequence[Tuple[str, Tuple[datetime.datetime, str]]]" = sorted(
-            tags.items(), key=lambda tag: tag[1][0], reverse=True
+            tags.items(), key=lambda tag: (tag[1][0], tag[0]), reverse=True
         )
 
         # Get the latest commit

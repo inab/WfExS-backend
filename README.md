@@ -67,7 +67,7 @@ usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCO
                         {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.9.0-13-g8307be2 (8307be297a96268c13b5df8d8cd1b708d9916a2d)
+WfExS (workflow execution service) backend 0.9.0-78-g75887fc (75887fcc9d5245cb64e82b5abd0a22031e1bf2cd)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -139,7 +139,7 @@ optional arguments:
   -g, --glob            Given cache element names are globs (default: False)
 
 Subparser 'staged-workdir'
-usage: WfExS-backend.py staged-workdir [-h] [--full] [-g]
+usage: WfExS-backend.py staged-workdir [-h] [--private-key-file PRIVATE_KEY_FILE] [--full] [-g]
                                        {offline-exec,ls,mount,rm,shell,status,create-staged-crate,create-prov-crate}
                                        [staged_workdir_command_args [staged_workdir_command_args ...]]
 
@@ -166,11 +166,16 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
   -g, --glob            Given staged workflow names are globs (default: False)
 
 Subparser 'export'
-usage: WfExS-backend.py export [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME] -J WORKFLOWWORKINGDIRECTORY
+usage: WfExS-backend.py export [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME]
+                               [--public-key-file PUBLIC_KEY_FILES] [--private-key-file PRIVATE_KEY_FILE] -J
+                               WORKFLOWWORKINGDIRECTORY
                                {ls,run} [export_contents_command_args [export_contents_command_args ...]]
 
 positional arguments:
@@ -187,6 +192,12 @@ optional arguments:
                         Configuration file, describing security contexts, which hold credentials and similar (default: None)
   -E EXPORTSCONFIGFILENAME, --exports-config EXPORTSCONFIGFILENAME
                         Configuration file, describing exports which can be done (default: None)
+  --public-key-file PUBLIC_KEY_FILES
+                        This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the
+                        working directory (default: None)
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
 
@@ -204,6 +215,7 @@ optional arguments:
 
 Subparser 'config-validate'
 usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX]
+                                        [--public-key-file PUBLIC_KEY_FILES]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -213,9 +225,13 @@ optional arguments:
                         Configuration file, describing security contexts, which hold credentials and similar (default: None)
   -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
                         Nickname prefix to be used on staged workdir creation (default: None)
+  --public-key-file PUBLIC_KEY_FILES
+                        This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the
+                        working directory (default: None)
 
 Subparser 'stage'
 usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX]
+                              [--public-key-file PUBLIC_KEY_FILES]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -225,35 +241,48 @@ optional arguments:
                         Configuration file, describing security contexts, which hold credentials and similar (default: None)
   -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
                         Nickname prefix to be used on staged workdir creation (default: None)
+  --public-key-file PUBLIC_KEY_FILES
+                        This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the
+                        working directory (default: None)
 
 Subparser 'mount-workdir'
-usage: WfExS-backend.py mount-workdir [-h] -J WORKFLOWWORKINGDIRECTORY
+usage: WfExS-backend.py mount-workdir [-h] [--private-key-file PRIVATE_KEY_FILE] -J WORKFLOWWORKINGDIRECTORY
 
 optional arguments:
   -h, --help            show this help message and exit
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
 
 Subparser 'export-stage'
-usage: WfExS-backend.py export-stage [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
+usage: WfExS-backend.py export-stage [-h] [--private-key-file PRIVATE_KEY_FILE] -J WORKFLOWWORKINGDIRECTORY [--full]
 
 optional arguments:
   -h, --help            show this help message and exit
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
   --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
 
 Subparser 'offline-execute'
-usage: WfExS-backend.py offline-execute [-h] -J WORKFLOWWORKINGDIRECTORY
+usage: WfExS-backend.py offline-execute [-h] [--private-key-file PRIVATE_KEY_FILE] -J WORKFLOWWORKINGDIRECTORY
 
 optional arguments:
   -h, --help            show this help message and exit
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
 
 Subparser 'execute'
 usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME]
-                                [-n NICKNAME_PREFIX] [--full]
+                                [-n NICKNAME_PREFIX] [--public-key-file PUBLIC_KEY_FILES] [--private-key-file PRIVATE_KEY_FILE]
+                                [--full]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -265,21 +294,33 @@ optional arguments:
                         Configuration file, describing exports which can be done (default: None)
   -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
                         Nickname prefix to be used on staged workdir creation (default: None)
+  --public-key-file PUBLIC_KEY_FILES
+                        This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the
+                        working directory (default: None)
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
 
 Subparser 'export-results'
-usage: WfExS-backend.py export-results [-h] -J WORKFLOWWORKINGDIRECTORY
+usage: WfExS-backend.py export-results [-h] [--private-key-file PRIVATE_KEY_FILE] -J WORKFLOWWORKINGDIRECTORY
 
 optional arguments:
   -h, --help            show this help message and exit
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
 
 Subparser 'export-crate'
-usage: WfExS-backend.py export-crate [-h] -J WORKFLOWWORKINGDIRECTORY [--full]
+usage: WfExS-backend.py export-crate [-h] [--private-key-file PRIVATE_KEY_FILE] -J WORKFLOWWORKINGDIRECTORY [--full]
 
 optional arguments:
   -h, --help            show this help message and exit
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
+                        working directory. (default: None)
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
   --full                Should the RO-Crate contain a copy of the inputs (and outputs)? (default: False)
