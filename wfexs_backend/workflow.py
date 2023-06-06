@@ -296,6 +296,8 @@ class WF:
         creation: "Optional[datetime.datetime]" = None,
         rawWorkDir: "Optional[AnyPath]" = None,
         paranoid_mode: "Optional[bool]" = None,
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
         fail_ok: "bool" = False,
     ):
         """
@@ -497,11 +499,18 @@ class WF:
             passphraseFile = os.path.join(self.rawWorkDir, WORKDIR_PASSPHRASE_FILE)
             self.secure = os.path.exists(passphraseFile)
         else:
-            self.secure = workflow_config.get("secure", True)
+            self.secure = (len(public_key_filenames) > 0) or workflow_config.get(
+                "secure", True
+            )
 
         doSecureWorkDir = self.secure or self.paranoidMode
 
-        was_setup = self.setupWorkdir(doSecureWorkDir, fail_ok=fail_ok)
+        was_setup = self.setupWorkdir(
+            doSecureWorkDir,
+            fail_ok=fail_ok,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+        )
 
         self.configMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
         self.inputsDir: "Optional[AbsPath]"
@@ -679,7 +688,13 @@ class WF:
 
         return the_pid
 
-    def setupWorkdir(self, doSecureWorkDir: "bool", fail_ok: "bool" = False) -> "bool":
+    def setupWorkdir(
+        self,
+        doSecureWorkDir: "bool",
+        fail_ok: "bool" = False,
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+    ) -> "bool":
         uniqueRawWorkDir = self.rawWorkDir
 
         allowOther = False
@@ -708,18 +723,27 @@ class WF:
                 "AbsPath", os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
             )
 
+            used_public_key_filenames: "Sequence[AnyPath]"
             if os.path.exists(passphraseFile):
                 (
                     encfs_type,
                     encfs_cmd,
                     securePassphrase,
-                ) = self.wfexs.readSecuredPassphrase(passphraseFile)
+                ) = self.wfexs.readSecuredPassphrase(
+                    passphraseFile,
+                    private_key_filename=private_key_filename,
+                )
+                used_public_key_filenames = []
             else:
                 (
                     encfs_type,
                     encfs_cmd,
                     securePassphrase,
-                ) = self.wfexs.generateSecuredPassphrase(passphraseFile)
+                    used_public_key_filenames,
+                ) = self.wfexs.generateSecuredPassphrase(
+                    passphraseFile,
+                    public_key_filenames=public_key_filenames,
+                )
 
             self.encfs_type = encfs_type
 
@@ -781,6 +805,34 @@ class WF:
                         daemon=True,
                     )
                     self.encfsThread.start()
+
+                    # Time to transfer the public keys
+                    # to be used later in the lifecycle
+                    if len(used_public_key_filenames) > 0:
+                        base_keys_dir = os.path.join(
+                            uniqueWorkDir, "meta", "public_keys"
+                        )
+                        os.makedirs(base_keys_dir, exist_ok=True)
+                        key_fns: "MutableSequence[str]" = []
+                        manifest = {
+                            "creation": datetime.datetime.now(
+                                tz=datetime.timezone.utc
+                            ).astimezone(),
+                            "keys": key_fns,
+                        }
+                        for i_key, key_fn in enumerate(used_public_key_filenames):
+                            dest_fn_basename = f"key_{i_key}.c4gh.public"
+                            dest_fn = os.path.join(base_keys_dir, dest_fn_basename)
+                            shutil.copyfile(key_fn, dest_fn)
+                            key_fns.append(dest_fn_basename)
+
+                        # Last, manifest
+                        with open(
+                            os.path.join(base_keys_dir, "manifest.json"),
+                            mode="wt",
+                            encoding="utf-8",
+                        ) as mF:
+                            json.dump(manifest, mF, sort_keys=True)
 
             # self.encfsPassphrase = securePassphrase
             del securePassphrase
@@ -872,7 +924,8 @@ class WF:
     def FromWorkDir(
         cls,
         wfexs: "WfExSBackend",
-        workflowWorkingDirectory: "Union[RelPath, AbsPath]",
+        workflowWorkingDirectory: "AnyPath",
+        private_key_filename: "Optional[AnyPath]" = None,
         fail_ok: "bool" = False,
     ) -> "WF":
         """
@@ -892,6 +945,7 @@ class WF:
             nickname=nickname,
             rawWorkDir=rawWorkDir,
             creation=creation,
+            private_key_filename=private_key_filename,
             fail_ok=fail_ok,
         )
 
@@ -911,6 +965,7 @@ class WF:
         workflowMetaFilename: "AnyPath",
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
+        public_key_filenames: "Sequence[AnyPath]" = [],
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -935,7 +990,13 @@ class WF:
             creds_config = {}
 
         return cls.FromDescription(
-            wfexs, workflow_meta, creds_config, paranoidMode=paranoidMode
+            wfexs,
+            workflow_meta,
+            creds_config,
+            paranoidMode=paranoidMode,
+            public_key_filenames=public_key_filenames,
+            # As it should be new, no propagation of private key
+            # should be needed here
         )
 
     @classmethod
@@ -944,6 +1005,8 @@ class WF:
         wfexs: "WfExSBackend",
         workflow_meta: "WorkflowMetaConfigBlock",
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -979,6 +1042,8 @@ class WF:
             workflow_config=workflow_meta.get("workflow_config"),
             nickname=workflow_meta.get("nickname"),
             creds_config=creds_config,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
             paranoid_mode=paranoidMode,
         )
 
@@ -987,6 +1052,8 @@ class WF:
         cls,
         wfexs: "WfExSBackend",
         workflow_meta: "WorkflowMetaConfigBlock",
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":  # VRE
         """
@@ -1011,6 +1078,8 @@ class WF:
             default_actions=workflow_meta.get("default_actions"),
             workflow_config=workflow_meta.get("workflow_config"),
             nickname=workflow_meta.get("nickname"),
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
             paranoid_mode=paranoidMode,
         )
 

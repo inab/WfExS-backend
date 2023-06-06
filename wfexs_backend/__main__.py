@@ -245,6 +245,21 @@ def genParserSub(
             help="Nickname prefix to be used on staged workdir creation",
         )
 
+    if preStageParams or exportParams:
+        ap_.add_argument(
+            "--public-key-file",
+            dest="public_key_files",
+            action="append",
+            help="This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the working directory",
+        )
+
+    if crateParams or postStageParams or exportParams:
+        ap_.add_argument(
+            "--private-key-file",
+            dest="private_key_file",
+            help="This parameter passes the name of the file containing the private key needed to unlock an encrypted working directory.",
+        )
+
     if postStageParams:
         ap_.add_argument(
             "-J",
@@ -484,13 +499,16 @@ def processStagedWorkdirCommand(
                 *args.staged_workdir_command_args,
                 acceptGlob=args.filesAsGlobs,
                 doCleanup=False,
+                private_key_filename=args.private_key_file,
             ):
                 if wfSetup is not None:
                     print(f"Mounted {instance_id} ({nickname}) at {wfSetup.work_dir}")
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.List:
         contents = sorted(
             wB.listStagedWorkflows(
-                *args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs
+                *args.staged_workdir_command_args,
+                private_key_filename=args.private_key_file,
+                acceptGlob=args.filesAsGlobs,
             ),
             key=lambda x: x[2],
         )
@@ -515,7 +533,9 @@ def processStagedWorkdirCommand(
                 map(
                     lambda x: "Removed: " + "\t".join(x),
                     wB.removeStagedWorkflows(
-                        *args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs
+                        *args.staged_workdir_command_args,
+                        private_key_filename=args.private_key_file,
+                        acceptGlob=args.filesAsGlobs,
                     ),
                 )
             )
@@ -523,7 +543,9 @@ def processStagedWorkdirCommand(
 
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Shell:
         retval = wB.shellFirstStagedWorkflow(
-            *args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs
+            *args.staged_workdir_command_args,
+            private_key_filename=args.private_key_file,
+            acceptGlob=args.filesAsGlobs,
         )
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineExecute:
         if len(args.staged_workdir_command_args) > 0:
@@ -537,6 +559,7 @@ def processStagedWorkdirCommand(
                 *args.staged_workdir_command_args,
                 acceptGlob=args.filesAsGlobs,
                 doCleanup=False,
+                private_key_filename=args.private_key_file,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
@@ -572,7 +595,9 @@ def processStagedWorkdirCommand(
                 wfSetup,
                 mStatus,
             ) in wB.statusStagedWorkflows(
-                *args.staged_workdir_command_args, acceptGlob=args.filesAsGlobs
+                *args.staged_workdir_command_args,
+                private_key_filename=args.private_key_file,
+                acceptGlob=args.filesAsGlobs,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if wfSetup is None:
@@ -604,6 +629,7 @@ def processStagedWorkdirCommand(
                 args.staged_workdir_command_args[0],
                 acceptGlob=args.filesAsGlobs,
                 doCleanup=False,
+                private_key_filename=args.private_key_file,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
@@ -1026,6 +1052,7 @@ def main() -> None:
         if os.path.isdir(args.workflowWorkingDirectory):
             wfInstance = wfBackend.fromWorkDir(
                 args.workflowWorkingDirectory,
+                private_key_filename=args.private_key_file,
                 fail_ok=command != WfExS_Commands.MountWorkDir,
             )
         else:
@@ -1037,6 +1064,7 @@ def main() -> None:
                 wfInstance,
             ) in wfBackend.listStagedWorkflows(
                 args.workflowWorkingDirectory,
+                private_key_filename=args.private_key_file,
                 acceptGlob=True,
                 doCleanup=False,
             ):
@@ -1067,6 +1095,7 @@ def main() -> None:
             args.workflowConfigFilename,
             args.securityContextsConfigFilename,
             nickname_prefix=args.nickname_prefix,
+            public_key_filenames=args.public_key_files,
         )
 
     # This is needed to be sure the encfs instance is unmounted

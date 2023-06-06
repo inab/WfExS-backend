@@ -339,7 +339,9 @@ class WfExSBackend:
         local_config: "WfExSConfigBlock",
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
         config_directory: "Optional[AnyPath]" = None,
-    ) -> WF:
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+    ) -> "WF":
         """
 
         :param workflow_meta: The configuration describing both the workflow
@@ -370,6 +372,8 @@ class WfExSBackend:
             default_actions=workflow_meta.get("default_actions", []),
             workflow_config=workflow_meta.get("workflow_config"),
             creds_config=creds_config,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
         )
 
     def __init__(
@@ -721,6 +725,8 @@ class WfExSBackend:
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
         workflow_config: "Optional[WorkflowConfigBlock]" = None,
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
     ) -> "WF":
         """
         Init function, which delegates on WF class
@@ -736,6 +742,8 @@ class WfExSBackend:
             default_actions=default_actions,
             workflow_config=workflow_config,
             creds_config=creds_config,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
         )
 
     def createRawWorkDir(
@@ -854,9 +862,17 @@ class WfExSBackend:
         )
 
     def fromWorkDir(
-        self, workflowWorkingDirectory: "AnyPath", fail_ok: "bool" = False
+        self,
+        workflowWorkingDirectory: "AnyPath",
+        private_key_filename: "Optional[AnyPath]" = None,
+        fail_ok: "bool" = False,
     ) -> "WF":
-        return WF.FromWorkDir(self, workflowWorkingDirectory, fail_ok=fail_ok)
+        return WF.FromWorkDir(
+            self,
+            workflowWorkingDirectory,
+            private_key_filename=private_key_filename,
+            fail_ok=fail_ok,
+        )
 
     def getDefaultParanoidMode(self) -> "bool":
         return self.defaultParanoidMode
@@ -869,6 +885,7 @@ class WfExSBackend:
         workflowMetaFilename: "AnyPath",
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
+        public_key_filenames: "Sequence[AnyPath]" = [],
         paranoidMode: "bool" = False,
     ) -> "WF":
         return WF.FromFiles(
@@ -876,6 +893,7 @@ class WfExSBackend:
             workflowMetaFilename,
             securityContextsConfigFilename=securityContextsConfigFilename,
             nickname_prefix=nickname_prefix,
+            public_key_filenames=public_key_filenames,
             paranoidMode=paranoidMode,
         )
 
@@ -936,6 +954,8 @@ class WfExSBackend:
         self,
         workflow_meta: "WorkflowMetaConfigBlock",
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -950,12 +970,24 @@ class WfExSBackend:
         :return: Workflow configuration
         """
 
-        return WF.FromDescription(self, workflow_meta, creds_config, paranoidMode)
+        return WF.FromDescription(
+            self,
+            workflow_meta,
+            creds_config,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            paranoidMode=paranoidMode,
+        )
 
     def fromForm(
-        self, workflow_meta: "WorkflowMetaConfigBlock", paranoidMode: "bool" = False
-    ) -> "WF":  # VRE
+        self,
+        workflow_meta: "WorkflowMetaConfigBlock",
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+        paranoidMode: "bool" = False,
+    ) -> "WF":
         """
+        Method mainly used by OpenVRE deployment in iPC
 
         :param workflow_meta: The configuration describing both the workflow
         and the inputs to use when it is being instantiated.
@@ -964,18 +996,34 @@ class WfExSBackend:
         :type paranoidMode:
         :return: Workflow configuration
         """
-        return WF.FromForm(self, workflow_meta, paranoidMode=paranoidMode)
+        return WF.FromForm(
+            self,
+            workflow_meta,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            paranoidMode=paranoidMode,
+        )
 
     def getFusermountParams(self) -> "Tuple[AnyPath, int]":
         return self.fusermount_cmd, self.encfs_idleMinutes
 
     def readSecuredPassphrase(
-        self, passphraseFile: "AbsPath"
+        self,
+        passphraseFile: "AbsPath",
+        private_key_filename: "Optional[AnyPath]" = None,
     ) -> "Tuple[EncryptedFSType, AnyPath, str]":
+        """
+        This method decrypts a crypt4gh file containing a passphrase
+        which has been encrypted with either the WfExS installation
+        public key (if the filename is not provided), or the public key
+        paired with the provided private key stored in the file.
+        """
         clearF = io.BytesIO()
+        if private_key_filename is None:
+            private_key_filename = self.privKey
         with open(passphraseFile, mode="rb") as encF:
             crypt4gh.lib.decrypt(
-                [(0, self.privKey, None)],
+                [(0, private_key_filename, None)],
                 encF,
                 clearF,
                 offset=0,
@@ -1016,22 +1064,39 @@ class WfExSBackend:
         return encfs_type, encfs_cmd, securePassphrase
 
     def generateSecuredPassphrase(
-        self, passphraseFile: "AbsPath"
-    ) -> "Tuple[EncryptedFSType, AnyPath, str]":
+        self,
+        passphraseFile: "AbsPath",
+        public_key_filenames: "Sequence[AnyPath]" = [],
+    ) -> "Tuple[EncryptedFSType, AnyPath, str, Sequence[AnyPath]]":
+        """
+        This method generates a random passphrase, which is stored
+        in a crypt4gh encrypted file (along with the FUSE filesystem used)
+        using either the default WfExS-backend public key, or the public
+        keys stored in the files provided as a parameter.
+        It returns the FUSE filesystem, the command to be used to mount,
+        the generated passphrase (to be consumed in memory) and the list
+        of public keys used to encrypt the passphrase file,
+        which can be used later for some additional purposes.
+        """
         securePassphrase = self.generate_passphrase()
         clearF = io.BytesIO(
             (self.encfs_type.value + "=" + securePassphrase).encode("utf-8")
         )
+        if len(public_key_filenames) == 0:
+            public_key_filenames = [self.pubKey]
+        encrypt_keys = [(0, self.privKey, pub_key) for pub_key in public_key_filenames]
         with open(passphraseFile, mode="wb") as encF:
-            crypt4gh.lib.encrypt(
-                [(0, self.privKey, self.pubKey)], clearF, encF, offset=0, span=None
-            )
+            crypt4gh.lib.encrypt(encrypt_keys, clearF, encF, offset=0, span=None)
         del clearF
 
-        return self.encfs_type, self.encfs_cmd, securePassphrase
+        return self.encfs_type, self.encfs_cmd, securePassphrase, public_key_filenames
 
     def listStagedWorkflows(
-        self, *args: "str", acceptGlob: "bool" = False, doCleanup: "bool" = True
+        self,
+        *args: "str",
+        acceptGlob: "bool" = False,
+        doCleanup: "bool" = True,
+        private_key_filename: "Optional[AnyPath]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]]":
         # Removing duplicates
         entries: "Set[str]" = set(args)
@@ -1076,7 +1141,11 @@ class WfExSBackend:
                     wfSetup = None
                     wfInstance = None
                     try:
-                        wfInstance = self.fromWorkDir(instanceRawWorkdir, fail_ok=True)
+                        wfInstance = self.fromWorkDir(
+                            instanceRawWorkdir,
+                            private_key_filename=private_key_filename,
+                            fail_ok=True,
+                        )
                         try:
                             wfSetup = wfInstance.getStagedSetup()
                         except Exception as e:
@@ -1098,7 +1167,10 @@ class WfExSBackend:
                         wfInstance = None
 
     def statusStagedWorkflows(
-        self, *args: "str", acceptGlob: "bool" = False
+        self,
+        *args: "str",
+        acceptGlob: "bool" = False,
+        private_key_filename: "Optional[AnyPath]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[MarshallingStatus]]]":
         if len(args) > 0:
             for (
@@ -1107,7 +1179,12 @@ class WfExSBackend:
                 creation,
                 wfSetup,
                 wfInstance,
-            ) in self.listStagedWorkflows(*args, acceptGlob=acceptGlob, doCleanup=True):
+            ) in self.listStagedWorkflows(
+                *args,
+                private_key_filename=private_key_filename,
+                acceptGlob=acceptGlob,
+                doCleanup=True,
+            ):
                 self.logger.debug(f"Status {instance_id} {nickname}")
 
                 # This is needed to trigger the cascade of
@@ -1118,11 +1195,17 @@ class WfExSBackend:
                 yield instance_id, nickname, creation, wfSetup, mStatus
 
     def removeStagedWorkflows(
-        self, *args: "str", acceptGlob: "bool" = False
+        self,
+        *args: "str",
+        acceptGlob: "bool" = False,
+        private_key_filename: "Optional[AnyPath]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str]]":
         if len(args) > 0:
             for instance_id, nickname, creation, wfSetup, _ in self.listStagedWorkflows(
-                *args, acceptGlob=acceptGlob, doCleanup=True
+                *args,
+                private_key_filename=private_key_filename,
+                acceptGlob=acceptGlob,
+                doCleanup=True,
             ):
                 if wfSetup is not None:
                     self.logger.debug(f"Removing {instance_id} {nickname}")
@@ -1137,6 +1220,7 @@ class WfExSBackend:
         stderr: "IO[str]" = sys.stderr,
         acceptGlob: "bool" = False,
         firstMatch: "bool" = True,
+        private_key_filename: "Optional[AnyPath]" = None,
     ) -> "ExitVal":
         arg0 = []
         if len(args) > 0:
@@ -1149,7 +1233,10 @@ class WfExSBackend:
             command = [os.environ.get("SHELL", "/bin/sh")]
 
         listIter: "Union[Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]], Sequence[Tuple[WfExSInstanceId, str, datetime.datetime, StagedSetup, WF]]]" = self.listStagedWorkflows(
-            *arg0, acceptGlob=acceptGlob, doCleanup=False
+            *arg0,
+            private_key_filename=private_key_filename,
+            acceptGlob=acceptGlob,
+            doCleanup=False,
         )
 
         # This is needed to implement the case of no working directory
