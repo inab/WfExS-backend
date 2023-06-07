@@ -708,6 +708,7 @@ class Container(NamedTuple):
     taggedName: "URIType"
     type: "ContainerType"
     architecture: "Optional[ProcessorArchitecture]" = None
+    operatingSystem: "Optional[ContainerOperatingSystem]" = None
     localPath: "Optional[AbsPath]" = None
     signature: "Optional[Fingerprint]" = None
     fingerprint: "Optional[Fingerprint]" = None

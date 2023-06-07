@@ -960,8 +960,11 @@ def add_containers_to_workflow(
                 )
 
             software_container["softwareVersion"] = container.fingerprint
-            if containerEngineOs is not None:
-                software_container["operatingSystem"] = containerEngineOs
+            container_os = container.operatingSystem
+            if container_os is None:
+                container_os = containerEngineOs
+            if container_os is not None:
+                software_container["operatingSystem"] = container_os
             # Getting the processor architecture of the container
             container_arch = container.architecture
             if container_arch is None:

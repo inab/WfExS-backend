@@ -504,6 +504,13 @@ STDERR
             else:
                 containerPath = localContainerPath
 
+            # Learning about the intended processor architecture and variant
+            architecture = manifest.get("Architecture")
+            # As of version 4.5.0, podman does not report the architecture variant
+            if architecture is not None:
+                variant = manifest.get("Variant")
+                if variant is not None:
+                    architecture += "/" + variant
             # And add to the list of containers
             containersList.append(
                 Container(
@@ -511,6 +518,8 @@ STDERR
                     taggedName=cast("URIType", dockerTag),
                     signature=tagId,
                     fingerprint=fingerprint,
+                    architecture=architecture,
+                    operatingSystem=manifest.get("Os"),
                     type=self.containerType,
                     localPath=containerPath,
                 )
