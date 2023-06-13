@@ -508,7 +508,6 @@ def create_workflow_crate(
 
     rel_entities = []
     if lW.relPathFiles:
-        logging.error(f"RPF {lW.relPathFiles}")
         for rel_file in lW.relPathFiles:
             # First, are we dealing with relative files or with URIs?
             p_rel_file = urllib.parse.urlparse(rel_file)
