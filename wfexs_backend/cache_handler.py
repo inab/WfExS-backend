@@ -107,7 +107,6 @@ from .common import (
 
 from .fetchers import (
     AbstractStatefulFetcher,
-    DEFAULT_SCHEME_HANDLERS,
     FetcherException,
     FetcherInstanceException,
     InvalidFetcherException,
@@ -147,7 +146,7 @@ class SchemeHandlerCacheHandler:
     def __init__(
         self,
         cacheDir: "AbsPath",
-        schemeHandlers: "Mapping[str, ProtocolFetcher]" = DEFAULT_SCHEME_HANDLERS,
+        schemeHandlers: "Mapping[str, ProtocolFetcher]" = dict(),
     ):
         # Getting a logger focused on specific classes
         import inspect

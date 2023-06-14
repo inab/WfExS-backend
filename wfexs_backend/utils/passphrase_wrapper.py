@@ -52,6 +52,7 @@ from ..cache_handler import (
     CacheOfflineException,
     SchemeHandlerCacheHandler,
 )
+from ..fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
 from ..fetchers.wiktionary import WiktionaryFetcher
 
 
@@ -238,7 +239,9 @@ class WfExSPassGenSingleton(WfExSPassphraseGenerator):
 
             # Private cache handler instance
             # with Wiktionary
-            cacheHandler = SchemeHandlerCacheHandler(cachePath)
+            cacheHandler = SchemeHandlerCacheHandler(
+                cachePath, schemeHandlers=HTTP_SCHEME_HANDLERS
+            )
             for scheme, clazz in WiktionaryFetcher.GetSchemeHandlers().items():
                 cacheHandler.addSchemeHandler(scheme, clazz)
             cls.__instance = WfExSPassphraseGenerator(cacheHandler)

@@ -241,7 +241,7 @@ def fetchSSHURL(
             t.close()
 
 
-DEFAULT_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
+SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
     "sftp": fetchSSHURL,
     "ssh": fetchSSHURL,
 }
