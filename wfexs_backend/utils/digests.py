@@ -22,6 +22,7 @@ import functools
 import hashlib
 import json
 import os
+import stat
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -32,6 +33,7 @@ if TYPE_CHECKING:
         Any,
         Callable,
         IO,
+        Iterator,
         Mapping,
         MutableSequence,
         Optional,
@@ -176,6 +178,116 @@ def ComputeDigestFromFile(
 
     with open(filename, mode="rb") as f:
         return ComputeDigestFromFileLike(f, digestAlgorithm, bufferSize, repMethod)
+
+
+def compute_sha1_git_from_stream(
+    stream: "IO[bytes]", length: "int", buffer_size: "int" = DEFAULT_DIGEST_BUFFER_SIZE
+) -> "hashlib._Hash":
+    # SHA1 git computes the sha1 by feeding 'blob ' keyword,
+    # followed by the ascii representation of the content size in bytes,
+    # followed by NUL character and at last the content.
+    h = hashlib.sha1()
+    h.update(b"blob ")
+    h.update(str(length).encode("ascii"))
+    h.update(b"\0")
+
+    buf = stream.read(buffer_size)
+    got_length = 0
+    while len(buf) > 0:
+        got_length += len(buf)
+        h.update(buf)
+        buf = stream.read(buffer_size)
+
+    assert (
+        got_length == length
+    ), f"Content had size {got_length}, but it was declared to have {length}"
+
+    return h
+
+
+def compute_sha1_git_from_file(filename: "str") -> "hashlib._Hash":
+    length = os.stat(filename).st_size
+    with open(filename, mode="rb") as oH:
+        return compute_sha1_git_from_stream(oH, length)
+
+
+def compute_sha1_git_from_bytes(the_bytes: "bytes") -> "hashlib._Hash":
+    # SHA1 git computes the sha1 by feeding 'blob ' keyword,
+    # followed by the ascii representation of the content size in bytes,
+    # followed by NUL character and at last the content.
+    h = hashlib.sha1()
+    h.update(b"blob ")
+    h.update(str(len(the_bytes)).encode("ascii"))
+    h.update(b"\0")
+    h.update(the_bytes)
+
+    return h
+
+
+def compute_sha1_git_from_string(the_string: "str") -> "hashlib._Hash":
+    return compute_sha1_git_from_bytes(the_string.encode("utf-8"))
+
+
+def process_dir_entries(
+    dirname: "str",
+) -> "Iterator[Tuple[bytes, hashlib._Hash, bytes, bool]]":
+    for direntry in os.scandir(dirname):
+        encoded_dirname = direntry.name.encode("utf-8")
+        if direntry.is_symlink():
+            yield encoded_dirname, compute_sha1_git_from_string(
+                os.readlink(direntry.path)
+            ), b"120000", True
+        elif direntry.is_dir(follow_symlinks=False):
+            yield encoded_dirname, compute_sha1_git_from_dir(
+                direntry.path
+            ), b"40000", False
+        elif direntry.is_file(follow_symlinks=False):
+            if direntry.stat(follow_symlinks=False).st_mode & (
+                stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+            ):
+                bperms = b"100755"
+            else:
+                bperms = b"100644"
+            yield encoded_dirname, compute_sha1_git_from_file(
+                direntry.path
+            ), bperms, True
+
+
+def compute_sha1_git_from_dir(dirname: "str") -> "hashlib._Hash":
+    # Directories receive an special treatment
+    sorted_entries = sorted(
+        process_dir_entries(dirname), key=lambda t: t[0] if t[3] else t[0] + b"/"
+    )
+
+    # Compute the number to be put there
+    tree_size = 0
+    for entry in sorted_entries:
+        tree_size += len(entry[0]) + len(entry[1].digest()) + len(entry[2]) + 2
+
+    # Now, the hash
+    h = hashlib.sha1()
+    h.update(b"tree ")
+    h.update(str(tree_size).encode("ascii"))
+    h.update(b"\0")
+    for entry in sorted_entries:
+        h.update(entry[2])
+        h.update(b" ")
+        h.update(entry[0])
+        h.update(b"\0")
+        h.update(entry[1].digest())
+
+    return h
+
+
+@functools.lru_cache(maxsize=128)
+def compute_sha1_git_from_any(path: "str") -> "Tuple[str, str]":
+    if os.path.exists(path):
+        if os.path.isdir(path):
+            return compute_sha1_git_from_dir(path).hexdigest(), "dir"
+        else:
+            return compute_sha1_git_from_file(path).hexdigest(), "cnt"
+
+    raise FileNotFoundError(f"Unable to process path {path}")
 
 
 def ComputeDigestFromDirectory(
