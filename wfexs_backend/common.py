@@ -622,6 +622,8 @@ class RepoType(enum.Enum):
     BitBucket = "bitbucket"
     Raw = "raw"
     Other = "other"
+    SoftwareHeritage = "swh"
+    TRS = "trs"
 
 
 class RemoteRepo(NamedTuple):
