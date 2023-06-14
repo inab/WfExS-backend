@@ -33,6 +33,7 @@ import uuid
 
 from typing import (
     cast,
+    NamedTuple,
     TYPE_CHECKING,
 )
 
@@ -124,6 +125,14 @@ from .utils.misc import (
     jsonFilterDecodeFromStream,
     translate_glob_args,
 )
+
+
+class CachedContent(NamedTuple):
+    kind: "ContentKind"
+    path: "AbsPath"
+    metadata_array: "Sequence[URIWithMetadata]"
+    licences: "Tuple[URIType, ...]"
+
 
 META_JSON_POSTFIX = "_meta.json"
 
@@ -802,7 +811,7 @@ class SchemeHandlerCacheHandler:
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         secContext: "Optional[SecurityContextConfig]" = None,
-    ) -> "Tuple[ContentKind, AbsPath, Sequence[URIWithMetadata], Tuple[URIType, ...]]":
+    ) -> "CachedContent":
         if destdir is None:
             destdir = self.cacheDir
 
@@ -1114,4 +1123,9 @@ class SchemeHandlerCacheHandler:
 
         assert finalCachedFilename is not None
 
-        return inputKind, finalCachedFilename, metadata_array, tuple(licences)
+        return CachedContent(
+            kind=inputKind,
+            path=finalCachedFilename,
+            metadata_array=metadata_array,
+            licences=tuple(licences),
+        )
