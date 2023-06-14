@@ -34,10 +34,6 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from typing_extensions import (
-    TypedDict,
-)
-
 if TYPE_CHECKING:
     from typing import (
         Any,
@@ -94,7 +90,6 @@ from ..common import (
 )
 
 from ..utils.contents import link_or_copy
-from ..utils.ftp_downloader import FTPDownloader
 
 
 class FetcherException(AbstractWfExSException):
@@ -215,67 +210,6 @@ class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
         which can receive as destination either a file
         """
         pass
-
-
-class FTPConnBlock(TypedDict):
-    HOST: "str"
-    PORT: "NotRequired[int]"
-    USER: "NotRequired[str]"
-    PASSWORD: "NotRequired[str]"
-
-
-def fetchFTPURL(
-    remote_file: "URIType",
-    cachedFilename: "AbsPath",
-    secContext: "Optional[SecurityContextConfig]" = None,
-) -> "ProtocolFetcherReturn":
-    """
-    Method to fetch contents from ftp
-
-    :param remote_file:
-    :param cachedFilename:
-    :param secContext:
-    """
-
-    orig_remote_file = remote_file
-    parsedInputURL, remote_file = AbstractStatefulFetcher.ParseAndRemoveCredentials(
-        orig_remote_file
-    )
-    # Now the credentials are properly removed from remote_file
-    # we get them from the parsed url
-    username = parsedInputURL.username
-    password = parsedInputURL.password
-
-    kind = None
-    assert parsedInputURL.hostname is not None
-    connParams: FTPConnBlock = {
-        "HOST": parsedInputURL.hostname,
-    }
-    if parsedInputURL.port is not None:
-        connParams["PORT"] = parsedInputURL.port
-
-    if isinstance(secContext, dict):
-        # There could be some corner cases where an empty
-        # dictionary, or a dictionary without the needed keys
-        # has been provided
-        username = secContext.get("username", username)
-        password = secContext.get("password", password)
-
-    # Setting credentials only when it is set
-    if username is not None:
-        connParams["USER"] = username
-        connParams["PASSWORD"] = password if password is not None else ""
-
-    ftp_client = FTPDownloader(**connParams)
-    retval = ftp_client.download(
-        download_path=parsedInputURL.path, upload_path=cachedFilename
-    )
-    if isinstance(retval, list):
-        kind = ContentKind.Directory
-    else:
-        kind = ContentKind.File
-
-    return kind, [URIWithMetadata(remote_file, {})], None
 
 
 def sftpCopy(
@@ -487,7 +421,6 @@ def fetchFile(
 
 
 DEFAULT_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    "ftp": fetchFTPURL,
     "sftp": fetchSSHURL,
     "ssh": fetchSSHURL,
     "file": fetchFile,
