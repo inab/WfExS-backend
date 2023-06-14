@@ -30,7 +30,8 @@ from typing import (
 from urllib import parse
 import urllib.error
 
-from . import fetchClassicURL, FetcherException
+from . import FetcherException
+from .http import fetchClassicURL
 
 from ..common import (
     ContentKind,

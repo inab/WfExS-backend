@@ -48,7 +48,8 @@ import urllib.error
 # should fallback to default implementations when C ones are not present
 import yaml
 
-from . import fetchClassicURL, FetcherException
+from . import FetcherException
+from .http import fetchClassicURL
 
 from ..common import (
     LicensedURI,

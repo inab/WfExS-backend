@@ -91,7 +91,7 @@ from .engine import (
     WORKDIR_STDERR_FILE,
     STATS_DAG_DOT_FILE,
 )
-from .fetchers import fetchClassicURL
+from .fetchers.http import fetchClassicURL
 
 # A default name for the static bash
 DEFAULT_STATIC_BASH_CMDS = [

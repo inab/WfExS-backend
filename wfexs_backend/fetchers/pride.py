@@ -46,7 +46,8 @@ if TYPE_CHECKING:
 from urllib import parse
 import urllib.error
 
-from . import fetchClassicURL, FetcherException
+from . import FetcherException
+from .http import fetchClassicURL
 
 
 PRIDE_PROJECT_SCHEME = "pride.project"

@@ -56,6 +56,8 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         NotRequired,
+        Required,
+        TypedDict,
     )
 
     from _typeshed import SupportsRead
@@ -67,10 +69,20 @@ if TYPE_CHECKING:
         ProgsMapping,
         ProtocolFetcher,
         ProtocolFetcherReturn,
+        RelPath,
+        RepoURL,
+        RepoTag,
         SecurityContextConfig,
         SymbolicName,
         URIType,
     )
+
+    class RepoDesc(TypedDict):
+        repo: Required[RepoURL]
+        tag: Required[Optional[RepoTag]]
+        checkout: Required[RepoTag]
+        relpath: NotRequired[RelPath]
+
 
 from urllib import request, parse
 import urllib.error
@@ -168,6 +180,19 @@ class AbstractStatefulFetcher(abc.ABC):
         return parsedInputURL, remote_file
 
 
+class AbstractRepoFetcher(AbstractStatefulFetcher):
+    @abc.abstractmethod
+    def doMaterializeRepo(
+        self,
+        repoURL: "RepoURL",
+        repoTag: "Optional[RepoTag]" = None,
+        repo_tag_destdir: "Optional[AbsPath]" = None,
+        base_repo_destdir: "Optional[AbsPath]" = None,
+        doUpdate: "Optional[bool]" = True,
+    ) -> "Tuple[AbsPath, RepoTag, RepoDesc]":
+        pass
+
+
 class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
     def fetch(
         self,
@@ -190,130 +215,6 @@ class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
         which can receive as destination either a file
         """
         pass
-
-
-def get_opener_with_auth(
-    top_level_url: "str", username: "str", password: "str"
-) -> "request.OpenerDirector":
-    """
-    Taken from https://stackoverflow.com/a/44239906
-    """
-
-    # create a password manager
-    password_mgr = request.HTTPPasswordMgrWithPriorAuth()
-
-    # Add the username and password.
-    # If we knew the realm, we could use it instead of None.
-    password_mgr.add_password(
-        None, top_level_url, username, password, is_authenticated=True
-    )
-
-    handler = request.HTTPBasicAuthHandler(password_mgr)
-
-    # create "opener" (OpenerDirector instance)
-    return request.build_opener(handler)
-
-
-def fetchClassicURL(
-    remote_file: "URIType",
-    cachedFilename: "Union[AbsPath, IO[bytes]]",
-    secContext: "Optional[SecurityContextConfig]" = None,
-) -> "ProtocolFetcherReturn":
-    """
-    Method to fetch contents from http, https and ftp
-
-    :param remote_file:
-    :param cachedFilename:
-    :param secContext:
-    """
-
-    # This is needed to remove possible embedded credentials,
-    # which should not be stored in the cache
-    orig_remote_file = remote_file
-    parsedInputURL, remote_file = AbstractStatefulFetcher.ParseAndRemoveCredentials(
-        orig_remote_file
-    )
-    # Now the credentials are properly removed from remote_file
-    # we get them from the parsed url
-    username = parsedInputURL.username
-    password = parsedInputURL.password
-
-    if isinstance(secContext, dict):
-        headers = secContext.get("headers", {}).copy()
-        token = secContext.get("token")
-        token_header = secContext.get("token_header")
-        username = secContext.get("username", username)
-        password = secContext.get("password", password)
-
-        method = secContext.get("method")
-    else:
-        headers = {}
-        method = None
-        token = None
-        token_header = None
-
-    # Callable[[Union[str, Request], Union[bytes, SupportsRead[bytes], Iterable[bytes], None], Optional[float]], Any]
-    # Callable[[Union[str, Request], Optional[Union[bytes, SupportsRead[bytes], Iterable[bytes], None]], Optional[float], DefaultNamedArg(Optional[str], 'cafile'), DefaultNamedArg(Optional[str], 'capath'), DefaultNamedArg(bool, 'cadefault'), DefaultNamedArg(Optional[SSLContext], 'context')], Any]
-    opener: "Union[Callable[[Union[str, request.Request], Union[bytes, SupportsRead[bytes], Iterable[bytes], None], Optional[float]], Any], Callable[[Union[str, request.Request], Optional[Union[bytes, SupportsRead[bytes], Iterable[bytes]]], Optional[float], DefaultNamedArg(Optional[str], 'cafile'), DefaultNamedArg(Optional[str], 'capath'), DefaultNamedArg(bool, 'cadefault'), DefaultNamedArg(Optional[SSLContext], 'context')], Any]]"
-    opener = request.urlopen
-    if token is not None:
-        if token_header is not None:
-            headers[token_header] = token
-        else:
-            headers["Authorization"] = f"Bearer {token}"
-    elif username is not None:
-        if password is None:
-            password = ""
-
-        opener = get_opener_with_auth(remote_file, username, password).open
-
-        # # Time to set up user and password in URL
-        # parsedInputURL = parse.urlparse(remote_file)
-        #
-        # netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
-        #                                                             safe='') + '@' + parsedInputURL.hostname
-        # if parsedInputURL.port is not None:
-        #     netloc += ':' + str(parsedInputURL.port)
-        #
-        # # Now the credentials are properly set up
-        # remote_file = cast("URIType", parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
-        #                                 parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
-
-    # Preparing where it is going to be written
-    download_file: "IO[bytes]"
-    if isinstance(cachedFilename, str):
-        download_file = open(cachedFilename, "wb")
-    else:
-        download_file = cachedFilename
-
-    uri_with_metadata = None
-    try:
-        req_remote = request.Request(remote_file, headers=headers, method=method)
-        with opener(req_remote) as url_response:
-            uri_with_metadata = URIWithMetadata(
-                uri=url_response.url, metadata=dict(url_response.headers.items())
-            )
-
-            while True:
-                try:
-                    # Try getting it
-                    shutil.copyfileobj(url_response, download_file)
-                except http.client.IncompleteRead as icread:
-                    download_file.write(icread.partial)
-                    # Restarting the copy
-                    continue
-                break
-
-    except urllib.error.HTTPError as he:
-        raise FetcherException(
-            "Error fetching {} : {} {}".format(orig_remote_file, he.code, he.reason)
-        )
-    finally:
-        # Closing files opened by this code
-        if download_file != cachedFilename:
-            download_file.close()
-
-    return ContentKind.File, [uri_with_metadata], None
 
 
 class FTPConnBlock(TypedDict):
@@ -586,8 +487,6 @@ def fetchFile(
 
 
 DEFAULT_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    "http": fetchClassicURL,
-    "https": fetchClassicURL,
     "ftp": fetchFTPURL,
     "sftp": fetchSSHURL,
     "ssh": fetchSSHURL,
