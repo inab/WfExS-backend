@@ -66,7 +66,6 @@ if TYPE_CHECKING:
 
 from . import AbstractStatefulFetcher
 from ..common import (
-    AbstractWfExSException,
     ContentKind,
     URIWithMetadata,
 )
