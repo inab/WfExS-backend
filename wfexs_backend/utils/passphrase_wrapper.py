@@ -135,24 +135,19 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
                 )
                 indexed_filename = None
                 try:
-                    i_kind, indexed_filename, _, _ = self.cacheHandler.fetch(
+                    i_cached_content = self.cacheHandler.fetch(
                         wordlist_internal_uri, destdir=self.cacheDir, offline=True
                     )
 
                     # This if should be superfluous
-                    if not os.path.exists(indexed_filename):
-                        indexed_filename = None
+                    if os.path.exists(i_cached_content.path):
+                        indexed_filename = i_cached_content.path
                 except CacheOfflineException:
                     pass
 
                 if indexed_filename is None:
                     # Time to fetch the wordlist
-                    (
-                        input_kind,
-                        cached_filename,
-                        metadata_array,
-                        licences_t,
-                    ) = self.cacheHandler.fetch(
+                    i_cached_content = self.cacheHandler.fetch(
                         cast("URIType", word_set_uri),
                         destdir=self.cacheDir,
                         offline=False,
@@ -161,7 +156,7 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
                     # Prepare the compressed index
                     with tempfile.NamedTemporaryFile() as tmp_indexed_filename:
                         CompressedIndexedText.IndexTextFile(
-                            cached_filename,
+                            i_cached_content.path,
                             tmp_indexed_filename.name,
                             substart=remote_wordlist.substart,
                             subend=remote_wordlist.subend,

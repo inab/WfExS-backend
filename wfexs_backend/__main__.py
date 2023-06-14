@@ -459,10 +459,12 @@ def processCacheCommand(
                         retval = 1
 
             if retval == 0:
-                contentKind, abs_path, metadata, licences = wfBackend.cacheFetch(
+                cached_content = wfBackend.cacheFetch(
                     uri_to_fetch, args.cache_type, offline=False, secContext=secContext
                 )
-                print(f"{contentKind}\t{abs_path}\t{licences}\t{metadata}")
+                print(
+                    f"{cached_content.kind}\t{cached_content.path}\t{cached_content.licences}\t{cached_content.metadata_array}"
+                )
         else:
             print(
                 f"ERROR: subcommand {args.cache_command} takes either one or three positional parameters: the URI to be fetched, the path to a security context file and the security context to be used for the fetch operation",

@@ -170,7 +170,6 @@ from .common import (
     ExportAction,
     GeneratedContent,
     GeneratedDirectoryContent,
-    IdentifiedWorkflow,
     LicensedURI,
     LocalWorkflow,
     MarshallingStatus,
@@ -205,10 +204,8 @@ from .utils.contents import link_or_copy
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import config_validate
 
-from .fetchers.git import guess_repo_params
 from .fetchers.trs_files import (
     TRS_SCHEME_PREFIX,
-    INTERNAL_TRS_SCHEME_PREFIX,
 )
 
 from .nextflow_engine import NextflowWorkflowEngine

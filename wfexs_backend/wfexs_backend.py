@@ -50,6 +50,8 @@ import crypt4gh.lib  # type: ignore[import]
 import crypt4gh.keys.kdf  # type: ignore[import]
 import crypt4gh.keys.c4gh  # type: ignore[import]
 
+import magic
+
 from rocrate import rocrate  # type: ignore[import]
 
 from .common import (
@@ -62,6 +64,7 @@ from .common import (
     LicensedURI,
     MaterializedContent,
     RemoteRepo,
+    RepoType,
     URIWithMetadata,
 )
 
@@ -74,7 +77,10 @@ from .encrypted_fs import (
 )
 
 
-from .cache_handler import SchemeHandlerCacheHandler
+from .cache_handler import (
+    CachedContent,
+    SchemeHandlerCacheHandler,
+)
 
 from .utils.marshalling_handling import unmarshall_namedtuple
 from .utils.misc import config_validate
@@ -87,10 +93,16 @@ from .utils.passphrase_wrapper import (
     WfExSPassGenSingleton,
 )
 
-from .fetchers.git import guess_repo_params
+from .fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
+from .fetchers.ftp import SCHEME_HANDLERS as FTP_SCHEME_HANDLERS
+from .fetchers.sftp import SCHEME_HANDLERS as SFTP_SCHEME_HANDLERS
+from .fetchers.file import SCHEME_HANDLERS as FILE_SCHEME_HANDLERS
+from .fetchers.git import (
+    GitFetcher,
+    guess_git_repo_params,
+)
 
-from .fetchers import DEFAULT_SCHEME_HANDLERS
-from .fetchers.git import GitFetcher
+# from .fetchers.swh import SoftwareHeritageFetcher
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
 from .fetchers.trs_files import SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
@@ -146,7 +158,6 @@ if TYPE_CHECKING:
         ProgsMapping,
         ProtocolFetcher,
         RelPath,
-        RemoteRepo,
         RepoTag,
         RepoURL,
         SecurityContextConfig,
@@ -545,7 +556,7 @@ class WfExSBackend:
         self._sngltn: "MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher]" = (
             dict()
         )
-        self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir, dict())
+        self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir)
 
         fetchers_setup_block = local_config.get("fetchers-setup")
         # All the custom ones should be added here
@@ -564,7 +575,11 @@ class WfExSBackend:
 
         # These ones should have prevalence over other custom ones
         self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
-        self.addSchemeHandlers(DEFAULT_SCHEME_HANDLERS, fetchers_setup_block)
+        # self.addStatefulSchemeHandlers(SoftwareHeritageFetcher, fetchers_setup_block)
+        self.addSchemeHandlers(HTTP_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(FTP_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(SFTP_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(FILE_SCHEME_HANDLERS, fetchers_setup_block)
 
         # Registry of export plugins is created here
         self._export_plugins: "MutableMapping[SymbolicName, Type[AbstractExportPlugin]]" = (
@@ -1309,7 +1324,7 @@ class WfExSBackend:
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         secContext: "Optional[SecurityContextConfig]" = None,
-    ) -> "Tuple[ContentKind, AbsPath, Sequence[URIWithMetadata], Tuple[URIType, ...]]":
+    ) -> "CachedContent":
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
 
@@ -1336,15 +1351,16 @@ class WfExSBackend:
             workflow_dir, repo, _, effective_checkout = self.cacheWorkflow(
                 workflow_id=cast("WorkflowId", remote_file),
                 ignoreCache=ignoreCache,
+                registerInCache=registerInCache,
                 offline=offline,
             )
-            return (
-                ContentKind.Directory
+            return CachedContent(
+                kind=ContentKind.Directory
                 if os.path.isdir(workflow_dir)
                 else ContentKind.File,
-                workflow_dir,
-                [],
-                tuple(),
+                path=workflow_dir,
+                metadata_array=[],
+                licences=tuple(),
             )
 
     def instantiateEngine(
@@ -1381,6 +1397,25 @@ class WfExSBackend:
 
         self.cacheHandler.addRawSchemeHandlers({scheme.lower(): handler})
 
+    def guess_repo_params(
+        self,
+        wf_url: "Union[URIType, parse.ParseResult]",
+        fail_ok: "bool" = False,
+    ) -> "Optional[RemoteRepo]":
+        if isinstance(wf_url, parse.ParseResult):
+            parsedRepoURL = wf_url
+        else:
+            parsedRepoURL = urllib.parse.urlparse(wf_url)
+
+        # if parsedRepoURL.scheme in SoftwareHeritageFetcher.GetSchemeHandlers():
+        #    return SoftwareHeritageFetcher.guess_repo_params(parsedRepoURL, logger=self.logger, fail_ok=fail_ok)
+        # else:
+        #    # Assume it might be a git repo or a link to a git repo
+        #    return guess_git_repo_params(parsedRepoURL, logger=self.logger, fail_ok=fail_ok)
+
+        # Assume it might be a git repo or a link to a git repo
+        return guess_git_repo_params(parsedRepoURL, logger=self.logger, fail_ok=fail_ok)
+
     def cacheWorkflow(
         self,
         workflow_id: "WorkflowId",
@@ -1388,6 +1423,7 @@ class WfExSBackend:
         trs_endpoint: "Optional[str]" = None,
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         ignoreCache: "bool" = False,
+        registerInCache: "bool" = True,
         offline: "bool" = False,
         meta_dir: "Optional[AbsPath]" = None,
     ) -> "Tuple[AbsPath, RemoteRepo, Optional[WorkflowType], Optional[RepoTag]]":
@@ -1397,7 +1433,7 @@ class WfExSBackend:
 
         If the workflow id is an URL, it is supposed to be a git repository,
         and the version will represent either the branch, tag or specific commit.
-        So, the whole TRS fetching machinery is bypassed.workflowDir
+        So, the whole TRS fetching machinery is bypassed.
         """
         parsedRepoURL = urllib.parse.urlparse(str(workflow_id))
 
@@ -1405,9 +1441,12 @@ class WfExSBackend:
         i_workflow: "Optional[IdentifiedWorkflow]" = None
         engineDesc: "Optional[WorkflowType]" = None
         guessedRepo: "Optional[RemoteRepo]" = None
+        repoDir: "Optional[AbsPath]" = None
+        repoURL: "Optional[RepoURL]" = None
+        putative: "bool" = False
         if parsedRepoURL.scheme == "":
             if (trs_endpoint is not None) and len(trs_endpoint) > 0:
-                i_workflow = self.getWorkflowRepoFromTRS(
+                i_workflow, repoDir = self.getWorkflowRepoFromTRS(
                     trs_endpoint,
                     workflow_id,
                     version_id,
@@ -1416,15 +1455,15 @@ class WfExSBackend:
                     offline=offline,
                     meta_dir=meta_dir,
                 )
+                # For the cases of pure TRS repos, like Dockstore
+                # repoDir contains the cached path
             else:
                 raise WFException("trs_endpoint was not provided")
         else:
             engineDesc = None
 
             # Trying to be smarter
-            guessedRepo = guess_repo_params(
-                parsedRepoURL, logger=self.logger, fail_ok=True
-            )
+            guessedRepo = self.guess_repo_params(parsedRepoURL, fail_ok=True)
 
             if guessedRepo is not None:
                 if guessedRepo.tag is None:
@@ -1436,12 +1475,18 @@ class WfExSBackend:
             else:
                 (
                     i_workflow,
-                    self.cacheROCrateFilename,
-                ) = self.getWorkflowRepoFromROCrateURL(
+                    cached_putative_path,
+                ) = self.getWorkflowBundleFromURI(
                     cast("URIType", workflow_id),
                     offline=offline,
                     ignoreCache=ignoreCache,
                 )
+                # This can be incorrect, but let it be for now
+                if i_workflow is not None:
+                    self.cacheROCrateFilename = cached_putative_path
+                else:
+                    repoDir = cached_putative_path
+                    putative = True
 
         if i_workflow is not None:
             guessedRepo = i_workflow.remote_repo
@@ -1453,28 +1498,30 @@ class WfExSBackend:
                 repo_url=cast("RepoURL", workflow_id), tag=cast("RepoTag", version_id)
             )
 
-        repoURL = guessedRepo.repo_url
+        if repoURL is None:
+            repoURL = guessedRepo.repo_url
         repoTag = guessedRepo.tag
         repoRelPath = guessedRepo.rel_path
         repoType = guessedRepo.repo_type
 
-        repoDir: "Optional[AbsPath]" = None
         repoEffectiveCheckout: "Optional[RepoTag]" = None
-        if ":" in repoURL:
-            parsedRepoURL = urllib.parse.urlparse(repoURL)
-            if len(parsedRepoURL.scheme) > 0:
-                # It can be either a relative path to a directory or to a file
-                # It could be even empty!
-                if repoRelPath == "":
-                    repoRelPath = None
-
-                repoDir, repoEffectiveCheckout = self.doMaterializeRepo(
-                    repoURL, repoTag
-                )
-
-        # For the cases of pure TRS repos, like Dockstore
+        # A putative workflow is one which is already materialized
+        # but we can only guess
         if repoDir is None:
-            repoDir = cast("AbsPath", repoURL)
+            parsedRepoURL = urllib.parse.urlparse(repoURL)
+            assert (
+                len(parsedRepoURL.scheme) > 0
+            ), f"Repository id {repoURL} should be a parsable URI"
+            # It can be either a relative path to a directory or to a file
+            # It could be even empty!
+            if repoRelPath == "":
+                repoRelPath = None
+
+            repoDir, repoEffectiveCheckout = self.doMaterializeRepo(
+                guessedRepo,
+                doUpdate=ignoreCache,
+                registerInCache=registerInCache,
+            )
 
         repo = RemoteRepo(
             repo_url=repoURL,
@@ -1497,7 +1544,7 @@ class WfExSBackend:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         meta_dir: "Optional[AbsPath]" = None,
-    ) -> "IdentifiedWorkflow":
+    ) -> "Tuple[IdentifiedWorkflow, Optional[AbsPath]]":
         """
 
         :return:
@@ -1528,12 +1575,7 @@ class WfExSBackend:
         trsMetadataCache = os.path.join(meta_dir, self.TRS_METADATA_FILE)
 
         try:
-            (
-                metaContentKind,
-                cachedTRSMetaFile,
-                trsMetaMeta,
-                trsMetaLicences,
-            ) = self.cacheHandler.fetch(
+            trs_cached_content = self.cacheHandler.fetch(
                 trs_endpoint_v2_meta_url,
                 destdir=meta_dir,
                 offline=offline,
@@ -1542,12 +1584,7 @@ class WfExSBackend:
             trs_endpoint_meta_url = trs_endpoint_v2_meta_url
         except WFException as wfe:
             try:
-                (
-                    metaContentKind,
-                    cachedTRSMetaFile,
-                    trsMetaMeta,
-                    trsMetaLicences,
-                ) = self.cacheHandler.fetch(
+                trs_cached_content = self.cacheHandler.fetch(
                     trs_endpoint_v2_beta2_meta_url,
                     destdir=meta_dir,
                     offline=offline,
@@ -1561,6 +1598,12 @@ class WfExSBackend:
                     )
                 )
 
+        (
+            metaContentKind,
+            cachedTRSMetaFile,
+            trsMetaMeta,
+            trsMetaLicences,
+        ) = trs_cached_content
         # Giving a friendly name
         if not os.path.exists(trsMetadataCache):
             os.symlink(os.path.basename(cachedTRSMetaFile), trsMetadataCache)
@@ -1588,12 +1631,12 @@ class WfExSBackend:
         )
 
         trsQueryCache = os.path.join(meta_dir, self.TRS_QUERY_CACHE_FILE)
-        _, cachedTRSQueryFile, _, _ = self.cacheHandler.fetch(
+        trs_cached_tool = self.cacheHandler.fetch(
             trs_tools_url, destdir=meta_dir, offline=offline, ignoreCache=ignoreCache
         )
         # Giving a friendly name
         if not os.path.exists(trsQueryCache):
-            os.symlink(os.path.basename(cachedTRSQueryFile), trsQueryCache)
+            os.symlink(os.path.basename(trs_cached_tool.path), trsQueryCache)
 
         with open(trsQueryCache, mode="r", encoding="utf-8") as tQ:
             rawToolDesc = tQ.read()
@@ -1716,18 +1759,19 @@ class WfExSBackend:
             (
                 i_workflow,
                 self.cacheROCrateFilename,
-            ) = self.getWorkflowRepoFromROCrateURL(
+            ) = self.getWorkflowBundleFromURI(
                 roCrateURL,
                 expectedEngineDesc=WF.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType],
                 offline=offline,
                 ignoreCache=ignoreCache,
             )
-            return i_workflow
+            assert i_workflow is not None
+            return i_workflow, None
         else:
             self.logger.debug("TRS workflow")
             # Learning the available files and maybe
             # which is the entrypoint to the workflow
-            _, trsFilesDir, trsFilesMeta, _ = self.cacheFetch(
+            cached_trs_files = self.cacheFetch(
                 cast("URIType", INTERNAL_TRS_SCHEME_PREFIX + ":" + toolFilesURL),
                 CacheType.TRS,
                 offline=offline,
@@ -1735,14 +1779,13 @@ class WfExSBackend:
             )
 
             expectedEngineDesc = WF.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
-            remote_workflow_entrypoint = trsFilesMeta[0].metadata.get(
+            trs_meta = cached_trs_files.metadata_array[0]
+            remote_workflow_entrypoint = trs_meta.metadata.get(
                 "remote_workflow_entrypoint"
             )
             if remote_workflow_entrypoint is not None:
                 # Give it a chance to identify the original repo of the workflow
-                repo = guess_repo_params(
-                    remote_workflow_entrypoint, logger=self.logger, fail_ok=True
-                )
+                repo = self.guess_repo_params(remote_workflow_entrypoint, fail_ok=True)
 
                 if repo is not None:
                     self.logger.debug(
@@ -1750,31 +1793,69 @@ class WfExSBackend:
                             repo.repo_url, repo.tag, repo.rel_path, trs_tools_url
                         )
                     )
-                    return IdentifiedWorkflow(
-                        workflow_type=expectedEngineDesc, remote_repo=repo
+                    return (
+                        IdentifiedWorkflow(
+                            workflow_type=expectedEngineDesc, remote_repo=repo
+                        ),
+                        None,
                     )
 
-            workflow_entrypoint = trsFilesMeta[0].metadata.get("workflow_entrypoint")
+            workflow_entrypoint = trs_meta.metadata.get("workflow_entrypoint")
             if workflow_entrypoint is not None:
                 self.logger.debug(
                     "Using raw files from TRS tool {}".format(trs_tools_url)
                 )
-                return IdentifiedWorkflow(
-                    workflow_type=expectedEngineDesc,
-                    remote_repo=RemoteRepo(
-                        repo_url=cast("RepoURL", trsFilesDir),
-                        rel_path=workflow_entrypoint,
+                return (
+                    IdentifiedWorkflow(
+                        workflow_type=expectedEngineDesc,
+                        remote_repo=RemoteRepo(
+                            repo_url=cast("RepoURL", toolFilesURL),
+                            rel_path=workflow_entrypoint,
+                            repo_type=RepoType.TRS,
+                        ),
                     ),
+                    cached_trs_files.path,
                 )
 
         raise WFException("Unable to find a workflow in {}".format(trs_tools_url))
 
     def doMaterializeRepo(
         self,
-        repoURL: "RepoURL",
-        repoTag: "Optional[RepoTag]" = None,
+        repo: "RemoteRepo",
         doUpdate: "bool" = True,
+        registerInCache: "bool" = True,
     ) -> "Tuple[AbsPath, RepoTag]":
+        if repo.repo_type not in (RepoType.Other, RepoType.SoftwareHeritage):
+            (
+                remote_url,
+                repo_effective_checkout,
+                repo_path,
+                kind,
+                metadata_array,
+            ) = self._doMaterializeGitRepo(repo, doUpdate=doUpdate)
+        # elif repo.repo_type == RepoType.SoftwareContainer:
+        #    remote_url, repo_effective_checkout, repo_path, kind, metadata_array = self._doMaterializeSoftwareHeritageDirOrContent(repo, doUpdate=doUpdate)
+        else:
+            raise WfExSBackendException(
+                f"Don't know how to materialize {repo.repo_url} as a repository"
+            )
+
+        if registerInCache:
+            self.cacheHandler.inject(
+                remote_url,
+                destdir=self.cacheWorkflowDir,
+                fetched_metadata_array=metadata_array,
+                finalCachedFilename=repo_path,
+                inputKind=kind,
+            )
+
+        return repo_path, repo_effective_checkout
+
+    def _doMaterializeGitRepo(
+        self,
+        repo: "RemoteRepo",
+        doUpdate: "bool" = True,
+    ) -> "Tuple[URIType, RepoTag, AbsPath, ContentKind, Sequence[URIWithMetadata]]":
         """
 
         :param repoURL:
@@ -1784,61 +1865,114 @@ class WfExSBackend:
         """
         gitFetcherInst = cast("GitFetcher", self.instantiateStatefulFetcher(GitFetcher))
         repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(
-            repoURL,
-            repoTag=repoTag,
+            repo.repo_url,
+            repoTag=repo.tag,
             doUpdate=doUpdate,
             base_repo_destdir=self.cacheWorkflowDir,
         )
 
         # Now, let's register the checkout with cache structures
         # using its public URI
-        if not repoURL.startswith("git"):
-            remote_url = "git+" + repoURL
+        if not repo.repo_url.startswith("git"):
+            remote_url = "git+" + repo.repo_url
         else:
-            remote_url = repoURL
+            remote_url = repo.repo_url
 
-        if repoTag is not None:
-            remote_url += "@" + repoTag
+        if repo.tag is not None:
+            remote_url += "@" + repo.tag
 
-        self.cacheHandler.inject(
+        metadata_array = [
+            URIWithMetadata(
+                uri=cast("URIType", remote_url),
+                metadata=metadata,
+            )
+        ]
+        return (
             cast("URIType", remote_url),
-            destdir=self.cacheWorkflowDir,
-            fetched_metadata_array=[
-                URIWithMetadata(
-                    uri=cast("URIType", remote_url),
-                    metadata=metadata,
-                )
-            ],
-            finalCachedFilename=repoDir,
-            inputKind=ContentKind.Directory,
+            repoEffectiveCheckout,
+            repoDir,
+            ContentKind.Directory,
+            metadata_array,
         )
 
-        return repoDir, repoEffectiveCheckout
+    #    def _doMaterializeSoftwareHeritageDirOrContent(
+    #        self,
+    #        repo: "RemoteRepo",
+    #        doUpdate: "bool" = True,
+    #    ) -> "Tuple[AbsPath, RepoTag]":
+    #        """
+    #
+    #        :param repoURL:
+    #        :param repoTag:
+    #        :param doUpdate:
+    #        :return:
+    #        """
+    #        swhFetcherInst = cast("SoftwareHeritageFetcher", self.instantiateStatefulFetcher(SoftwareHeritageFetcher))
+    #        repoDir, repoEffectiveCheckout, metadata = swhFetcherInst.doMaterializeRepo(
+    #            repo.tag if repo.tag is not None else repo.repo_url,
+    #            doUpdate=doUpdate,
+    #            base_repo_destdir=self.cacheWorkflowDir,
+    #        )
+    #
+    #        metadata_array = [
+    #            URIWithMetadata(
+    #                uri=cast("URIType", repo.repo_url),
+    #                metadata=metadata,
+    #            )
+    #        ]
+    #        return repo.repo_url, repoEffectiveCheckout, repoDir, ContentKind.Directory, metadata_array
 
-    def getWorkflowRepoFromROCrateURL(
+    def getWorkflowBundleFromURI(
         self,
-        roCrateURL: "URIType",
+        remote_url: "URIType",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
-    ) -> "Tuple[IdentifiedWorkflow, AbsPath]":
-        """
-
-        :param roCrateURL:
-        :param expectedEngineDesc: If defined, an instance of WorkflowType
-        :return:
-        """
-        roCrateFile = self.cacheROcrate(
-            roCrateURL, offline=offline, ignoreCache=ignoreCache
-        )
+        registerInCache: "bool" = True,
+    ) -> "Tuple[Optional[IdentifiedWorkflow], AbsPath]":
+        try:
+            cached_content = self.cacheFetch(
+                remote_url,
+                CacheType.Input,
+                offline=offline,
+                ignoreCache=ignoreCache,
+                registerInCache=registerInCache,
+            )
+        except Exception as e:
+            raise WfExSBackendException(
+                "Cannot download putative workflow from {}, {}".format(remote_url, e)
+            ) from e
         self.logger.info(
-            "downloaded RO-Crate: {} -> {}".format(roCrateURL, roCrateFile)
+            "downloaded putative workflow: {} -> {}".format(
+                remote_url, cached_content.path
+            )
         )
 
-        return (
-            self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc),
-            roCrateFile,
-        )
+        # Now, let's guess whether it is a possible RO-Crate or a bare file
+        encoding = magic.from_file(cached_content.path, mime=True)
+        if encoding == "application/zip":
+            self.logger.info(
+                "putative workflow {} seems to be a packed RO-Crate".format(remote_url)
+            )
+
+            crate_hashed_id = hashlib.sha1(remote_url.encode("utf-8")).hexdigest()
+            roCrateFile = os.path.join(
+                self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION
+            )
+            if not os.path.exists(roCrateFile):
+                os.symlink(os.path.basename(cached_content.path), roCrateFile)
+
+            return (
+                self.getWorkflowRepoFromROCrateFile(
+                    cast("AbsPath", roCrateFile), expectedEngineDesc
+                ),
+                cast("AbsPath", roCrateFile),
+            )
+        else:
+            return (
+                None,
+                cached_content.path,
+            )
 
     def getWorkflowRepoFromROCrateFile(
         self,
@@ -1940,13 +2074,11 @@ class WfExSBackend:
         # Some RO-Crates might have this value missing or ill-built
         remote_repo: "Optional[RemoteRepo]" = None
         if workflowUploadURL is not None:
-            remote_repo = guess_repo_params(
-                workflowUploadURL, logger=self.logger, fail_ok=True
-            )
+            remote_repo = self.guess_repo_params(workflowUploadURL, fail_ok=True)
 
         if remote_repo is None:
-            remote_repo = guess_repo_params(
-                roCrateObj.root_dataset["isBasedOn"], logger=self.logger, fail_ok=True
+            remote_repo = self.guess_repo_params(
+                roCrateObj.root_dataset["isBasedOn"], fail_ok=True
             )
 
         if remote_repo is None:
@@ -1977,7 +2109,7 @@ class WfExSBackend:
         """
 
         try:
-            roCK, roCrateFile, _, _ = self.cacheHandler.fetch(
+            cached_rocrate = self.cacheHandler.fetch(
                 roCrateURL,
                 destdir=self.cacheROCrateDir,
                 offline=offline,
@@ -1993,7 +2125,7 @@ class WfExSBackend:
             self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION
         )
         if not os.path.exists(cachedFilename):
-            os.symlink(os.path.basename(roCrateFile), cachedFilename)
+            os.symlink(os.path.basename(cached_rocrate.path), cachedFilename)
 
         return cast("AbsPath", cachedFilename)
 
@@ -2063,12 +2195,7 @@ class WfExSBackend:
             "downloading workflow input: {}".format(" or ".join(remote_uris))
         )
 
-        (
-            inputKind,
-            cachedFilename,
-            metadata_array,
-            cachedLicences,
-        ) = self.cacheHandler.fetch(
+        cached_content = self.cacheHandler.fetch(
             remote_file,
             destdir=workflowInputs_destdir,
             offline=offline,
@@ -2080,27 +2207,30 @@ class WfExSBackend:
             remote_file.uri if isinstance(remote_file, LicensedURI) else remote_file
         )
         self.logger.info(
-            "downloaded workflow input: {} => {}".format(downloaded_uri, cachedFilename)
+            "downloaded workflow input: {} => {}".format(
+                downloaded_uri, cached_content.path
+            )
         )
 
         prettyFilename = None
-        if len(metadata_array) > 0:
+        if len(cached_content.metadata_array) > 0:
             self.logger.info(
                 "downloaded workflow input chain: {} => {}".format(
-                    " -> ".join(map(lambda m: m.uri, metadata_array)), cachedFilename
+                    " -> ".join(map(lambda m: m.uri, cached_content.metadata_array)),
+                    cached_content.path,
                 )
             )
 
             if isinstance(firstURI, LicensedURI):
                 firstLicensedURI = LicensedURI(
-                    uri=metadata_array[0].uri,
-                    licences=cachedLicences,
+                    uri=cached_content.metadata_array[0].uri,
+                    licences=cached_content.licences,
                     attributions=firstURI.attributions,
                 )
             else:
-                firstURI = metadata_array[0].uri
+                firstURI = cached_content.metadata_array[0].uri
             # The preferred name is obtained from the metadata
-            for m in metadata_array:
+            for m in cached_content.metadata_array:
                 if m.preferredName is not None:
                     prettyFilename = m.preferredName
                     break
@@ -2124,9 +2254,9 @@ class WfExSBackend:
             firstLicensedURI = LicensedURI(uri=firstURI)
 
         return MaterializedContent(
-            local=cachedFilename,
+            local=cached_content.path,
             licensed_uri=firstLicensedURI,
             prettyFilename=prettyFilename,
-            kind=inputKind,
-            metadata_array=metadata_array,
+            kind=cached_content.kind,
+            metadata_array=cached_content.metadata_array,
         )

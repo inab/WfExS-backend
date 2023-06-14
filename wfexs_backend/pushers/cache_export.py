@@ -136,12 +136,7 @@ class CacheExportPlugin(AbstractExportPlugin):
                 ),
             )
 
-            (
-                contentKind,
-                abs_path,
-                metadata,
-                licences,
-            ) = self.wfInstance.wfexs.cacheFetch(
+            cached_uri = self.wfInstance.wfexs.cacheFetch(
                 uri_to_fetch, CacheType.Input, offline=False, ignoreCache=True
             )
         finally:
@@ -149,4 +144,4 @@ class CacheExportPlugin(AbstractExportPlugin):
             if tmpdir is not None:
                 shutil.rmtree(tmpdir)
 
-        return metadata
+        return cached_uri.metadata_array
