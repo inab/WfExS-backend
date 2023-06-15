@@ -48,10 +48,13 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
+
+from ..common import (
+    ProtocolFetcherReturn,
+)
 
 INTERNAL_TRS_SCHEME_PREFIX = "wfexs.trs.files"
 TRS_SCHEME_PREFIX = "trs"
@@ -290,7 +293,10 @@ def fetchTRSFiles(
             )
         )
 
-    return ContentKind.Directory, metadata_array, None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=ContentKind.Directory,
+        metadata_array=metadata_array,
+    )
 
 
 # These are schemes from identifiers.org

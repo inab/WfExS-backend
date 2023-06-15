@@ -48,7 +48,6 @@ if TYPE_CHECKING:
         AbsPath,
         ProgsMapping,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         RelPath,
         RepoURL,
         RepoTag,
@@ -67,6 +66,7 @@ if TYPE_CHECKING:
 from . import AbstractStatefulFetcher
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -124,7 +124,10 @@ def fetchFTPURL(
     else:
         kind = ContentKind.File
 
-    return kind, [URIWithMetadata(remote_file, {})], None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=kind,
+        metadata_array=[URIWithMetadata(remote_file, {})],
+    )
 
 
 SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {

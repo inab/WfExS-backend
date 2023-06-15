@@ -34,7 +34,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
@@ -43,6 +42,7 @@ from . import FetcherException
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -138,7 +138,10 @@ def downloadContentFrom_gs(
 
         kind = ContentKind.Directory
 
-    return kind, [URIWithMetadata(remote_file, metadata)], None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=kind,
+        metadata_array=[URIWithMetadata(remote_file, metadata)],
+    )
 
 
 GS_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {"gs": downloadContentFrom_gs}

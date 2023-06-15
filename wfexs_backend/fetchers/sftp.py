@@ -61,7 +61,6 @@ if TYPE_CHECKING:
         AbsPath,
         ProgsMapping,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         RelPath,
         RepoURL,
         RepoTag,
@@ -83,6 +82,7 @@ from . import (
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -234,7 +234,10 @@ def fetchSSHURL(
             raise FetcherException(
                 f"sftp copy from {sshHost}:{sshPort}/{sshPath} failed"
             )
-        return kind, [URIWithMetadata(remote_file, {})], None
+        return ProtocolFetcherReturn(
+            kind_or_resolved=kind,
+            metadata_array=[URIWithMetadata(remote_file, {})],
+        )
     finally:
         # Closing the SFTP connection
         if t is not None:

@@ -44,7 +44,6 @@ if TYPE_CHECKING:
         AbsPath,
         ProgsMapping,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         RelPath,
         RepoURL,
         RepoTag,
@@ -59,6 +58,7 @@ from . import FetcherException
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -110,7 +110,10 @@ def fetchFile(
                 metadata["impersonated"] = True
     link_or_copy(localPath, cachedFilename, force_copy=force_copy)
 
-    return kind, [URIWithMetadata(the_remote_file, metadata)], None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=kind,
+        metadata_array=[URIWithMetadata(the_remote_file, metadata)],
+    )
 
 
 SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {

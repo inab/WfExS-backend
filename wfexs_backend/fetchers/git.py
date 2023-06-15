@@ -49,7 +49,6 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         ProgsMapping,
-        ProtocolFetcherReturn,
         RelPath,
         RepoTag,
         RepoURL,
@@ -71,10 +70,12 @@ import dulwich.porcelain
 from . import (
     AbstractRepoFetcher,
     FetcherException,
+    RepoGuessException,
 )
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     RemoteRepo,
     RepoType,
     URIWithMetadata,
@@ -84,10 +85,6 @@ from ..utils.contents import link_or_copy
 
 GITHUB_SCHEME = "github"
 GITHUB_NETLOC = "github.com"
-
-
-class GitGuessException(FetcherException):
-    pass
 
 
 class GitFetcher(AbstractRepoFetcher):
@@ -124,7 +121,7 @@ class GitFetcher(AbstractRepoFetcher):
         repo_tag_destdir: "Optional[AbsPath]" = None,
         base_repo_destdir: "Optional[AbsPath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RepoTag, RepoDesc]":
+    ) -> "Tuple[AbsPath, RepoDesc, Sequence[URIWithMetadata]]":
         """
 
         :param repoURL:
@@ -263,13 +260,17 @@ class GitFetcher(AbstractRepoFetcher):
                     "RepoTag", revproc.stdout.read().rstrip()
                 )
 
-        metadata: "RepoDesc" = {
+        repo_desc: "RepoDesc" = {
             "repo": repoURL,
             "tag": repoTag,
             "checkout": repo_effective_checkout,
         }
 
-        return repo_tag_destdir, repo_effective_checkout, metadata
+        return (
+            repo_tag_destdir,
+            repo_desc,
+            [],
+        )
 
     def fetch(
         self,
@@ -315,10 +316,10 @@ class GitFetcher(AbstractRepoFetcher):
             parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, "", "", "")),
         )
 
-        repo_tag_destdir, repo_effective_checkout, metadata = self.doMaterializeRepo(
+        repo_tag_destdir, repo_desc, metadata_array = self.doMaterializeRepo(
             repoURL, repoTag=repoTag
         )
-        metadata["relpath"] = cast("RelPath", repoRelPath)
+        repo_desc["relpath"] = cast("RelPath", repoRelPath)
 
         preferredName: "Optional[RelPath]"
         if repoRelPath is not None:
@@ -340,14 +341,17 @@ class GitFetcher(AbstractRepoFetcher):
         # shutil.move(cachedContentPath, cachedFilename)
         link_or_copy(cast("AnyPath", cachedContentPath), cachedFilename)
 
-        return (
-            kind,
-            [
-                URIWithMetadata(
-                    uri=remote_file, metadata=metadata, preferredName=preferredName
-                )
-            ],
-            None,
+        augmented_metadata_array = [
+            URIWithMetadata(
+                uri=remote_file, metadata=repo_desc, preferredName=preferredName
+            ),
+            *metadata_array,
+        ]
+        return ProtocolFetcherReturn(
+            kind_or_resolved=kind,
+            metadata_array=augmented_metadata_array,
+            # TODO: Identify licences in git repositories??
+            licences=None,
         )
 
 
@@ -492,7 +496,7 @@ def guess_git_repo_params(
         else:
             found_params = find_git_repo_in_uri(parsed_wf_url)
 
-    except GitGuessException as gge:
+    except RepoGuessException as gge:
         if not fail_ok:
             raise FetcherException(
                 f"FIXME: Unsupported http(s) git repository {wf_url} (see cascade exception)"
@@ -601,10 +605,10 @@ def find_git_repo_in_uri(
                 pass
 
     if repo_type is None:
-        raise GitGuessException(f"Unable to identify {remote_file} as a git repo")
+        raise RepoGuessException(f"Unable to identify {remote_file} as a git repo")
 
     if b_default_repo_tag is None:
-        raise GitGuessException(
+        raise RepoGuessException(
             f"No tag was obtained while getting default branch name from {remote_file}"
         )
 

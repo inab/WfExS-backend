@@ -47,10 +47,13 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
+
+from ..common import (
+    ProtocolFetcherReturn,
+)
 
 # See https://developers.zenodo.org/#retrieve37
 ZENODO_SCHEME = "zenodo"
@@ -211,7 +214,11 @@ def fetchZenodo(
             f"Error fetching Zenodo entry contents for {zenodo_id} : {he.code} {he.reason}"
         )
 
-    return kind, metadata_array, (cast("URIType", licence_url),)
+    return ProtocolFetcherReturn(
+        kind_or_resolved=kind,
+        metadata_array=metadata_array,
+        licences=(cast("URIType", licence_url),),
+    )
 
 
 # These are schemes from identifiers.org

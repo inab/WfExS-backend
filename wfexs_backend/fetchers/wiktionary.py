@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProgsMapping,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -49,6 +48,7 @@ from wiktionary_fetcher import store_terms
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -111,4 +111,7 @@ class WiktionaryFetcher(AbstractStatefulFetcher):
             "terms": term_type,
         }
 
-        return kind, [URIWithMetadata(uri=remote_file, metadata=metadata)], None
+        return ProtocolFetcherReturn(
+            kind_or_resolved=kind,
+            metadata_array=[URIWithMetadata(uri=remote_file, metadata=metadata)],
+        )

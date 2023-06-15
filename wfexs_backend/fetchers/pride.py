@@ -26,6 +26,7 @@ from typing import (
 )
 
 from ..common import (
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -38,7 +39,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
@@ -127,7 +127,10 @@ def fetchPRIDEProject(
     else:
         composed_pride_project_url = pride_project_url
 
-    return composed_pride_project_url, metadata_array, None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=composed_pride_project_url,
+        metadata_array=metadata_array,
+    )
 
 
 # These are schemes from identifiers.org

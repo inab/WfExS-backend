@@ -36,7 +36,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
@@ -53,6 +52,7 @@ from .http import fetchClassicURL
 
 from ..common import (
     LicensedURI,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -256,7 +256,10 @@ def downloadContentFromDRS(
                 lic_uri = LicensedURI(uri=object_url, secContext=customSecContext)
                 retURL.append(lic_uri)
 
-    return retURL, metadata_array, None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=retURL,
+        metadata_array=metadata_array,
+    )
 
 
 SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {

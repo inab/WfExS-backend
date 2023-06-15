@@ -35,6 +35,7 @@ from .http import fetchClassicURL
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -47,7 +48,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
@@ -187,7 +187,11 @@ def fetchB2SHARE(
             f"Error fetching B2SHARE entry contents for {b2share_id} : {he.code} {he.reason}"
         )
 
-    return kind, metadata_array, (cast("URIType", licence_url),)
+    return ProtocolFetcherReturn(
+        kind_or_resolved=kind,
+        metadata_array=metadata_array,
+        licences=(cast("URIType", licence_url),),
+    )
 
 
 # These are schemes from identifiers.org

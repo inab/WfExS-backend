@@ -37,7 +37,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProgsMapping,
-        ProtocolFetcherReturn,
         RelPath,
         SecurityContextConfig,
         SymbolicName,
@@ -48,6 +47,7 @@ from . import AbstractStatefulFetcher, FetcherException
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -207,9 +207,9 @@ class FASPFetcher(AbstractStatefulFetcher):
                 f"Remote {remote_file} is neither a file nor a directory (does it exist?)"
             )
 
-        return (
-            kind,
-            [
+        return ProtocolFetcherReturn(
+            kind_or_resolved=kind,
+            metadata_array=[
                 URIWithMetadata(
                     uri=remote_file,
                     # Some metadata could be gathered through the
@@ -217,5 +217,4 @@ class FASPFetcher(AbstractStatefulFetcher):
                     metadata={},
                 )
             ],
-            None,
         )

@@ -49,7 +49,6 @@ if TYPE_CHECKING:
         AbsPath,
         ProgsMapping,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         RelPath,
         RepoURL,
         RepoTag,
@@ -68,6 +67,7 @@ from . import (
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -126,9 +126,11 @@ def fetchClassicURL(
         password = secContext.get("password", password)
 
         method = secContext.get("method")
+        data = secContext.get("data")
     else:
         headers = {}
         method = None
+        data = None
         token = None
         token_header = None
 
@@ -168,7 +170,9 @@ def fetchClassicURL(
 
     uri_with_metadata = None
     try:
-        req_remote = request.Request(remote_file, headers=headers, method=method)
+        req_remote = request.Request(
+            remote_file, headers=headers, data=data, method=method
+        )
         with opener(req_remote) as url_response:
             uri_with_metadata = URIWithMetadata(
                 uri=url_response.url, metadata=dict(url_response.headers.items())
@@ -186,14 +190,19 @@ def fetchClassicURL(
 
     except urllib.error.HTTPError as he:
         raise FetcherException(
-            "Error fetching {} : {} {}".format(orig_remote_file, he.code, he.reason)
-        )
+            "Error fetching {} : {} {}\n{}".format(
+                orig_remote_file, he.code, he.reason, he.read().decode()
+            )
+        ) from he
     finally:
         # Closing files opened by this code
         if download_file != cachedFilename:
             download_file.close()
 
-    return ContentKind.File, [uri_with_metadata], None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=ContentKind.File,
+        metadata_array=[uri_with_metadata],
+    )
 
 
 SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {

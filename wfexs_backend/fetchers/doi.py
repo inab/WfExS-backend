@@ -33,6 +33,7 @@ from . import FetcherException
 from .http import fetchClassicURL
 
 from ..common import (
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -45,7 +46,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
@@ -216,7 +216,10 @@ def fetchDOI(
                 if len(version_a) > 0:
                     doi_resolved_url += "/" + parse.quote(version_a[0], safe="")
 
-    return cast("URIType", doi_resolved_url), metadata_array, None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=cast("URIType", doi_resolved_url),
+        metadata_array=metadata_array,
+    )
 
 
 # These are schemes from identifiers.org

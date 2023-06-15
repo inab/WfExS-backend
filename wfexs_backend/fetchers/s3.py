@@ -36,7 +36,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProtocolFetcher,
-        ProtocolFetcherReturn,
         SecurityContextConfig,
         URIType,
     )
@@ -50,6 +49,7 @@ from . import FetcherException
 
 from ..common import (
     ContentKind,
+    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -136,7 +136,10 @@ def downloadContentFrom_s3(
             raise FetcherException(errmsg) from e
         kind = ContentKind.Directory
 
-    return kind, [URIWithMetadata(remote_file, metadata)], None
+    return ProtocolFetcherReturn(
+        kind_or_resolved=kind,
+        metadata_array=[URIWithMetadata(remote_file, metadata)],
+    )
 
 
 S3_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {"s3": downloadContentFrom_s3}

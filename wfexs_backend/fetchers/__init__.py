@@ -58,6 +58,7 @@ if TYPE_CHECKING:
         SecurityContextConfig,
         SymbolicName,
         URIType,
+        URIWithMetadata,
     )
 
     class RepoDesc(TypedDict):
@@ -157,6 +158,10 @@ class AbstractStatefulFetcher(abc.ABC):
         return parsedInputURL, remote_file
 
 
+class RepoGuessException(FetcherException):
+    pass
+
+
 class AbstractRepoFetcher(AbstractStatefulFetcher):
     @abc.abstractmethod
     def doMaterializeRepo(
@@ -166,7 +171,7 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
         repo_tag_destdir: "Optional[AbsPath]" = None,
         base_repo_destdir: "Optional[AbsPath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RepoTag, RepoDesc]":
+    ) -> "Tuple[AbsPath, RepoDesc, Sequence[URIWithMetadata]]":
         pass
 
 
