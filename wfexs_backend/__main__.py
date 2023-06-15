@@ -250,6 +250,7 @@ def genParserSub(
             "--public-key-file",
             dest="public_key_files",
             action="append",
+            default=[],
             help="This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the working directory",
         )
 
