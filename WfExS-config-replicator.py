@@ -316,7 +316,6 @@ def writeWorkflowConfigVariations(
 
 
 if __name__ == "__main__":
-
     ap = argparse.ArgumentParser(description="WfExS config replicator")
     ap.add_argument(
         "-W",
