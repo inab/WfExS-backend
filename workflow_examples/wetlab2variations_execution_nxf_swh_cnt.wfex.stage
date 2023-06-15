@@ -1,0 +1,43 @@
+workflow_id: swh:1:cnt:deb7365914c0fdf51fd0a4e9a75b4afe7f8d93f7;origin=https://github.com/inab/Wetlab2Variations;visit=swh:1:snp:4f8cb5f83b5a0b8d9d629e8cfcb979bba0b6b325;anchor=swh:1:rev:31348ed533961f84cf348bf1af660ad9de6f870c;path=/nextflow/nextflow.nf
+workflow_config:
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  general:
+    rawreads:
+      c-l-a-s-s: File
+      url:
+        - ftp://ftp-trace.ncbi.nih.gov/giab/ftp/data/NA12878/NIST_NA12878_HG001_HiSeq_300x/140407_D00360_0017_BH947YADXX/Project_RM8398/Sample_U5c/U5c_CCGTCC_L001_R1_001.fastq.gz
+        - ftp://ftp-trace.ncbi.nih.gov/giab/ftp/data/NA12878/NIST_NA12878_HG001_HiSeq_300x/140407_D00360_0017_BH947YADXX/Project_RM8398/Sample_U5c/U5c_CCGTCC_L001_R2_001.fastq.gz
+    referencegenome:
+      c-l-a-s-s: File
+      url: ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/technical/reference/phase2_reference_assembly_sequence/hs37d5.fa.gz
+  BSQR:
+    files:
+      c-l-a-s-s: File
+      security-context: public_broad
+      url:
+        - ftp://ftp.broadinstitute.org/bundle/b37/Mills_and_1000G_gold_standard.indels.b37.vcf.gz
+        - ftp://ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.vcf.gz
+    indexes:
+      c-l-a-s-s: File
+      security-context: public_broad
+      url:
+        - ftp://ftp.broadinstitute.org/bundle/b37/Mills_and_1000G_gold_standard.indels.b37.vcf.idx.gz
+        - ftp://ftp.broadinstitute.org/bundle/b37/dbsnp_138.b37.vcf.idx.gz
+  bwamem:
+    rgheader: "@RG\\tID:H947YADXX\\tSM:NA12878\\tPL:ILLUMINA"
+  outputDir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false
+outputs:
+  gvcf:
+    c-l-a-s-s: File
+    preferredName: NA12878.g.vcf.gz
+    glob: "*.sorted.noDuplicates.recalibrated.g.vcf.gz"
+  metrics:
+    c-l-a-s-s: File
+    preferredName: 'NA12878.metrics.txt'
+    glob: "*.sorted.duplicates.metrics.txt"

@@ -38,6 +38,7 @@ if TYPE_CHECKING:
         Sequence,
         Tuple,
         Type,
+        TypeVar,
         Union,
     )
 
@@ -156,6 +157,10 @@ class AbstractStatefulFetcher(abc.ABC):
             )
 
         return parsedInputURL, remote_file
+
+
+if TYPE_CHECKING:
+    StatefulFetcher = TypeVar("StatefulFetcher", bound=AbstractStatefulFetcher)
 
 
 class RepoGuessException(FetcherException):

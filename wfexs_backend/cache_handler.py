@@ -69,6 +69,10 @@ if TYPE_CHECKING:
         URIType,
     )
 
+    from .fetchers import (
+        StatefulFetcher,
+    )
+
     class RelAbsDict(TypedDict):
         relative: RelPath
         absolute: AbsPath
@@ -184,7 +188,7 @@ class SchemeHandlerCacheHandler:
     def addSchemeHandler(
         self,
         scheme: "str",
-        handler: "Union[Type[AbstractStatefulFetcher], ProtocolFetcher]",
+        handler: "Union[Type[StatefulFetcher], ProtocolFetcher]",
         progs: "ProgsMapping" = dict(),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ) -> None:
@@ -231,10 +235,10 @@ class SchemeHandlerCacheHandler:
 
     def instantiateStatefulFetcher(
         self,
-        statefulFetcher: "Type[AbstractStatefulFetcher]",
+        statefulFetcher: "Type[StatefulFetcher]",
         progs: "ProgsMapping" = dict(),
         setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> "AbstractStatefulFetcher":
+    ) -> "StatefulFetcher":
         """
         Method to instantiate stateful fetchers
         """
@@ -255,7 +259,7 @@ class SchemeHandlerCacheHandler:
                 "Unable to instantiate something which is not a class inheriting from AbstractStatefulFetcher"
             )
 
-        return instStatefulFetcher
+        return cast("StatefulFetcher", instStatefulFetcher)
 
     def getRegisteredSchemes(self) -> "Sequence[str]":
         return list(self.schemeHandlers.keys())

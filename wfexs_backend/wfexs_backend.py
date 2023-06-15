@@ -97,12 +97,17 @@ from .fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
 from .fetchers.ftp import SCHEME_HANDLERS as FTP_SCHEME_HANDLERS
 from .fetchers.sftp import SCHEME_HANDLERS as SFTP_SCHEME_HANDLERS
 from .fetchers.file import SCHEME_HANDLERS as FILE_SCHEME_HANDLERS
+
 from .fetchers.git import (
     GitFetcher,
     guess_git_repo_params,
 )
 
-# from .fetchers.swh import SoftwareHeritageFetcher
+from .fetchers.swh import (
+    guess_swh_repo_params,
+    SoftwareHeritageFetcher,
+)
+
 from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
 from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
 from .fetchers.trs_files import SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
@@ -174,7 +179,10 @@ if TYPE_CHECKING:
         WritableWfExSConfigBlock,
     )
 
-    from .fetchers import AbstractStatefulFetcher
+    from .fetchers import (
+        AbstractStatefulFetcher,
+        StatefulFetcher,
+    )
 
     from .pushers import AbstractExportPlugin
 
@@ -575,7 +583,7 @@ class WfExSBackend:
 
         # These ones should have prevalence over other custom ones
         self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
-        # self.addStatefulSchemeHandlers(SoftwareHeritageFetcher, fetchers_setup_block)
+        self.addStatefulSchemeHandlers(SoftwareHeritageFetcher, fetchers_setup_block)
         self.addSchemeHandlers(HTTP_SCHEME_HANDLERS, fetchers_setup_block)
         self.addSchemeHandlers(FTP_SCHEME_HANDLERS, fetchers_setup_block)
         self.addSchemeHandlers(SFTP_SCHEME_HANDLERS, fetchers_setup_block)
@@ -611,9 +619,9 @@ class WfExSBackend:
 
     def instantiateStatefulFetcher(
         self,
-        statefulFetcher: "Type[AbstractStatefulFetcher]",
+        statefulFetcher: "Type[StatefulFetcher]",
         setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> "Optional[AbstractStatefulFetcher]":
+    ) -> "StatefulFetcher":
         """
         Method to instantiate stateful fetchers once
         """
@@ -626,7 +634,7 @@ class WfExSBackend:
             )
             self._sngltn[statefulFetcher] = instStatefulFetcher
 
-        return instStatefulFetcher
+        return cast("StatefulFetcher", instStatefulFetcher)
 
     def addExportPlugin(self, exportClazz: "Type[AbstractExportPlugin]") -> None:
         self._export_plugins[exportClazz.PluginName()] = exportClazz
@@ -1407,14 +1415,16 @@ class WfExSBackend:
         else:
             parsedRepoURL = urllib.parse.urlparse(wf_url)
 
-        # if parsedRepoURL.scheme in SoftwareHeritageFetcher.GetSchemeHandlers():
-        #    return SoftwareHeritageFetcher.guess_repo_params(parsedRepoURL, logger=self.logger, fail_ok=fail_ok)
-        # else:
-        #    # Assume it might be a git repo or a link to a git repo
-        #    return guess_git_repo_params(parsedRepoURL, logger=self.logger, fail_ok=fail_ok)
+        remote_repo = guess_swh_repo_params(
+            parsedRepoURL, logger=self.logger, fail_ok=fail_ok
+        )
+        if remote_repo is None:
+            # Assume it might be a git repo or a link to a git repo
+            remote_repo = guess_git_repo_params(
+                parsedRepoURL, logger=self.logger, fail_ok=fail_ok
+            )
 
-        # Assume it might be a git repo or a link to a git repo
-        return guess_git_repo_params(parsedRepoURL, logger=self.logger, fail_ok=fail_ok)
+        return remote_repo
 
     def cacheWorkflow(
         self,
@@ -1466,11 +1476,12 @@ class WfExSBackend:
             guessedRepo = self.guess_repo_params(parsedRepoURL, fail_ok=True)
 
             if guessedRepo is not None:
-                if guessedRepo.tag is None:
+                if guessedRepo.tag is None and version_id is not None:
                     guessedRepo = RemoteRepo(
                         repo_url=guessedRepo.repo_url,
                         tag=cast("RepoTag", version_id),
                         rel_path=guessedRepo.rel_path,
+                        repo_type=guessedRepo.repo_type,
                     )
             else:
                 (
@@ -1830,17 +1841,24 @@ class WfExSBackend:
                 remote_url,
                 repo_effective_checkout,
                 repo_path,
-                kind,
                 metadata_array,
             ) = self._doMaterializeGitRepo(repo, doUpdate=doUpdate)
-        # elif repo.repo_type == RepoType.SoftwareContainer:
-        #    remote_url, repo_effective_checkout, repo_path, kind, metadata_array = self._doMaterializeSoftwareHeritageDirOrContent(repo, doUpdate=doUpdate)
+        elif repo.repo_type == RepoType.SoftwareHeritage:
+            (
+                remote_url,
+                repo_effective_checkout,
+                repo_path,
+                metadata_array,
+            ) = self._doMaterializeSoftwareHeritageDirOrContent(repo, doUpdate=doUpdate)
         else:
             raise WfExSBackendException(
                 f"Don't know how to materialize {repo.repo_url} as a repository"
             )
 
         if registerInCache:
+            kind = (
+                ContentKind.Directory if os.path.isdir(repo_path) else ContentKind.File
+            )
             self.cacheHandler.inject(
                 remote_url,
                 destdir=self.cacheWorkflowDir,
@@ -1855,7 +1873,7 @@ class WfExSBackend:
         self,
         repo: "RemoteRepo",
         doUpdate: "bool" = True,
-    ) -> "Tuple[URIType, RepoTag, AbsPath, ContentKind, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[URIType, RepoTag, AbsPath, Sequence[URIWithMetadata]]":
         """
 
         :param repoURL:
@@ -1863,8 +1881,8 @@ class WfExSBackend:
         :param doUpdate:
         :return:
         """
-        gitFetcherInst = cast("GitFetcher", self.instantiateStatefulFetcher(GitFetcher))
-        repoDir, repoEffectiveCheckout, metadata = gitFetcherInst.doMaterializeRepo(
+        gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
+        repoDir, repo_desc, metadata_array = gitFetcherInst.doMaterializeRepo(
             repo.repo_url,
             repoTag=repo.tag,
             doUpdate=doUpdate,
@@ -1881,46 +1899,52 @@ class WfExSBackend:
         if repo.tag is not None:
             remote_url += "@" + repo.tag
 
-        metadata_array = [
+        augmented_metadata_array = [
             URIWithMetadata(
                 uri=cast("URIType", remote_url),
-                metadata=metadata,
-            )
+                metadata=repo_desc,
+            ),
+            *metadata_array,
         ]
         return (
             cast("URIType", remote_url),
-            repoEffectiveCheckout,
+            repo_desc["checkout"],
             repoDir,
-            ContentKind.Directory,
-            metadata_array,
+            augmented_metadata_array,
         )
 
-    #    def _doMaterializeSoftwareHeritageDirOrContent(
-    #        self,
-    #        repo: "RemoteRepo",
-    #        doUpdate: "bool" = True,
-    #    ) -> "Tuple[AbsPath, RepoTag]":
-    #        """
-    #
-    #        :param repoURL:
-    #        :param repoTag:
-    #        :param doUpdate:
-    #        :return:
-    #        """
-    #        swhFetcherInst = cast("SoftwareHeritageFetcher", self.instantiateStatefulFetcher(SoftwareHeritageFetcher))
-    #        repoDir, repoEffectiveCheckout, metadata = swhFetcherInst.doMaterializeRepo(
-    #            repo.tag if repo.tag is not None else repo.repo_url,
-    #            doUpdate=doUpdate,
-    #            base_repo_destdir=self.cacheWorkflowDir,
-    #        )
-    #
-    #        metadata_array = [
-    #            URIWithMetadata(
-    #                uri=cast("URIType", repo.repo_url),
-    #                metadata=metadata,
-    #            )
-    #        ]
-    #        return repo.repo_url, repoEffectiveCheckout, repoDir, ContentKind.Directory, metadata_array
+    def _doMaterializeSoftwareHeritageDirOrContent(
+        self,
+        repo: "RemoteRepo",
+        doUpdate: "bool" = True,
+    ) -> "Tuple[URIType, RepoTag, AbsPath, Sequence[URIWithMetadata]]":
+        """
+
+        :param repoURL:
+        :param repoTag:
+        :param doUpdate:
+        :return:
+        """
+        swhFetcherInst = self.instantiateStatefulFetcher(SoftwareHeritageFetcher)
+        repoDir, repo_desc, metadata_array = swhFetcherInst.doMaterializeRepo(
+            cast("RepoURL", repo.tag) if repo.tag is not None else repo.repo_url,
+            doUpdate=doUpdate,
+            base_repo_destdir=self.cacheWorkflowDir,
+        )
+
+        augmented_metadata_array = [
+            URIWithMetadata(
+                uri=cast("URIType", repo.repo_url),
+                metadata=repo_desc,
+            ),
+            *metadata_array,
+        ]
+        return (
+            repo.repo_url,
+            repo_desc["checkout"],
+            repoDir,
+            augmented_metadata_array,
+        )
 
     def getWorkflowBundleFromURI(
         self,
