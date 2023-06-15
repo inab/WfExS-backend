@@ -1454,6 +1454,7 @@ class WfExSBackend:
         repoDir: "Optional[AbsPath]" = None
         repoURL: "Optional[RepoURL]" = None
         putative: "bool" = False
+        repoRelPath: "Optional[str]" = None
         if parsedRepoURL.scheme == "":
             if (trs_endpoint is not None) and len(trs_endpoint) > 0:
                 i_workflow, repoDir = self.getWorkflowRepoFromTRS(
@@ -1497,6 +1498,11 @@ class WfExSBackend:
                     self.cacheROCrateFilename = cached_putative_path
                 else:
                     repoDir = cached_putative_path
+                    if len(parsedRepoURL.fragment) > 0:
+                        frag_qs = urllib.parse.parse_qs(parsedRepoURL.fragment)
+                        subDirArr = frag_qs.get("subdirectory", [])
+                        if len(subDirArr) > 0:
+                            repoRelPath = subDirArr[0]
                     putative = True
 
         if i_workflow is not None:
@@ -1506,7 +1512,9 @@ class WfExSBackend:
         if guessedRepo is None:
             # raise WFException('Unable to guess repository from RO-Crate manifest')
             guessedRepo = RemoteRepo(
-                repo_url=cast("RepoURL", workflow_id), tag=cast("RepoTag", version_id)
+                repo_url=cast("RepoURL", workflow_id),
+                tag=cast("RepoTag", version_id),
+                rel_path=cast("RelPath", repoRelPath),
             )
 
         if repoURL is None:
@@ -1972,8 +1980,12 @@ class WfExSBackend:
             )
         )
 
-        # Now, let's guess whether it is a possible RO-Crate or a bare file
-        encoding = magic.from_file(cached_content.path, mime=True)
+        if os.path.isfile(cached_content.path):
+            # Now, let's guess whether it is a possible RO-Crate or a bare file
+            encoding = magic.from_file(cached_content.path, mime=True)
+        else:
+            # A directory does not have mime type
+            encoding = ""
         if encoding == "application/zip":
             self.logger.info(
                 "putative workflow {} seems to be a packed RO-Crate".format(remote_url)
