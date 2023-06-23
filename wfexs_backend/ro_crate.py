@@ -383,12 +383,12 @@ def create_workflow_crate(
     else:
         matWf_local_path = matWf.dir
 
-    assert (
-        matWf.effectiveCheckout is not None
-    ), "The effective checkout should be available"
-
     parsed_repo_url = urllib.parse.urlparse(repoURL)
     if parsed_repo_url.netloc == "github.com":
+        assert (
+            matWf.effectiveCheckout is not None
+        ), "The effective checkout should be available"
+
         parsed_repo_path = parsed_repo_url.path.split("/")
         repo_name = parsed_repo_path[2]
         # TODO: should we urldecode repo_name?
@@ -541,7 +541,8 @@ def create_workflow_crate(
             gen_cwl=False,
         )
         local_wf_file["codeRepository"] = repoURL
-        local_wf_file["version"] = materializedEngine.workflow.effectiveCheckout
+        if materializedEngine.workflow.effectiveCheckout is not None:
+            local_wf_file["version"] = materializedEngine.workflow.effectiveCheckout
         local_wf_file["description"] = "Unconsolidated Workflow Entrypoint"
         local_wf_file["contentUrl"] = wf_entrypoint_url
         local_wf_file["url"] = wf_url
@@ -564,7 +565,8 @@ def create_workflow_crate(
         wf_consolidate_action["instrument"] = wf_wfexs
     else:
         wf_file["codeRepository"] = repoURL
-        wf_file["version"] = materializedEngine.workflow.effectiveCheckout
+        if materializedEngine.workflow.effectiveCheckout is not None:
+            wf_file["version"] = materializedEngine.workflow.effectiveCheckout
         wf_file["description"] = "Workflow Entrypoint"
         wf_file["url"] = wf_url
         wf_file["hasPart"] = rel_entities
