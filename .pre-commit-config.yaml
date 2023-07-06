@@ -31,7 +31,7 @@ repos:
 #        args: [--strict, --show-error-codes, --no-warn-unused-ignores, --python-executable, .pyWEenv/bin/python]
 #  - repo: meta
   - repo: https://github.com/inab/python-extended-json-schema-validator.git
-    rev: v0.13.0
+    rev: v0.15.0
     hooks:
 #      - id: identity
       - id: jsonschema_dir_validate
