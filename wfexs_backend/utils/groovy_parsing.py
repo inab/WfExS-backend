@@ -19,6 +19,7 @@
 # limitations under the License.
 
 import copy
+import functools
 import json
 import logging
 import os
@@ -625,20 +626,30 @@ def extract_nextflow_features(
     return processes, includes, workflows, includeconfigs
 
 
-def analyze_nf_content(
+@functools.lru_cache(maxsize=128)
+def parse_and_digest_groovy_content(
     content: "str",
-) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], ContextAssignments]":
+) -> "Union[RuleNode, LeafNode, EmptyNode]":
     tree = parse_groovy_content(content)
 
     # This one can be written as JSON
-    t_tree = digest_lark_tree(tree)
+    return digest_lark_tree(tree)
+
+
+def analyze_nf_content(
+    content: "str",
+    only_names: "Sequence[str]" = [],
+) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], ContextAssignments]":
+    t_tree = parse_and_digest_groovy_content(content)
 
     if "rule" in t_tree:
         c_t_tree = cast("RuleNode", t_tree)
         processes, includes, workflows, includeconfigs = extract_nextflow_features(
             c_t_tree,
         )
-        interesting_assignments = extract_nested_assignments(c_t_tree["children"])
+        interesting_assignments = extract_nested_assignments(
+            c_t_tree["children"], only_names=only_names
+        )
 
     else:
         processes = []
