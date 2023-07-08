@@ -741,7 +741,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             os.makedirs(nextflow_install_dir, exist_ok=True)
             nextflow_script_url = cast(
                 "URIType",
-                "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow".format(
+                "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow-{0}-all".format(
                     nextflow_version
                 ),
             )
