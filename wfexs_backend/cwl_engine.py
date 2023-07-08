@@ -35,6 +35,7 @@ from typing import (
 )
 
 from .common import (
+    ContainerTaggedName,
     ContainerType,
     ContentKind,
     EngineMode,
@@ -66,7 +67,6 @@ if TYPE_CHECKING:
     from .common import (
         AbsPath,
         AnyPath,
-        ContainerTaggedName,
         EngineLocalConfig,
         EnginePath,
         EngineVersion,
@@ -144,7 +144,10 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     NODEJS_WRAPPER = "nodejs_wrapper.bash"
 
-    NODEJS_CONTAINER_TAG = cast("ContainerTaggedName", "docker.io/node:slim")
+    NODEJS_CONTAINER_TAG = ContainerTaggedName(
+        origTaggedName="docker.io/node:slim",
+        type=ContainerType.Docker,
+    )
     OPERATIONAL_CONTAINER_TAGS = [NODEJS_CONTAINER_TAG]
 
     ENGINE_NAME = "cwl"
@@ -693,10 +696,11 @@ STDERR
                         )
                         raise WorkflowEngineException(errstr)
 
-        containerTags = set()
+        containerTags: "Set[str]" = set()
 
         # Getting the identifiers
         cwlVersion = None
+        # TODO: collect conda hints
         with open(packedLocalWorkflowFile, encoding="utf-8") as pLWH:
             wf_yaml = yaml.safe_load(pLWH)  # parse packed CWL
             cwlVersion = wf_yaml.get("cwlVersion", "v1.0")
@@ -729,7 +733,21 @@ STDERR
             engine_path=cwltool_install_dir,
             workflow=newLocalWf,
         )
-        return newWfEngine, list(containerTags)
+
+        list_of_containers: "MutableSequence[ContainerTaggedName]" = []
+        for containerTag in containerTags:
+            container_type = ContainerType.Docker
+            if containerTag.startswith("http:") or containerTag.startswith("https:"):
+                container_type = ContainerType.Singularity
+
+            list_of_containers.append(
+                ContainerTaggedName(
+                    origTaggedName=containerTag,
+                    type=container_type,
+                )
+            )
+
+        return newWfEngine, list_of_containers
 
     def sideContainers(self) -> "Sequence[ContainerTaggedName]":
         """

@@ -33,9 +33,10 @@ import uuid
 
 from .common import (
     Container,
-    ContainerType,
     DEFAULT_SINGULARITY_CMD,
 )
+
+from . import common
 
 if TYPE_CHECKING:
     from typing import (
@@ -87,8 +88,8 @@ from .utils.docker import DockerHelper
 
 
 class FailedContainerTag(NamedTuple):
-    tag: "ContainerTaggedName"
-    sing_tag: "ContainerTaggedName"
+    tag: "str"
+    sing_tag: "str"
 
 
 class SingularityContainerFactory(ContainerFactory):
@@ -101,6 +102,15 @@ class SingularityContainerFactory(ContainerFactory):
         "https",
         "ftp",
     }
+
+    ACCEPTED_CONTAINER_TYPES = set(
+        (
+            common.ContainerType.Podman,
+            common.ContainerType.UDocker,
+            common.ContainerType.Docker,
+            common.ContainerType.Singularity,
+        )
+    )
 
     def __init__(
         self,
@@ -162,8 +172,16 @@ class SingularityContainerFactory(ContainerFactory):
             )
 
     @classmethod
-    def ContainerType(cls) -> "ContainerType":
-        return ContainerType.Singularity
+    def ContainerType(cls) -> "common.ContainerType":
+        return common.ContainerType.Singularity
+
+    @classmethod
+    def AcceptsContainerType(
+        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+    ) -> "bool":
+        return not cls.ACCEPTED_CONTAINER_TYPES.isdisjoint(
+            container_type if isinstance(container_type, set) else (container_type,)
+        )
 
     def _getContainerArchitecture(
         self, container_filename: "AnyPath", matEnv: "Mapping[str, str]" = {}
@@ -278,7 +296,28 @@ STDERR
 
         return cast("ProcessorArchitecture", architecture)
 
-    def _materializeSingleContainer(
+    def materializeSingleContainer(
+        self,
+        tag: "ContainerTaggedName",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        offline: "bool" = False,
+        force: "bool" = False,
+    ) -> "Optional[Container]":
+        """
+        This is a no-op
+        """
+        the_cont = self._materializeSingleContainerSing(
+            tag,
+            simpleFileNameMethod,
+            containers_dir=containers_dir,
+            offline=offline,
+            force=force,
+        )
+
+        return the_cont if isinstance(the_cont, Container) else None
+
+    def _materializeSingleContainerSing(
         self,
         tag: "ContainerTaggedName",
         simpleFileNameMethod: "ContainerFileNamingMethod",
@@ -294,16 +333,17 @@ STDERR
             matEnv = matEnvNew
 
         # It is not an absolute URL, we are prepending the docker://
-        parsedTag = parse.urlparse(tag)
+        tag_name = tag.origTaggedName
+        parsedTag = parse.urlparse(tag_name)
         if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
-            singTag = tag
+            singTag = tag_name
             isDocker = parsedTag.scheme == "docker"
         else:
-            singTag = cast("ContainerTaggedName", "docker://" + tag)
+            singTag = "docker://" + tag_name
             # Assuming it is docker
             isDocker = True
 
-        containerFilename = simpleFileNameMethod(cast("URIType", tag))
+        containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
         containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
         localContainerPath = cast(
             "AbsPath",
@@ -315,7 +355,7 @@ STDERR
         )
 
         self.logger.info(
-            f"downloading singularity container: {tag} => {localContainerPath}"
+            f"downloading singularity container: {tag_name} => {localContainerPath}"
         )
 
         # First, let's materialize the container image if it is needed
@@ -381,7 +421,7 @@ STDERR
             if offline:
                 raise ContainerFactoryException(
                     "Cannot download containers in offline mode from {} to {}".format(
-                        tag, localContainerPath
+                        tag_name, localContainerPath
                     )
                 )
 
@@ -391,7 +431,7 @@ STDERR
                 )
 
                 self.logger.debug(
-                    f"downloading temporary container: {tag} => {tmpContainerPath}"
+                    f"downloading temporary container: {tag_name} => {tmpContainerPath}"
                 )
                 # Singularity command line borrowed from
                 # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
@@ -418,7 +458,7 @@ STDERR
                     if not os.path.exists(tmpContainerPath):
                         raise ContainerFactoryException(
                             "FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(
-                                tag, tmpContainerPath
+                                tag_name, tmpContainerPath
                             )
                         )
 
@@ -442,7 +482,7 @@ STDERR
                             # If files were not the same complain
                             # This should not happen!!!!!
                             raise ContainerFactoryException(
-                                f"FATAL ERROR: Singularity cache collision for {imageSignature}, with differing sizes ({tag} => local {canonicalSize} != remote {tmpSize})"
+                                f"FATAL ERROR: Singularity cache collision for {imageSignature}, with differing sizes ({tag_name} => local {canonicalSize} != remote {tmpSize})"
                             )
                         else:
                             # Remove the temporary one, as the name contains the digest
@@ -509,7 +549,7 @@ STDERR
                             )
                         else:
                             # TODO: is there a better alternative?
-                            fingerprint = cast("Fingerprint", tag)
+                            fingerprint = cast("Fingerprint", tag_name)
                     else:
                         registryServer = ""
                         registryType = None
@@ -517,7 +557,7 @@ STDERR
                         alias = ""
                         partial_fingerprint = ""
                         manifest = None
-                        fingerprint = cast("Fingerprint", tag)
+                        fingerprint = cast("Fingerprint", tag_name)
             except Exception as e:
                 # Some problem happened parsing the existing metadata
                 self.logger.exception(
@@ -530,7 +570,7 @@ STDERR
         if fetch_metadata:
             if offline:
                 raise ContainerFactoryException(
-                    f"Cannot download containers metadata in offline mode from {tag} to {localContainerPath}"
+                    f"Cannot download containers metadata in offline mode from {tag_name} to {localContainerPath}"
                 )
 
             if tmpContainerPath is None:
@@ -540,7 +580,7 @@ STDERR
             tmpContainerPathMeta = tmpContainerPath + self.META_JSON_POSTFIX
 
             self.logger.debug(
-                f"downloading temporary container metadata: {tag} => {tmpContainerPathMeta}"
+                f"downloading temporary container metadata: {tag_name} => {tmpContainerPathMeta}"
             )
 
             tag_details = None
@@ -548,7 +588,7 @@ STDERR
             if isDocker:
                 tag_details = dhelp.query_tag(singTag)
                 if tag_details is None:
-                    return FailedContainerTag(tag=tag, sing_tag=singTag)
+                    return FailedContainerTag(tag=tag_name, sing_tag=singTag)
 
             # Save the temporary metadata
             with open(tmpContainerPathMeta, mode="w", encoding="utf8") as tcpm:
@@ -574,7 +614,7 @@ STDERR
                         "repo": singTag,
                         "alias": None,
                     }
-                    fingerprint = cast("Fingerprint", tag)
+                    fingerprint = cast("Fingerprint", tag_name)
                 json.dump(tmp_meta, tcpm)
 
             canonicalContainerPathMeta = cast(
@@ -612,7 +652,7 @@ STDERR
             containerPath = localContainerPath
 
         return Container(
-            origTaggedName=tag,
+            origTaggedName=tag_name,
             taggedName=cast("URIType", singTag),
             signature=imageSignature,
             fingerprint=fingerprint,
@@ -640,7 +680,10 @@ STDERR
         dhelp = DockerHelper()
 
         for tag in tagList:
-            matched_container = self._materializeSingleContainer(
+            # If we cannot materialize it we cannot accept it
+            if not self.AcceptsContainer(tag):
+                continue
+            matched_container = self._materializeSingleContainerSing(
                 tag,
                 simpleFileNameMethod=simpleFileNameMethod,
                 matEnv=matEnv,

@@ -56,7 +56,7 @@ from .common import (
     ContainerType,
 )
 from .container import (
-    ContainerFactory,
+    AbstractDockerContainerFactory,
     ContainerEngineException,
     ContainerFactoryException,
 )
@@ -66,7 +66,7 @@ from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject
 DOCKER_PROTO = "docker://"
 
 
-class PodmanContainerFactory(ContainerFactory):
+class PodmanContainerFactory(AbstractDockerContainerFactory):
     def __init__(
         self,
         cacheDir: "Optional[AnyPath]" = None,
@@ -102,7 +102,7 @@ class PodmanContainerFactory(ContainerFactory):
         return ContainerType.Podman
 
     def _inspect(
-        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+        self, dockerTag: "str", matEnv: "Mapping[str, str]"
     ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying podman container {dockerTag}")
@@ -127,7 +127,7 @@ class PodmanContainerFactory(ContainerFactory):
             return cast("ExitVal", d_retval), d_out_v, d_err_v
 
     def _pull(
-        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+        self, dockerTag: "str", matEnv: "Mapping[str, str]"
     ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"pulling podman container {dockerTag}")
@@ -152,7 +152,7 @@ class PodmanContainerFactory(ContainerFactory):
             return cast("ExitVal", d_retval), d_out_v, d_err_v
 
     def _rmi(
-        self, dockerTag: "ContainerTaggedName", matEnv: "Mapping[str, str]"
+        self, dockerTag: "str", matEnv: "Mapping[str, str]"
     ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"removing podman container {dockerTag}")
@@ -178,7 +178,7 @@ class PodmanContainerFactory(ContainerFactory):
 
     def _save(
         self,
-        dockerTag: "ContainerTaggedName",
+        dockerTag: "str",
         destfile: "AbsPath",
         matEnv: "Mapping[str, str]",
     ) -> "Tuple[ExitVal, str]":
@@ -264,57 +264,57 @@ STDERR
                 "Ill-formed answer from podman version"
             ) from e
 
-    def materializeContainers(
+    def materializeSingleContainer(
         self,
-        tagList: "Sequence[ContainerTaggedName]",
+        tag: "ContainerTaggedName",
         simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
         offline: "bool" = False,
         force: "bool" = False,
-    ) -> "Sequence[Container]":
+    ) -> "Optional[Container]":
         """
         It is assured the containers are materialized
         """
-        containersList = []
 
         matEnv = dict(os.environ)
         matEnv.update(self.environment)
-        for tag in tagList:
-            # It is an absolute URL, we are removing the docker://
-            if tag.startswith(DOCKER_PROTO):
-                dockerTag = cast("ContainerTaggedName", tag[len(DOCKER_PROTO) :])
-                podmanPullTag = tag
-            else:
-                dockerTag = tag
-                podmanPullTag = cast("ContainerTaggedName", DOCKER_PROTO + tag)
 
-            self.logger.info(f"downloading podman container: {tag}")
-            if force:
-                if offline:
-                    raise ContainerFactoryException(
-                        f"Banned remove podman containers in offline mode from {tag}"
-                    )
+        # It is an absolute URL, we are removing the docker://
+        tag_name = tag.origTaggedName
+        if tag_name.startswith(DOCKER_PROTO):
+            dockerTag = tag_name[len(DOCKER_PROTO) :]
+            podmanPullTag = tag_name
+        else:
+            dockerTag = tag_name
+            podmanPullTag = DOCKER_PROTO + tag_name
 
-                # Blindly remove
-                _, _, _ = self._rmi(dockerTag, matEnv)
-                d_retval = -1
-            else:
+        self.logger.info(f"downloading podman container: {tag_name}")
+        if force:
+            if offline:
+                raise ContainerFactoryException(
+                    f"Banned remove podman containers in offline mode from {tag_name}"
+                )
+
+            # Blindly remove
+            _, _, _ = self._rmi(dockerTag, matEnv)
+            d_retval = -1
+        else:
+            d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
+
+        # Time to pull the image
+        if d_retval != 0:
+            if offline:
+                raise ContainerFactoryException(
+                    f"Banned pull podman containers in offline mode from {tag_name}"
+                )
+
+            d_retval, d_out_v, d_err_v = self._pull(podmanPullTag, matEnv)
+            if d_retval == 0:
+                # Second try
                 d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
 
-            # Time to pull the image
-            if d_retval != 0:
-                if offline:
-                    raise ContainerFactoryException(
-                        f"Banned pull podman containers in offline mode from {tag}"
-                    )
-
-                d_retval, d_out_v, d_err_v = self._pull(podmanPullTag, matEnv)
-                if d_retval == 0:
-                    # Second try
-                    d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
-
-            if d_retval != 0:
-                errstr = """Could not materialize podman image {}. Retval {}
+        if d_retval != 0:
+            errstr = """Could not materialize podman image {}. Retval {}
 ======
 STDOUT
 ======
@@ -324,205 +324,195 @@ STDOUT
 STDERR
 ======
 {}""".format(
-                    podmanPullTag, d_retval, d_out_v, d_err_v
-                )
-                raise ContainerEngineException(errstr)
-
-            # Parsing the output from podman inspect
-            try:
-                manifests = json.loads(d_out_v)
-                manifest = manifests[0]
-            except Exception as e:
-                raise ContainerFactoryException(
-                    f"FATAL ERROR: Podman finished properly but it did not properly materialize {tag}: {e}"
-                )
-
-            # Then, compute the signature
-            tagId = manifest["Id"]
-            fingerprint = None
-            if len(manifest["RepoDigests"]) > 0:
-                fingerprint = manifest["RepoDigests"][0]
-
-            # Last but one, let's save a copy of the container locally
-            containerFilename = simpleFileNameMethod(cast("URIType", tag))
-            containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
-            localContainerPath = cast(
-                "AbsPath",
-                os.path.join(self.engineContainersSymlinkDir, containerFilename),
+                podmanPullTag, d_retval, d_out_v, d_err_v
             )
-            localContainerPathMeta = cast(
-                "AbsPath",
-                os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
+            raise ContainerEngineException(errstr)
+
+        # Parsing the output from podman inspect
+        try:
+            manifests = json.loads(d_out_v)
+            manifest = manifests[0]
+        except Exception as e:
+            raise ContainerFactoryException(
+                f"FATAL ERROR: Podman finished properly but it did not properly materialize {tag_name}: {e}"
             )
 
-            self.logger.info(
-                "saving docker container (for reproducibility matters): {} => {}".format(
-                    tag, localContainerPath
-                )
-            )
-            # First, let's materialize the container image
-            manifestsImageSignature = ComputeDigestFromObject(manifests)
-            canonicalContainerPath = os.path.join(
-                self.containersCacheDir,
-                manifestsImageSignature.replace("=", "~")
-                .replace("/", "-")
-                .replace("+", "_"),
-            )
-            canonicalContainerPathMeta = canonicalContainerPath + self.META_JSON_POSTFIX
+        # Then, compute the signature
+        tagId = manifest["Id"]
+        fingerprint = None
+        if len(manifest["RepoDigests"]) > 0:
+            fingerprint = manifest["RepoDigests"][0]
 
-            # Defining the destinations
-            if os.path.isfile(canonicalContainerPathMeta):
-                with open(
-                    canonicalContainerPathMeta, mode="r", encoding="utf-8"
-                ) as tcpm:
-                    metadataLocal = json.load(tcpm)
+        # Last but one, let's save a copy of the container locally
+        containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
+        containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
+        localContainerPath = cast(
+            "AbsPath",
+            os.path.join(self.engineContainersSymlinkDir, containerFilename),
+        )
+        localContainerPathMeta = cast(
+            "AbsPath",
+            os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
+        )
 
-                manifestsImageSignatureLocal = metadataLocal.get("manifests_signature")
-                manifestsImageSignatureLocalRead = ComputeDigestFromObject(
-                    metadataLocal.get("manifests", [])
-                )
-                if (
-                    manifestsImageSignature != manifestsImageSignatureLocal
-                    or manifestsImageSignature != manifestsImageSignatureLocalRead
-                ):
-                    self.logger.warning(
-                        "Corrupted canonical container metadata {tag}. Re-saving"
-                    )
-                    saveContainerPathMeta = True
-                    imageSignatureLocal = None
-                else:
-                    saveContainerPathMeta = False
-                    imageSignatureLocal = metadataLocal.get("image_signature")
-            else:
-                saveContainerPathMeta = True
-                imageSignature = None
-                imageSignatureLocal = None
-
-            # Only trust when they match
-            tmpContainerPath: "Optional[str]" = os.path.join(
-                self.containersCacheDir, str(uuid.uuid4())
+        self.logger.info(
+            "saving docker container (for reproducibility matters): {} => {}".format(
+                tag_name, localContainerPath
             )
-            if os.path.isfile(canonicalContainerPath) and (
-                imageSignatureLocal is not None
+        )
+        # First, let's materialize the container image
+        manifestsImageSignature = ComputeDigestFromObject(manifests)
+        canonicalContainerPath = os.path.join(
+            self.containersCacheDir,
+            manifestsImageSignature.replace("=", "~")
+            .replace("/", "-")
+            .replace("+", "_"),
+        )
+        canonicalContainerPathMeta = canonicalContainerPath + self.META_JSON_POSTFIX
+
+        # Defining the destinations
+        if os.path.isfile(canonicalContainerPathMeta):
+            with open(canonicalContainerPathMeta, mode="r", encoding="utf-8") as tcpm:
+                metadataLocal = json.load(tcpm)
+
+            manifestsImageSignatureLocal = metadataLocal.get("manifests_signature")
+            manifestsImageSignatureLocalRead = ComputeDigestFromObject(
+                metadataLocal.get("manifests", [])
+            )
+            if (
+                manifestsImageSignature != manifestsImageSignatureLocal
+                or manifestsImageSignature != manifestsImageSignatureLocalRead
             ):
-                imageSignatureLocalRead = ComputeDigestFromFile(canonicalContainerPath)
-                if imageSignatureLocalRead != imageSignatureLocal:
-                    self.logger.warning(
-                        "Corrupted canonical container {tag}. Re-saving"
-                    )
-                else:
-                    imageSignature = imageSignatureLocal
-                    tmpContainerPath = None
-
-            if tmpContainerPath is not None:
-                saveContainerPathMeta = True
-                d_retval, d_err_ev = self._save(
-                    dockerTag, cast("AbsPath", tmpContainerPath), matEnv
+                self.logger.warning(
+                    f"Corrupted canonical container metadata {tag_name}. Re-saving"
                 )
-                self.logger.debug("podman save retval: {}".format(d_retval))
-                self.logger.debug("podman save stderr: {}".format(d_err_v))
+                saveContainerPathMeta = True
+                imageSignatureLocal = None
+            else:
+                saveContainerPathMeta = False
+                imageSignatureLocal = metadataLocal.get("image_signature")
+        else:
+            saveContainerPathMeta = True
+            imageSignature = None
+            imageSignatureLocal = None
 
-                if d_retval != 0:
-                    errstr = """Could not save podman image {}. Retval {}
+        # Only trust when they match
+        tmpContainerPath: "Optional[str]" = os.path.join(
+            self.containersCacheDir, str(uuid.uuid4())
+        )
+        if os.path.isfile(canonicalContainerPath) and (imageSignatureLocal is not None):
+            imageSignatureLocalRead = ComputeDigestFromFile(canonicalContainerPath)
+            if imageSignatureLocalRead != imageSignatureLocal:
+                self.logger.warning(
+                    f"Corrupted canonical container {tag_name}. Re-saving"
+                )
+            else:
+                imageSignature = imageSignatureLocal
+                tmpContainerPath = None
+
+        if tmpContainerPath is not None:
+            saveContainerPathMeta = True
+            d_retval, d_err_ev = self._save(
+                dockerTag, cast("AbsPath", tmpContainerPath), matEnv
+            )
+            self.logger.debug("podman save retval: {}".format(d_retval))
+            self.logger.debug("podman save stderr: {}".format(d_err_v))
+
+            if d_retval != 0:
+                errstr = """Could not save podman image {}. Retval {}
 ======
 STDERR
 ======
 {}""".format(
-                        dockerTag, d_retval, d_err_v
-                    )
-                    if os.path.exists(tmpContainerPath):
-                        try:
-                            os.unlink(tmpContainerPath)
-                        except:
-                            pass
-                    raise ContainerEngineException(errstr)
+                    dockerTag, d_retval, d_err_v
+                )
+                if os.path.exists(tmpContainerPath):
+                    try:
+                        os.unlink(tmpContainerPath)
+                    except:
+                        pass
+                raise ContainerEngineException(errstr)
 
-                shutil.move(tmpContainerPath, canonicalContainerPath)
-                imageSignature = ComputeDigestFromFile(canonicalContainerPath)
+            shutil.move(tmpContainerPath, canonicalContainerPath)
+            imageSignature = ComputeDigestFromFile(canonicalContainerPath)
 
-            if saveContainerPathMeta:
-                with open(
-                    canonicalContainerPathMeta, mode="w", encoding="utf-8"
-                ) as tcpM:
-                    json.dump(
-                        {
-                            "image_signature": imageSignature,
-                            "manifests_signature": manifestsImageSignature,
-                            "manifests": manifests,
-                        },
-                        tcpM,
-                    )
-
-            # Now, check the relative symbolic link of image
-            createSymlink = True
-            if os.path.lexists(localContainerPath):
-                if os.path.realpath(localContainerPath) != os.path.realpath(
-                    canonicalContainerPath
-                ):
-                    os.unlink(localContainerPath)
-                else:
-                    createSymlink = False
-            if createSymlink:
-                os.symlink(
-                    os.path.relpath(
-                        canonicalContainerPath, self.engineContainersSymlinkDir
-                    ),
-                    localContainerPath,
+        if saveContainerPathMeta:
+            with open(canonicalContainerPathMeta, mode="w", encoding="utf-8") as tcpM:
+                json.dump(
+                    {
+                        "image_signature": imageSignature,
+                        "manifests_signature": manifestsImageSignature,
+                        "manifests": manifests,
+                    },
+                    tcpM,
                 )
 
-            # Now, check the relative symbolic link of metadata
-            createSymlink = True
-            if os.path.lexists(localContainerPathMeta):
-                if os.path.realpath(localContainerPathMeta) != os.path.realpath(
-                    canonicalContainerPathMeta
-                ):
-                    os.unlink(localContainerPathMeta)
-                else:
-                    createSymlink = False
-            if createSymlink:
-                os.symlink(
-                    os.path.relpath(
-                        canonicalContainerPathMeta, self.engineContainersSymlinkDir
-                    ),
-                    localContainerPathMeta,
-                )
-
-            # Last, hardlink or copy the container and its metadata
-            if containers_dir is not None:
-                containerPath = cast(
-                    "AbsPath", os.path.join(containers_dir, containerFilename)
-                )
-                containerPathMeta = cast(
-                    "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
-                )
-
-                # Do not allow overwriting in offline mode
-                if not offline or not os.path.exists(containerPath):
-                    link_or_copy(localContainerPath, containerPath)
-                if not offline or not os.path.exists(containerPathMeta):
-                    link_or_copy(localContainerPathMeta, containerPathMeta)
+        # Now, check the relative symbolic link of image
+        createSymlink = True
+        if os.path.lexists(localContainerPath):
+            if os.path.realpath(localContainerPath) != os.path.realpath(
+                canonicalContainerPath
+            ):
+                os.unlink(localContainerPath)
             else:
-                containerPath = localContainerPath
-
-            # Learning about the intended processor architecture and variant
-            architecture = manifest.get("Architecture")
-            # As of version 4.5.0, podman does not report the architecture variant
-            if architecture is not None:
-                variant = manifest.get("Variant")
-                if variant is not None:
-                    architecture += "/" + variant
-            # And add to the list of containers
-            containersList.append(
-                Container(
-                    origTaggedName=tag,
-                    taggedName=cast("URIType", dockerTag),
-                    signature=tagId,
-                    fingerprint=fingerprint,
-                    architecture=architecture,
-                    operatingSystem=manifest.get("Os"),
-                    type=self.containerType,
-                    localPath=containerPath,
-                )
+                createSymlink = False
+        if createSymlink:
+            os.symlink(
+                os.path.relpath(
+                    canonicalContainerPath, self.engineContainersSymlinkDir
+                ),
+                localContainerPath,
             )
 
-        return containersList
+        # Now, check the relative symbolic link of metadata
+        createSymlink = True
+        if os.path.lexists(localContainerPathMeta):
+            if os.path.realpath(localContainerPathMeta) != os.path.realpath(
+                canonicalContainerPathMeta
+            ):
+                os.unlink(localContainerPathMeta)
+            else:
+                createSymlink = False
+        if createSymlink:
+            os.symlink(
+                os.path.relpath(
+                    canonicalContainerPathMeta, self.engineContainersSymlinkDir
+                ),
+                localContainerPathMeta,
+            )
+
+        # Last, hardlink or copy the container and its metadata
+        if containers_dir is not None:
+            containerPath = cast(
+                "AbsPath", os.path.join(containers_dir, containerFilename)
+            )
+            containerPathMeta = cast(
+                "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
+            )
+
+            # Do not allow overwriting in offline mode
+            if not offline or not os.path.exists(containerPath):
+                link_or_copy(localContainerPath, containerPath)
+            if not offline or not os.path.exists(containerPathMeta):
+                link_or_copy(localContainerPathMeta, containerPathMeta)
+        else:
+            containerPath = localContainerPath
+
+        # Learning about the intended processor architecture and variant
+        architecture = manifest.get("Architecture")
+        # As of version 4.5.0, podman does not report the architecture variant
+        if architecture is not None:
+            variant = manifest.get("Variant")
+            if variant is not None:
+                architecture += "/" + variant
+        # And add to the list of containers
+        return Container(
+            origTaggedName=tag_name,
+            taggedName=cast("URIType", dockerTag),
+            signature=tagId,
+            fingerprint=fingerprint,
+            architecture=architecture,
+            operatingSystem=manifest.get("Os"),
+            type=self.containerType,
+            localPath=containerPath,
+        )

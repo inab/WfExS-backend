@@ -126,9 +126,6 @@ if TYPE_CHECKING:
     SymbolicParamName = NewType("SymbolicParamName", SymbolicName)
     SymbolicOutputName = NewType("SymbolicOutputName", SymbolicName)
 
-    # The tagged name of a container
-    ContainerTaggedName = NewType("ContainerTaggedName", str)
-
     URIType = NewType("URIType", str)
     # The URL of a git repository containing at least one workflow
     RepoURL = NewType("RepoURL", URIType)
@@ -188,6 +185,30 @@ class ContentKind(enum.Enum):
     File = "file"
     Directory = "dir"
     Value = "val"
+
+
+class ContainerType(enum.Enum):
+    Singularity = "singularity"
+    Apptainer = "singularity"
+    Docker = "docker"
+    UDocker = "udocker"
+    Podman = "podman"
+    Conda = "conda"
+    NoContainer = "none"
+
+
+# The tagged name of a container
+@dataclass
+class ContainerTaggedName:
+    """
+    origTaggedName: Symbolic name or identifier of the container
+        (including tag) which appears in the workflow.
+    type: Compatible container type with this symbolic name
+        Container factories have to decide whether they bear with it.
+    """
+
+    origTaggedName: "str"
+    type: "ContainerType"
 
 
 class AttributionRole(enum.Enum):
@@ -682,24 +703,16 @@ class MarshallingStatus(NamedTuple):
 """
 
 
-class ContainerType(enum.Enum):
-    Singularity = "singularity"
-    Apptainer = "singularity"
-    Docker = "docker"
-    UDocker = "udocker"
-    Podman = "podman"
-    NoContainer = "none"
-
-
 DEFAULT_CONTAINER_TYPE = ContainerType.Singularity
 
 
-class Container(NamedTuple):
+@dataclass
+class Container(ContainerTaggedName):
     """
     origTaggedName: Symbolic name or identifier of the container
         (including tag) which appears in the workflow.
-    taggedName: Symbolic name or identifier of the container (including tag)
     type: Container type
+    taggedName: Symbolic name or identifier of the container (including tag)
     localPath: The full local path to the container file (it can be None)
     signature: Signature (aka file fingerprint) of the container
         (sha256 or similar). It could be None outside Singularity solutions.
@@ -707,9 +720,7 @@ class Container(NamedTuple):
         Mainly from docker registries.
     """
 
-    origTaggedName: "str"
     taggedName: "URIType"
-    type: "ContainerType"
     architecture: "Optional[ProcessorArchitecture]" = None
     operatingSystem: "Optional[ContainerOperatingSystem]" = None
     localPath: "Optional[AbsPath]" = None

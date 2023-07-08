@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +38,7 @@ from typing import (
 )
 
 from .common import (
+    ContainerTaggedName,
     ContainerType,
     ContentKind,
     DEFAULT_JAVA_CMD,
@@ -68,7 +70,6 @@ if TYPE_CHECKING:
     from .common import (
         AbsPath,
         AnyPath,
-        ContainerTaggedName,
         EngineLocalConfig,
         EngineMode,
         EnginePath,
@@ -84,6 +85,14 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
+    from .utils.groovy_parsing import (
+        ContextAssignments,
+        NfInclude,
+        NfIncludeConfig,
+        NfProcess,
+        NfWorkflow,
+    )
+
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import (
     WORKDIR_STATS_RELDIR,
@@ -92,6 +101,7 @@ from .engine import (
     STATS_DAG_DOT_FILE,
 )
 from .fetchers.http import fetchClassicURL
+from .utils.groovy_parsing import analyze_nf_content
 
 # A default name for the static bash
 DEFAULT_STATIC_BASH_CMDS = [
@@ -124,6 +134,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     DEFAULT_NEXTFLOW_VERSION_20_04 = cast("EngineVersion", "20.04.1")
     DEFAULT_NEXTFLOW_DOCKER_IMAGE = "nextflow/nextflow"
 
+    DEFAULT_NEXTFLOW_ENTRYPOINT = "main.nf"
     NEXTFLOW_CONFIG_FILENAME = "nextflow.config"
 
     NEXTFLOW_IO = cast("URIType", "https://www.nextflow.io/")
@@ -295,6 +306,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
     def engine_url(self) -> "URIType":
         return self.NEXTFLOW_IO
 
+    NXF_VER_PAT: "Pattern[str]" = re.compile(r"!?[>=]*([^ ]+)")
+
     def identifyWorkflow(
         self, localWf: "LocalWorkflow", engineVer: "Optional[EngineVersion]" = None
     ) -> "Union[Tuple[EngineVersion, LocalWorkflow], Tuple[None, None]]":
@@ -307,64 +320,135 @@ class NextflowWorkflowEngine(WorkflowEngine):
         if localWf.relPath is not None:
             nfPath = cast("AbsPath", os.path.join(nfPath, localWf.relPath))
 
-        candidateNf: "Optional[RelPath]"
+        nfDir: "AbsPath"
+        # If it is a directory, we have to assume there should be a nextflow.config
+        firstPath = None
         if os.path.isdir(nfPath):
             nfDir = nfPath
-            candidateNf = None
-        else:
+        elif os.path.isfile(nfPath):
+            # Does it exist?
             nfDir = cast("AbsPath", os.path.dirname(nfPath))
-            candidateNf = cast("RelPath", os.path.basename(nfPath))
+            # We don't know yet which is
+            firstPath = nfPath
+        else:
+            # Giving up
+            raise WorkflowEngineException(
+                f"Could not find {nfPath} in Nextflow workflow directory"
+            )
 
-        nfConfig = os.path.join(nfDir, self.NEXTFLOW_CONFIG_FILENAME)
-        verPat: "Optional[Pattern[str]]" = re.compile(
-            r"nextflowVersion *= *['\"]!?[>=]*([^ ]+)['\"]"
-        )
-        mainPat: "Optional[Pattern[str]]" = re.compile(
-            r"mainScript *= *['\"]([^\"]+)['\"]"
-        )
+        # Trying with the defaults
+        if firstPath is None:
+            firstPath = cast(
+                "AbsPath", os.path.join(nfDir, self.NEXTFLOW_CONFIG_FILENAME)
+            )
+
+            # Does it exist?
+            if not os.path.isfile(firstPath):
+                firstPath = cast(
+                    "AbsPath", os.path.join(nfDir, self.DEFAULT_NEXTFLOW_ENTRYPOINT)
+                )
+
+                if not os.path.isfile(firstPath):
+                    # Giving up
+                    raise WorkflowEngineException(
+                        f"Could not find neither {self.NEXTFLOW_CONFIG_FILENAME} nor {self.DEFAULT_NEXTFLOW_ENTRYPOINT} in Nextflow workflow directory {nfDir}"
+                    )
+                    # return None, None
+
+        # Guessing what we got here is a nextflow.config
+        # or a Nexflow file
+        processes: "Sequence[NfProcess]"
+        includes: "Sequence[NfInclude]"
+        workflows: "Sequence[NfWorkflow]"
+        includeconfigs: "Sequence[NfIncludeConfig]"
+        interesting_assignments: "ContextAssignments"
+
+        nfConfig: "Optional[AbsPath]" = None
+        candidateNf: "Optional[RelPath]" = None
+        candidateConfig: "Optional[RelPath]" = None
+        newNxfConfigs: "MutableSequence[AbsPath]" = []
+        only_names = ["manifest", "nextflow"]
+        absoluteCandidateNf: "Optional[AbsPath]" = None
+        # First, are we dealing with a config or a nextflow file?
+        with open(firstPath, mode="rt", encoding="utf-8") as nfH:
+            firstPathContent = nfH.read()
+            try:
+                (
+                    _,
+                    processes,
+                    includes,
+                    workflows,
+                    includeconfigs,
+                    interesting_assignments,
+                ) = analyze_nf_content(firstPathContent, only_names=only_names)
+            except Exception as e:
+                errstr = f"Failed to parse initial file {os.path.relpath(firstPath, nfDir)} with groovy parser"
+                self.logger.exception(errstr)
+                raise WorkflowEngineException(errstr) from e
+
+            if len(processes) > 0 or len(includes) > 0 or len(workflows) > 0:
+                # It is a nextflow file, but it could be one different from the one at the nextflow.config
+                absoluteCandidateNf = firstPath
+            else:
+                # This is a nextflow config
+                nfConfig = firstPath
+                newNxfConfigs.append(firstPath)
+
+        # Did we loaded a nextflow config file?
+        if nfConfig is None:
+            possibleNfConfig = cast(
+                "AbsPath", os.path.join(nfDir, self.NEXTFLOW_CONFIG_FILENAME)
+            )
+            # Only include what it is reachable
+            if os.path.isfile(possibleNfConfig):
+                newNxfConfigs.append(possibleNfConfig)
+            else:
+                self.logger.debug(
+                    f"No default configuration file for workflow at {nfDir}"
+                )
+
+        # Let's record all the configuration files
+        nxfScripts: "MutableSequence[RelPath]" = []
+        absolutePutativeCandidateNf: "Optional[AbsPath]" = None
+        engineVer = None
+        minimalEngineVer = None
         kw_20_04_Pat: "Optional[Pattern[str]]" = re.compile(
             r"\$(?:(?:launchDir|moduleDir|projectDir)|\{(?:launchDir|moduleDir|projectDir)\})"
         )
-        engineVer = None
-        minimalEngineVer = None
+        while len(newNxfConfigs) > 0:
+            nextNewNxfConfigs: "MutableSequence[AbsPath]" = []
+            for newNxfConfig in newNxfConfigs:
+                # Do not read twice
+                relNewNxfConfig = cast("RelPath", os.path.relpath(newNxfConfig, nfDir))
+                if relNewNxfConfig in nxfScripts:
+                    continue
 
-        # else:
-        #    # We are deactivating the engine version capture from the config
-        #    verPat = None
+                nxfScripts.append(relNewNxfConfig)
+                with open(newNxfConfig, mode="rt", encoding="utf-8") as nfH:
+                    newNxfConfigContent = nfH.read()
+                    try:
+                        (
+                            _,
+                            _,
+                            _,
+                            _,
+                            includeconfigs,
+                            interesting_assignments,
+                        ) = analyze_nf_content(
+                            newNxfConfigContent, only_names=only_names
+                        )
+                    except Exception as e:
+                        errstr = f"Failed to parse configuration file {relNewNxfConfig} with groovy parser"
+                        self.logger.exception(errstr)
+                        raise WorkflowEngineException(errstr) from e
 
-        nxfScripts: "MutableSequence[RelPath]" = []
-        if os.path.isfile(nfConfig):
-            # Now, let's guess the nextflow version and mainScript
-            with open(nfConfig, "r") as nc_config:
-                # Recording the nextflow.config file
-                nxfScripts.append(cast("RelPath", os.path.relpath(nfConfig, nfDir)))
-                for line in nc_config:
-                    if verPat is not None:
-                        matched = verPat.search(line)
-                        if matched:
-                            engineVer = cast("EngineVersion", matched.group(1))
-                            verPat = None
+                    # Register the main one
+                    if nfConfig is None:
+                        nfConfig = newNxfConfig
 
-                    if mainPat is not None:
-                        matched = mainPat.search(line)
-                        if matched:
-                            putativeCandidateNf = cast(
-                                "Optional[RelPath]", matched.group(1)
-                            )
-                            if candidateNf is not None:
-                                if candidateNf != putativeCandidateNf:
-                                    # This should be a warning
-                                    raise WorkflowEngineException(
-                                        "Nextflow mainScript in manifest {} differs from the one requested {}".format(
-                                            putativeCandidateNf, candidateNf
-                                        )
-                                    )
-                            else:
-                                candidateNf = putativeCandidateNf
-                            mainPat = None
-
+                    # This is easier to be detected through pattern matching
                     if kw_20_04_Pat is not None:
-                        matched = kw_20_04_Pat.search(line)
+                        matched = kw_20_04_Pat.search(newNxfConfigContent)
                         if matched:
                             if self.nxf_version <= self.DEFAULT_NEXTFLOW_VERSION_20_04:
                                 minimalEngineVer = self.DEFAULT_NEXTFLOW_VERSION_20_04
@@ -372,36 +456,90 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                 minimalEngineVer = self.nxf_version
                             kw_20_04_Pat = None
 
-        if candidateNf is None:
-            # Default case
-            self.logger.debug("Default candidateNf")
-            candidateNf = cast("RelPath", "main.nf")
+                    # Time to resolve these
+                    nfConfigDir = os.path.dirname(newNxfConfig)
+                    # But first, check the manifest availability
+                    # to obtain the entrypoint
+                    manifest = interesting_assignments.get("manifest")
+                    if isinstance(manifest, dict):
+                        putativeCandidateNfVals = manifest.get("mainScript")
+                        if putativeCandidateNfVals is not None:
+                            for putativeCandidateNfVal in putativeCandidateNfVals:
+                                putativeCandidateNf = putativeCandidateNfVal[1]
+                                possibleAbsolutePutativeCandidateNf = cast(
+                                    "AbsPath",
+                                    os.path.normpath(
+                                        os.path.join(nfConfigDir, putativeCandidateNf)
+                                    ),
+                                )
+                                if os.path.isfile(possibleAbsolutePutativeCandidateNf):
+                                    absolutePutativeCandidateNf = (
+                                        possibleAbsolutePutativeCandidateNf
+                                    )
+                                else:
+                                    self.logger.warning(
+                                        f"Candidate entrypoint {putativeCandidateNf} from manifest at {relNewNxfConfig} not found"
+                                    )
 
-        entrypoint = os.path.join(nfDir, candidateNf)
-        self.logger.debug(
-            "Testing entrypoint {} (dir {} candidate {})".format(
-                entrypoint, nfDir, candidateNf
-            )
-        )
-        # Checking that the workflow entrypoint does exist
-        if not os.path.isfile(entrypoint):
+                        # And now, the minimal version
+                        putativeEngineVerVals = manifest.get("nextflowVersion")
+                        if putativeEngineVerVals is not None:
+                            for putativeEngineVerVal in putativeEngineVerVals:
+                                matched = self.NXF_VER_PAT.search(
+                                    putativeEngineVerVal[1]
+                                )
+                                if matched:
+                                    engineVer = cast("EngineVersion", matched.group(1))
+                                    break
+                                else:
+                                    self.logger.debug(
+                                        f"Discarded {putativeEngineVerVal[1]} as a valid version string from {relNewNxfConfig}"
+                                    )
+
+                    # And register all the included config files which are reachable
+                    for includeconfig in includeconfigs:
+                        relIncludePath = includeconfig.path
+                        absIncludePath = cast(
+                            "AbsPath",
+                            os.path.normpath(os.path.join(nfConfigDir, relIncludePath)),
+                        )
+                        if os.path.isfile(absIncludePath):
+                            nextNewNxfConfigs.append(absIncludePath)
+                        else:
+                            self.logger.warning(
+                                f"Config file {relIncludePath} included from {relNewNxfConfig} not found"
+                            )
+            # Next round
+            newNxfConfigs = nextNewNxfConfigs
+
+        if nfConfig is None and absoluteCandidateNf is None:
+            # Neither config nor entrypoint, giving up
             raise WorkflowEngineException(
-                "Could not find mainScript {} in Nextflow workflow directory {} ".format(
-                    candidateNf, nfDir
+                f"Could not find neither neither config nor entrypoint in Nextflow workflow directory {nfDir}, giving up"
+            )
+            # return None, None
+
+        if absoluteCandidateNf is None:
+            if absolutePutativeCandidateNf is None:
+                # Giving up
+                raise WorkflowEngineException(
+                    f"Could not find mainScript or {self.DEFAULT_NEXTFLOW_ENTRYPOINT} in Nextflow workflow directory {nfDir}"
+                )
+                # return None, None
+            # We have the entrypoint
+            entrypoint = absolutePutativeCandidateNf
+        elif (
+            absolutePutativeCandidateNf is not None
+            and absoluteCandidateNf != absolutePutativeCandidateNf
+        ):
+            raise WorkflowEngineException(
+                "Nextflow mainScript in manifest {} differs from the one requested {}".format(
+                    os.path.relpath(absolutePutativeCandidateNf, nfDir),
+                    os.path.relpath(absoluteCandidateNf, nfDir),
                 )
             )
-
-        # Now, the moment to identify whether it is a nextflow workflow
-        with open(entrypoint, mode="r", encoding="iso-8859-1") as hypNf:
-            wholeNf = hypNf.read()
-
-            # Better recognition is needed, maybe using nextflow
-            for pat in ("nextflow", "process "):
-                if pat in wholeNf:
-                    break
-            else:
-                # No nextflow keyword was detected
-                return None, None
+        else:
+            entrypoint = absoluteCandidateNf
 
         # Setting a default engineVer
         if (minimalEngineVer is not None) and (
@@ -418,55 +556,64 @@ class NextflowWorkflowEngine(WorkflowEngine):
             engineVer = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
 
         # Subworkflow / submodule include detection
-        newNxfScripts = [entrypoint]
+        newNxfScripts: "MutableSequence[AbsPath]" = [entrypoint]
+        only_names = ["nextflow"]
         while len(newNxfScripts) > 0:
-            nextNxfScripts = []
+            nextNxfScripts: "MutableSequence[AbsPath]" = []
             for nxfScript in newNxfScripts:
+                relNxfScript = cast("RelPath", os.path.relpath(nxfScript, nfDir))
                 # Avoid loops
-                if nxfScript in nxfScripts:
+                if relNxfScript in nxfScripts:
                     continue
 
-                baseNxfScript = os.path.dirname(nxfScript)
-                relNxfScript = cast("RelPath", os.path.relpath(nxfScript, nfDir))
                 self.logger.debug(f"Initial parsing {relNxfScript}")
-                with open(nxfScript, encoding="utf-8") as wfH:
-                    for line in wfH:
-                        # Getting include declaration
-                        includeMatchE = self.IncludeScriptPat.search(line)
-                        if includeMatchE:
-                            relScriptPath = includeMatchE.group(2)
-                            # self.logger.debug(f"File {nxfScript} includes {relScriptPath} (line {line})")
-                            if "$" in relScriptPath:
-                                self.logger.error(
-                                    f"File {relNxfScript} includes from {relScriptPath} using variable"
-                                )
+                nxfScripts.append(relNxfScript)
+                with open(nxfScript, mode="rt", encoding="utf-8") as nH:
+                    content = nH.read()
+                    try:
+                        (
+                            _,
+                            processes,
+                            includes,
+                            workflows,
+                            _,
+                            interesting_assignments,
+                        ) = analyze_nf_content(content, only_names=only_names)
+                    except Exception as e:
+                        errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
+                        self.logger.exception(errstr)
+                        raise WorkflowEngineException(errstr) from e
 
-                            if not relScriptPath.endswith(".nf"):
-                                relScriptPath += ".nf"
-
-                            absScriptPath = os.path.normpath(
-                                os.path.join(baseNxfScript, relScriptPath)
+                    # Register all the included files which are reachable
+                    nxfScriptDir = os.path.dirname(nxfScript)
+                    for include in includes:
+                        relIncludePath = include.path
+                        if not relIncludePath.endswith(".nf"):
+                            relIncludePath += ".nf"
+                        absIncludePath = cast(
+                            "AbsPath",
+                            os.path.normpath(
+                                os.path.join(nxfScriptDir, relIncludePath)
+                            ),
+                        )
+                        if os.path.isfile(absIncludePath):
+                            nextNxfScripts.append(absIncludePath)
+                        else:
+                            self.logger.warning(
+                                f"Nextflow file {relIncludePath} included from {relNxfScript} not found"
                             )
-                            nextNxfScripts.append(absScriptPath)
-                        # Matching all template declarations
-                        patMatchE = self.TemplatePat.search(line)
-                        if patMatchE is None:
-                            patMatchE = self.TemplatePatAlt.search(line)
 
-                        if patMatchE is not None:
-                            this_template = patMatchE.group(1)
-                            if "$" in this_template:
-                                self.logger.error(
-                                    f"File {relNxfScript} uses template {this_template} using variable"
-                                )
-
+                    # And register the templates from each
+                    # the processes
+                    for processDecl in processes:
+                        for relTemplatePath in processDecl.templates:
                             # Now, let's try finding it
                             local_template = os.path.join(
-                                baseNxfScript, "templates", this_template
+                                nxfScriptDir, "templates", relTemplatePath
                             )
                             if not os.path.isfile(local_template):
                                 local_template = os.path.join(
-                                    nfDir, "templates", this_template
+                                    nfDir, "templates", relTemplatePath
                                 )
 
                             # And now let's save it!
@@ -476,10 +623,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                     "RelPath", os.path.relpath(local_template, nfDir)
                                 )
                                 nxfScripts.append(rel_local_template)
+                            else:
+                                self.logger.warning(
+                                    f"Nextflow template {relTemplatePath} included from {relNxfScript} not found"
+                                )
 
-                # Recording the script
-                nxfScripts.append(relNxfScript)
             newNxfScripts = nextNxfScripts
+
+        candidateNf = cast("RelPath", os.path.relpath(entrypoint, nfDir))
 
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(
@@ -1077,11 +1228,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
     )
 
     C_URL_REGEX: "Final[Pattern[str]]" = re.compile(
-        r"(['\"])(https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*))\1"
+        r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)"
     )
 
     C_DOCKER_REGEX: "Final[Pattern[str]]" = re.compile(
-        r"(['\"])((?:docker://)?(?:(?=[^:\/]{1,253})(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-zA-Z0-9-]{1,63}(?<!-))*(?::[0-9]{1,5})?/)?((?![._-])(?:[a-z0-9._-]*)(?<![._-])(?:/(?![._-])[a-z0-9._-]*(?<![._-]))*)(?::(?![.-])[a-zA-Z0-9_.-]{1,128})?)\1"
+        r"(?:docker://)?(?:(?=[^:\/]{1,253})(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(?:\.(?!-)[a-zA-Z0-9-]{1,63}(?<!-))*(?::[0-9]{1,5})?/)?((?![._-])(?:[a-z0-9._-]*)(?<![._-])(?:/(?![._-])[a-z0-9._-]*(?<![._-]))*)(?::(?![.-])[a-zA-Z0-9_.-]{1,128})?"
     )
 
     # Pattern to search dsl enabling
@@ -1092,6 +1243,38 @@ class NextflowWorkflowEngine(WorkflowEngine):
     IncludeScriptPat: "Final[Pattern[str]]" = re.compile(
         r"^\s*include\s+\{[^\}]+\}\s+from\s+(['\"])([^'\"]+)\1"
     )
+
+    def _genDockSingContainerTaggedName(
+        self, container_tag: "str"
+    ) -> "Optional[ContainerTaggedName]":
+        this_container_url = None
+        this_container_docker = None
+        url_match = self.C_URL_REGEX.search(container_tag)
+        if url_match:
+            this_container_url = url_match[0]
+            self.logger.debug(f"Found URL container {this_container_url}")
+
+        docker_match = self.C_DOCKER_REGEX.search(container_tag)
+        if docker_match is not None and docker_match[0] != "singularity":
+            this_container_docker = docker_match[0]
+            self.logger.debug(f"Found Docker container {this_container_docker}")
+
+        if this_container_docker is not None:
+            return ContainerTaggedName(
+                origTaggedName=this_container_docker,
+                type=ContainerType.Docker,
+            )
+        elif this_container_url is not None:
+            return ContainerTaggedName(
+                origTaggedName=this_container_url,
+                type=ContainerType.Singularity,
+            )
+
+        self.logger.error(
+            f"Cannot parse container string {container_tag}\n\n:warning: Skipping this container image.."
+        )
+
+        return None
 
     def materializeWorkflow(
         self, matWorkflowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
@@ -1137,13 +1320,17 @@ STDERR
             raise WorkflowEngineException(errstr)
 
         # searching for process\..*container = ['"]([^'"]+)['"]
-        containerTags: "Set[ContainerTaggedName]" = set()
+        containerTags: "MutableSequence[ContainerTaggedName]" = []
+        containerTagSet: "Set[str]" = set()
         assert flat_stdout is not None
         self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
         for contMatch in self.ContConfigPat.finditer(flat_stdout):
             # Discarding local path cases
-            if contMatch[1][0] != "/":
-                containerTags.add(cast("ContainerTaggedName", contMatch[1]))
+            if contMatch[1][0] != "/" and contMatch[1] not in containerTagSet:
+                containerTagSet.add(contMatch[1])
+                tagged_container = self._genDockSingContainerTaggedName(contMatch[1])
+                if tagged_container is not None:
+                    containerTags.append(tagged_container)
 
         # Early DSL2 detection
         dslVer: "Optional[str]" = None
@@ -1165,64 +1352,62 @@ STDERR
         nfDir = matWorkflowEngine.workflow.dir
         assert matWorkflowEngine.workflow.relPathFiles is not None
         for relNxfScript in matWorkflowEngine.workflow.relPathFiles:
-            # Skip the config file
-            if relNxfScript == self.NEXTFLOW_CONFIG_FILENAME:
-                continue
-
             # Skipping templates and other elements
             if not relNxfScript.endswith(".nf"):
                 continue
 
             nxfScript = os.path.normpath(os.path.join(nfDir, relNxfScript))
-            baseNxfScript = os.path.dirname(nxfScript)
             self.logger.debug(f"Searching container declarations at {relNxfScript}")
             with open(nxfScript, encoding="utf-8") as wfH:
                 # This is needed for multi-line pattern matching
-                nxfSource = wfH.read()
+                content = wfH.read()
 
-                # Matching all container declarations
-                for cont_match in itertools.chain(
-                    self.BlockContainerPat.finditer(nxfSource),
-                    self.BlockContainerPatAlt.finditer(nxfSource),
-                ):
-                    # This block is partially borrowed from
-                    # https://github.com/nf-core/tools/blob/dec66abe1c36a8975a952e1f80f045cab65bbf72/nf_core/download.py#L464-L488
+                try:
+                    (
+                        _,
+                        processes,
+                        includes,
+                        workflows,
+                        _,
+                        interesting_assignments,
+                    ) = analyze_nf_content(content)
+                except Exception as e:
+                    errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
+                    self.logger.exception(errstr)
+                    raise WorkflowEngineException(errstr) from e
 
-                    this_container_url = None
-                    this_container_docker = None
-                    url_match = self.C_URL_REGEX.search(cont_match[0])
-                    if url_match:
-                        this_container_url = url_match[2]
-                        self.logger.debug(f"Found URL container {this_container_url}")
-
-                    for docker_match in self.C_DOCKER_REGEX.finditer(cont_match[0]):
-                        if docker_match[2] != "singularity":
-                            this_container_docker = docker_match[2]
-                            self.logger.debug(
-                                f"Found Docker container {this_container_docker}"
+                for processDecl in processes:
+                    # Docker and Singularity
+                    for container_tag in processDecl.containers:
+                        if container_tag not in containerTagSet:
+                            containerTagSet.add(container_tag)
+                            tagged_container = self._genDockSingContainerTaggedName(
+                                container_tag
                             )
-                            break
-
-                    if this_container_docker is not None:
-                        containerTags.add(
-                            cast("ContainerTaggedName", this_container_docker)
-                        )
-                    elif this_container_url is not None:
-                        containerTags.add(
-                            cast("ContainerTaggedName", this_container_url)
-                        )
-                    else:
-                        self.logger.error(
-                            f"Cannot parse container string in '{relNxfScript}':\n\n{cont_match[0]}\n\n:warning: Skipping this container image.."
-                        )
+                            if tagged_container is not None:
+                                containerTags.append(tagged_container)
+                    # Conda
+                    for conda_tag in processDecl.condas:
+                        if conda_tag not in containerTagSet:
+                            containerTagSet.add(container_tag)
+                            containerTags.append(
+                                ContainerTaggedName(
+                                    origTaggedName=conda_tag,
+                                    type=ContainerType.Conda,
+                                )
+                            )
 
                 # Matching at least one DSL declaration
                 if dslVer is None:
-                    for dslEnable in self.DSLEnablePat.finditer(nxfSource):
-                        dslVer = dslEnable.group(1)
-                        break
+                    nextFl = interesting_assignments.get("nextflow")
+                    if isinstance(nextFl, dict):
+                        nextEnb = nextFl.get("enable")
+                        if isinstance(nextEnb, dict):
+                            dslVerVal = nextEnb.get("dsl")
+                            if isinstance(dslVerVal, list):
+                                dslVer = dslVerVal[0][1]
 
-        return matWorkflowEngine, list(containerTags)
+        return matWorkflowEngine, containerTags
 
     def simpleContainerFileName(self, imageUrl: "URIType") -> "RelPath":
         """

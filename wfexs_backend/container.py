@@ -39,8 +39,10 @@ if TYPE_CHECKING:
     from typing import (
         Mapping,
         MutableMapping,
+        MutableSequence,
         Optional,
         Sequence,
+        Set,
         Tuple,
         Union,
     )
@@ -176,6 +178,17 @@ class ContainerFactory(abc.ABC):
     def ContainerType(cls) -> "common.ContainerType":
         pass
 
+    @classmethod
+    def AcceptsContainer(cls, container: "ContainerTaggedName") -> "bool":
+        return cls.AcceptsContainerType(container.type)
+
+    @classmethod
+    @abc.abstractmethod
+    def AcceptsContainerType(
+        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+    ) -> "bool":
+        pass
+
     @property
     def environment(self) -> "Mapping[str, str]":
         return self._environment
@@ -242,7 +255,6 @@ STDERR
             "ProcessorArchitecture", platform.machine()
         )
 
-    @abc.abstractmethod
     def materializeContainers(
         self,
         tagList: "Sequence[ContainerTaggedName]",
@@ -251,6 +263,42 @@ STDERR
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Sequence[Container]":
+        """
+        It is assured the containers are materialized
+        """
+        materialized_containers: "MutableSequence[Container]" = []
+        not_found_containers: "MutableSequence[str]" = []
+
+        for tag in tagList:
+            if self.AcceptsContainer(tag):
+                container = self.materializeSingleContainer(
+                    tag,
+                    simpleFileNameMethod,
+                    containers_dir=containers_dir,
+                    offline=offline,
+                    force=force,
+                )
+                if container is not None:
+                    materialized_containers.append(container)
+                else:
+                    not_found_containers.append(tag.origTaggedName)
+
+        if len(not_found_containers) > 0:
+            raise ContainerNotFoundException(
+                f"Could not fetch metadata for next tags because they were not found:\n{', '.join(not_found_containers)}"
+            )
+
+        return materialized_containers
+
+    @abc.abstractmethod
+    def materializeSingleContainer(
+        self,
+        tag: "ContainerTaggedName",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        offline: "bool" = False,
+        force: "bool" = False,
+    ) -> "Optional[Container]":
         """
         It is assured the containers are materialized
         """
@@ -271,26 +319,51 @@ class NoContainerFactory(ContainerFactory):
 
     # def __init__(self, cacheDir=None, local_config=None, engine_name='unset'):
     #    super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name)
+    AcceptedContainerTypes = set([common.ContainerType.NoContainer])
 
     @classmethod
     def ContainerType(cls) -> "common.ContainerType":
         return common.ContainerType.NoContainer
 
+    @classmethod
+    def AcceptsContainerType(
+        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+    ) -> "bool":
+        return not cls.AcceptedContainerTypes.isdisjoint(
+            container_type if isinstance(container_type, set) else (container_type,)
+        )
+
     def engine_version(self) -> "ContainerEngineVersionStr":
         """No container engine, empty version"""
         return cast("ContainerEngineVersionStr", "")
 
-    def materializeContainers(
+    def materializeSingleContainer(
         self,
-        tagList: "Sequence[ContainerTaggedName]",
+        tag: "ContainerTaggedName",
         simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
         offline: "bool" = False,
         force: "bool" = False,
-    ) -> "Sequence[Container]":
+    ) -> "Optional[Container]":
         """
-        It is assured the no-containers are materialized
-        i.e. it is a no-op
+        This is a no-op
         """
+        return None
 
-        return []
+
+class AbstractDockerContainerFactory(ContainerFactory):
+    ACCEPTED_CONTAINER_TYPES = set(
+        (
+            common.ContainerType.Docker,
+            common.ContainerType.UDocker,
+            common.ContainerType.Podman,
+        )
+    )
+
+    @classmethod
+    def AcceptsContainerType(
+        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+    ) -> "bool":
+        return not cls.ACCEPTED_CONTAINER_TYPES.isdisjoint(
+            container_type if isinstance(container_type, set) else (container_type,)
+        )
