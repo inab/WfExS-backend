@@ -1210,22 +1210,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
     ContConfigPat: "Pattern[str]" = re.compile(
         r"process\..*container = '(.+)'$", flags=re.MULTILINE
     )
-    # Pattern for searching for container ['"]([^'"]+)['"] in main workflow
-    ContScriptPat: "Final[Pattern[str]]" = re.compile(
-        r"^\s*container\s+(['\"])([^'\"]+)\1"
-    )
-
-    TemplatePat: "Final[Pattern[str]]" = re.compile(r"^\s*template\s+'([^']+)'")
-    TemplatePatAlt: "Final[Pattern[str]]" = re.compile(r"^\s*template\s+\"([^\"]+)\"")
-
-    # Borrowed from https://github.com/nf-core/tools/blob/dec66abe1c36a8975a952e1f80f045cab65bbf72/nf_core/download.py#L462
-    BlockContainerPat: "Final[Pattern[str]]" = re.compile(
-        r"container\s*\"([^\"]*)\"", re.S
-    )
-
-    BlockContainerPatAlt: "Final[Pattern[str]]" = re.compile(
-        r"container\s*'([^']*)'", re.S
-    )
 
     C_URL_REGEX: "Final[Pattern[str]]" = re.compile(
         r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)"
@@ -1238,10 +1222,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
     # Pattern to search dsl enabling
     DSLEnablePat: "Final[Pattern[str]]" = re.compile(
         r"^\s*nextflow\.enable\.dsl\s*=\s*([1-9])"
-    )
-    # Pattern to search includes
-    IncludeScriptPat: "Final[Pattern[str]]" = re.compile(
-        r"^\s*include\s+\{[^\}]+\}\s+from\s+(['\"])([^'\"]+)\1"
     )
 
     def _genDockSingContainerTaggedName(
