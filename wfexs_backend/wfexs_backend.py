@@ -1488,6 +1488,7 @@ class WfExSBackend:
                 (
                     i_workflow,
                     cached_putative_path,
+                    metadata_array,
                 ) = self.getWorkflowBundleFromURI(
                     cast("URIType", workflow_id),
                     offline=offline,
@@ -1498,11 +1499,16 @@ class WfExSBackend:
                     self.cacheROCrateFilename = cached_putative_path
                 else:
                     repoDir = cached_putative_path
-                    if len(parsedRepoURL.fragment) > 0:
-                        frag_qs = urllib.parse.parse_qs(parsedRepoURL.fragment)
-                        subDirArr = frag_qs.get("subdirectory", [])
-                        if len(subDirArr) > 0:
-                            repoRelPath = subDirArr[0]
+                    if os.path.isdir(repoDir):
+                        if len(parsedRepoURL.fragment) > 0:
+                            frag_qs = urllib.parse.parse_qs(parsedRepoURL.fragment)
+                            subDirArr = frag_qs.get("subdirectory", [])
+                            if len(subDirArr) > 0:
+                                repoRelPath = subDirArr[0]
+                    elif len(metadata_array) > 0:
+                        # Let's try getting a pretty filename
+                        # when the workflow is a single file
+                        repoRelPath = metadata_array[0].preferredName
                     putative = True
 
         if i_workflow is not None:
@@ -1778,6 +1784,7 @@ class WfExSBackend:
             (
                 i_workflow,
                 self.cacheROCrateFilename,
+                metadata_array,
             ) = self.getWorkflowBundleFromURI(
                 roCrateURL,
                 expectedEngineDesc=WF.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType],
@@ -1961,7 +1968,7 @@ class WfExSBackend:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
-    ) -> "Tuple[Optional[IdentifiedWorkflow], AbsPath]":
+    ) -> "Tuple[Optional[IdentifiedWorkflow], AbsPath, Sequence[URIWithMetadata]]":
         try:
             cached_content = self.cacheFetch(
                 remote_url,
@@ -2003,11 +2010,13 @@ class WfExSBackend:
                     cast("AbsPath", roCrateFile), expectedEngineDesc
                 ),
                 cast("AbsPath", roCrateFile),
+                cached_content.metadata_array,
             )
         else:
             return (
                 None,
                 cached_content.path,
+                cached_content.metadata_array,
             )
 
     def getWorkflowRepoFromROCrateFile(
