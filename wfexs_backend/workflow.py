@@ -1121,7 +1121,17 @@ class WF:
         # force_copy is needed to isolate the copy of the workflow
         # so local modifications in a working directory does not
         # poison the cached workflow
-        link_or_copy(repoDir, self.workflowDir, force_copy=True)
+        if os.path.isdir(repoDir):
+            link_or_copy(repoDir, self.workflowDir, force_copy=True)
+        else:
+            os.makedirs(self.workflowDir, exist_ok=True)
+            if self.repoRelPath is None:
+                self.repoRelPath = cast("RelPath", "workflow.entrypoint")
+            link_or_copy(
+                repoDir,
+                cast("AbsPath", os.path.join(self.workflowDir, self.repoRelPath)),
+                force_copy=True,
+            )
         # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
             dir=self.workflowDir,
