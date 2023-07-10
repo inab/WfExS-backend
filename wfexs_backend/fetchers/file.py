@@ -112,7 +112,13 @@ def fetchFile(
 
     return ProtocolFetcherReturn(
         kind_or_resolved=kind,
-        metadata_array=[URIWithMetadata(the_remote_file, metadata)],
+        metadata_array=[
+            URIWithMetadata(
+                uri=the_remote_file,
+                metadata=metadata,
+                preferredName=cast("RelPath", os.path.basename(localPath)),
+            )
+        ],
     )
 
 
