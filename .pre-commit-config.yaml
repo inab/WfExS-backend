@@ -17,7 +17,7 @@ repos:
         types:
           - python
 #        files: \.py$
-        exclude: "^[^/]*env/|development-[^/]*/"
+        exclude: "^[^/]*env/|development-[^/]*/|docs/"
         require_serial: true
 #        entry: ./basic-installer.bash mypy --strict
         entry: mypy --strict --show-error-codes --no-warn-unused-ignores
@@ -52,7 +52,7 @@ repos:
     rev: 23.3.0
     hooks:
       - id: black
-        exclude: "^[^/]*env/|development-[^/]*/"
+        exclude: "^[^/]*env/|development-[^/]*/|docs/"
         args: [--diff, --check]
 
   - repo: local
