@@ -1,9 +1,13 @@
 # Configuration file for the Sphinx documentation builder.
 
+import os
+import sys
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), '..')))
+
 # -- Project information
 
 project = 'WfExS-backend'
-copyright = '2022, Barcelona Supercomputing Center'
+copyright = '2022-2023, Barcelona Supercomputing Center'
 author = 'José Mª Fernández, Laura Rodríguez-Navas'
 
 release = '0.1'
