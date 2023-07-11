@@ -1,4 +1,4 @@
-# ![WfExS-backend:](docs/logo/WfExS-logo-final_paths.svg) Workflow Execution Service backend
+# ![WfExS-backend:](development-docs/logo/WfExS-logo-final_paths.svg) Workflow Execution Service backend
 
 
 ## WfExS-config-replicator usage

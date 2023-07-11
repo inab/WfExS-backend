@@ -1,4 +1,4 @@
-# ![WfExS-backend:](docs/logo/WfExS-logo-final_paths.svg) Workflow Execution Service backend documentation
+# ![WfExS-backend:](development-docs/logo/WfExS-logo-final_paths.svg) Workflow Execution Service backend documentation
 
 This page holds pointers to additional documentation and demos about the system, due its growing complexity.
 

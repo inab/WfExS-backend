@@ -1,4 +1,4 @@
-# <img src="docs/logo/WfExS-logo-final_paths.svg" alt="WfExS-backend:" height="48"> Workflow Execution Service backend [![DOI](https://zenodo.org/badge/301434294.svg)](https://zenodo.org/badge/latestdoi/301434294)
+# <img src="development-docs/logo/WfExS-logo-final_paths.svg" alt="WfExS-backend:" height="48"> Workflow Execution Service backend [![DOI](https://zenodo.org/badge/301434294.svg)](https://zenodo.org/badge/latestdoi/301434294)
 
 
 WfExS (which could be pronounced like "why-fex", "why-fix" or "why-fixes") project aims to automate next steps:
@@ -27,7 +27,7 @@ and [cwltool](https://github.com/common-workflow-language/cwltool)).
 
 * [README_REPLICATOR.md](README_REPLICATOR.md): It briefly describes `WfExS-config-replicator.py` usage.
 
-Additional present and future documentation is hosted at [docs](docs/index.md) subfolder, until it is migrated to a proper documentation service.
+Additional present and future documentation is hosted at [development-docs](development-docs/index.md) subfolder, until it is migrated to a proper documentation service.
 
 ### Presentations and outreach
 
@@ -329,7 +329,7 @@ optional arguments:
 
 WfExS commands are:
 
-![WfExS-backend commands](docs/wfexs-commands.svg)
+![WfExS-backend commands](development-docs/wfexs-commands.svg)
 
 * `init`: This command is used to initialize a WfExS installation. It takes a local configuration file through `-L` parameter, and it can both generate crypt4gh paired keys for installation work and identification purposes and update the path to them in case they are not properly defined. Those keys are needed to decrypt encrypted working directories, and in the future to decrypt secure requests and encrypt secure results.
 
@@ -361,7 +361,7 @@ When the execution has finished properly, the working directory `outputs` subdir
 
 The program uses three different types of configuration files:
 
-* Local configuration file: YAML formatted file which describes the local setup of the backend (example at [workflow_examples/local_config.yaml](workflow_examples/local_config.yaml)). JSON Schema describing the format (and used for validation) is available at [wfexs_backend/schemas/config.json](wfexs_backend/schemas/config.json) and there is also automatically generated documentation (see [config_schema.md](docs/schemas/config_schema.md)). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
+* Local configuration file: YAML formatted file which describes the local setup of the backend (example at [workflow_examples/local_config.yaml](workflow_examples/local_config.yaml)). JSON Schema describing the format (and used for validation) is available at [wfexs_backend/schemas/config.json](wfexs_backend/schemas/config.json) and there is also automatically generated documentation (see [config_schema.md](development-docs/schemas/config_schema.md)). Relative paths in this configuration file use as reference the directory where the local configuration file is living.
   
   - `cacheDir`: The path in this key sets up the place where all the contents which can be cached are hold. It contains downloaded RO-Crate,
      downloaded workflow git repositories, downloaded workflow engines. It is recommended to have it outside `/tmp` directory when
@@ -399,9 +399,9 @@ The program uses three different types of configuration files:
   
   - `tools.encrypted_fs.idle`: Number of minutes of inactivity before the encrypted FUSE filesystem is automatically unmounted. The default is 5 minutes.
   
-* Workflow configuration file: YAML formatted file which describes the workflow staging before being executed, like where inputs are located and can be fetched, the security contexts to be used on specific inputs to get those controlled access resources, the parameters, the outputs to capture, ... ([Nextflow example](workflow_examples/wetlab2variations_execution_nxf.wfex.stage), [CWL example](workflow_examples/wetlab2variations_execution_cwl.wfex.stage)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/stage-definition.json](wfexs_backend/schemas/stage-definition.json) and there is also automatically generated documentation (see [stage-definition_schema.md](docs/schemas/stage-definition_schema.md)).
+* Workflow configuration file: YAML formatted file which describes the workflow staging before being executed, like where inputs are located and can be fetched, the security contexts to be used on specific inputs to get those controlled access resources, the parameters, the outputs to capture, ... ([Nextflow example](workflow_examples/wetlab2variations_execution_nxf.wfex.stage), [CWL example](workflow_examples/wetlab2variations_execution_cwl.wfex.stage)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/stage-definition.json](wfexs_backend/schemas/stage-definition.json) and there is also automatically generated documentation (see [stage-definition_schema.md](development-docs/schemas/stage-definition_schema.md)).
 
-* Security contexts file: YAML formatted file which holds the `user`/`password` pairs, security tokens or keys needed on different steps, like input fetching. ([Nextflow example](workflow_examples/wetlab2variations_credentials_nxf.wfex.ctxt), [CWL example](workflow_examples/wetlab2variations_credentials_cwl.wfex.ctxt)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/security-context.json](wfexs_backend/schemas/security-context.json) and there is also automatically generated documentation (see [security-context_schema.md](docs/schemas/security-context_schema.md)).
+* Security contexts file: YAML formatted file which holds the `user`/`password` pairs, security tokens or keys needed on different steps, like input fetching. ([Nextflow example](workflow_examples/wetlab2variations_credentials_nxf.wfex.ctxt), [CWL example](workflow_examples/wetlab2variations_credentials_cwl.wfex.ctxt)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/security-context.json](wfexs_backend/schemas/security-context.json) and there is also automatically generated documentation (see [security-context_schema.md](development-docs/schemas/security-context_schema.md)).
 
 ## License
 * © 2020-2022 Barcelona Supercomputing Center (BSC), ES

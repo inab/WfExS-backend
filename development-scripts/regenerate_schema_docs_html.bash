@@ -6,12 +6,19 @@ set -e
 wfexsDir="$(dirname "$0")"/..
 wfexsDir="$(readlink -f "${wfexsDir}")"
 
-if [ $# -gt 0 ] ; then
-	case "$1" in
-		force)
-			doRebuild=1
-			;;
-	esac
+if [ $# -ge 2 ] ; then
+	schemas_path="$1"
+	doc_schemas_path="$2"
+	if [ $# -gt 2 ] ; then
+		case "$3" in
+			force)
+				doRebuild=1
+				;;
+		esac
+	fi
+else
+	schemas_path="wfexs_backend/schemas"
+	doc_schemas_path="development-docs/schemas"
 fi
 
 git_date() {
@@ -20,9 +27,9 @@ git_date() {
 	git log -1 --format=%ct "$filename" 2> /dev/null
 }
 
-for schema in "${wfexsDir}"/wfexs_backend/schemas/*.json ; do
+for schema in "${wfexsDir}"/"${schemas_path}"/*.json ; do
 	doregen=
-	destfile="${wfexsDir}"/docs/schemas/$(basename "$schema" .json)_schema.html
+	destfile="${wfexsDir}"/"${doc_schemas_path}"/"$(basename "$schema" .json)"_schema.html
 	if [ -n "$doRebuild" ] ; then
 		rm -f "$destfile"
 	fi

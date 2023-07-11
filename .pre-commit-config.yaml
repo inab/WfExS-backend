@@ -17,7 +17,7 @@ repos:
         types:
           - python
 #        files: \.py$
-        exclude: "^[^/]*env/|dev-[^/]*/"
+        exclude: "^[^/]*env/|development-[^/]*/"
         require_serial: true
 #        entry: ./basic-installer.bash mypy --strict
         entry: mypy --strict --show-error-codes --no-warn-unused-ignores
@@ -52,7 +52,7 @@ repos:
     rev: 23.3.0
     hooks:
       - id: black
-        exclude: "^[^/]*env/|dev-[^/]*/"
+        exclude: "^[^/]*env/|development-[^/]*/"
         args: [--diff, --check]
 
   - repo: local
@@ -63,5 +63,5 @@ repos:
         pass_filenames: false
         language: system
         files: "CITATION.cff$"
-#        entry: ./basic-installer.bash python dev-scripts/cff-ver-validate.py CITATION.cff
-        entry: python dev-scripts/cff-ver-validate.py CITATION.cff
+#        entry: ./basic-installer.bash python development-scripts/cff-ver-validate.py CITATION.cff
+        entry: python development-scripts/cff-ver-validate.py CITATION.cff
