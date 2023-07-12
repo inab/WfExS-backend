@@ -1239,15 +1239,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
             this_container_docker = docker_match[0]
             self.logger.debug(f"Found Docker container {this_container_docker}")
 
-        if this_container_docker is not None:
-            return ContainerTaggedName(
-                origTaggedName=this_container_docker,
-                type=ContainerType.Docker,
-            )
-        elif this_container_url is not None:
+        if this_container_url is not None:
             return ContainerTaggedName(
                 origTaggedName=this_container_url,
                 type=ContainerType.Singularity,
+            )
+        elif this_container_docker is not None:
+            return ContainerTaggedName(
+                origTaggedName=this_container_docker,
+                type=ContainerType.Docker,
             )
 
         self.logger.error(
