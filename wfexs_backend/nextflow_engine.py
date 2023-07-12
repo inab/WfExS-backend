@@ -278,6 +278,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.nxf_assets = os.path.join(self.engineTweaksDir, "assets")
         os.makedirs(self.nxf_assets, exist_ok=True)
 
+        # Setting up packed directory
+        self.groovy_cache_dir = os.path.join(
+            self.cacheWorkflowDir, "groovy-parsing-cache"
+        )
+        os.makedirs(self.groovy_cache_dir, exist_ok=True)
+
     @classmethod
     def MyWorkflowType(cls) -> "WorkflowType":
         # As of https://about.workflowhub.eu/Workflow-RO-Crate/ ,
@@ -380,7 +386,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     workflows,
                     includeconfigs,
                     interesting_assignments,
-                ) = analyze_nf_content(firstPathContent, only_names=only_names)
+                ) = analyze_nf_content(
+                    firstPathContent,
+                    only_names=only_names,
+                    cache_dir=self.groovy_cache_dir,
+                )
             except Exception as e:
                 errstr = f"Failed to parse initial file {os.path.relpath(firstPath, nfDir)} with groovy parser"
                 self.logger.exception(errstr)
@@ -435,7 +445,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             includeconfigs,
                             interesting_assignments,
                         ) = analyze_nf_content(
-                            newNxfConfigContent, only_names=only_names
+                            newNxfConfigContent,
+                            only_names=only_names,
+                            cache_dir=self.groovy_cache_dir,
                         )
                     except Exception as e:
                         errstr = f"Failed to parse configuration file {relNewNxfConfig} with groovy parser"
@@ -578,7 +590,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             workflows,
                             _,
                             interesting_assignments,
-                        ) = analyze_nf_content(content, only_names=only_names)
+                        ) = analyze_nf_content(
+                            content,
+                            only_names=only_names,
+                            cache_dir=self.groovy_cache_dir,
+                        )
                     except Exception as e:
                         errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
                         self.logger.exception(errstr)
@@ -1350,7 +1366,7 @@ STDERR
                         workflows,
                         _,
                         interesting_assignments,
-                    ) = analyze_nf_content(content)
+                    ) = analyze_nf_content(content, cache_dir=self.groovy_cache_dir)
                 except Exception as e:
                     errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
                     self.logger.exception(errstr)

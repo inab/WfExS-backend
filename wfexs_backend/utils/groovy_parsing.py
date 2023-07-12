@@ -58,8 +58,7 @@ if TYPE_CHECKING:
     ]
 
 from groovy_parser.parser import (
-    parse_groovy_content,
-    digest_lark_tree,
+    parse_and_digest_groovy_content,
 )
 
 # The root_rule of any groovy/nextflow content
@@ -627,20 +626,22 @@ def extract_nextflow_features(
 
 
 @functools.lru_cache(maxsize=128)
-def parse_and_digest_groovy_content(
+def cached_parse_and_digest_groovy_content(
     content: "str",
+    cache_dir: "Optional[str]" = None,
 ) -> "Union[RuleNode, LeafNode, EmptyNode]":
-    tree = parse_groovy_content(content)
+    t_tree = parse_and_digest_groovy_content(content, cache_directory=cache_dir)
 
     # This one can be written as JSON
-    return digest_lark_tree(tree)
+    return t_tree
 
 
 def analyze_nf_content(
     content: "str",
     only_names: "Sequence[str]" = [],
+    cache_dir: "Optional[str]" = None,
 ) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], ContextAssignments]":
-    t_tree = parse_and_digest_groovy_content(content)
+    t_tree = cached_parse_and_digest_groovy_content(content, cache_dir=cache_dir)
 
     if "rule" in t_tree:
         c_t_tree = cast("RuleNode", t_tree)
@@ -673,6 +674,14 @@ if __name__ == "__main__":
         level=logging.DEBUG,
     )
     log = logging.getLogger()  # root logger
+    cache_directory = os.environ.get("GROOVY_CACHEDIR")
+    if cache_directory is not None:
+        print(f"* Using as caching directory {cache_directory}")
+        os.makedirs(cache_directory, exist_ok=True)
+    else:
+        print(
+            "[WARNING] No caching is done. If you want to cache parsed content declare variable GROOVY_CACHEDIR"
+        )
     for filename in sys.argv[1:]:
         print(f"* Parsing {filename}")
         logfile = filename + ".wfex.log"
@@ -692,7 +701,7 @@ if __name__ == "__main__":
                     workflows,
                     includeconfigs,
                     interesting_assignments,
-                ) = analyze_nf_content(content)
+                ) = analyze_nf_content(content, cache_dir=cache_directory)
             with open(jsonfile, mode="w", encoding="utf-8") as jH:
                 json.dump(t_tree, jH, indent=4)
             with open(resultfile, mode="w", encoding="utf-8") as rW:
