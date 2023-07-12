@@ -1171,10 +1171,12 @@ class WF:
                         break
                 except WorkflowEngineException:
                     # TODO: store the exceptions, to be shown if no workflow is recognized
-                    pass
+                    self.logger.exception(
+                        f"Engine {engineDesc.trs_descriptor} did not recognize the workflow as a valid one. Reason:"
+                    )
             else:
                 raise WFException(
-                    "No engine recognized a workflow at {}".format(self.repoURL)
+                    "No engine recognized a valid workflow at {}".format(self.repoURL)
                 )
         else:
             self.logger.debug("Fixed engine " + engineDesc.trs_descriptor)
