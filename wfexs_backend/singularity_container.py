@@ -235,12 +235,13 @@ STDERR
 
                     cells = re.split(r"\s*\|\s*", line.strip())
                     if parse_header:
-                        for i_cell, cell_name in enumerate(cells):
-                            if cell_name.startswith("TYPE"):
-                                type_column_id = i_cell
-                            elif cell_name.startswith("ID"):
-                                column_id = i_cell
-                        parse_header = False
+                        if cells[0].startswith("ID"):
+                            for i_cell, cell_name in enumerate(cells):
+                                if cell_name.startswith("TYPE"):
+                                    type_column_id = i_cell
+                                elif cell_name.startswith("ID"):
+                                    column_id = i_cell
+                            parse_header = False
                     elif cells[type_column_id].startswith("FS"):
                         data_bundle_id = cells[column_id]
                         break
