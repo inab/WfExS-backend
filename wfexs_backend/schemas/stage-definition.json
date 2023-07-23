@@ -144,6 +144,102 @@
 				}
 			]
 		},
+		"DirFile": {
+			"type": "object",
+			"properties": {
+				"c-l-a-s-s": {
+					"type": "string",
+					"enum": [
+						"File",
+						"Directory"
+					]
+				},
+				"url": {
+					"description": "The URL(s) / URI(s) where this input is available",
+					"$ref": "#/definitions/InputURI"
+				},
+				"secondary-urls": {
+					"description": "Secondary URLs / URIs are pointing to contents which will feed secondary inputs (CWL concept)",
+					"$ref": "#/definitions/InputURI"
+				},
+				"preferred-name": {
+					"description": "Preferred base name / relative path for this input, instead of the derived one from the URL",
+					"type": ["boolean", "string"],
+					"default": false,
+					"minLength": 1
+				},
+				"relative-dir": {
+					"description": "Put contents fetched for this input in this relative directory. This option does not affect preferred-name",
+					"type": ["boolean", "string"],
+					"default": false,
+					"minLength": 1
+				},
+				"security-context": {
+					"type": "string",
+					"minLength": 1
+				},
+				"globExplode": {
+					"description": "When this is set, and the class is directory, it helps filtering in what it should be included",
+					"type": "string"
+				},
+				"autoFill": {
+					"description": "When this key is true, the directory or file is considered an output one",
+					"type": "boolean",
+					"default": false
+				},
+				"autoPrefix": {
+					"type": "boolean",
+					"default": false
+				}
+			},
+			"required": [
+				"c-l-a-s-s"
+			],
+			"additionalProperties": false,
+			"if": {
+				"properties": {
+					"c-l-a-s-s": {
+						"const": "Directory"
+					}
+				}
+			},
+			"then":	{
+				"if": {
+					"required": [
+						"url"
+					]
+				},
+				"then": {
+					"not": {
+						"required": [
+							"autoFill",
+							"autoPrefix"
+						]
+					}
+				},
+				"else": {
+					"not": {
+						"required": [
+							"security-context",
+							"globExplode"
+						]
+					}
+				}
+			}
+		},
+		"EnvVar": {
+			"oneOf": [
+				{
+					"type": [
+						"string",
+						"number"
+					]
+				},
+				{
+					"$ref": "#/definitions/DirFile"
+				}
+			]
+		},
 		"Param": {
 			"oneOf": [
 				{
@@ -172,94 +268,10 @@
 					}
 				},
 				{
-					"oneOf": [
-						{
-							"type": "object",
-							"properties": {
-								"c-l-a-s-s": {
-									"type": "string",
-									"enum": [
-										"File",
-										"Directory"
-									]
-								},
-								"url": {
-									"description": "The URL(s) / URI(s) where this input is available",
-									"$ref": "#/definitions/InputURI"
-								},
-								"secondary-urls": {
-									"description": "Secondary URLs / URIs are pointing to contents which will feed secondary inputs (CWL concept)",
-									"$ref": "#/definitions/InputURI"
-								},
-								"preferred-name": {
-									"description": "Preferred base name / relative path for this input, instead of the derived one from the URL",
-									"type": ["boolean", "string"],
-									"default": false,
-									"minLength": 1
-								},
-								"relative-dir": {
-									"description": "Put contents fetched for this input in this relative directory. This option does not affect preferred-name",
-									"type": ["boolean", "string"],
-									"default": false,
-									"minLength": 1
-								},
-								"security-context": {
-									"type": "string",
-									"minLength": 1
-								},
-								"globExplode": {
-									"description": "When this is set, and the class is directory, it helps filtering in what it should be included",
-									"type": "string"
-								},
-								"autoFill": {
-									"description": "When this key is true, the directory or file is considered an output one",
-									"type": "boolean",
-									"default": false
-								},
-								"autoPrefix": {
-									"type": "boolean",
-									"default": false
-								}
-							},
-							"required": [
-								"c-l-a-s-s"
-							],
-							"additionalProperties": false,
-							"if": {
-								"properties": {
-									"c-l-a-s-s": {
-										"const": "Directory"
-									}
-								}
-							},
-							"then":	{
-								"if": {
-									"required": [
-										"url"
-									]
-								},
-								"then": {
-									"not": {
-										"required": [
-											"autoFill",
-											"autoPrefix"
-										]
-									}
-								},
-								"else": {
-									"not": {
-										"required": [
-											"security-context",
-											"globExplode"
-										]
-									}
-								}
-							}
-						},
-						{
-							"$ref": "#/definitions/Params"
-						}
-					]
+					"$ref": "#/definitions/DirFile"
+				},
+				{
+					"$ref": "#/definitions/Params"
 				}
 			]
 		},
@@ -288,9 +300,12 @@
 			]
 		},
 		"workflow_id": {
-			"oneOf": [
+			"anyOf": [
 				{
 					"$ref": "#/definitions/PlainURI"
+				},
+				{
+					"type": "string"
 				},
 				{
 					"type": "integer"
@@ -388,6 +403,16 @@
 		},
 		"params": {
 			"$ref": "#/definitions/Params"
+		},
+		"environment": {
+			"type": "object",
+			"patternProperties": {
+				"^[^=\\0]+$": {
+					"description": "The name of an environment variable. These names cannot contain either the equal or the character \\0",
+					"$ref": "#/definitions/EnvVar"
+				}
+			},
+			"additionalProperties": false
 		},
 		"outputs": {
 			"type": "object",

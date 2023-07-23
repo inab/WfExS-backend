@@ -34,7 +34,7 @@
 							},
 							{
 								"type": "string",
-								"pattern": "^(param|output):([^:;]+:)?[^:;]*$"
+								"pattern": "^(param|envvar|output):([^:;]+:)?[^:;]*$"
 							}
 						]
 					},
