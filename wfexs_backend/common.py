@@ -171,6 +171,7 @@ if TYPE_CHECKING:
     WritableWfExSConfigBlock: TypeAlias = MutableMapping[str, Any]
     ExportActionBlock: TypeAlias = Mapping[str, Any]
     ParamsBlock: TypeAlias = Mapping[str, Any]
+    EnvironmentBlock: TypeAlias = Mapping[str, Any]
     MutableParamsBlock: TypeAlias = MutableMapping[str, Any]
     OutputsBlock: TypeAlias = Mapping[str, Any]
     PlaceHoldersBlock: TypeAlias = Mapping[str, Union[int, float, str]]
@@ -581,6 +582,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         self,
         matWfEng: "MaterializedWorkflowEngine",
         inputs: "Sequence[MaterializedInput]",
+        environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
         pass
@@ -818,6 +820,7 @@ class ExportItemType(enum.Enum):
     """
 
     Param = "param"
+    Environment = "envvar"
     Output = "output"
     WorkingDirectory = "working-directory"
     StageCrate = "stage-rocrate"

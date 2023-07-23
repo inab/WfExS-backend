@@ -721,9 +721,10 @@ def addInputsResearchObject(
     inputs: "Sequence[MaterializedInput]",
     work_dir: "AbsPath",
     do_attach: "bool" = False,
+    are_envvars: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
-    Add the input's provenance data to a Research Object.
+    Add the input's or environment variables provenance data to a Research Object.
 
     :param crate: Research Object
     :type crate: ROCrate object
@@ -732,9 +733,10 @@ def addInputsResearchObject(
     """
     crate = wf_crate.crate
     crate_inputs = []
+    input_sep = "envvar" if are_envvars else "param"
     for in_item in inputs:
-        formal_parameter_id = (
-            wf_crate.id + "#param:" + urllib.parse.quote(in_item.name, safe="")
+        formal_parameter_id = f"{wf_crate.id}#{input_sep}:" + urllib.parse.quote(
+            in_item.name, safe=""
         )
         itemInValue0 = in_item.values[0]
         additional_type: "Optional[str]" = None
@@ -761,6 +763,9 @@ def addInputsResearchObject(
             additional_type=additional_type,
         )
         crate.add(formal_parameter)
+        # TODO: fix this at the standard level in some way
+        # so it is possible in the future to distinguish among
+        # inputs and environment variables in an standardized way
         wf_crate.append_to("input", formal_parameter)
 
         crate_coll: "Union[Collection, rocrate.model.dataset.Dataset, rocrate.model.dataset.File, PropertyValue]"

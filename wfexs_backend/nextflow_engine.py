@@ -1509,8 +1509,10 @@ STDERR
         self,
         matWfEng: "MaterializedWorkflowEngine",
         matInputs: "Sequence[MaterializedInput]",
+        matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
+        # TODO: implement usage of materialized environment variables
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
 

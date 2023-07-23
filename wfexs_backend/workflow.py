@@ -70,6 +70,7 @@ if TYPE_CHECKING:
         ContainerEngineVersionStr,
         ContainerOperatingSystem,
         EngineVersion,
+        EnvironmentBlock,
         ExitVal,
         ExportActionBlock,
         MaterializedOutput,
@@ -283,6 +284,7 @@ class WF:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "str" = DEFAULT_TRS_ENDPOINT,
         params: "Optional[ParamsBlock]" = None,
+        environment: "Optional[EnvironmentBlock]" = None,
         outputs: "Optional[OutputsBlock]" = None,
         placeholders: "Optional[PlaceHoldersBlock]" = None,
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
@@ -418,8 +420,10 @@ class WF:
             self.version_id = str(version_id)
             self.descriptor_type = descriptor_type
             self.params = params
+            self.environment = environment
             self.placeholders = placeholders
             self.formatted_params = self.formatParams(params)
+            self.formatted_environment = self.formatParams(environment)
             self.outputs = self.parseExpectedOutputs(outputs)
             self.default_actions = self.parseExportActions(
                 [] if default_actions is None else default_actions
@@ -624,6 +628,7 @@ class WF:
         self.engineDesc: "Optional[WorkflowType]" = None
 
         self.materializedParams: "Optional[Sequence[MaterializedInput]]" = None
+        self.materializedEnvironment: "Optional[Sequence[MaterializedInput]]" = None
         self.localWorkflow: "Optional[LocalWorkflow]" = None
         self.materializedEngine: "Optional[MaterializedWorkflowEngine]" = None
         self.containerEngineVersion: "Optional[ContainerEngineVersionStr]" = None
@@ -1033,6 +1038,7 @@ class WF:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            environment=workflow_meta.get("environment", {}),
             outputs=workflow_meta.get("outputs", {}),
             placeholders=workflow_meta.get("placeholders", {}),
             default_actions=workflow_meta.get("default_actions"),
@@ -1071,6 +1077,7 @@ class WF:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            environment=workflow_meta.get("environment", {}),
             placeholders=workflow_meta.get("placeholders", {}),
             default_actions=workflow_meta.get("default_actions"),
             workflow_config=workflow_meta.get("workflow_config"),
@@ -1330,21 +1337,25 @@ class WF:
         return lastInput
 
     def materializeInputs(
-        self, offline: "bool" = False, ignoreCache: "bool" = False, lastInput: "int" = 0
-    ) -> None:
+        self,
+        formatted_params: "Union[ParamsBlock, Sequence[Mapping[str, Any]]]",
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        lastInput: "int" = 0,
+    ) -> "Sequence[MaterializedInput]":
         assert (
             self.inputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
-        assert self.formatted_params is not None
 
         theParams, numInputs = self.fetchInputs(
-            self.formatted_params,
+            formatted_params,
             workflowInputs_destdir=self.inputsDir,
             offline=offline,
             ignoreCache=ignoreCache,
             lastInput=lastInput,
         )
-        self.materializedParams = theParams
+
+        return theParams
 
     def getContext(
         self, remote_file: "str", contextName: "Optional[str]"
@@ -1531,7 +1542,7 @@ class WF:
         return remote_pairs
 
     def _formatStringFromPlaceHolders(self, the_string: "str") -> "str":
-        assert self.params is not None
+        assert self.placeholders is not None
 
         i_l_the_string = the_string.find("{")
         i_r_the_string = the_string.find("}")
@@ -1995,7 +2006,17 @@ class WF:
         # This method is called from within materializeWorkflowAndContainers
         # self.setupEngine(offline=offline)
         self.materializeWorkflowAndContainers(offline=offline, ignoreCache=ignoreCache)
-        self.materializeInputs(offline=offline, ignoreCache=ignoreCache)
+
+        assert self.formatted_params is not None
+        self.materializedParams = self.materializeInputs(
+            self.formatted_params, offline=offline, ignoreCache=ignoreCache
+        )
+
+        assert self.formatted_environment is not None
+        self.materializedEnvironment = self.materializeInputs(
+            self.formatted_environment, offline=offline, ignoreCache=ignoreCache
+        )
+
         self.marshallStage()
 
         return self.getStagedSetup()
@@ -2139,13 +2160,17 @@ class WF:
 
         assert self.materializedEngine is not None
         assert self.materializedParams is not None
+        assert self.materializedEnvironment is not None
         assert self.outputs is not None
 
         if self.stagedExecutions is None:
             self.stagedExecutions = []
 
         stagedExec = WorkflowEngine.ExecuteWorkflow(
-            self.materializedEngine, self.materializedParams, self.outputs
+            self.materializedEngine,
+            self.materializedParams,
+            self.materializedEnvironment,
+            self.outputs,
         )
 
         self.stagedExecutions.append(stagedExec)
@@ -2349,6 +2374,8 @@ class WF:
                         workflow_meta["workflow_config"] = self.workflow_config
                     if self.params is not None:
                         workflow_meta["params"] = self.params
+                    if self.environment is not None:
+                        workflow_meta["environment"] = self.environment
                     if self.placeholders is not None:
                         workflow_meta["placeholders"] = self.placeholders
                     if self.outputs is not None:
@@ -2419,8 +2446,10 @@ class WF:
                     self.trs_endpoint = workflow_meta.get("trs_endpoint")
                     self.workflow_config = workflow_meta.get("workflow_config")
                     self.params = workflow_meta.get("params")
+                    self.environment = workflow_meta.get("environment")
                     self.placeholders = workflow_meta.get("placeholders")
                     self.formatted_params = self.formatParams(self.params)
+                    self.formatted_environment = self.formatParams(self.environment)
 
                     outputsM = workflow_meta.get("outputs")
                     if isinstance(outputsM, dict):
@@ -2548,7 +2577,8 @@ class WF:
                     "containerEngineOs": self.containerEngineOs,
                     "arch": self.arch,
                     "workflowEngineVersion": self.workflowEngineVersion,
-                    "materializedParams": self.materializedParams
+                    "materializedParams": self.materializedParams,
+                    "materializedEnvironment": self.materializedEnvironment,
                     # TODO: check nothing essential was left
                 }
 
@@ -2610,6 +2640,9 @@ class WF:
                     self.engineVer = stage["engineVer"]
                     self.materializedEngine = stage["materializedEngine"]
                     self.materializedParams = stage["materializedParams"]
+                    self.materializedEnvironment = stage.get(
+                        "materializedEnvironment", []
+                    )
                     self.containerEngineVersion = stage.get("containerEngineVersion")
                     self.containerEngineOs = stage.get("containerEngineOs")
                     if self.containerEngineOs is None:
@@ -2881,6 +2914,9 @@ class WF:
         retval: "MutableSequence[AnyContent]" = []
 
         materializedParamsDict: "Mapping[SymbolicParamName, MaterializedInput]" = dict()
+        materializedEnvironmentDict: "Mapping[SymbolicParamName, MaterializedInput]" = (
+            dict()
+        )
         for item in items:
             if item.type == ExportItemType.Param:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
@@ -2914,7 +2950,9 @@ class WF:
                     if materializedParam.secondaryInputs:
                         retval.extend(materializedParam.secondaryInputs)
                 else:
-                    # The whole input directory
+                    # The whole input directory, which can contain files
+                    # and / or directories references from environment
+                    # variables
                     prettyFilename = cast(
                         "RelPath", os.path.basename(self.stagedSetup.inputs_dir)
                     )
@@ -2933,6 +2971,39 @@ class WF:
                             prettyFilename=prettyFilename,
                             kind=ContentKind.Directory,
                         )
+                    )
+            elif item.type == ExportItemType.Environment:
+                if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
+                    raise WFException(
+                        f"Cannot export environment from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                    )
+
+                assert self.materializedEnvironment is not None
+                assert self.stagedSetup.inputs_dir is not None
+                if item.name is not None:
+                    if not materializedEnvironmentDict:
+                        materializedEnvironmentDict = dict(
+                            map(lambda mp: (mp.name, mp), self.materializedEnvironment)
+                        )
+                    materializedEnvVar = materializedEnvironmentDict.get(
+                        cast("SymbolicParamName", item.name)
+                    )
+                    if materializedEnvVar is None:
+                        raise KeyError(
+                            f"Environment variable {item.name} to be exported does not exist"
+                        )
+                    retval.extend(
+                        cast(
+                            "Iterable[MaterializedContent]",
+                            filter(
+                                lambda mpc: isinstance(mpc, MaterializedContent),
+                                materializedEnvVar.values,
+                            ),
+                        )
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Exporting the files and directories associated to the whole set of environment variables is not implemented yet"
                     )
             elif item.type == ExportItemType.Output:
                 if not isinstance(
@@ -3088,7 +3159,7 @@ class WF:
         """
         Create RO-crate from stage provenance.
         """
-        # TODO: implement deserialization
+        # TODO: implement RO-Crate deserialization
         self.unmarshallStage(offline=True, fail_ok=True)
 
         assert self.localWorkflow is not None
@@ -3096,6 +3167,7 @@ class WF:
         assert self.repoURL is not None
         assert self.repoTag is not None
         assert self.materializedParams is not None
+        assert self.materializedEnvironment is not None
         assert self.stagedSetup.work_dir is not None
         assert self.stagedSetup.inputs_dir is not None
         assert self.stagedSetup.outputs_dir is not None
@@ -3119,6 +3191,14 @@ class WF:
             self.materializedParams,
             work_dir=self.stagedSetup.work_dir,
             do_attach=doMaterializedROCrate,
+            are_envvars=False,
+        )
+        addInputsResearchObject(
+            wf_file,
+            self.materializedEnvironment,
+            work_dir=self.stagedSetup.work_dir,
+            do_attach=doMaterializedROCrate,
+            are_envvars=True,
         )
         if self.outputs is not None:
             addExpectedOutputsResearchObject(wf_file, self.outputs)

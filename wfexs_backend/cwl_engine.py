@@ -822,11 +822,13 @@ STDERR
         self,
         matWfEng: "MaterializedWorkflowEngine",
         matInputs: "Sequence[MaterializedInput]",
+        matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
         """
         Method to execute the workflow
         """
+        # TODO: implement usage of materialized environment variables
         localWf = matWfEng.workflow
 
         assert (
