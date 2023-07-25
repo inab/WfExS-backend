@@ -70,13 +70,15 @@ from rfc6920.methods import extract_digest
 import rocrate.model.entity  # type:ignore
 import rocrate.model.dataset  # type:ignore
 import rocrate.model.computationalworkflow  # type:ignore
+import rocrate.model.file  # type:ignore
+import rocrate.model.file_or_dir  # type:ignore
 import rocrate.model.softwareapplication  # type:ignore
 import rocrate.model.creativework  # type:ignore
 import rocrate.rocrate  # type:ignore
 
+from rocrate.utils import is_url  # type:ignore
 
 from .utils.digests import (
-    nihDigester,
     ComputeDigestFromDirectory,
     ComputeDigestFromFile,
     hexDigest,
@@ -199,24 +201,104 @@ class Collection(rocrate.model.creativework.CreativeWork):  # type: ignore[misc]
             self["mainEntity"] = main_entity
 
 
+class FixedFile(rocrate.model.file.File):  # type: ignore[misc]
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[Union[str, pathlib.Path]]" = None,
+        identifier: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        if properties is None:
+            properties = {}
+        self.fetch_remote = fetch_remote
+        self.validate_url = validate_url
+        self.source = source
+        if dest_path is not None:
+            dest_path = pathlib.Path(dest_path)
+            if dest_path.is_absolute():
+                raise ValueError("if provided, dest_path must be relative")
+            if identifier is None:
+                identifier = dest_path.as_posix()
+        elif identifier is None:
+            if not isinstance(source, (str, pathlib.Path)):
+                raise ValueError(
+                    "dest_path must be provided if source is not a path or URI"
+                )
+            elif is_url(str(source)):
+                identifier = os.path.basename(source) if fetch_remote else str(source)
+            else:
+                identifier = "./" if source == "./" else os.path.basename(source)
+        super(rocrate.model.file_or_dir.FileOrDir, self).__init__(
+            crate, identifier, properties
+        )
+
+
+def fixed_crate_add_file(
+    crate: "rocrate.rocrate.ROCrate",
+    source: "Optional[Union[str, pathlib.Path]]",
+    dest_path: "Optional[str]",
+    identifier: "Optional[str]" = None,
+    fetch_remote: "bool" = False,
+    validate_url: "bool" = False,
+    properties: "Optional[Mapping[str, Any]]" = None,
+) -> "rocrate.model.file.File":
+    """
+    source: The absolute path to the local copy of the file, if exists.
+    dest_path: The relative path inside the RO-Crate for the file copy.
+    identifier: The forced value for the @id of the File declaration.
+    """
+    return crate.add(
+        FixedFile(
+            crate,
+            source=source,
+            dest_path=dest_path,
+            identifier=identifier,
+            fetch_remote=fetch_remote,
+            validate_url=validate_url,
+            properties=properties,
+        )
+    )
+
+
 def add_file_to_crate(
     crate: "rocrate.rocrate.ROCrate",
     the_path: "str",
-    the_uri: "URIType",
+    the_uri: "Optional[URIType]",
+    the_id: "Optional[str]" = None,
     the_name: "Optional[RelPath]" = None,
+    the_alternate_name: "Optional[RelPath]" = None,
     the_size: "Optional[int]" = None,
     the_signature: "Optional[Fingerprint]" = None,
     do_attach: "bool" = True,
 ) -> "rocrate.model.file.File":
     # The do_attach logic helps on the ill internal logic of add_file
     # when an id has to be assigned
-    the_file_crate = crate.add_file(
-        source=the_path if do_attach else the_uri,
-        dest_path=the_name if do_attach else None,
-        fetch_remote=False,
-        validate_url=False,
+    import logging
+
+    logging.error(
+        f"OS {the_path} {the_uri} {the_name} {the_path if do_attach else the_uri} {the_name if do_attach else None}"
     )
-    if do_attach:
+
+    # assert do_attach or (the_id is not None), "We must provide an @id for non local files"
+    assert not do_attach or (
+        the_name is not None
+    ), "We must provide a name for local files"
+
+    # When the id is none and ...
+    if the_id is None:
+        the_id = the_name if do_attach or (the_uri is None) else the_uri
+
+    the_file_crate = fixed_crate_add_file(
+        crate,
+        identifier=the_id,
+        source=the_path if do_attach else None,
+        dest_path=the_name if do_attach else None,
+    )
+    if do_attach and the_uri is not None:
         if the_uri.startswith("http") or the_uri.startswith("ftp"):
             # See https://github.com/ResearchObject/ro-crate/pull/259
             uri_key = "contentUrl"
@@ -224,8 +306,8 @@ def add_file_to_crate(
             uri_key = "identifier"
 
         the_file_crate[uri_key] = the_uri
-    if the_name is not None:
-        the_file_crate["alternateName"] = the_name
+    if the_alternate_name is not None:
+        the_file_crate["alternateName"] = the_alternate_name
 
     if the_size is None:
         the_size = os.stat(the_path).st_size
@@ -248,22 +330,33 @@ def add_GeneratedContent_to_crate(
     crate: "rocrate.rocrate.ROCrate",
     the_content: "GeneratedContent",
     work_dir: "AbsPath",
+    rel_work_dir: "RelPath",
     do_attach: "bool" = True,
 ) -> "Union[rocrate.model.file.File, Collection]":
-    the_content_uri = (
-        the_content.uri.uri if the_content.uri is not None else the_content.signature
-    )
     assert the_content.signature is not None
 
     digest, algo = extract_digest(the_content.signature)
     if digest is None:
         digest, algo = unstringifyDigest(the_content.signature)
     assert algo is not None
+    dest_path = os.path.relpath(the_content.local, work_dir)
+    # dest_path = hexDigest(algo, digest)
+
+    alternateName = os.path.relpath(
+        the_content.local, os.path.join(work_dir, rel_work_dir)
+    )
+
+    if the_content.uri is not None and not the_content.uri.uri.startswith("nih:"):
+        the_content_uri = the_content.uri.uri
+    else:
+        the_content_uri = None
+
     crate_file = add_file_to_crate(
         crate,
         the_path=the_content.local,
-        the_uri=cast("URIType", the_content_uri),
-        the_name=cast("RelPath", os.path.relpath(the_content.local, work_dir)),
+        the_uri=the_content_uri,
+        the_name=cast("RelPath", dest_path),
+        the_alternate_name=cast("RelPath", alternateName),
         the_signature=hexDigest(algo, digest),
         do_attach=do_attach,
     )
@@ -279,12 +372,20 @@ def add_GeneratedContent_to_crate(
             gen_content: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset]"
             if isinstance(secFile, GeneratedContent):
                 gen_content = add_GeneratedContent_to_crate(
-                    crate, secFile, work_dir, do_attach=do_attach
+                    crate,
+                    secFile,
+                    work_dir,
+                    rel_work_dir=rel_work_dir,
+                    do_attach=do_attach,
                 )
             else:
                 # elif isinstance(secFile, GeneratedDirectoryContent):
                 gen_dir_content, _ = add_GeneratedDirectoryContent_as_dataset(
-                    crate, secFile, work_dir, do_attach=do_attach
+                    crate,
+                    secFile,
+                    work_dir,
+                    rel_work_dir=rel_work_dir,
+                    do_attach=do_attach,
                 )
                 assert gen_dir_content is not None
                 gen_content = gen_dir_content
@@ -524,7 +625,9 @@ def create_workflow_crate(
                     the_entity = add_file_to_crate(
                         wfCrate,
                         the_path=os.path.join(lW.dir, rel_file),
-                        the_name=cast("RelPath", rocrate_wf_folder + "/" + rel_file),
+                        the_name=cast(
+                            "RelPath", os.path.join(rocrate_wf_folder, rel_file)
+                        ),
                         the_uri=cast("URIType", rocrate_file_id),
                     )
                     rel_entities.append(the_entity)
@@ -580,7 +683,7 @@ def create_workflow_crate(
     # representation of the workflow (when it is not a CWL workflow)
     # etc...
     # for file_entry in include_files:
-    #    wfCrate.add_file(file_entry)
+    #    fixed_crate_add_file(wfCrate, file_entry)
 
     return wf_file
 
@@ -616,8 +719,8 @@ def add_directory_as_dataset(
                 if the_file.is_file():
                     the_file_crate = add_file_to_crate(
                         crate,
-                        the_file.path,
-                        the_uri,
+                        the_path=the_file.path,
+                        the_uri=the_uri,
                         the_size=the_file.stat().st_size,
                         do_attach=do_attach,
                     )
@@ -646,29 +749,46 @@ def add_GeneratedDirectoryContent_as_dataset(
     crate: "rocrate.rocrate.ROCrate",
     the_content: "GeneratedDirectoryContent",
     work_dir: "AbsPath",
+    rel_work_dir: "RelPath",
     do_attach: "bool" = True,
 ) -> "Union[Tuple[Union[rocrate.model.dataset.Dataset, Collection], Sequence[rocrate.model.file.File]], Tuple[None, None]]":
     if os.path.isdir(the_content.local):
         the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
-        an_uri = (
-            the_content.uri.uri
-            if the_content.uri is not None
-            else the_content.signature
-        )
+
+        if the_content.uri is not None:
+            an_uri = the_content.uri.uri
+            dest_path = None
+        else:
+            an_uri = None
+            dest_path = os.path.relpath(the_content.local, work_dir)
+            # digest, algo = extract_digest(the_content.signature)
+            # dest_path = hexDigest(algo, digest)
 
         crate_dataset = crate.add_dataset(
             source=an_uri,
+            dest_path=dest_path,
             fetch_remote=False,
             validate_url=False,
             # properties=file_properties,
         )
-        crate_dataset["alternateName"] = os.path.relpath(the_content.local, work_dir)
+        import logging
+
+        logging.error(f"faa {the_content.local} {os.path.join(work_dir, rel_work_dir)}")
+        alternateName = os.path.relpath(
+            the_content.local, os.path.join(work_dir, rel_work_dir)
+        )
+        logging.error(f"faa2 {alternateName}")
+        crate_dataset["alternateName"] = alternateName
 
         if isinstance(the_content.values, list):
             for the_val in the_content.values:
                 if isinstance(the_val, GeneratedContent):
                     the_val_file = add_GeneratedContent_to_crate(
-                        crate, the_val, work_dir=work_dir, do_attach=do_attach
+                        crate,
+                        the_val,
+                        work_dir=work_dir,
+                        rel_work_dir=rel_work_dir,
+                        do_attach=do_attach,
                     )
                     crate_dataset.append_to("hasPart", the_val_file)
                     the_files_crates.append(the_val_file)
@@ -677,7 +797,11 @@ def add_GeneratedDirectoryContent_as_dataset(
                         the_val_dataset,
                         the_subfiles_crates,
                     ) = add_GeneratedDirectoryContent_as_dataset(
-                        crate, the_val, work_dir=work_dir, do_attach=do_attach
+                        crate,
+                        the_val,
+                        work_dir=work_dir,
+                        rel_work_dir=rel_work_dir,
+                        do_attach=do_attach,
                     )
                     if the_val_dataset is not None:
                         assert the_subfiles_crates is not None
@@ -697,12 +821,20 @@ def add_GeneratedDirectoryContent_as_dataset(
                 gen_content: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset]"
                 if isinstance(secFile, GeneratedContent):
                     gen_content = add_GeneratedContent_to_crate(
-                        crate, secFile, work_dir, do_attach=do_attach
+                        crate,
+                        secFile,
+                        work_dir,
+                        rel_work_dir=rel_work_dir,
+                        do_attach=do_attach,
                     )
                 else:
                     # elif isinstance(secFile, GeneratedDirectoryContent):
                     gen_dir_content, _ = add_GeneratedDirectoryContent_as_dataset(
-                        crate, secFile, work_dir, do_attach=do_attach
+                        crate,
+                        secFile,
+                        work_dir,
+                        rel_work_dir=rel_work_dir,
+                        do_attach=do_attach,
                     )
                     assert gen_dir_content is not None
                     gen_content = gen_dir_content
@@ -1021,6 +1153,7 @@ def addOutputsResearchObject(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     outputs: "Sequence[MaterializedOutput]",
     work_dir: "AbsPath",
+    rel_work_dir: "RelPath",
     do_attach: "bool" = False,
 ) -> "Sequence[rocrate.model.entity.Entity]":
     """
@@ -1094,6 +1227,7 @@ def addOutputsResearchObject(
                             crate,
                             itemOutValues,
                             work_dir=work_dir,
+                            rel_work_dir=rel_work_dir,
                             do_attach=do_attach,
                         )
 
@@ -1116,6 +1250,7 @@ def addOutputsResearchObject(
                             crate,
                             itemOutValues,
                             work_dir=work_dir,
+                            rel_work_dir=rel_work_dir,
                             do_attach=do_attach,
                         )
 
@@ -1186,6 +1321,7 @@ def add_execution_to_crate(
         wf_crate,
         stagedExec.matCheckOutputs,
         work_dir=stagedSetup.work_dir,
+        rel_work_dir=stagedExec.outputsDir,
         do_attach=do_attach,
     )
     crate_action["result"] = crate_outputs
