@@ -32,6 +32,7 @@ from typing import (
 
 from .common import (
     ArgsDefaultWithRawHelpFormatter,
+    NoCratableItem,
     CacheType as WfExS_CacheType,
     StrDocEnum,
 )
@@ -56,8 +57,6 @@ if TYPE_CHECKING:
         URIType,
     )
 
-    from .workflow import WF
-
     Callable_WfExS_CacheType: TypeAlias = Callable[[str], WfExS_CacheType]
 
     class BasicLoggingConfigDict(TypedDict):
@@ -78,6 +77,7 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .wfexs_backend import WfExSBackend
+from .workflow import WF
 from . import get_WfExS_version
 from .utils.misc import DatetimeEncoder
 
@@ -254,7 +254,11 @@ def genParserSub(
             help="This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the working directory",
         )
 
-    if crateParams or postStageParams or exportParams:
+    if command is not WfExS_Commands.Execute and (
+        crateParams or postStageParams or exportParams
+    ):
+        # When it is a one shot, like Execute,
+        # the --private-key-file parameter is not needed
         ap_.add_argument(
             "--private-key-file",
             dest="private_key_file",
@@ -271,12 +275,16 @@ def genParserSub(
         )
 
     if crateParams:
-        ap_.add_argument(
-            "--full",
-            dest="doMaterializedROCrate",
-            action="store_true",
-            help="Should the RO-Crate contain a copy of the inputs (and outputs)?",
-        )
+        mat_opts = ap_.add_mutually_exclusive_group()
+        for key_mat, val_mat in WF.ExportROCrate2Payloads.items():
+            if key_mat:
+                mat_opts.add_argument(
+                    "--" + key_mat,
+                    dest="doMaterializedROCrate",
+                    action="store_const",
+                    const=val_mat,
+                    help=f"Should the RO-Crate contain a {key_mat} copy (of everything)?",
+                )
 
     return ap_
 
@@ -638,6 +646,11 @@ def processStagedWorkdirCommand(
                 if not is_damaged and (wfInstance is not None):
                     assert wfSetup is not None
                     try:
+                        if args.doMaterializedROCrate is None:
+                            doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
+                        else:
+                            doMaterializedROCrate = args.doMaterializedROCrate
+
                         if (
                             args.staged_workdir_command
                             == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
@@ -650,7 +663,7 @@ def processStagedWorkdirCommand(
                             )
                             wfInstance.createStageResearchObject(
                                 filename=args.staged_workdir_command_args[1],
-                                doMaterializedROCrate=args.doMaterializedROCrate,
+                                payloads=doMaterializedROCrate,
                             )
                         else:
                             mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
@@ -663,7 +676,7 @@ def processStagedWorkdirCommand(
                                 )
                                 wfInstance.createResultsResearchObject(
                                     filename=args.staged_workdir_command_args[1],
-                                    doMaterializedROCrate=args.doMaterializedROCrate,
+                                    payloads=doMaterializedROCrate,
                                 )
                             else:
                                 print(
@@ -1129,10 +1142,13 @@ def main() -> None:
                 )
             )
 
+    if args.doMaterializedROCrate is None:
+        doMaterializedROCrate = NoCratableItem
+    else:
+        doMaterializedROCrate = args.doMaterializedROCrate
+
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
-        wfInstance.createStageResearchObject(
-            doMaterializedROCrate=args.doMaterializedROCrate
-        )
+        wfInstance.createStageResearchObject(payloads=doMaterializedROCrate)
 
     if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
         print(
@@ -1157,9 +1173,7 @@ def main() -> None:
         wfInstance.exportResults()
 
     if command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
-        wfInstance.createResultsResearchObject(
-            doMaterializedROCrate=args.doMaterializedROCrate
-        )
+        wfInstance.createResultsResearchObject(payloads=doMaterializedROCrate)
 
 
 if __name__ == "__main__":

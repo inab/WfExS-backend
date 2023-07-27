@@ -88,9 +88,11 @@ from .common import (
     AbstractWfExSException,
     ContainerType,
     ContentKind,
+    CratableItem,
     GeneratedContent,
     GeneratedDirectoryContent,
     MaterializedContent,
+    NoCratableItem,
 )
 
 from . import __url__ as wfexs_backend_url
@@ -458,7 +460,7 @@ def create_workflow_crate(
     containerEngineOs: "Optional[ContainerOperatingSystem]",
     arch: "Optional[ProcessorArchitecture]",
     work_dir: "AbsPath",
-    do_attach: "bool" = False,
+    payloads: "CratableItem" = NoCratableItem,
 ) -> "rocrate.model.computationalworkflow.ComputationalWorkflow":
     if localWorkflow.relPath is not None:
         wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
@@ -593,7 +595,7 @@ def create_workflow_crate(
             containerEngineOs,
             arch,
             work_dir=work_dir,
-            do_attach=do_attach,
+            do_attach=CratableItem.Containers in payloads,
         )
     if materializedEngine.operational_containers is not None:
         add_containers_to_workflow(
@@ -604,7 +606,7 @@ def create_workflow_crate(
             arch,
             weng_crate=weng_crate,
             work_dir=work_dir,
-            do_attach=do_attach,
+            do_attach=CratableItem.Containers in payloads,
         )
 
     rel_entities = []
@@ -629,6 +631,7 @@ def create_workflow_crate(
                             "RelPath", os.path.join(rocrate_wf_folder, rel_file)
                         ),
                         the_uri=cast("URIType", rocrate_file_id),
+                        do_attach=CratableItem.Workflow in payloads,
                     )
                     rel_entities.append(the_entity)
 
@@ -1289,7 +1292,7 @@ def add_execution_to_crate(
     wf_crate: "rocrate.model.computationalworkflow.ComputationalWorkflow",
     stagedSetup: "StagedSetup",
     stagedExec: "StagedExecution",
-    do_attach: "bool" = False,
+    payloads: "CratableItem" = NoCratableItem,
 ) -> None:
     # TODO: Add a new CreateAction for each stagedExec
     # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
@@ -1313,7 +1316,7 @@ def add_execution_to_crate(
         wf_crate,
         stagedExec.augmentedInputs,
         work_dir=stagedSetup.work_dir,
-        do_attach=do_attach,
+        do_attach=CratableItem.Inputs in payloads,
     )
     crate_action["object"] = crate_inputs
 
@@ -1322,6 +1325,6 @@ def add_execution_to_crate(
         stagedExec.matCheckOutputs,
         work_dir=stagedSetup.work_dir,
         rel_work_dir=stagedExec.outputsDir,
-        do_attach=do_attach,
+        do_attach=CratableItem.Inputs in payloads,
     )
     crate_action["result"] = crate_outputs

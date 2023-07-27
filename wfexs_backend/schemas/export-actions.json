@@ -29,6 +29,7 @@
 									":stage-rocrate:",
 									":stage-rocrate:full",
 									":provenance-rocrate:",
+									":provenance-rocrate:output",
 									":provenance-rocrate:full"
 								]
 							},

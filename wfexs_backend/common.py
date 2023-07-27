@@ -827,6 +827,22 @@ class ExportItemType(enum.Enum):
     ProvenanceCrate = "provenance-rocrate"
 
 
+class CratableItem(enum.IntFlag):
+    """
+    What can be materialized in the RO-Crate
+    """
+
+    Workflow = enum.auto()
+    Containers = enum.auto()
+    Inputs = enum.auto()
+    Outputs = enum.auto()
+    ProspectiveProvenance = Workflow | Containers | Inputs
+    RetrospectiveProvenance = ProspectiveProvenance | Outputs
+
+
+NoCratableItem = CratableItem(0)
+
+
 class ExportItem(NamedTuple):
     type: "ExportItemType"
     block: "Optional[str]" = None

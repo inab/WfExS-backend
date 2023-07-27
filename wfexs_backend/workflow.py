@@ -39,6 +39,8 @@ from typing import (
 )
 
 from .common import (
+    CratableItem,
+    NoCratableItem,
     StagedExecution,
 )
 
@@ -2905,6 +2907,16 @@ class WF:
 
         return self.exportMarshalled
 
+    ExportROCrate2Payloads: "Final[Mapping[str, CratableItem]]" = {
+        "": NoCratableItem,
+        "inputs": CratableItem.Inputs,
+        "outputs": CratableItem.Outputs,
+        "workflow": CratableItem.Workflow,
+        "containers": CratableItem.Containers,
+        "prospective": CratableItem.ProspectiveProvenance,
+        "full": CratableItem.RetrospectiveProvenance,
+    }
+
     def locateExportItems(
         self, items: "Sequence[ExportItem]"
     ) -> "Sequence[AnyContent]":
@@ -3086,9 +3098,11 @@ class WF:
                 ExportItemType.StageCrate,
                 ExportItemType.ProvenanceCrate,
             ):
-                if item.block not in ("", "full"):
+                if item.block not in self.ExportROCrate2Payloads:
                     raise KeyError(
-                        f"'{item.block}' is not a valid variant for {item.type.value}"
+                        f"'{item.block}' is not a valid variant for {item.type.value} ('"
+                        + "', '".join(self.ExportROCrate2Payloads.keys())
+                        + "')"
                     )
 
                 if item.type == ExportItemType.StageCrate:
@@ -3124,9 +3138,11 @@ class WF:
                 )
                 os.close(temp_handle)
                 atexit.register(os.unlink, temp_rocrate_file)
+
+                assert item.block is not None
                 create_rocrate(
                     filename=cast("AbsPath", temp_rocrate_file),
-                    doMaterializedROCrate=item.block == "full",
+                    payloads=self.ExportROCrate2Payloads[item.block],
                 )
                 retval.append(
                     MaterializedContent(
@@ -3154,7 +3170,7 @@ class WF:
     def createStageResearchObject(
         self,
         filename: "Optional[AnyPath]" = None,
-        doMaterializedROCrate: "bool" = False,
+        payloads: "CratableItem" = NoCratableItem,
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -3182,7 +3198,7 @@ class WF:
             self.containerEngineOs,
             self.arch,
             work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
+            payloads=payloads,
         )
         wfCrate = wf_file.crate
 
@@ -3190,14 +3206,14 @@ class WF:
             wf_file,
             self.materializedParams,
             work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
+            do_attach=CratableItem.Inputs in payloads,
             are_envvars=False,
         )
         addInputsResearchObject(
             wf_file,
             self.materializedEnvironment,
             work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
+            do_attach=CratableItem.Inputs in payloads,
             are_envvars=True,
         )
         if self.outputs is not None:
@@ -3218,7 +3234,7 @@ class WF:
     def createResultsResearchObject(
         self,
         filename: "Optional[AnyPath]" = None,
-        doMaterializedROCrate: "bool" = False,
+        payloads: "CratableItem" = NoCratableItem,
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -3245,7 +3261,7 @@ class WF:
             self.containerEngineOs,
             self.arch,
             work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
+            payloads=payloads,
         )
         wfCrate = wf_file.crate
 
@@ -3254,7 +3270,7 @@ class WF:
                 wf_file,
                 stagedSetup=self.stagedSetup,
                 stagedExec=stagedExec,
-                do_attach=doMaterializedROCrate,
+                payloads=payloads,
             )
 
         # Save RO-crate as execution.crate.zip
