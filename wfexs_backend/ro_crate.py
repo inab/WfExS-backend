@@ -25,6 +25,7 @@ from typing import (
     cast,
     TYPE_CHECKING,
 )
+import warnings
 
 if TYPE_CHECKING:
     import datetime
@@ -1021,7 +1022,12 @@ class WorkflowRunROCrate:
             self.wf_file.append_to("output", formal_parameter)
 
     def writeWRROC(self, filename: "AnyPath") -> None:
-        self.crate.write_zip(filename)
+        with warnings.catch_warnings():
+            # Disable possible warnings emitted by rocrate-py library
+            # when it is not run in debug mode
+            if self.logger.getEffectiveLevel() > logging.DEBUG:
+                warnings.simplefilter("ignore")
+            self.crate.write_zip(filename)
 
     def addWorkflowExecution(
         self,
