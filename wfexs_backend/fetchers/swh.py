@@ -647,5 +647,6 @@ def guess_swh_repo_params(
 
     return RemoteRepo(
         repo_url=wf_url,
+        tag=cast("RepoTag", putative_core_swhid),
         repo_type=RepoType.SoftwareHeritage,
     )
