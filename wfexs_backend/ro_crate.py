@@ -183,6 +183,14 @@ class CreateAction(Action):
     pass
 
 
+class OrganizeAction(Action):
+    pass
+
+
+class ControlAction(Action):
+    pass
+
+
 class SoftwareContainer(rocrate.model.file.File):  # type: ignore[misc]
     TYPES = ["File", "SoftwareApplication"]
 
@@ -302,7 +310,7 @@ class WorkflowRunROCrate:
             materializedEngine.instance.workflowType, localWorkflow.langVersion
         )
 
-        wf_wfexs = self._add_wfexs_to_crate()
+        self.wf_wfexs = self._add_wfexs_to_crate()
 
         wf_url = repoURL.replace(".git", "/") + "tree/" + repoTag
         if localWorkflow.relPath is not None:
@@ -416,14 +424,14 @@ class WorkflowRunROCrate:
             },
         )
 
-        weng_crate = rocrate.model.softwareapplication.SoftwareApplication(
+        self.weng_crate = rocrate.model.softwareapplication.SoftwareApplication(
             self.crate, identifier=materializedEngine.instance.engine_url
         )
         if workflowEngineVersion is not None:
-            weng_crate["softwareVersion"] = workflowEngineVersion
+            self.weng_crate["softwareVersion"] = workflowEngineVersion
             self.wf_file["runtimePlatform"] = workflowEngineVersion
-        self.crate.add(weng_crate)
-        self.wf_file.append_to("softwareRequirements", weng_crate)
+        self.crate.add(self.weng_crate)
+        self.wf_file.append_to("softwareRequirements", self.weng_crate)
 
         if materializedEngine.containers is not None:
             self._add_containers_to_workflow(
@@ -432,7 +440,7 @@ class WorkflowRunROCrate:
         if materializedEngine.operational_containers is not None:
             self._add_containers_to_workflow(
                 materializedEngine.operational_containers,
-                weng_crate=weng_crate,
+                weng_crate=self.weng_crate,
             )
 
         rel_entities = []
@@ -493,8 +501,8 @@ class WorkflowRunROCrate:
             wf_consolidate_action = self.crate.add(wf_consolidate_action)
             wf_consolidate_action["object"] = local_wf_file
             wf_consolidate_action["result"] = self.wf_file
-            wf_consolidate_action["instrument"] = weng_crate
-            wf_consolidate_action["agent"] = wf_wfexs
+            wf_consolidate_action["instrument"] = self.weng_crate
+            wf_consolidate_action["agent"] = self.wf_wfexs
         else:
             self.wf_file["codeRepository"] = repoURL
             if materializedEngine.workflow.effectiveCheckout is not None:
@@ -1029,17 +1037,31 @@ class WorkflowRunROCrate:
         )
 
         crate_action = CreateAction(
-            self.crate, stagedExec.outputsDir, stagedExec.started, stagedExec.ended
+            self.crate,
+            "Run " + stagedExec.outputsDir + " of " + self.wf_file.id,
+            stagedExec.started,
+            stagedExec.ended,
         )
         self.crate.add(crate_action)
-        self.wf_file.append_to("mentions", crate_action)
+        self.crate.root_dataset.append_to("mentions", crate_action)
         crate_action["instrument"] = self.wf_file
+        # subjectOf is not fulfilled as this execution has not public page
 
         crate_inputs = self.addWorkflowInputs(
             stagedExec.augmentedInputs,
         )
         crate_action["object"] = crate_inputs
 
+        control_action = ControlAction(
+            self.crate,
+            "Orchestration of " + self.wf_file.id + " for" + stagedExec.outputsDir,
+        )
+        self.crate.add(control_action)
+        control_action["instrument"] = self.wf_file
+        control_action["object"] = crate_action
+
+        # TODO: Add engine specific traces
+        # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces
         # TODO: Add "augmented environment variables"
 
         crate_outputs = self._add_workflow_execution_outputs(
@@ -1047,6 +1069,21 @@ class WorkflowRunROCrate:
             rel_work_dir=stagedExec.outputsDir,
         )
         crate_action["result"] = crate_outputs
+
+        org_action = OrganizeAction(
+            self.crate,
+            "Orchestration of " + stagedExec.outputsDir + " from " + self.wf_file.id,
+            stagedExec.started,
+            stagedExec.ended,
+        )
+        self.crate.add(org_action)
+        org_action["agent"] = self.wf_wfexs
+        # The used workflow engine
+        org_action["instrument"] = self.weng_crate
+
+        org_action.append_to("object", control_action)
+        # TODO: add configuration files (if available) to object
+        org_action["result"] = crate_action
 
     def _add_workflow_execution_outputs(
         self,
