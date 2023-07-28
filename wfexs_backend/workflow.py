@@ -414,8 +414,8 @@ class WF:
             self.workflow_config = workflow_config
             self.creds_config = creds_config
 
-            self.id = str(workflow_id)
-            self.version_id = str(version_id)
+            self.id = str(workflow_id) if workflow_id is not None else None
+            self.version_id = str(version_id) if version_id is not None else None
             self.descriptor_type = descriptor_type
             self.params = params
             self.environment = environment
