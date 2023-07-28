@@ -101,7 +101,10 @@ from .engine import (
     STATS_DAG_DOT_FILE,
 )
 from .fetchers.http import fetchClassicURL
-from .utils.groovy_parsing import analyze_nf_content
+from .utils.groovy_parsing import (
+    analyze_nf_content,
+    ERROR_PROCESS_NAME,
+)
 
 # A default name for the static bash
 DEFAULT_STATIC_BASH_CMDS = [
@@ -396,11 +399,20 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 self.logger.exception(errstr)
                 raise WorkflowEngineException(errstr) from e
 
-            if len(processes) > 0 or len(includes) > 0 or len(workflows) > 0:
+            some_process = False
+            for a_process in processes:
+                if a_process.name != ERROR_PROCESS_NAME:
+                    some_process = True
+                    break
+            if isinstance(interesting_assignments.get("manifest"), dict):
+                # This is a nextflow config
+                nfConfig = firstPath
+                newNxfConfigs.append(firstPath)
+            elif some_process or len(includes) > 0 or len(workflows) > 0:
                 # It is a nextflow file, but it could be one different from the one at the nextflow.config
                 absoluteCandidateNf = firstPath
             else:
-                # This is a nextflow config
+                # This might be a nextflow config
                 nfConfig = firstPath
                 newNxfConfigs.append(firstPath)
 

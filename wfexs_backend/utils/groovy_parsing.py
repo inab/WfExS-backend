@@ -260,9 +260,12 @@ def extract_process_features(
     return containers, condas, templates
 
 
+ERROR_PROCESS_NAME = "<error>"
+
+
 def extract_nextflow_process(node: "RuleNode") -> "NfProcess":
     p_rule = node.get("rule")
-    process_name = "<error>"
+    process_name = ERROR_PROCESS_NAME
     templates: "Sequence[str]" = []
     containers: "Sequence[str]" = []
     condas: "Sequence[str]" = []
