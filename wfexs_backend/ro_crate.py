@@ -1026,7 +1026,9 @@ class WorkflowRunROCrate:
             # Disable possible warnings emitted by rocrate-py library
             # when it is not run in debug mode
             if self.logger.getEffectiveLevel() > logging.DEBUG:
-                warnings.simplefilter("ignore", category=UserWarning)
+                warnings.filterwarnings(
+                    "ignore", category=UserWarning, module="^rocrate\.model\.file$"
+                )
             self.crate.write_zip(filename)
 
     def addWorkflowExecution(
