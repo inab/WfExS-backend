@@ -53,10 +53,6 @@ if TYPE_CHECKING:
         TypeAlias,
     )
 
-if TYPE_CHECKING:
-    from rocrate.model.computerlanguage import ComputerLanguage  # type: ignore[import]
-    from rocrate.rocrate import ROCrate  # type: ignore[import]
-
 
 # Patching default context in order to load CA certificates from certifi
 import certifi
@@ -598,12 +594,6 @@ class AbstractWorkflowEngineType(abc.ABC):
         local_config: "Optional[EngineLocalConfig]" = None,
         config_directory: "Optional[AnyPath]" = None,
     ) -> "AbstractWorkflowEngineType":
-        pass
-
-    @abc.abstractmethod
-    def getEmptyCrateAndComputerLanguage(
-        self, langVersion: "Optional[Union[EngineVersion, WFLangVersion]]"
-    ) -> "Tuple[ROCrate, ComputerLanguage]":
         pass
 
 

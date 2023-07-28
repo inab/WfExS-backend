@@ -95,9 +95,6 @@ from .podman_container import PodmanContainerFactory
 from .utils.contents import CWLDesc2Content, GetGeneratedDirectoryContent
 from .utils.digests import ComputeDigestFromFile, nihDigester
 
-from rocrate.rocrate import ROCrate  # type: ignore[import]
-from rocrate.model.computerlanguage import ComputerLanguage  # type: ignore[import]
-
 # Constants
 WORKDIR_INPUTS_RELDIR = "inputs"
 WORKDIR_INTERMEDIATE_RELDIR = "intermediate"
@@ -432,31 +429,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     def supportsSecureExecContainerType(self, containerType: "ContainerType") -> "bool":
         return containerType in self.SupportedSecureExecContainerTypes()
-
-    def getEmptyCrateAndComputerLanguage(
-        self, langVersion: "Optional[Union[EngineVersion, WFLangVersion]]"
-    ) -> "Tuple[ROCrate, ComputerLanguage]":
-        """
-        Due the internal synergies between an instance of ComputerLanguage
-        and the RO-Crate it is attached to, both of them should be created
-        here, just at the same time
-        """
-
-        wfType = self.workflowType
-        crate = ROCrate(gen_preview=True)
-        compLang = ComputerLanguage(
-            crate,
-            identifier=wfType.rocrate_programming_language,
-            properties={
-                "name": wfType.name,
-                "alternateName": wfType.trs_descriptor,
-                "identifier": {"@id": wfType.uriTemplate.format(langVersion)},
-                "url": {"@id": wfType.url},
-                "version": langVersion,
-            },
-        )
-
-        return crate, compLang
 
     @abc.abstractmethod
     def identifyWorkflow(

@@ -18,6 +18,7 @@
 import argparse
 import atexit
 import datetime
+import functools
 import json
 import logging
 import os
@@ -32,7 +33,6 @@ from typing import (
 
 from .common import (
     ArgsDefaultWithRawHelpFormatter,
-    NoCratableItem,
     CacheType as WfExS_CacheType,
     StrDocEnum,
 )
@@ -275,13 +275,16 @@ def genParserSub(
         )
 
     if crateParams:
-        mat_opts = ap_.add_mutually_exclusive_group()
+        mat_opts = ap_.add_argument_group(
+            "ro-crate-payload", "What to include in the RO-Crate"
+        )
         for key_mat, val_mat in WF.ExportROCrate2Payloads.items():
             if key_mat:
                 mat_opts.add_argument(
                     "--" + key_mat,
                     dest="doMaterializedROCrate",
-                    action="store_const",
+                    action="append_const",
+                    default=[],
                     const=val_mat,
                     help=f"Should the RO-Crate contain a {key_mat} copy (of everything)?",
                 )
@@ -649,7 +652,9 @@ def processStagedWorkdirCommand(
                         if args.doMaterializedROCrate is None:
                             doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
                         else:
-                            doMaterializedROCrate = args.doMaterializedROCrate
+                            doMaterializedROCrate = functools.reduce(
+                                lambda a, b: a | b, args.doMaterializedROCrate
+                            )
 
                         if (
                             args.staged_workdir_command
@@ -1143,9 +1148,11 @@ def main() -> None:
             )
 
     if args.doMaterializedROCrate is None:
-        doMaterializedROCrate = NoCratableItem
+        doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
     else:
-        doMaterializedROCrate = args.doMaterializedROCrate
+        doMaterializedROCrate = functools.reduce(
+            lambda a, b: a | b, args.doMaterializedROCrate
+        )
 
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(payloads=doMaterializedROCrate)

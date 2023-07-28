@@ -139,11 +139,7 @@ if TYPE_CHECKING:
 import urllib.parse
 
 from .ro_crate import (
-    addInputsResearchObject,
-    addOutputsResearchObject,
-    addExpectedOutputsResearchObject,
-    create_workflow_crate,
-    add_execution_to_crate,
+    WorkflowRunROCrate,
 )
 import bagit  # type: ignore[import]
 
@@ -3188,7 +3184,7 @@ class WF:
         assert self.stagedSetup.inputs_dir is not None
         assert self.stagedSetup.outputs_dir is not None
 
-        wf_file = create_workflow_crate(
+        wrroc = WorkflowRunROCrate(
             self.repoURL,
             self.repoTag,
             self.localWorkflow,
@@ -3197,27 +3193,20 @@ class WF:
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            work_dir=self.stagedSetup.work_dir,
+            staged_setup=self.stagedSetup,
             payloads=payloads,
         )
-        wfCrate = wf_file.crate
 
-        addInputsResearchObject(
-            wf_file,
+        wrroc.addWorkflowInputs(
             self.materializedParams,
-            work_dir=self.stagedSetup.work_dir,
-            do_attach=CratableItem.Inputs in payloads,
             are_envvars=False,
         )
-        addInputsResearchObject(
-            wf_file,
+        wrroc.addWorkflowInputs(
             self.materializedEnvironment,
-            work_dir=self.stagedSetup.work_dir,
-            do_attach=CratableItem.Inputs in payloads,
             are_envvars=True,
         )
         if self.outputs is not None:
-            addExpectedOutputsResearchObject(wf_file, self.outputs)
+            wrroc.addWorkflowExpectedOutputs(self.outputs)
 
         # Save RO-crate as execution.crate.zip
         if filename is None:
@@ -3225,7 +3214,7 @@ class WF:
             filename = cast(
                 "AnyPath", os.path.join(self.outputsDir, self.STAGED_CRATE_FILE)
             )
-        wfCrate.write_zip(filename)
+        wrroc.writeWRROC(filename)
 
         self.logger.info("Staged RO-Crate created: {}".format(filename))
 
@@ -3251,7 +3240,7 @@ class WF:
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
 
-        wf_file = create_workflow_crate(
+        wrroc = WorkflowRunROCrate(
             self.repoURL,
             self.repoTag,
             self.localWorkflow,
@@ -3260,17 +3249,13 @@ class WF:
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            work_dir=self.stagedSetup.work_dir,
+            staged_setup=self.stagedSetup,
             payloads=payloads,
         )
-        wfCrate = wf_file.crate
 
         for stagedExec in self.stagedExecutions:
-            add_execution_to_crate(
-                wf_file,
-                stagedSetup=self.stagedSetup,
+            wrroc.addWorkflowExecution(
                 stagedExec=stagedExec,
-                payloads=payloads,
             )
 
         # Save RO-crate as execution.crate.zip
@@ -3280,7 +3265,7 @@ class WF:
                 "AnyPath", os.path.join(self.outputsDir, self.EXECUTION_CRATE_FILE)
             )
 
-        wfCrate.write_zip(filename)
+        wrroc.writeWRROC(filename)
 
         self.logger.info("Execution RO-Crate created: {}".format(filename))
 
