@@ -1147,7 +1147,8 @@ def main() -> None:
                 )
             )
 
-    if args.doMaterializedROCrate:
+    # Depending on the parameters, it might not exist
+    if getattr(args, "doMaterializedROCrate", None):
         doMaterializedROCrate = functools.reduce(
             lambda a, b: a | b, args.doMaterializedROCrate
         )
