@@ -649,19 +649,19 @@ def processStagedWorkdirCommand(
                 if not is_damaged and (wfInstance is not None):
                     assert wfSetup is not None
                     try:
-                        if args.doMaterializedROCrate is None:
-                            doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
-                        else:
+                        if args.doMaterializedROCrate:
                             doMaterializedROCrate = functools.reduce(
                                 lambda a, b: a | b, args.doMaterializedROCrate
                             )
+                        else:
+                            doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
 
                         if (
                             args.staged_workdir_command
                             == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
                         ):
                             print(
-                                "\t- Generating prospective RO-Crate fro instance {} (nickname '{}')\n".format(
+                                "\t- Generating prospective RO-Crate provenance from instance {} (nickname '{}')\n".format(
                                     wfSetup.instance_id,
                                     wfSetup.nickname,
                                 )
@@ -674,7 +674,7 @@ def processStagedWorkdirCommand(
                             mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
                             if isinstance(mStatus.execution, datetime.datetime):
                                 print(
-                                    "\t- Generating retrospective RO-Crate fro instance {} (nickname '{}')\n".format(
+                                    "\t- Generating retrospective provenance RO-Crate from instance {} (nickname '{}')\n".format(
                                         wfSetup.instance_id,
                                         wfSetup.nickname,
                                     )
@@ -1147,12 +1147,12 @@ def main() -> None:
                 )
             )
 
-    if args.doMaterializedROCrate is None:
-        doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
-    else:
+    if args.doMaterializedROCrate:
         doMaterializedROCrate = functools.reduce(
             lambda a, b: a | b, args.doMaterializedROCrate
         )
+    else:
+        doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
 
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
         wfInstance.createStageResearchObject(payloads=doMaterializedROCrate)
