@@ -1042,7 +1042,7 @@ STDERR
                                     "Output cwltool JSON decode error: {}".format(e.msg)
                                 )
 
-                            if retVal > 125:
+                            if retVal > 0:
                                 # Reading the error for the report
                                 cwl_yaml_stderr.seek(0)
                                 cwl_yaml_stderr_v += cwl_yaml_stderr.read().decode(
