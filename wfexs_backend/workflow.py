@@ -620,7 +620,6 @@ class WF:
         self.repoURL: "Optional[RepoURL]" = None
         self.repoTag: "Optional[RepoTag]" = None
         self.repoRelPath: "Optional[RelPath]" = None
-        self.repoDir: "Optional[AbsPath]" = None
         self.repoEffectiveCheckout: "Optional[RepoTag]" = None
         self.engine: "Optional[AbstractWorkflowEngineType]" = None
         self.engineVer: "Optional[EngineVersion]" = None
@@ -1101,54 +1100,66 @@ class WF:
 
         If the workflow id is an URL, it is supposed to be a git repository,
         and the version will represent either the branch, tag or specific commit.
-        So, the whole TRS fetching machinery is bypassed.workflowDir
+        So, the whole TRS fetching machinery is bypassed.
         """
 
         assert self.metaDir is not None
+        assert self.workflowDir is not None
 
-        repoDir, repo, engineDesc, repoEffectiveCheckout = self.wfexs.cacheWorkflow(
-            workflow_id=workflow_id,
-            version_id=version_id,
-            trs_endpoint=trs_endpoint,
-            descriptor_type=descriptor_type,
-            ignoreCache=ignoreCache,
-            offline=offline,
-            meta_dir=self.metaDir,
-        )
-        self.remote_repo = repo
-        # These are kept for compatibility
-        self.repoURL = repo.repo_url
-        self.repoTag = repo.tag
-        self.repoRelPath = repo.rel_path
-
-        # Workflow Language version cannot be assumed here yet
-        # A copy of the workflows is kept
-        assert self.workflowDir is not None, "The workflow directory should be defined"
-        if os.path.isdir(self.workflowDir):
-            shutil.rmtree(self.workflowDir)
-        # force_copy is needed to isolate the copy of the workflow
-        # so local modifications in a working directory does not
-        # poison the cached workflow
-        if os.path.isdir(repoDir):
-            link_or_copy(repoDir, self.workflowDir, force_copy=True)
-        else:
-            os.makedirs(self.workflowDir, exist_ok=True)
-            if self.repoRelPath is None:
-                self.repoRelPath = cast("RelPath", "workflow.entrypoint")
-            link_or_copy(
+        repoDir: "Optional[AbsPath]" = None
+        if self.remote_repo is None or ignoreCache:
+            (
                 repoDir,
-                cast("AbsPath", os.path.join(self.workflowDir, self.repoRelPath)),
-                force_copy=True,
+                repo,
+                self.engineDesc,
+                repoEffectiveCheckout,
+            ) = self.wfexs.cacheWorkflow(
+                workflow_id=workflow_id,
+                version_id=version_id,
+                trs_endpoint=trs_endpoint,
+                descriptor_type=descriptor_type,
+                ignoreCache=ignoreCache,
+                offline=offline,
+                meta_dir=self.metaDir,
             )
+            self.remote_repo = repo
+            # These are kept for compatibility
+            self.repoURL = repo.repo_url
+            self.repoTag = repo.tag
+            self.repoRelPath = repo.rel_path
+            self.repoEffectiveCheckout = repoEffectiveCheckout
+
+            # Workflow Language version cannot be assumed here yet
+            # A copy of the workflows is kept
+            assert (
+                self.workflowDir is not None
+            ), "The workflow directory should be defined"
+            if os.path.isdir(self.workflowDir):
+                shutil.rmtree(self.workflowDir)
+            # force_copy is needed to isolate the copy of the workflow
+            # so local modifications in a working directory does not
+            # poison the cached workflow
+            if os.path.isdir(repoDir):
+                link_or_copy(repoDir, self.workflowDir, force_copy=True)
+            else:
+                os.makedirs(self.workflowDir, exist_ok=True)
+                if self.repoRelPath is None:
+                    self.repoRelPath = cast("RelPath", "workflow.entrypoint")
+                link_or_copy(
+                    repoDir,
+                    cast("AbsPath", os.path.join(self.workflowDir, self.repoRelPath)),
+                    force_copy=True,
+                )
+
         # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
             dir=self.workflowDir,
             relPath=self.repoRelPath,
-            effectiveCheckout=repoEffectiveCheckout,
+            effectiveCheckout=self.repoEffectiveCheckout,
         )
         self.logger.info(
             "materialized workflow repository (checkout {}): {}".format(
-                repoEffectiveCheckout, self.workflowDir
+                self.repoEffectiveCheckout, self.workflowDir
             )
         )
 
@@ -1161,7 +1172,7 @@ class WF:
                 )
         # A valid engine must be identified from the fetched content
         # TODO: decide whether to force some specific version
-        if engineDesc is None:
+        if self.engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 self.logger.debug("Testing engine " + engineDesc.trs_descriptor)
                 engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
@@ -1176,6 +1187,7 @@ class WF:
                         )
                     )
                     if engineVer is not None:
+                        self.engineDesc = engineDesc
                         break
                 except WorkflowEngineException:
                     # TODO: store the exceptions, to be shown if no workflow is recognized
@@ -1187,8 +1199,8 @@ class WF:
                     "No engine recognized a valid workflow at {}".format(self.repoURL)
                 )
         else:
-            self.logger.debug("Fixed engine " + engineDesc.trs_descriptor)
-            engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
+            self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)
+            engine = self.wfexs.instantiateEngine(self.engineDesc, self.stagedSetup)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException(
@@ -1197,9 +1209,6 @@ class WF:
                     )
                 )
 
-        self.repoDir = repoDir
-        self.repoEffectiveCheckout = repoEffectiveCheckout
-        self.engineDesc = engineDesc
         self.engine = engine
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
