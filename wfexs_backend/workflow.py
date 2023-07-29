@@ -616,6 +616,7 @@ class WF:
             is_damaged=is_damaged,
         )
 
+        self.remote_repo: "Optional[RemoteRepo]" = None
         self.repoURL: "Optional[RepoURL]" = None
         self.repoTag: "Optional[RepoTag]" = None
         self.repoRelPath: "Optional[RelPath]" = None
@@ -1114,6 +1115,8 @@ class WF:
             offline=offline,
             meta_dir=self.metaDir,
         )
+        self.remote_repo = repo
+        # These are kept for compatibility
         self.repoURL = repo.repo_url
         self.repoTag = repo.tag
         self.repoRelPath = repo.rel_path
@@ -2563,6 +2566,7 @@ class WF:
                     self.materializedEngine is not None
                 ), "The engine should have already been materialized at this point"
                 stage = {
+                    "remote_repo": self.remote_repo,
                     "repoURL": self.repoURL,
                     "repoTag": self.repoTag,
                     "repoRelPath": self.repoRelPath,
@@ -2630,9 +2634,22 @@ class WF:
                     combined_globals = copy.copy(common_defs_module.__dict__)
                     combined_globals.update(globals())
                     stage = unmarshall_namedtuple(marshalled_stage, combined_globals)
-                    self.repoURL = stage["repoURL"]
-                    self.repoTag = stage["repoTag"]
-                    self.repoRelPath = stage["repoRelPath"]
+                    self.remote_repo = stage.get("remote_repo")
+                    # This one takes precedence
+                    if self.remote_repo is not None:
+                        self.repoURL = self.remote_repo.repo_url
+                        self.repoTag = self.remote_repo.tag
+                        self.repoRelPath = self.remote_repo.rel_path
+                    else:
+                        self.repoURL = stage["repoURL"]
+                        self.repoTag = stage["repoTag"]
+                        self.repoRelPath = stage["repoRelPath"]
+                        assert self.repoURL is not None
+                        self.remote_repo = RemoteRepo(
+                            repo_url=self.repoURL,
+                            tag=self.repoTag,
+                            rel_path=self.repoRelPath,
+                        )
                     self.repoEffectiveCheckout = stage["repoEffectiveCheckout"]
                     self.engineDesc = stage["engineDesc"]
                     self.engineVer = stage["engineVer"]
@@ -3176,8 +3193,8 @@ class WF:
 
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
-        assert self.repoURL is not None
-        assert self.repoTag is not None
+        assert self.remote_repo is not None
+        assert self.remote_repo.tag is not None
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
         assert self.stagedSetup.work_dir is not None
@@ -3185,8 +3202,7 @@ class WF:
         assert self.stagedSetup.outputs_dir is not None
 
         wrroc = WorkflowRunROCrate(
-            self.repoURL,
-            self.repoTag,
+            self.remote_repo,
             self.localWorkflow,
             self.materializedEngine,
             self.workflowEngineVersion,
@@ -3233,16 +3249,15 @@ class WF:
 
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
-        assert self.repoURL is not None
-        assert self.repoTag is not None
+        assert self.remote_repo is not None
+        assert self.remote_repo.tag is not None
         assert self.stagedSetup.work_dir is not None
         assert (
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
 
         wrroc = WorkflowRunROCrate(
-            self.repoURL,
-            self.repoTag,
+            self.remote_repo,
             self.localWorkflow,
             self.materializedEngine,
             self.workflowEngineVersion,

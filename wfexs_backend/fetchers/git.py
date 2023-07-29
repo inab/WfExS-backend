@@ -369,6 +369,7 @@ def guess_git_repo_params(
     repoTag = None
     repoRelPath = None
     repoType: "Optional[RepoType]" = None
+    web_url: "Optional[URIType]" = None
 
     # Deciding which is the input
     if isinstance(wf_url, parse.ParseResult):
@@ -520,11 +521,27 @@ def guess_git_repo_params(
     if repoURL is None:
         return None
 
+    #    if repoType == RepoType.GitHub:
+    #        wf_entrypoint_path = [
+    #
+    #        ]
+    #        web_url = urllib.parse.urlunparse(
+    #            (
+    #                "https",
+    #                "raw.githubusercontent.com",
+    #                "/".join(wf_entrypoint_path),
+    #                "",
+    #                "",
+    #                "",
+    #            )
+    #        )
+
     return RemoteRepo(
         repo_url=cast("RepoURL", repoURL),
         tag=cast("Optional[RepoTag]", repoTag),
         rel_path=cast("Optional[RelPath]", repoRelPath),
         repo_type=repoType,
+        web_url=web_url,
     )
 
 

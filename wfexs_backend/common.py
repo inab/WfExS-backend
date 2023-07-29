@@ -649,6 +649,7 @@ class RemoteRepo(NamedTuple):
     tag: "Optional[RepoTag]" = None
     rel_path: "Optional[RelPath]" = None
     repo_type: "Optional[RepoType]" = None
+    web_url: "Optional[URIType]" = None
 
 
 class IdentifiedWorkflow(NamedTuple):

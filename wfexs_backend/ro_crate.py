@@ -61,6 +61,7 @@ if TYPE_CHECKING:
         MaterializedWorkflowEngine,
         ProcessorArchitecture,
         RelPath,
+        RemoteRepo,
         RepoTag,
         RepoURL,
         StagedExecution,
@@ -268,8 +269,7 @@ class WorkflowRunROCrate:
 
     def __init__(
         self,
-        repoURL: "RepoURL",
-        repoTag: "RepoTag",
+        remote_repo: "RemoteRepo",
         localWorkflow: "LocalWorkflow",
         materializedEngine: "MaterializedWorkflowEngine",
         workflowEngineVersion: "Optional[WorkflowEngineVersionStr]",
@@ -313,10 +313,6 @@ class WorkflowRunROCrate:
 
         self.wf_wfexs = self._add_wfexs_to_crate()
 
-        wf_url = repoURL.replace(".git", "/") + "tree/" + repoTag
-        if localWorkflow.relPath is not None:
-            wf_url += localWorkflow.dir.rsplit("workflow")[1]
-
         matWf = materializedEngine.workflow
         if matWf.relPath is not None:
             if os.path.isabs(matWf.relPath):
@@ -328,65 +324,81 @@ class WorkflowRunROCrate:
         else:
             matWf_local_path = matWf.dir
 
-        parsed_repo_url = urllib.parse.urlparse(repoURL)
-        if parsed_repo_url.netloc == "github.com":
-            assert (
-                matWf.effectiveCheckout is not None
-            ), "The effective checkout should be available"
-
-            parsed_repo_path = parsed_repo_url.path.split("/")
-            repo_name = parsed_repo_path[2]
-            # TODO: should we urldecode repo_name?
-            if repo_name.endswith(".git"):
-                repo_name = repo_name[:-4]
-            wf_entrypoint_path = [
-                "",  # Needed to prepend a slash
-                parsed_repo_path[1],
-                # TODO: should we urlencode repo_name?
-                repo_name,
-                matWf.effectiveCheckout,
-            ]
-
-            if localWorkflow.relPath is not None:
-                wf_entrypoint_path.append(localWorkflow.relPath)
-
-            wf_entrypoint_url = urllib.parse.urlunparse(
-                (
-                    "https",
-                    "raw.githubusercontent.com",
-                    "/".join(wf_entrypoint_path),
-                    "",
-                    "",
-                    "",
-                )
-            )
-
-        elif "gitlab" in parsed_repo_url.netloc:
-            parsed_repo_path = parsed_repo_url.path.split("/")
-            # FIXME: cover the case of nested groups
-            repo_name = parsed_repo_path[2]
-            if repo_name.endswith(".git"):
-                repo_name = repo_name[:-4]
-            wf_entrypoint_path = [parsed_repo_path[1], repo_name]
-            if localWorkflow.relPath is not None:
-                # TODO: should we urlencode repoTag?
-                wf_entrypoint_path.extend(["-", "raw", repoTag, localWorkflow.relPath])
-
-            wf_entrypoint_url = urllib.parse.urlunparse(
-                (
-                    parsed_repo_url.scheme,
-                    parsed_repo_url.netloc,
-                    "/".join(wf_entrypoint_path),
-                    "",
-                    "",
-                    "",
-                )
-            )
-
+        wf_url: "str"
+        wf_entrypoint_url: "str"
+        if remote_repo.web_url is not None:
+            wf_url = remote_repo.web_url
+            wf_entrypoint_url = wf_url
         else:
-            raise ROCrateGenerationException(
-                "FIXME: Unsupported http(s) git repository {}".format(repoURL)
-            )
+            wf_url = remote_repo.repo_url.replace(".git", "/")
+            if remote_repo.tag is not None:
+                wf_url += "tree/" + remote_repo.tag
+            if localWorkflow.relPath is not None:
+                wf_url += localWorkflow.dir.rsplit("workflow")[1]
+
+            parsed_repo_url = urllib.parse.urlparse(remote_repo.repo_url)
+            if parsed_repo_url.netloc == "github.com":
+                assert (
+                    matWf.effectiveCheckout is not None
+                ), "The effective checkout should be available"
+
+                parsed_repo_path = parsed_repo_url.path.split("/")
+                repo_name = parsed_repo_path[2]
+                # TODO: should we urldecode repo_name?
+                if repo_name.endswith(".git"):
+                    repo_name = repo_name[:-4]
+                wf_entrypoint_path = [
+                    "",  # Needed to prepend a slash
+                    parsed_repo_path[1],
+                    # TODO: should we urlencode repo_name?
+                    repo_name,
+                    matWf.effectiveCheckout,
+                ]
+
+                if localWorkflow.relPath is not None:
+                    wf_entrypoint_path.append(localWorkflow.relPath)
+
+                wf_entrypoint_url = urllib.parse.urlunparse(
+                    (
+                        "https",
+                        "raw.githubusercontent.com",
+                        "/".join(wf_entrypoint_path),
+                        "",
+                        "",
+                        "",
+                    )
+                )
+
+            elif "gitlab" in parsed_repo_url.netloc:
+                parsed_repo_path = parsed_repo_url.path.split("/")
+                # FIXME: cover the case of nested groups
+                repo_name = parsed_repo_path[2]
+                if repo_name.endswith(".git"):
+                    repo_name = repo_name[:-4]
+                wf_entrypoint_path = [parsed_repo_path[1], repo_name]
+                if remote_repo.tag is not None and localWorkflow.relPath is not None:
+                    # TODO: should we urlencode repoTag?
+                    wf_entrypoint_path.extend(
+                        ["-", "raw", remote_repo.tag, localWorkflow.relPath]
+                    )
+
+                wf_entrypoint_url = urllib.parse.urlunparse(
+                    (
+                        parsed_repo_url.scheme,
+                        parsed_repo_url.netloc,
+                        "/".join(wf_entrypoint_path),
+                        "",
+                        "",
+                        "",
+                    )
+                )
+
+            else:
+                raise ROCrateGenerationException(
+                    "FIXME: Unsupported http(s) git repository {}".format(
+                        remote_repo.repo_url
+                    )
+                )
 
         # This is needed to avoid future collisions with other workflows stored in the RO-Crate
         rocrate_wf_folder = str(uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url))
@@ -480,7 +492,7 @@ class WorkflowRunROCrate:
                 lang=self.compLang,
                 gen_cwl=False,
             )
-            local_wf_file["codeRepository"] = repoURL
+            local_wf_file["codeRepository"] = remote_repo.repo_url
             if materializedEngine.workflow.effectiveCheckout is not None:
                 local_wf_file["version"] = materializedEngine.workflow.effectiveCheckout
             local_wf_file["description"] = "Unconsolidated Workflow Entrypoint"
@@ -505,7 +517,7 @@ class WorkflowRunROCrate:
             wf_consolidate_action["instrument"] = self.weng_crate
             wf_consolidate_action["agent"] = self.wf_wfexs
         else:
-            self.wf_file["codeRepository"] = repoURL
+            self.wf_file["codeRepository"] = remote_repo.repo_url
             if materializedEngine.workflow.effectiveCheckout is not None:
                 self.wf_file["version"] = materializedEngine.workflow.effectiveCheckout
             self.wf_file["description"] = "Workflow Entrypoint"
