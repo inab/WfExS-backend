@@ -207,7 +207,7 @@ class Collection(rocrate.model.creativework.CreativeWork):  # type: ignore[misc]
     def __init__(
         self,
         crate: "rocrate.rocrate.ROCrate",
-        main_entity: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset, None]",
+        main_entity: "Union[FixedFile, FixedDataset, None]",
         identifier: "Optional[str]" = None,
         properties: "Optional[Mapping[str, Any]]" = None,
     ):
@@ -221,7 +221,7 @@ class Collection(rocrate.model.creativework.CreativeWork):  # type: ignore[misc]
             self["mainEntity"] = main_entity
 
 
-class FixedFile(rocrate.model.file.File):  # type: ignore[misc]
+class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
     def __init__(
         self,
         crate: "rocrate.rocrate.ROCrate",
@@ -255,6 +255,80 @@ class FixedFile(rocrate.model.file.File):  # type: ignore[misc]
         super(rocrate.model.file_or_dir.FileOrDir, self).__init__(
             crate, identifier, properties
         )
+
+
+class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
+    pass
+
+
+class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[misc]
+    pass
+
+
+class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
+    """
+    This subclass fixes the limitations from original ROCrate class
+    """
+
+    def add_file(
+        self,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ) -> "FixedFile":
+        """
+        source: The absolute path to the local copy of the file, if exists.
+        dest_path: The relative path inside the RO-Crate for the file copy.
+        identifier: The forced value for the @id of the File declaration.
+        """
+        return cast(
+            "FixedFile",
+            self.add(
+                FixedFile(
+                    self,
+                    source=source,
+                    dest_path=dest_path,
+                    identifier=identifier,
+                    fetch_remote=fetch_remote,
+                    validate_url=validate_url,
+                    properties=properties,
+                )
+            ),
+        )
+
+    def add_dataset(
+        self,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ) -> "FixedDataset":
+        """
+        source: The absolute path to the local copy of the file, if exists.
+        dest_path: The relative path inside the RO-Crate for the file copy.
+        identifier: The forced value for the @id of the File declaration.
+        """
+        return cast(
+            "FixedDataset",
+            self.add(
+                FixedDataset(
+                    self,
+                    source=source,
+                    dest_path=dest_path,
+                    identifier=identifier,
+                    fetch_remote=fetch_remote,
+                    validate_url=validate_url,
+                    properties=properties,
+                )
+            ),
+        )
+
+    add_directory = add_dataset
 
 
 class WorkflowRunROCrate:
@@ -305,7 +379,7 @@ class WorkflowRunROCrate:
         self.work_dir = staged_setup.work_dir
         self.payloads = payloads
 
-        self.crate: "rocrate.rocrate.ROCrate"
+        self.crate: "FixedROCrate"
         self.compLang: "rocrate.model.computerlanguage.ComputerLanguage"
         self._init_empty_crate_and_ComputerLanguage(
             materializedEngine.instance.workflowType, localWorkflow.langVersion
@@ -533,7 +607,7 @@ class WorkflowRunROCrate:
         # representation of the workflow (when it is not a CWL workflow)
         # etc...
         # for file_entry in include_files:
-        #    self._fixed_crate_add_file(file_entry)
+        #    self.crate.add_file(file_entry)
 
     def _init_empty_crate_and_ComputerLanguage(
         self,
@@ -546,7 +620,7 @@ class WorkflowRunROCrate:
         here, just at the same time
         """
 
-        self.crate = rocrate.rocrate.ROCrate(gen_preview=True)
+        self.crate = FixedROCrate(gen_preview=True)
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
             identifier=wf_type.rocrate_programming_language,
@@ -729,7 +803,7 @@ class WorkflowRunROCrate:
             # inputs and environment variables in an standardized way
             self.wf_file.append_to("input", formal_parameter)
 
-            crate_coll: "Union[Collection, rocrate.model.dataset.Dataset, rocrate.model.dataset.File, PropertyValue]"
+            crate_coll: "Union[Collection, FixedDataset, FixedFile, PropertyValue, None]"
             if len(in_item.values) > 1:
                 crate_coll = self._add_collection_to_crate()
             else:
@@ -761,7 +835,13 @@ class WorkflowRunROCrate:
 
                     elif os.path.isdir(itemInLocalSource):
                         crate_dataset, _ = self._add_directory_as_dataset(
-                            itemInLocalSource, itemInURISource
+                            itemInLocalSource,
+                            itemInURISource,
+                            the_name=cast(
+                                "RelPath",
+                                os.path.relpath(itemInLocalSource, self.work_dir) + "/",
+                            ),
+                            do_attach=do_attach,
                         )
                         # crate_dataset = self.crate.add_dataset(
                         #    source=itemInURISource,
@@ -770,10 +850,8 @@ class WorkflowRunROCrate:
                         #    do_attach=do_attach,
                         #    # properties=file_properties,
                         # )
-                        the_name = os.path.relpath(itemInLocalSource, self.work_dir)
 
                         if crate_dataset is not None:
-                            crate_dataset["alternateName"] = the_name + "/"
                             if isinstance(crate_coll, Collection):
                                 crate_coll.append_to("hasPart", crate_dataset)
                             else:
@@ -808,7 +886,7 @@ class WorkflowRunROCrate:
                     )
 
                     for secInput in in_item.secondaryInputs:
-                        sec_crate_elem: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset, Collection, None]"
+                        sec_crate_elem: "Union[FixedFile, FixedDataset, Collection, None]"
 
                         secInputLocalSource = secInput.local  # local source
                         secInputURISource = secInput.licensed_uri.uri  # uri source
@@ -826,13 +904,14 @@ class WorkflowRunROCrate:
 
                         elif os.path.isdir(secInputLocalSource):
                             sec_crate_elem, _ = self._add_directory_as_dataset(
-                                secInputLocalSource, secInputURISource
+                                secInputLocalSource,
+                                secInputURISource,
+                                do_attach=do_attach,
                             )
                             # crate_dataset = self.crate.add_dataset(
                             #    source=secInputURISource,
                             #    fetch_remote=False,
                             #    validate_url=False,
-                            #    do_attach=do_attach,
                             #    # properties=file_properties,
                             # )
                             the_sec_name = os.path.relpath(
@@ -867,25 +946,25 @@ class WorkflowRunROCrate:
         the_size: "Optional[int]" = None,
         the_signature: "Optional[Fingerprint]" = None,
         do_attach: "bool" = True,
-    ) -> "rocrate.model.file.File":
+    ) -> "FixedFile":
         # The do_attach logic helps on the ill internal logic of add_file
         # when an id has to be assigned
 
         # assert do_attach or (the_id is not None), "We must provide an @id for non local files"
         assert not do_attach or (
             the_name is not None
-        ), "We must provide a name for local files"
+        ), "A name must be provided for local files"
 
         # When the id is none and ...
         if the_id is None:
             the_id = the_name if do_attach or (the_uri is None) else the_uri
 
-        the_file_crate = self._fixed_crate_add_file(
+        the_file_crate = self.crate.add_file(
             identifier=the_id,
             source=the_path if do_attach else None,
             dest_path=the_name if do_attach else None,
         )
-        if do_attach and the_uri is not None:
+        if do_attach and (the_uri is not None):
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
@@ -914,7 +993,7 @@ class WorkflowRunROCrate:
 
     def _add_collection_to_crate(
         self,
-        main_entity: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset, None]" = None,
+        main_entity: "Union[FixedFile, FixedDataset, None]" = None,
     ) -> "Collection":
         wf_coll = Collection(self.crate, main_entity)
         wf_coll = self.crate.add(wf_coll)
@@ -923,89 +1002,86 @@ class WorkflowRunROCrate:
 
     def _add_directory_as_dataset(
         self,
-        itemInLocalSource: "str",
-        itemInURISource: "URIType",
+        the_path: "str",
+        the_uri: "URIType",
+        the_id: "Optional[str]" = None,
+        the_name: "Optional[RelPath]" = None,
+        the_alternate_name: "Optional[RelPath]" = None,
         do_attach: "bool" = True,
-    ) -> "Union[Tuple[rocrate.model.dataset.Dataset, Sequence[rocrate.model.file.File]], Tuple[None, None]]":
+    ) -> "Union[Tuple[FixedDataset, Sequence[FixedFile]], Tuple[None, None]]":
         # FUTURE IMPROVEMENT
         # Describe datasets referred from DOIs
         # as in https://github.com/ResearchObject/ro-crate/pull/255/files
 
-        if os.path.isdir(itemInLocalSource):
-            the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
-            crate_dataset = self.crate.add_dataset(
-                source=itemInURISource,
-                fetch_remote=False,
-                validate_url=False,
-                # properties=file_properties,
-            )
+        if not os.path.isdir(the_path):
+            return None, None
 
-            # Now, recursively walk it
-            with os.scandir(itemInLocalSource) as the_dir:
-                for the_file in the_dir:
-                    if the_file.name[0] == ".":
-                        continue
-                    the_uri = cast(
-                        "URIType",
-                        itemInURISource
-                        + "/"
-                        + urllib.parse.quote(the_file.name, safe=""),
-                    )
-                    if the_file.is_file():
-                        the_file_crate = self._add_file_to_crate(
-                            the_path=the_file.path,
-                            the_uri=the_uri,
-                            the_size=the_file.stat().st_size,
-                            do_attach=do_attach,
-                        )
+        assert not do_attach or (
+            the_name is not None
+        ), "A name must be provided for local directories"
 
-                        crate_dataset.append_to("hasPart", the_file_crate)
+        # When the id is none and ...
+        if the_id is None:
+            the_id = the_name if do_attach or (the_uri is None) else the_uri
 
-                        the_files_crates.append(the_file_crate)
-                    elif the_file.is_dir():
-                        # TODO: fix URI handling
-                        (
-                            the_dir_crate,
-                            the_subfiles_crates,
-                        ) = self._add_directory_as_dataset(
-                            the_file.path, the_uri, do_attach=do_attach
-                        )
-                        if the_dir_crate is not None:
-                            assert the_subfiles_crates is not None
-                            crate_dataset.append_to("hasPart", the_dir_crate)
-                            crate_dataset.append_to("hasPart", the_subfiles_crates)
-
-                            the_files_crates.extend(the_subfiles_crates)
-
-            return crate_dataset, the_files_crates
-
-        return None, None
-
-    def _fixed_crate_add_file(
-        self,
-        source: "Optional[Union[str, pathlib.Path]]",
-        dest_path: "Optional[str]",
-        identifier: "Optional[str]" = None,
-        fetch_remote: "bool" = False,
-        validate_url: "bool" = False,
-        properties: "Optional[Mapping[str, Any]]" = None,
-    ) -> "rocrate.model.file.File":
-        """
-        source: The absolute path to the local copy of the file, if exists.
-        dest_path: The relative path inside the RO-Crate for the file copy.
-        identifier: The forced value for the @id of the File declaration.
-        """
-        return self.crate.add(
-            FixedFile(
-                self.crate,
-                source=source,
-                dest_path=dest_path,
-                identifier=identifier,
-                fetch_remote=fetch_remote,
-                validate_url=validate_url,
-                properties=properties,
-            )
+        the_files_crates: "MutableSequence[FixedFile]" = []
+        crate_dataset = self.crate.add_dataset(
+            identifier=the_id,
+            source=the_path if do_attach else None,
+            dest_path=the_name if do_attach else None,
+            fetch_remote=False,
+            validate_url=False,
+            # properties=file_properties,
         )
+        if do_attach and (the_uri is not None):
+            if the_uri.startswith("http") or the_uri.startswith("ftp"):
+                # See https://github.com/ResearchObject/ro-crate/pull/259
+                uri_key = "contentUrl"
+            else:
+                uri_key = "identifier"
+
+            crate_dataset[uri_key] = the_uri
+        if the_alternate_name is not None:
+            crate_dataset["alternateName"] = the_alternate_name
+
+        # Now, recursively walk it
+        with os.scandir(the_path) as the_dir:
+            for the_file in the_dir:
+                if the_file.name[0] == ".":
+                    continue
+                the_item_uri = cast(
+                    "URIType",
+                    the_uri + "/" + urllib.parse.quote(the_file.name, safe=""),
+                )
+                if the_file.is_file():
+                    the_file_crate = self._add_file_to_crate(
+                        the_path=the_file.path,
+                        the_uri=the_item_uri,
+                        the_size=the_file.stat().st_size,
+                        do_attach=do_attach,
+                    )
+
+                    crate_dataset.append_to("hasPart", the_file_crate)
+
+                    the_files_crates.append(the_file_crate)
+                elif the_file.is_dir():
+                    # TODO: fix URI handling
+                    (
+                        the_dir_crate,
+                        the_subfiles_crates,
+                    ) = self._add_directory_as_dataset(
+                        the_path=the_file.path,
+                        the_uri=the_item_uri,
+                        do_attach=do_attach,
+                    )
+                    if the_dir_crate is not None:
+                        assert the_subfiles_crates is not None
+                        crate_dataset.append_to("hasPart", the_dir_crate)
+                        crate_dataset.append_to("hasPart", the_subfiles_crates)
+
+                        the_files_crates.extend(the_subfiles_crates)
+
+        return crate_dataset, the_files_crates
 
     def addWorkflowExpectedOutputs(
         self,
@@ -1157,7 +1233,7 @@ class WorkflowRunROCrate:
                 continue
 
             if additional_type in ("File", "Dataset", "Collection"):
-                crate_coll: "Union[Collection, rocrate.model.dataset.Dataset, rocrate.model.dataset.File]"
+                crate_coll: "Union[Collection, FixedDataset, FixedFile, None]"
                 if len(out_item.values) > 1:
                     crate_coll = self._add_collection_to_crate()
                 else:
@@ -1246,7 +1322,7 @@ class WorkflowRunROCrate:
         the_content: "GeneratedContent",
         rel_work_dir: "RelPath",
         do_attach: "bool" = True,
-    ) -> "Union[rocrate.model.file.File, Collection]":
+    ) -> "Union[FixedFile, Collection]":
         assert the_content.signature is not None
 
         digest, algo = extract_digest(the_content.signature)
@@ -1282,7 +1358,7 @@ class WorkflowRunROCrate:
             crate_coll = self._add_collection_to_crate(main_entity=crate_file)
 
             for secFile in the_content.secondaryFiles:
-                gen_content: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset]"
+                gen_content: "Union[FixedFile, FixedDataset]"
                 if isinstance(secFile, GeneratedContent):
                     gen_content = self._add_GeneratedContent_to_crate(
                         secFile,
@@ -1310,29 +1386,47 @@ class WorkflowRunROCrate:
         the_content: "GeneratedDirectoryContent",
         rel_work_dir: "RelPath",
         do_attach: "bool" = True,
-    ) -> "Union[Tuple[Union[rocrate.model.dataset.Dataset, Collection], Sequence[rocrate.model.file.File]], Tuple[None, None]]":
+    ) -> "Union[Tuple[Union[FixedDataset, Collection], Sequence[FixedFile]], Tuple[None, None]]":
         if os.path.isdir(the_content.local):
-            the_files_crates: "MutableSequence[rocrate.model.file.File]" = []
+            the_files_crates: "MutableSequence[FixedFile]" = []
 
-            if the_content.uri is not None:
-                an_uri = the_content.uri.uri
-                dest_path = None
+            the_uri = the_content.uri.uri if the_content.uri is not None else None
+            dest_path = os.path.relpath(the_content.local, self.work_dir) + "/"
+            if do_attach or (the_uri is None):
+                the_id = dest_path
             else:
-                an_uri = None
-                dest_path = os.path.relpath(the_content.local, self.work_dir)
-                # digest, algo = extract_digest(the_content.signature)
-                # dest_path = hexDigest(algo, digest)
+                the_id = the_uri
+            # if the_uri is not None:
+            #    an_uri = the_uri
+            #    dest_path = None
+            # else:
+            #    an_uri = None
+            #    dest_path = os.path.relpath(the_content.local, self.work_dir)
+            #    # digest, algo = extract_digest(the_content.signature)
+            #    # dest_path = hexDigest(algo, digest)
 
             crate_dataset = self.crate.add_dataset(
-                source=an_uri,
-                dest_path=dest_path,
+                identifier=the_id,
+                source=the_content.local if do_attach else None,
+                dest_path=dest_path if do_attach else None,
                 fetch_remote=False,
                 validate_url=False,
                 # properties=file_properties,
             )
 
-            alternateName = os.path.relpath(
-                the_content.local, os.path.join(self.work_dir, rel_work_dir)
+            if do_attach and (the_uri is not None):
+                if the_uri.startswith("http") or the_uri.startswith("ftp"):
+                    # See https://github.com/ResearchObject/ro-crate/pull/259
+                    uri_key = "contentUrl"
+                else:
+                    uri_key = "identifier"
+
+                crate_dataset[uri_key] = the_uri
+            alternateName = (
+                os.path.relpath(
+                    the_content.local, os.path.join(self.work_dir, rel_work_dir)
+                )
+                + "/"
             )
             crate_dataset["alternateName"] = alternateName
 
@@ -1370,7 +1464,7 @@ class WorkflowRunROCrate:
                 crate_coll = self._add_collection_to_crate(main_entity=crate_dataset)
 
                 for secFile in the_content.secondaryFiles:
-                    gen_content: "Union[rocrate.model.file.File, rocrate.model.dataset.Dataset]"
+                    gen_content: "Union[FixedFile, FixedDataset]"
                     if isinstance(secFile, GeneratedContent):
                         gen_content = self._add_GeneratedContent_to_crate(
                             secFile,
