@@ -83,13 +83,13 @@ from ..common import (
 
 from ..utils.contents import link_or_copy
 
-GITHUB_SCHEME = "github"
 GITHUB_NETLOC = "github.com"
 
 
 class GitFetcher(AbstractRepoFetcher):
     GIT_PROTO: "Final[str]" = "git"
     GIT_PROTO_PREFIX: "Final[str]" = GIT_PROTO + "+"
+    GITHUB_SCHEME: "Final[str]" = "github"
     DEFAULT_GIT_CMD: "Final[SymbolicName]" = cast("SymbolicName", "git")
 
     def __init__(
@@ -108,6 +108,7 @@ class GitFetcher(AbstractRepoFetcher):
             cls.GIT_PROTO: cls,
             cls.GIT_PROTO_PREFIX + "https": cls,
             cls.GIT_PROTO_PREFIX + "http": cls,
+            cls.GITHUB_SCHEME: cls,
         }
 
     @classmethod
@@ -285,6 +286,34 @@ class GitFetcher(AbstractRepoFetcher):
         if parsedInputURL.scheme not in self.GetSchemeHandlers():
             raise FetcherException(f"FIXME: Unhandled scheme {parsedInputURL.scheme}")
 
+        if parsedInputURL.scheme == self.GITHUB_SCHEME:
+            gh_path_split = parsedInputURL.path.split("/")
+            gh_path_gh = [
+                gh_path_split[0],
+            ]
+            fragment = ""
+            if len(gh_path_split) > 2:
+                gh_path_gh.append(gh_path_split[1] + f".git@{gh_path_split[2]}")
+                if len(gh_path_split) > 3:
+                    fragment = f"subdirectory={'/'.join(gh_path_split[3:])}"
+            else:
+                gh_path_gh.append(gh_path_split[1] + ".git")
+
+            redir_url = parse.urlunparse(
+                parse.ParseResult(
+                    scheme=self.GIT_PROTO_PREFIX + "https",
+                    netloc=GITHUB_NETLOC,
+                    path="/".join(gh_path_gh),
+                    params="",
+                    query="",
+                    fragment=fragment,
+                )
+            )
+            return ProtocolFetcherReturn(
+                kind_or_resolved=cast("URIType", redir_url),
+                metadata_array=[],
+            )
+
         # Getting the scheme git is going to understand
         if len(parsedInputURL.scheme) >= len(self.GIT_PROTO_PREFIX):
             gitScheme = parsedInputURL.scheme[len(self.GIT_PROTO_PREFIX) :]
@@ -381,7 +410,30 @@ def guess_git_repo_params(
     # See https://pip.pypa.io/en/stable/cli/pip_install/#git
     found_params: "Optional[Tuple[RemoteRepo, Sequence[str], Sequence[RepoTag]]]" = None
     try:
-        if parsed_wf_url.scheme in GitFetcher.GetSchemeHandlers():
+        if parsed_wf_url.scheme == GitFetcher.GITHUB_SCHEME:
+            repoType = RepoType.GitHub
+
+            gh_path_split = parsed_wf_url.path.split("/")
+            gh_path = "/".join(gh_path_split[:2])
+            gh_post_path = list(map(parse.unquote_plus, gh_path_split[2:]))
+            if len(gh_post_path) > 0:
+                repoTag = gh_post_path[0]
+                if len(gh_post_path) > 1:
+                    repoRelPath = "/".join(gh_post_path[1:])
+
+            repoURL = parse.urlunparse(
+                parse.ParseResult(
+                    scheme="https",
+                    netloc=GITHUB_NETLOC,
+                    path=gh_path,
+                    params="",
+                    query="",
+                    fragment="",
+                )
+            )
+            found_params = find_git_repo_in_uri(cast("URIType", repoURL))
+
+        elif parsed_wf_url.scheme in GitFetcher.GetSchemeHandlers():
             # Getting the scheme git is going to understand
             if len(parsed_wf_url.scheme) >= len(GitFetcher.GIT_PROTO_PREFIX):
                 gitScheme = parsed_wf_url.scheme[len(GitFetcher.GIT_PROTO_PREFIX) :]
@@ -404,29 +456,6 @@ def guess_git_repo_params(
             # Now, reassemble the repoURL
             repoURL = parse.urlunparse(
                 (gitScheme, parsed_wf_url.netloc, gitPath, "", "", "")
-            )
-            found_params = find_git_repo_in_uri(cast("URIType", repoURL))
-
-        elif parsed_wf_url.scheme == GITHUB_SCHEME:
-            repoType = RepoType.GitHub
-
-            gh_path_split = parsed_wf_url.path.split("/")
-            gh_path = "/".join(gh_path_split[:2])
-            gh_post_path = list(map(parse.unquote_plus, gh_path_split[2:]))
-            if len(gh_post_path) > 0:
-                repoTag = gh_post_path[0]
-                if len(gh_post_path) > 1:
-                    repoRelPath = "/".join(gh_post_path[1:])
-
-            repoURL = parse.urlunparse(
-                parse.ParseResult(
-                    scheme="https",
-                    netloc=GITHUB_NETLOC,
-                    path=gh_path,
-                    params="",
-                    query="",
-                    fragment="",
-                )
             )
             found_params = find_git_repo_in_uri(cast("URIType", repoURL))
 
