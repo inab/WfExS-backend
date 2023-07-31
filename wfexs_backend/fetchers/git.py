@@ -66,7 +66,6 @@ if TYPE_CHECKING:
 from urllib import parse, request
 
 import dulwich.porcelain
-import git
 
 from . import (
     AbstractRepoFetcher,
@@ -380,7 +379,7 @@ def guess_git_repo_params(
     if no repo was found.
     """
     repoURL = None
-    repoTag = None
+    repoTag = "main"
     repoRelPath = None
     repoType: "Optional[RepoType]" = RepoType.Git
 
@@ -394,13 +393,6 @@ def guess_git_repo_params(
     if not parsed_wf_url.scheme:
         logger.debug(
             f"No scheme in repo URL. Choices are: {', '.join(GIT_SCHEMES)}"
-        )
-        return None
-    
-    # Return None if no scheme in URL. Can't choose how to proceed
-    if not ".git" in parsed_wf_url.path:
-        logger.debug(
-            f"URL does not seem to point to a git repo."
         )
         return None
 
