@@ -1457,6 +1457,7 @@ class WfExSBackend:
         guessedRepo: "Optional[RemoteRepo]" = None
         repoDir: "Optional[AbsPath]" = None
         putative: "bool" = False
+        cached_putative_path: "Optional[AbsPath]" = None
         if parsedRepoURL.scheme == "":
             if (trs_endpoint is not None) and len(trs_endpoint) > 0:
                 i_workflow, repoDir = self.getWorkflowRepoFromTRS(
@@ -1526,7 +1527,8 @@ class WfExSBackend:
         if i_workflow is not None:
             guessedRepo = i_workflow.remote_repo
             engineDesc = i_workflow.workflow_type
-            self.cacheROCrateFilename = cached_putative_path
+            if cached_putative_path is not None:
+                self.cacheROCrateFilename = cached_putative_path
 
         assert guessedRepo is not None
         assert guessedRepo.repo_url is not None
