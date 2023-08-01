@@ -68,61 +68,12 @@ jobs:
         with:
           retention-days: 2
           path: constraints-${{ matrix.python-version }}.txt
-  update_docs:
-    runs-on: ubuntu-latest
-    name: Update documentation if all worked properly
-    needs:
-      - pre-commit
-    steps:
-      - uses: actions/checkout@v3
-      - name: Changes at WfExS-backend internal JSON Schemas
-        id: changed_schemas
-        uses: tj-actions/changed-files@v34
-        with:
-          files: |
-            wfexs_backend/schemas/*.json
-      - name: Install documentation generator
-        if: steps.changed_schemas.outputs.any_changed == 'true'
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.8"
-          cache: 'pip'
-          architecture: x64
-          cache-dependency-path: 'dev-requirements.txt'
-      - name: Install development dependencies
-        run: |
-          pip install -r dev-requirements.txt
-      - name: Generate HTML documentation from internal JSON Schemas
-        id: doc-generate-html-if-changed
-        if: steps.changed_schemas.outputs.any_changed == 'true'
-        run: |
-          development-scripts/regenerate_schema_docs_html.bash wfexs_backend/schemas development-docs/schemas
-      - uses: actions/upload-artifact@v3
-        if: steps.doc-generate-html-if-changed.outcome == 'success'
-        with:
-          retention-days: 2
-          path: |
-            development-docs/schemas/*.html
-            development-docs/schemas/*.css
-            development-docs/schemas/*.js
-      - name: Generate MD documentation from internal JSON Schemas
-        id: doc-generate-md-if-changed
-        if: steps.changed_schemas.outputs.any_changed == 'true'
-        run: |
-          development-scripts/regenerate_schema_docs_md.bash wfexs_backend/schemas development-docs/schemas
-      - uses: actions/upload-artifact@v3
-        if: steps.doc-generate-md-if-changed.outcome == 'success'
-        with:
-          retention-days: 2
-          path: |
-            development-docs/schemas/*.md
 
   pull_request_changes:
     runs-on: ubuntu-latest
     name: Pull request with the newly generated contents
     needs:
       - pre-commit
-      - update_docs
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3
@@ -134,11 +85,11 @@ jobs:
           rm -r changes-dir/artifact
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@v5
         with:
           title: Updated constraints (triggered by ${{ github.sha }})
           delete-branch: true
-          commit-message: "[create-pull-request] Automatically commit updated contents (constraints, generated documentation)"
+          commit-message: "[create-pull-request] Automatically commit updated contents (constraints)"
       - name: Check outputs
         if: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
