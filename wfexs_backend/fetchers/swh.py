@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,8 +36,10 @@ if TYPE_CHECKING:
     import logging
 
     from typing import (
+        Any,
         IO,
         Mapping,
+        MutableSequence,
         Optional,
         Sequence,
         Tuple,
@@ -125,31 +128,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         # The service does not work with quoted identifiers, neither with
         # fully unquoted identifiers. Only the semicolons have to be
         # substituted
-        swh_quoted_repoURL = repoURL.replace(";", parse.quote(";"))
-        resio = io.BytesIO()
-        # urljoin cannot be used due working with URIs
-        resolve_uri = cast(
-            "URIType", self.SWH_API_REST_RESOLVE + swh_quoted_repoURL + "/"
-        )
-        try:
-            _, metaresio, _ = fetchClassicURL(
-                resolve_uri,
-                resio,
-                secContext={
-                    "headers": {
-                        "Accept": "application/json",
-                    },
-                },
-            )
-            res_doc = json.loads(resio.getvalue().decode("utf-8"))
-        except Exception as e:
-            raise FetcherException(f"HTTP REST call {resolve_uri} failed") from e
-        gathered_meta = {
-            "fetched": resolve_uri,
-            "payload": res_doc,
-        }
-        metadata_array = [URIWithMetadata(repoURL, gathered_meta)]
-        metadata_array.extend(metaresio)
+        res_doc, metadata_array = resolve_swh_id(repoURL)
 
         # Error handling
         if "exception" in res_doc:
@@ -163,32 +142,8 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         if object_type == "content":
             anchor = res_doc.get("metadata", {}).get("anchor")
             if anchor is not None:
-                # urljoin cannot be used due working with URIs
-                anchor_resolve_uri = cast(
-                    "URIType", self.SWH_API_REST_RESOLVE + anchor + "/"
-                )
-                try:
-                    ancio = io.BytesIO()
-                    _, metaancio, _ = fetchClassicURL(
-                        anchor_resolve_uri,
-                        ancio,
-                        secContext={
-                            "headers": {
-                                "Accept": "application/json",
-                            },
-                        },
-                    )
-                    anc_res_doc = json.loads(ancio.getvalue().decode("utf-8"))
-                except Exception as e:
-                    raise FetcherException(
-                        f"HTTP REST call {anchor_resolve_uri} failed"
-                    ) from e
-                gathered_meta = {
-                    "fetched": anchor_resolve_uri,
-                    "payload": anc_res_doc,
-                }
-                metadata_array = [URIWithMetadata(repoURL, gathered_meta)]
-                metadata_array.extend(metaancio)
+                anc_res_doc, anchor_metadata_array = resolve_swh_id(anchor)
+                metadata_array.extend(anchor_metadata_array)
 
                 # Now, truly yes the context
                 object_type = anc_res_doc["object_type"]
@@ -598,6 +553,52 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         )
 
 
+def resolve_swh_id(
+    the_id: "URIType",
+) -> "Tuple[Mapping[str, Any], MutableSequence[URIWithMetadata]]":
+    # ## Use the resolver, see https://archive.softwareheritage.org/api/1/resolve/doc/
+    # curl -H "Accept: application/json" https://archive.softwareheritage.org/api/1/resolve/swh:1:rev:31348ed533961f84cf348bf1af660ad9de6f870c/
+    # The service does not work with quoted identifiers, neither with
+    # fully unquoted identifiers. Only the semicolons have to be
+    # substituted
+    swh_quoted_id = the_id.replace(";", parse.quote(";"))
+    resio = io.BytesIO()
+    # urljoin cannot be used due working with URIs
+    resolve_uri = cast(
+        "URIType", SoftwareHeritageFetcher.SWH_API_REST_RESOLVE + swh_quoted_id + "/"
+    )
+    try:
+        _, metaresio, _ = fetchClassicURL(
+            resolve_uri,
+            resio,
+            secContext={
+                "headers": {
+                    "Accept": "application/json",
+                },
+            },
+        )
+        res_doc = json.loads(resio.getvalue().decode("utf-8"))
+    except Exception as e:
+        raise FetcherException(f"HTTP REST call {resolve_uri} failed") from e
+
+    if not isinstance(res_doc, dict):
+        raise FetcherException(f"{the_id} is not valid. Message: {res_doc}")
+
+    gathered_meta = {
+        "fetched": resolve_uri,
+        "payload": res_doc,
+    }
+    metadata_array = [
+        URIWithMetadata(
+            uri=the_id,
+            metadata=gathered_meta,
+        )
+    ]
+    metadata_array.extend(metaresio)
+
+    return res_doc, metadata_array
+
+
 def guess_swh_repo_params(
     orig_wf_url: "Union[URIType, parse.ParseResult]",
     logger: "logging.Logger",
@@ -645,7 +646,12 @@ def guess_swh_repo_params(
     ):
         return None
 
+    # Now we are sure it is known, let's learn the web url to browse it
+    resolved_payload, _ = resolve_swh_id(wf_url)
+    web_url = resolved_payload["browse_url"]
     return RemoteRepo(
         repo_url=wf_url,
+        tag=cast("RepoTag", putative_core_swhid),
         repo_type=RepoType.SoftwareHeritage,
+        web_url=web_url,
     )

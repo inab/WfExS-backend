@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -83,13 +84,13 @@ from ..common import (
 
 from ..utils.contents import link_or_copy
 
-GITHUB_SCHEME = "github"
 GITHUB_NETLOC = "github.com"
 
 
 class GitFetcher(AbstractRepoFetcher):
     GIT_PROTO: "Final[str]" = "git"
     GIT_PROTO_PREFIX: "Final[str]" = GIT_PROTO + "+"
+    GITHUB_SCHEME: "Final[str]" = "github"
     DEFAULT_GIT_CMD: "Final[SymbolicName]" = cast("SymbolicName", "git")
 
     def __init__(
@@ -108,6 +109,7 @@ class GitFetcher(AbstractRepoFetcher):
             cls.GIT_PROTO: cls,
             cls.GIT_PROTO_PREFIX + "https": cls,
             cls.GIT_PROTO_PREFIX + "http": cls,
+            cls.GITHUB_SCHEME: cls,
         }
 
     @classmethod
@@ -286,6 +288,34 @@ class GitFetcher(AbstractRepoFetcher):
         if parsedInputURL.scheme not in self.GetSchemeHandlers():
             raise FetcherException(f"FIXME: Unhandled scheme {parsedInputURL.scheme}")
 
+        if parsedInputURL.scheme == self.GITHUB_SCHEME:
+            gh_path_split = parsedInputURL.path.split("/")
+            gh_path_gh = [
+                gh_path_split[0],
+            ]
+            fragment = ""
+            if len(gh_path_split) > 2:
+                gh_path_gh.append(gh_path_split[1] + f".git@{gh_path_split[2]}")
+                if len(gh_path_split) > 3:
+                    fragment = f"subdirectory={'/'.join(gh_path_split[3:])}"
+            else:
+                gh_path_gh.append(gh_path_split[1] + ".git")
+
+            redir_url = parse.urlunparse(
+                parse.ParseResult(
+                    scheme=self.GIT_PROTO_PREFIX + "https",
+                    netloc=GITHUB_NETLOC,
+                    path="/".join(gh_path_gh),
+                    params="",
+                    query="",
+                    fragment=fragment,
+                )
+            )
+            return ProtocolFetcherReturn(
+                kind_or_resolved=cast("URIType", redir_url),
+                metadata_array=[],
+            )
+
         # Getting the scheme git is going to understand
         if len(parsedInputURL.scheme) >= len(self.GIT_PROTO_PREFIX):
             gitScheme = parsedInputURL.scheme[len(self.GIT_PROTO_PREFIX) :]
@@ -382,6 +412,7 @@ def guess_git_repo_params(
     repoTag = None
     repoRelPath = None
     repoType: "Optional[RepoType]" = RepoType.Git
+    web_url: "Optional[URIType]" = None
 
     # Deciding which is the input
     if isinstance(wf_url, parse.ParseResult):
@@ -428,4 +459,5 @@ def guess_git_repo_params(
         tag=cast("Optional[RepoTag]", repoTag),
         rel_path=cast("Optional[RelPath]", repoRelPath),
         repo_type=repoType,
+        web_url=web_url,
     )

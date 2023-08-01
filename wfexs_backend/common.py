@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,10 +53,6 @@ if TYPE_CHECKING:
     from typing_extensions import (
         TypeAlias,
     )
-
-if TYPE_CHECKING:
-    from rocrate.model.computerlanguage import ComputerLanguage  # type: ignore[import]
-    from rocrate.rocrate import ROCrate  # type: ignore[import]
 
 
 # Patching default context in order to load CA certificates from certifi
@@ -171,6 +168,7 @@ if TYPE_CHECKING:
     WritableWfExSConfigBlock: TypeAlias = MutableMapping[str, Any]
     ExportActionBlock: TypeAlias = Mapping[str, Any]
     ParamsBlock: TypeAlias = Mapping[str, Any]
+    EnvironmentBlock: TypeAlias = Mapping[str, Any]
     MutableParamsBlock: TypeAlias = MutableMapping[str, Any]
     OutputsBlock: TypeAlias = Mapping[str, Any]
     PlaceHoldersBlock: TypeAlias = Mapping[str, Union[int, float, str]]
@@ -581,6 +579,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         self,
         matWfEng: "MaterializedWorkflowEngine",
         inputs: "Sequence[MaterializedInput]",
+        environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
         pass
@@ -596,12 +595,6 @@ class AbstractWorkflowEngineType(abc.ABC):
         local_config: "Optional[EngineLocalConfig]" = None,
         config_directory: "Optional[AnyPath]" = None,
     ) -> "AbstractWorkflowEngineType":
-        pass
-
-    @abc.abstractmethod
-    def getEmptyCrateAndComputerLanguage(
-        self, langVersion: "Optional[Union[EngineVersion, WFLangVersion]]"
-    ) -> "Tuple[ROCrate, ComputerLanguage]":
         pass
 
 
@@ -655,6 +648,7 @@ class RemoteRepo(NamedTuple):
     tag: "Optional[RepoTag]" = None
     rel_path: "Optional[RelPath]" = None
     repo_type: "Optional[RepoType]" = None
+    web_url: "Optional[URIType]" = None
 
 
 class IdentifiedWorkflow(NamedTuple):
@@ -816,10 +810,27 @@ class ExportItemType(enum.Enum):
     """
 
     Param = "param"
+    Environment = "envvar"
     Output = "output"
     WorkingDirectory = "working-directory"
     StageCrate = "stage-rocrate"
     ProvenanceCrate = "provenance-rocrate"
+
+
+class CratableItem(enum.IntFlag):
+    """
+    What can be materialized in the RO-Crate
+    """
+
+    Workflow = enum.auto()
+    Containers = enum.auto()
+    Inputs = enum.auto()
+    Outputs = enum.auto()
+    ProspectiveProvenance = Workflow | Containers | Inputs
+    RetrospectiveProvenance = ProspectiveProvenance | Outputs
+
+
+NoCratableItem = CratableItem(0)
 
 
 class ExportItem(NamedTuple):

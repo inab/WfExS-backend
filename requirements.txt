@@ -1,6 +1,7 @@
 pyyaml
 jsonpath-ng
 jsonschema[format_nongpl] >= 3.0.0 , < 4.18.0
+python-magic >= 0.4.27
 paramiko[ed25519]
 certifi
 crypt4gh

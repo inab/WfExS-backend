@@ -101,7 +101,10 @@ from .engine import (
     STATS_DAG_DOT_FILE,
 )
 from .fetchers.http import fetchClassicURL
-from .utils.groovy_parsing import analyze_nf_content
+from .utils.groovy_parsing import (
+    analyze_nf_content,
+    ERROR_PROCESS_NAME,
+)
 
 # A default name for the static bash
 DEFAULT_STATIC_BASH_CMDS = [
@@ -396,11 +399,20 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 self.logger.exception(errstr)
                 raise WorkflowEngineException(errstr) from e
 
-            if len(processes) > 0 or len(includes) > 0 or len(workflows) > 0:
+            some_process = False
+            for a_process in processes:
+                if a_process.name != ERROR_PROCESS_NAME:
+                    some_process = True
+                    break
+            if isinstance(interesting_assignments.get("manifest"), dict):
+                # This is a nextflow config
+                nfConfig = firstPath
+                newNxfConfigs.append(firstPath)
+            elif some_process or len(includes) > 0 or len(workflows) > 0:
                 # It is a nextflow file, but it could be one different from the one at the nextflow.config
                 absoluteCandidateNf = firstPath
             else:
-                # This is a nextflow config
+                # This might be a nextflow config
                 nfConfig = firstPath
                 newNxfConfigs.append(firstPath)
 
@@ -1509,8 +1521,10 @@ STDERR
         self,
         matWfEng: "MaterializedWorkflowEngine",
         matInputs: "Sequence[MaterializedInput]",
+        matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
+        # TODO: implement usage of materialized environment variables
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
 
@@ -1537,22 +1551,14 @@ STDERR
         runEnv = dict(os.environ)
         optStaticBinsMonkeyPatch = ""
         optWritable = None
-        runEnv.update(self.container_factory.environment)
-        if self.container_factory.containerType == ContainerType.Singularity:
-            if self.static_bash_cmd is not None:
-                optStaticBinsMonkeyPatch += f" -B {self.static_bash_cmd}:/bin/bash:ro"
 
-            if self.writable_containers:
-                optWritable = "--writable-tmpfs"
-            elif self.container_factory.supportsFeature("userns"):
-                optWritable = "--userns"
-            else:
-                optWritable = "--pid"
-        elif self.container_factory.containerType == ContainerType.Podman:
-            if self.container_factory.supportsFeature("userns"):
-                optWritable = "--userns=keep-id"
-            else:
-                optWritable = ""
+        # The list of environment variables to be whitelisted
+        runEnv["TZ"] = _tzstring()
+        envWhitelist = [
+            "TZ",
+        ]
+        runEnv.update(self.container_factory.environment)
+        envWhitelist.extend(self.container_factory.environment.keys())
 
         # This is needed for containers potentially without ps command
         if self.container_factory.containerType in (
@@ -1573,42 +1579,89 @@ STDERR
                     f" {volFlag} {self.static_ps_cmd}:/usr/local/bin/ps:ro"
                 )
 
+        if self.container_factory.containerType == ContainerType.Singularity:
+            if self.static_bash_cmd is not None:
+                optStaticBinsMonkeyPatch += (
+                    f" {volFlag} {self.static_bash_cmd}:/bin/bash:ro"
+                )
+
+            if self.writable_containers:
+                optWritable = "--writable-tmpfs"
+            elif self.container_factory.supportsFeature("userns"):
+                optWritable = "--userns"
+            else:
+                optWritable = "--pid"
+        elif self.container_factory.containerType == ContainerType.Podman:
+            if self.container_factory.supportsFeature("userns"):
+                optWritable = "--userns=keep-id"
+            else:
+                optWritable = ""
+
+        # Environment variables have to be processed before we are reaching next lines
+        # Now, the environment variables to include
+        bindable_paths = []
+        for mat_env in matEnvironment:
+            if len(mat_env.values) > 0:
+                envWhitelist.append(mat_env.name)
+                env_vals: "MutableSequence[str]" = []
+                for mat_val in mat_env.values:
+                    if isinstance(mat_val, MaterializedContent):
+                        bindable_paths.append(mat_val.local)
+                        env_vals.append(mat_val.local)
+                    else:
+                        env_vals.append(str(mat_val))
+                # Now, assign it
+                runEnv[mat_env.name] = ":".join(env_vals)
+
+        if self.container_factory.containerType != ContainerType.NoContainer:
+            # Teach the container solution to bind the paths being used
+            # by the exposed environment variables
+            for bindable_path in bindable_paths:
+                optStaticBinsMonkeyPatch += (
+                    f" {volFlag} {bindable_path}:{bindable_path}:ro"
+                )
+
         forceParamsConfFile = os.path.join(self.engineTweaksDir, "force-params.config")
         with open(forceParamsConfFile, mode="w", encoding="utf-8") as fPC:
             if self.container_factory.containerType == ContainerType.Singularity:
                 print(
-                    f"""docker.enabled = false
+                    f"""
+docker.enabled = false
 podman.enabled = false
 singularity.enabled = true
-singularity.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
-singularity.runOptions = '-B {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro {optWritable} {optStaticBinsMonkeyPatch}'
+singularity.envWhitelist = '{','.join(envWhitelist)}'
+singularity.runOptions = '{volFlag} {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro {optWritable} {optStaticBinsMonkeyPatch}'
 singularity.autoMounts = true
 """,
                     file=fPC,
                 )
             elif self.container_factory.containerType == ContainerType.Docker:
                 print(
-                    f"""singularity.enabled = false
+                    f"""
+singularity.enabled = false
 podman.enabled = false
 docker.enabled = true
-docker.envWhitelist = '{','.join(self.container_factory.environment.keys())}'
-docker.runOptions = '-v {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z -e TZ="{_tzstring()}"'
+docker.envWhitelist = '{','.join(envWhitelist)}'
+docker.runOptions = '{volFlag} {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z"'
 docker.fixOwnership = true
 """,
                     file=fPC,
                 )
             elif self.container_factory.containerType == ContainerType.Podman:
                 print(
-                    f"""singularity.enabled = false
+                    f"""
+singularity.enabled = false
 docker.enabled = false
 podman.enabled = true
-podman.runOptions = '-v {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z {optWritable} -e TZ="{_tzstring()}"'
+podman.envWhitelist = '{','.join(envWhitelist)}'
+podman.runOptions = '{volFlag} {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z {optWritable}'
 """,
                     file=fPC,
                 )
             elif self.container_factory.containerType == ContainerType.NoContainer:
                 print(
-                    f"""docker.enabled = false
+                    f"""
+docker.enabled = false
 singularity.enabled = false
 podman.enabled = false
 """,
@@ -1618,7 +1671,8 @@ podman.enabled = false
             # Trace fields are detailed at
             # https://www.nextflow.io/docs/latest/tracing.html#trace-fields
             print(
-                f"""timeline {{
+                f"""
+timeline {{
 	enabled = true
 	file = "{timelineFile}"
 }}

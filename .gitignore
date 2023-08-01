@@ -127,25 +127,15 @@ celerybeat.pid
 # Environments
 .env
 .venv
->>>>>>> origin/readthedocs
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
-<<<<<<< HEAD
 constraints-dir/
-
-# byte-compiled / optimized / DLL files
-__pycache__/
 
 # PyCharm IDE folder
 .idea/
-
-# setuptools leftovers
-build/
-dist/
-*.egg-info/
 
 # keys
 *.pub
@@ -153,7 +143,6 @@ dist/
 
 # tests
 wfexs-backend-test*
-=======
 
 # Spyder project settings
 .spyderproject

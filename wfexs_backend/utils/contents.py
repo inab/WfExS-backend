@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -225,6 +226,10 @@ def CWLDesc2Content(
     return matValues
 
 
+def copy2_nofollow(src: "str", dest: "str") -> "None":
+    shutil.copy2(src, dest, follow_symlinks=False)
+
+
 def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) -> None:
     assert os.path.exists(
         src
@@ -303,4 +308,4 @@ def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) ->
             # as it is in a separated filesystem
             if dest_exists:
                 shutil.rmtree(dest)
-            shutil.copytree(src, dest)
+            shutil.copytree(src, dest, copy_function=copy2_nofollow)

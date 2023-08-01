@@ -1,0 +1,95 @@
+name: schemas-doc-generator
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  json-schema-validation:
+    runs-on: ubuntu-latest
+    name: JSON Schema validation through pre-commit
+    steps:
+      - uses: actions/checkout@v3
+      - uses: pre-commit/action@v3.0.0
+        with:
+          extra_args: --all -c .pre-commit-config.yaml jsonschema_dir_validate
+  
+  update_docs:
+    runs-on: ubuntu-latest
+    name: Update documentation if all worked properly
+    needs:
+      - json-schema-validation
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 100
+      - name: Changes at WfExS-backend internal JSON Schemas
+        id: changed_schemas
+        uses: tj-actions/changed-files@v34
+        with:
+          files: |
+            wfexs_backend/schemas/*.json
+      - name: Install documentation generator
+        if: steps.changed_schemas.outputs.any_changed == 'true'
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.8"
+          cache: 'pip'
+          architecture: x64
+          cache-dependency-path: 'dev-requirements.txt'
+      - name: Install development dependencies
+        run: |
+          pip install -r dev-requirements.txt
+      - name: Generate HTML documentation from internal JSON Schemas
+        id: doc-generate-html-if-changed
+        if: steps.changed_schemas.outputs.any_changed == 'true'
+        run: |
+          development-scripts/regenerate_schema_docs_html.bash wfexs_backend/schemas development-docs/schemas
+      - uses: actions/upload-artifact@v3
+        if: steps.doc-generate-html-if-changed.outcome == 'success'
+        with:
+          retention-days: 2
+          path: |
+            development-docs/schemas/*.html
+            development-docs/schemas/*.css
+            development-docs/schemas/*.js
+      - name: Generate MD documentation from internal JSON Schemas
+        id: doc-generate-md-if-changed
+        if: steps.changed_schemas.outputs.any_changed == 'true'
+        run: |
+          development-scripts/regenerate_schema_docs_md.bash wfexs_backend/schemas development-docs/schemas
+      - uses: actions/upload-artifact@v3
+        if: steps.doc-generate-md-if-changed.outcome == 'success'
+        with:
+          retention-days: 2
+          path: |
+            development-docs/schemas/*.md
+
+  pull_request_changes:
+    runs-on: ubuntu-latest
+    name: Pull request with the newly generated contents
+    needs:
+      - update_docs
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/download-artifact@v3
+        with:
+          path: changes-dir
+      - name: Move artifacts to their right place
+        run: |
+          ls -lR changes-dir
+          cp -dpr changes-dir/artifact/* .
+          rm -r changes-dir/artifact
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: Updated documentation (triggered by ${{ github.sha }})
+          delete-branch: true
+          commit-message: "[create-pull-request] Automatically commit updated contents (generated documentation)"
+      - name: Check outputs
+        if: ${{ steps.cpr.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
+          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"

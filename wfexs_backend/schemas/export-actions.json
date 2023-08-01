@@ -29,12 +29,13 @@
 									":stage-rocrate:",
 									":stage-rocrate:full",
 									":provenance-rocrate:",
+									":provenance-rocrate:output",
 									":provenance-rocrate:full"
 								]
 							},
 							{
 								"type": "string",
-								"pattern": "^(param|output):([^:;]+:)?[^:;]*$"
+								"pattern": "^(param|envvar|output):([^:;]+:)?[^:;]*$"
 							}
 						]
 					},

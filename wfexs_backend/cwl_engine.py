@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -123,7 +124,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
 
-    DEFAULT_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20230601100705")
+    DEFAULT_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20230719185429")
 
     DEVEL_CWLTOOL_PACKAGE = f"git+{CWLTOOL_REPO}.git"
     # Set this constant to something meaningful only when a hotfix
@@ -436,19 +437,46 @@ class CWLWorkflowEngine(WorkflowEngine):
             with tempfile.NamedTemporaryFile() as cwltool_install_stdout:
                 with tempfile.NamedTemporaryFile() as cwltool_install_stderr:
                     retVal = subprocess.Popen(
-                        ". '{0}'/bin/activate && pip install --upgrade pip wheel ; pip install {1}{2}{3}".format(
-                            cwltool_install_dir,
-                            cwltoolPackage,
-                            cwltoolMatchOp,
-                            inst_engineVersion,
-                            # Commented out, as WfExS is not currently using cwl-utils
-                            #    self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
-                            #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
-                        ),
+                        [
+                            f"{cwltool_install_dir}/bin/pip",
+                            "install",
+                            "--upgrade",
+                            "pip",
+                            "wheel",
+                        ],
                         stdout=cwltool_install_stdout,
                         stderr=cwltool_install_stderr,
                         cwd=cwltool_install_dir,
-                        shell=True,
+                        env=instEnv,
+                    ).wait()
+
+                    # Proper error handling
+                    if retVal != 0:
+                        # Reading the output and error for the report
+                        with open(cwltool_install_stdout.name, "r") as c_stF:
+                            cwltool_install_stdout_v = c_stF.read()
+                        with open(cwltool_install_stderr.name, "r") as c_stF:
+                            cwltool_install_stderr_v = c_stF.read()
+
+                        errstr = "Could not upgrade pip. Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                            retVal,
+                            cwltool_install_stdout_v,
+                            cwltool_install_stderr_v,
+                        )
+                        raise WorkflowEngineException(errstr)
+
+                    retVal = subprocess.Popen(
+                        [
+                            f"{cwltool_install_dir}/bin/pip",
+                            "install",
+                            cwltoolPackage + cwltoolMatchOp + inst_engineVersion,
+                        ],
+                        # Commented out, as WfExS is not currently using cwl-utils
+                        #    self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
+                        #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
+                        stdout=cwltool_install_stdout,
+                        stderr=cwltool_install_stderr,
+                        cwd=cwltool_install_dir,
                         env=instEnv,
                     ).wait()
 
@@ -502,11 +530,10 @@ class CWLWorkflowEngine(WorkflowEngine):
         with tempfile.NamedTemporaryFile() as cwltool_version_stderr:
             # Writing straight to the file
             with subprocess.Popen(
-                ". '{0}'/bin/activate && cwltool --version".format(cwltool_install_dir),
+                [f"{cwltool_install_dir}/bin/cwltool", "--version"],
                 stdout=subprocess.PIPE,
                 stderr=cwltool_version_stderr,
                 cwd=cwltool_install_dir,
-                shell=True,
             ) as vP:
                 engine_ver: "str" = ""
                 if vP.stdout is not None:
@@ -538,18 +565,22 @@ class CWLWorkflowEngine(WorkflowEngine):
         # CWLWorkflowEngine directory is needed
         _, cwltool_install_dir, _ = self.materializeEngineVersion(engineVer)
 
-        # Execute cwltool --version
+        assert localWf.relPath
+        # Execute cwltool --print-deps
         printed_deps_str = ""
         with tempfile.NamedTemporaryFile() as cwltool_printdeps_stderr:
             # Writing straight to the file
             with subprocess.Popen(
-                ". '{0}'/bin/activate && cwltool --print-deps --relative-deps cwd '{1}'".format(
-                    cwltool_install_dir, localWf.relPath
-                ),
+                [
+                    f"{cwltool_install_dir}/bin/cwltool",
+                    "--print-deps",
+                    "--relative-deps",
+                    "cwd",
+                    localWf.relPath,
+                ],
                 stdout=subprocess.PIPE,
                 stderr=cwltool_printdeps_stderr,
                 cwd=localWf.dir,
-                shell=True,
             ) as pP:
                 if pP.stdout is not None:
                     printed_deps_str = pP.stdout.read().decode(
@@ -676,13 +707,15 @@ STDERR
                 with tempfile.NamedTemporaryFile() as cwltool_pack_stderr:
                     # Writing straight to the file
                     retVal = subprocess.Popen(
-                        ". '{0}'/bin/activate && cwltool --no-doc-cache --pack {1}".format(
-                            cwltool_install_dir, localWorkflowFile
-                        ),
+                        [
+                            f"{cwltool_install_dir}/bin/cwltool",
+                            "--no-doc-cache",
+                            "--pack",
+                            localWorkflowFile,
+                        ],
                         stdout=packedH,
                         stderr=cwltool_pack_stderr,
                         cwd=cwltool_install_dir,
-                        shell=True,
                     ).wait()
 
                     # Proper error handling
@@ -796,13 +829,14 @@ STDERR
             with tempfile.NamedTemporaryFile() as cwltool_dot_stderr:
                 # Writing straight to the file
                 retVal = subprocess.Popen(
-                    ". '{0}'/bin/activate && cwltool --print-dot {1}".format(
-                        cwltool_install_dir, localWorkflowFile
-                    ),
+                    [
+                        f"{cwltool_install_dir}/bin/cwltool",
+                        "--print-dot",
+                        localWorkflowFile,
+                    ],
                     stdout=packedH,
                     stderr=cwltool_dot_stderr,
                     cwd=cwltool_install_dir,
-                    shell=True,
                 ).wait()
 
                 # Proper error handling
@@ -822,11 +856,13 @@ STDERR
         self,
         matWfEng: "MaterializedWorkflowEngine",
         matInputs: "Sequence[MaterializedInput]",
+        matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
         """
         Method to execute the workflow
         """
+        # TODO: implement usage of materialized environment variables
         localWf = matWfEng.workflow
 
         assert (
@@ -950,11 +986,30 @@ STDERR
 
                             debugFlag = ""
                             if self.logger.getEffectiveLevel() <= logging.DEBUG:
-                                debugFlag = "--debug --leave-tmpdir"
+                                debugFlags = [
+                                    "--debug",
+                                    "--leave-tmpdir",
+                                ]
                             elif self.logger.getEffectiveLevel() <= logging.INFO:
-                                debugFlag = "--verbose --rm-tmpdir"
+                                debugFlags = [
+                                    "--verbose",
+                                    "--rm-tmpdir",
+                                ]
                             else:
-                                debugFlag = "--rm-tmpdir"
+                                debugFlags = [
+                                    "--rm-tmpdir",
+                                ]
+
+                            # The command-line
+                            cmd_arr = [
+                                f"{cwltool_install_dir}/bin/cwltool",
+                                *debugFlags,
+                                "--outdir=" + outputDir,
+                                "--tmp-outdir-prefix=" + intermediateDir,
+                                "--tmpdir-prefix=" + intermediateDir,
+                                "--strict",
+                                "--no-doc-cache",
+                            ]
 
                             if (
                                 self.container_factory.containerType
@@ -964,7 +1019,12 @@ STDERR
                                     matWfEng.containers_path is not None
                                 ), "The containers path should exist"
 
-                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --singularity --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmd_arr.extend(
+                                    [
+                                        "--disable-pull",
+                                        "--singularity",
+                                    ]
+                                )
                                 instEnv[
                                     "CWL_SINGULARITY_CACHE"
                                 ] = matWfEng.containers_path
@@ -977,7 +1037,11 @@ STDERR
                                 self.container_factory.containerType
                                 == ContainerType.Docker
                             ):
-                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmd_arr.extend(
+                                    [
+                                        "--disable-pull",
+                                    ]
+                                )
                             elif (
                                 self.container_factory.containerType
                                 == ContainerType.Podman
@@ -985,18 +1049,29 @@ STDERR
                                 if engineVersion < self.PODMAN_CWLTOOL_VERSION:
                                     if self.container_factory.supportsFeature("userns"):
                                         instEnv["PODMAN_USERNS"] = "keep-id"
-                                    cmdTemplate = (
-                                        "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull '--user-space-docker-cmd="
-                                        + self.container_factory.command
-                                        + "' --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                    cmd_arr.extend(
+                                        [
+                                            "--disable-pull",
+                                            "--user-space-docker-cmd="
+                                            + self.container_factory.command,
+                                        ]
                                     )
                                 else:
-                                    cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --disable-pull --podman --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                    cmd_arr.extend(
+                                        [
+                                            "--disable-pull",
+                                            "--podman",
+                                        ]
+                                    )
                             elif (
                                 self.container_factory.containerType
                                 == ContainerType.NoContainer
                             ):
-                                cmdTemplate = "cwltool --outdir {0} {4} --strict --no-doc-cache --no-container --tmp-outdir-prefix={1} --tmpdir-prefix={1} {2} {3}"
+                                cmd_arr.extend(
+                                    [
+                                        "--no-container",
+                                    ]
+                                )
                             else:
                                 raise WorkflowEngineException(
                                     "FATAL ERROR: Unsupported container factory {}".format(
@@ -1004,24 +1079,45 @@ STDERR
                                     )
                                 )
 
-                            cmd = cmdTemplate.format(
-                                outputDir,
-                                intermediateDir,
-                                localWorkflowFile,
-                                yamlFile,
-                                debugFlag,
+                            # Now, the environment variables to include
+                            bindable_paths = []
+                            for mat_env in matEnvironment:
+                                if len(mat_env.values) > 0:
+                                    cmd_arr.append(
+                                        "--preserve-environment=" + mat_env.name
+                                    )
+                                    env_vals: "MutableSequence[str]" = []
+                                    for mat_val in mat_env.values:
+                                        if isinstance(mat_val, MaterializedContent):
+                                            bindable_paths.append(mat_val.local)
+                                            env_vals.append(mat_val.local)
+                                        else:
+                                            env_vals.append(str(mat_val))
+                                    # Now, assign it
+                                    instEnv[mat_env.name] = ":".join(env_vals)
+
+                            if (
+                                self.container_factory.containerType
+                                != ContainerType.NoContainer
+                            ):
+                                # TODO: Teach cwltool to bind the paths
+                                pass
+
+                            # Last, the workflow to run and the yaml with the inputs
+                            cmd_arr.extend(
+                                [
+                                    localWorkflowFile,
+                                    yamlFile,
+                                ]
                             )
-                            self.logger.debug("Command => {}".format(cmd))
+                            self.logger.debug("Command => {}".format(" ".join(cmd_arr)))
 
                             started = datetime.datetime.now(datetime.timezone.utc)
                             retVal = subprocess.Popen(
-                                ". '{0}'/bin/activate && {1}".format(
-                                    cwltool_install_dir, cmd
-                                ),
+                                cmd_arr,
                                 stdout=cwl_yaml_stdout,
                                 stderr=cwl_yaml_stderr,
                                 cwd=self.workDir,
-                                shell=True,
                                 env=instEnv,
                             ).wait()
                             ended = datetime.datetime.now(datetime.timezone.utc)
@@ -1040,7 +1136,7 @@ STDERR
                                     "Output cwltool JSON decode error: {}".format(e.msg)
                                 )
 
-                            if retVal > 125:
+                            if retVal > 0:
                                 # Reading the error for the report
                                 cwl_yaml_stderr.seek(0)
                                 cwl_yaml_stderr_v += cwl_yaml_stderr.read().decode(

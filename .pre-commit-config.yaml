@@ -10,7 +10,7 @@ repos:
         types:
           - python
         exclude: "^[^/]*env/|dev-[^/]*/"
-        entry: pylint -j 0
+        entry: pylint -j 4
       - id: mypy
         name: Local MyPy
         language: system
@@ -44,7 +44,7 @@ repos:
         args: [ wfexs_backend/schemas ]
 
   - repo: https://github.com/jmfernandez/pre-commit_mirrors-actionlint.git
-    rev: v1.6.24
+    rev: v1.6.25
     hooks:
       - id: actionlint
 
@@ -55,13 +55,7 @@ repos:
         exclude: "^[^/]*env/|development-[^/]*/|docs/"
         args: [--diff, --check]
 
-  - repo: local
+  - repo: https://github.com/jmfernandez/citation-cff-checker.git
+    rev: v0.1.0
     hooks:
-      - id: citation.cff
-        name: CITATION.CFF checker
-        always_run: true
-        pass_filenames: false
-        language: system
-        files: "CITATION.cff$"
-#        entry: ./basic-installer.bash python development-scripts/cff-ver-validate.py CITATION.cff
-        entry: python development-scripts/cff-ver-validate.py CITATION.cff
+      - id: cff_ver_validate

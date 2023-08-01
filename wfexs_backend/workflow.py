@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# SPDX-License-Identifier: Apache-2.0
 # Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,6 +40,8 @@ from typing import (
 )
 
 from .common import (
+    CratableItem,
+    NoCratableItem,
     StagedExecution,
 )
 
@@ -70,6 +73,7 @@ if TYPE_CHECKING:
         ContainerEngineVersionStr,
         ContainerOperatingSystem,
         EngineVersion,
+        EnvironmentBlock,
         ExitVal,
         ExportActionBlock,
         MaterializedOutput,
@@ -136,11 +140,7 @@ if TYPE_CHECKING:
 import urllib.parse
 
 from .ro_crate import (
-    addInputsResearchObject,
-    addOutputsResearchObject,
-    addExpectedOutputsResearchObject,
-    create_workflow_crate,
-    add_execution_to_crate,
+    WorkflowRunROCrate,
 )
 import bagit  # type: ignore[import]
 
@@ -283,6 +283,7 @@ class WF:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "str" = DEFAULT_TRS_ENDPOINT,
         params: "Optional[ParamsBlock]" = None,
+        environment: "Optional[EnvironmentBlock]" = None,
         outputs: "Optional[OutputsBlock]" = None,
         placeholders: "Optional[PlaceHoldersBlock]" = None,
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
@@ -414,12 +415,14 @@ class WF:
             self.workflow_config = workflow_config
             self.creds_config = creds_config
 
-            self.id = str(workflow_id)
-            self.version_id = None if version_id is None else str(version_id)
+            self.id = str(workflow_id) if workflow_id is not None else None
+            self.version_id = str(version_id) if version_id is not None else None
             self.descriptor_type = descriptor_type
             self.params = params
+            self.environment = environment
             self.placeholders = placeholders
             self.formatted_params = self.formatParams(params)
+            self.formatted_environment = self.formatParams(environment)
             self.outputs = self.parseExpectedOutputs(outputs)
             self.default_actions = self.parseExportActions(
                 [] if default_actions is None else default_actions
@@ -614,16 +617,17 @@ class WF:
             is_damaged=is_damaged,
         )
 
+        self.remote_repo: "Optional[RemoteRepo]" = None
         self.repoURL: "Optional[RepoURL]" = None
         self.repoTag: "Optional[RepoTag]" = None
         self.repoRelPath: "Optional[RelPath]" = None
-        self.repoDir: "Optional[AbsPath]" = None
         self.repoEffectiveCheckout: "Optional[RepoTag]" = None
         self.engine: "Optional[AbstractWorkflowEngineType]" = None
         self.engineVer: "Optional[EngineVersion]" = None
         self.engineDesc: "Optional[WorkflowType]" = None
 
         self.materializedParams: "Optional[Sequence[MaterializedInput]]" = None
+        self.materializedEnvironment: "Optional[Sequence[MaterializedInput]]" = None
         self.localWorkflow: "Optional[LocalWorkflow]" = None
         self.materializedEngine: "Optional[MaterializedWorkflowEngine]" = None
         self.containerEngineVersion: "Optional[ContainerEngineVersionStr]" = None
@@ -1033,6 +1037,7 @@ class WF:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            environment=workflow_meta.get("environment", {}),
             outputs=workflow_meta.get("outputs", {}),
             placeholders=workflow_meta.get("placeholders", {}),
             default_actions=workflow_meta.get("default_actions"),
@@ -1071,6 +1076,7 @@ class WF:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            environment=workflow_meta.get("environment", {}),
             placeholders=workflow_meta.get("placeholders", {}),
             default_actions=workflow_meta.get("default_actions"),
             workflow_config=workflow_meta.get("workflow_config"),
@@ -1095,52 +1101,66 @@ class WF:
 
         If the workflow id is an URL, it is supposed to be a git repository,
         and the version will represent either the branch, tag or specific commit.
-        So, the whole TRS fetching machinery is bypassed.workflowDir
+        So, the whole TRS fetching machinery is bypassed.
         """
 
         assert self.metaDir is not None
+        assert self.workflowDir is not None
 
-        repoDir, repo, engineDesc, repoEffectiveCheckout = self.wfexs.cacheWorkflow(
-            workflow_id=workflow_id,
-            version_id=version_id,
-            trs_endpoint=trs_endpoint,
-            descriptor_type=descriptor_type,
-            ignoreCache=ignoreCache,
-            offline=offline,
-            meta_dir=self.metaDir,
-        )
-        self.repoURL = repo.repo_url
-        self.repoTag = repo.tag
-        self.repoRelPath = repo.rel_path
-
-        # Workflow Language version cannot be assumed here yet
-        # A copy of the workflows is kept
-        assert self.workflowDir is not None, "The workflow directory should be defined"
-        if os.path.isdir(self.workflowDir):
-            shutil.rmtree(self.workflowDir)
-        # force_copy is needed to isolate the copy of the workflow
-        # so local modifications in a working directory does not
-        # poison the cached workflow
-        if os.path.isdir(repoDir):
-            link_or_copy(repoDir, self.workflowDir, force_copy=True)
-        else:
-            os.makedirs(self.workflowDir, exist_ok=True)
-            if self.repoRelPath is None:
-                self.repoRelPath = cast("RelPath", "workflow.entrypoint")
-            link_or_copy(
+        repoDir: "Optional[AbsPath]" = None
+        if self.remote_repo is None or ignoreCache:
+            (
                 repoDir,
-                cast("AbsPath", os.path.join(self.workflowDir, self.repoRelPath)),
-                force_copy=True,
+                repo,
+                self.engineDesc,
+                repoEffectiveCheckout,
+            ) = self.wfexs.cacheWorkflow(
+                workflow_id=workflow_id,
+                version_id=version_id,
+                trs_endpoint=trs_endpoint,
+                descriptor_type=descriptor_type,
+                ignoreCache=ignoreCache,
+                offline=offline,
+                meta_dir=self.metaDir,
             )
+            self.remote_repo = repo
+            # These are kept for compatibility
+            self.repoURL = repo.repo_url
+            self.repoTag = repo.tag
+            self.repoRelPath = repo.rel_path
+            self.repoEffectiveCheckout = repoEffectiveCheckout
+
+            # Workflow Language version cannot be assumed here yet
+            # A copy of the workflows is kept
+            assert (
+                self.workflowDir is not None
+            ), "The workflow directory should be defined"
+            if os.path.isdir(self.workflowDir):
+                shutil.rmtree(self.workflowDir)
+            # force_copy is needed to isolate the copy of the workflow
+            # so local modifications in a working directory does not
+            # poison the cached workflow
+            if os.path.isdir(repoDir):
+                link_or_copy(repoDir, self.workflowDir, force_copy=True)
+            else:
+                os.makedirs(self.workflowDir, exist_ok=True)
+                if self.repoRelPath is None:
+                    self.repoRelPath = cast("RelPath", "workflow.entrypoint")
+                link_or_copy(
+                    repoDir,
+                    cast("AbsPath", os.path.join(self.workflowDir, self.repoRelPath)),
+                    force_copy=True,
+                )
+
         # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
             dir=self.workflowDir,
             relPath=self.repoRelPath,
-            effectiveCheckout=repoEffectiveCheckout,
+            effectiveCheckout=self.repoEffectiveCheckout,
         )
         self.logger.info(
             "materialized workflow repository (checkout {}): {}".format(
-                repoEffectiveCheckout, self.workflowDir
+                self.repoEffectiveCheckout, self.workflowDir
             )
         )
 
@@ -1153,7 +1173,7 @@ class WF:
                 )
         # A valid engine must be identified from the fetched content
         # TODO: decide whether to force some specific version
-        if engineDesc is None:
+        if self.engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 self.logger.debug("Testing engine " + engineDesc.trs_descriptor)
                 engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
@@ -1168,6 +1188,7 @@ class WF:
                         )
                     )
                     if engineVer is not None:
+                        self.engineDesc = engineDesc
                         break
                 except WorkflowEngineException:
                     # TODO: store the exceptions, to be shown if no workflow is recognized
@@ -1179,8 +1200,8 @@ class WF:
                     "No engine recognized a valid workflow at {}".format(self.repoURL)
                 )
         else:
-            self.logger.debug("Fixed engine " + engineDesc.trs_descriptor)
-            engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
+            self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)
+            engine = self.wfexs.instantiateEngine(self.engineDesc, self.stagedSetup)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException(
@@ -1189,9 +1210,6 @@ class WF:
                     )
                 )
 
-        self.repoDir = repoDir
-        self.repoEffectiveCheckout = repoEffectiveCheckout
-        self.engineDesc = engineDesc
         self.engine = engine
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
@@ -1330,21 +1348,25 @@ class WF:
         return lastInput
 
     def materializeInputs(
-        self, offline: "bool" = False, ignoreCache: "bool" = False, lastInput: "int" = 0
-    ) -> None:
+        self,
+        formatted_params: "Union[ParamsBlock, Sequence[Mapping[str, Any]]]",
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        lastInput: "int" = 0,
+    ) -> "Sequence[MaterializedInput]":
         assert (
             self.inputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
-        assert self.formatted_params is not None
 
         theParams, numInputs = self.fetchInputs(
-            self.formatted_params,
+            formatted_params,
             workflowInputs_destdir=self.inputsDir,
             offline=offline,
             ignoreCache=ignoreCache,
             lastInput=lastInput,
         )
-        self.materializedParams = theParams
+
+        return theParams
 
     def getContext(
         self, remote_file: "str", contextName: "Optional[str]"
@@ -1531,7 +1553,7 @@ class WF:
         return remote_pairs
 
     def _formatStringFromPlaceHolders(self, the_string: "str") -> "str":
-        assert self.params is not None
+        assert self.placeholders is not None
 
         i_l_the_string = the_string.find("{")
         i_r_the_string = the_string.find("}")
@@ -1995,7 +2017,17 @@ class WF:
         # This method is called from within materializeWorkflowAndContainers
         # self.setupEngine(offline=offline)
         self.materializeWorkflowAndContainers(offline=offline, ignoreCache=ignoreCache)
-        self.materializeInputs(offline=offline, ignoreCache=ignoreCache)
+
+        assert self.formatted_params is not None
+        self.materializedParams = self.materializeInputs(
+            self.formatted_params, offline=offline, ignoreCache=ignoreCache
+        )
+
+        assert self.formatted_environment is not None
+        self.materializedEnvironment = self.materializeInputs(
+            self.formatted_environment, offline=offline, ignoreCache=ignoreCache
+        )
+
         self.marshallStage()
 
         return self.getStagedSetup()
@@ -2139,13 +2171,17 @@ class WF:
 
         assert self.materializedEngine is not None
         assert self.materializedParams is not None
+        assert self.materializedEnvironment is not None
         assert self.outputs is not None
 
         if self.stagedExecutions is None:
             self.stagedExecutions = []
 
         stagedExec = WorkflowEngine.ExecuteWorkflow(
-            self.materializedEngine, self.materializedParams, self.outputs
+            self.materializedEngine,
+            self.materializedParams,
+            self.materializedEnvironment,
+            self.outputs,
         )
 
         self.stagedExecutions.append(stagedExec)
@@ -2349,6 +2385,8 @@ class WF:
                         workflow_meta["workflow_config"] = self.workflow_config
                     if self.params is not None:
                         workflow_meta["params"] = self.params
+                    if self.environment is not None:
+                        workflow_meta["environment"] = self.environment
                     if self.placeholders is not None:
                         workflow_meta["placeholders"] = self.placeholders
                     if self.outputs is not None:
@@ -2419,8 +2457,10 @@ class WF:
                     self.trs_endpoint = workflow_meta.get("trs_endpoint")
                     self.workflow_config = workflow_meta.get("workflow_config")
                     self.params = workflow_meta.get("params")
+                    self.environment = workflow_meta.get("environment")
                     self.placeholders = workflow_meta.get("placeholders")
                     self.formatted_params = self.formatParams(self.params)
+                    self.formatted_environment = self.formatParams(self.environment)
 
                     outputsM = workflow_meta.get("outputs")
                     if isinstance(outputsM, dict):
@@ -2536,6 +2576,7 @@ class WF:
                     self.materializedEngine is not None
                 ), "The engine should have already been materialized at this point"
                 stage = {
+                    "remote_repo": self.remote_repo,
                     "repoURL": self.repoURL,
                     "repoTag": self.repoTag,
                     "repoRelPath": self.repoRelPath,
@@ -2548,7 +2589,8 @@ class WF:
                     "containerEngineOs": self.containerEngineOs,
                     "arch": self.arch,
                     "workflowEngineVersion": self.workflowEngineVersion,
-                    "materializedParams": self.materializedParams
+                    "materializedParams": self.materializedParams,
+                    "materializedEnvironment": self.materializedEnvironment,
                     # TODO: check nothing essential was left
                 }
 
@@ -2602,14 +2644,30 @@ class WF:
                     combined_globals = copy.copy(common_defs_module.__dict__)
                     combined_globals.update(globals())
                     stage = unmarshall_namedtuple(marshalled_stage, combined_globals)
-                    self.repoURL = stage["repoURL"]
-                    self.repoTag = stage["repoTag"]
-                    self.repoRelPath = stage["repoRelPath"]
+                    self.remote_repo = stage.get("remote_repo")
+                    # This one takes precedence
+                    if self.remote_repo is not None:
+                        self.repoURL = self.remote_repo.repo_url
+                        self.repoTag = self.remote_repo.tag
+                        self.repoRelPath = self.remote_repo.rel_path
+                    else:
+                        self.repoURL = stage["repoURL"]
+                        self.repoTag = stage["repoTag"]
+                        self.repoRelPath = stage["repoRelPath"]
+                        assert self.repoURL is not None
+                        self.remote_repo = RemoteRepo(
+                            repo_url=self.repoURL,
+                            tag=self.repoTag,
+                            rel_path=self.repoRelPath,
+                        )
                     self.repoEffectiveCheckout = stage["repoEffectiveCheckout"]
                     self.engineDesc = stage["engineDesc"]
                     self.engineVer = stage["engineVer"]
                     self.materializedEngine = stage["materializedEngine"]
                     self.materializedParams = stage["materializedParams"]
+                    self.materializedEnvironment = stage.get(
+                        "materializedEnvironment", []
+                    )
                     self.containerEngineVersion = stage.get("containerEngineVersion")
                     self.containerEngineOs = stage.get("containerEngineOs")
                     if self.containerEngineOs is None:
@@ -2872,6 +2930,16 @@ class WF:
 
         return self.exportMarshalled
 
+    ExportROCrate2Payloads: "Final[Mapping[str, CratableItem]]" = {
+        "": NoCratableItem,
+        "inputs": CratableItem.Inputs,
+        "outputs": CratableItem.Outputs,
+        "workflow": CratableItem.Workflow,
+        "containers": CratableItem.Containers,
+        "prospective": CratableItem.ProspectiveProvenance,
+        "full": CratableItem.RetrospectiveProvenance,
+    }
+
     def locateExportItems(
         self, items: "Sequence[ExportItem]"
     ) -> "Sequence[AnyContent]":
@@ -2881,6 +2949,9 @@ class WF:
         retval: "MutableSequence[AnyContent]" = []
 
         materializedParamsDict: "Mapping[SymbolicParamName, MaterializedInput]" = dict()
+        materializedEnvironmentDict: "Mapping[SymbolicParamName, MaterializedInput]" = (
+            dict()
+        )
         for item in items:
             if item.type == ExportItemType.Param:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
@@ -2914,7 +2985,9 @@ class WF:
                     if materializedParam.secondaryInputs:
                         retval.extend(materializedParam.secondaryInputs)
                 else:
-                    # The whole input directory
+                    # The whole input directory, which can contain files
+                    # and / or directories references from environment
+                    # variables
                     prettyFilename = cast(
                         "RelPath", os.path.basename(self.stagedSetup.inputs_dir)
                     )
@@ -2933,6 +3006,39 @@ class WF:
                             prettyFilename=prettyFilename,
                             kind=ContentKind.Directory,
                         )
+                    )
+            elif item.type == ExportItemType.Environment:
+                if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
+                    raise WFException(
+                        f"Cannot export environment from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                    )
+
+                assert self.materializedEnvironment is not None
+                assert self.stagedSetup.inputs_dir is not None
+                if item.name is not None:
+                    if not materializedEnvironmentDict:
+                        materializedEnvironmentDict = dict(
+                            map(lambda mp: (mp.name, mp), self.materializedEnvironment)
+                        )
+                    materializedEnvVar = materializedEnvironmentDict.get(
+                        cast("SymbolicParamName", item.name)
+                    )
+                    if materializedEnvVar is None:
+                        raise KeyError(
+                            f"Environment variable {item.name} to be exported does not exist"
+                        )
+                    retval.extend(
+                        cast(
+                            "Iterable[MaterializedContent]",
+                            filter(
+                                lambda mpc: isinstance(mpc, MaterializedContent),
+                                materializedEnvVar.values,
+                            ),
+                        )
+                    )
+                else:
+                    raise NotImplementedError(
+                        "Exporting the files and directories associated to the whole set of environment variables is not implemented yet"
                     )
             elif item.type == ExportItemType.Output:
                 if not isinstance(
@@ -3015,9 +3121,11 @@ class WF:
                 ExportItemType.StageCrate,
                 ExportItemType.ProvenanceCrate,
             ):
-                if item.block not in ("", "full"):
+                if item.block not in self.ExportROCrate2Payloads:
                     raise KeyError(
-                        f"'{item.block}' is not a valid variant for {item.type.value}"
+                        f"'{item.block}' is not a valid variant for {item.type.value} ('"
+                        + "', '".join(self.ExportROCrate2Payloads.keys())
+                        + "')"
                     )
 
                 if item.type == ExportItemType.StageCrate:
@@ -3053,9 +3161,11 @@ class WF:
                 )
                 os.close(temp_handle)
                 atexit.register(os.unlink, temp_rocrate_file)
+
+                assert item.block is not None
                 create_rocrate(
                     filename=cast("AbsPath", temp_rocrate_file),
-                    doMaterializedROCrate=item.block == "full",
+                    payloads=self.ExportROCrate2Payloads[item.block],
                 )
                 retval.append(
                     MaterializedContent(
@@ -3083,45 +3193,46 @@ class WF:
     def createStageResearchObject(
         self,
         filename: "Optional[AnyPath]" = None,
-        doMaterializedROCrate: "bool" = False,
+        payloads: "CratableItem" = NoCratableItem,
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
         """
-        # TODO: implement deserialization
+        # TODO: implement RO-Crate deserialization
         self.unmarshallStage(offline=True, fail_ok=True)
 
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
-        assert self.repoURL is not None
-        assert self.repoTag is not None
+        assert self.remote_repo is not None
+        assert self.remote_repo.tag is not None
         assert self.materializedParams is not None
+        assert self.materializedEnvironment is not None
         assert self.stagedSetup.work_dir is not None
         assert self.stagedSetup.inputs_dir is not None
         assert self.stagedSetup.outputs_dir is not None
 
-        wf_file = create_workflow_crate(
-            self.repoURL,
-            self.repoTag,
+        wrroc = WorkflowRunROCrate(
+            self.remote_repo,
             self.localWorkflow,
             self.materializedEngine,
             self.workflowEngineVersion,
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
+            staged_setup=self.stagedSetup,
+            payloads=payloads,
         )
-        wfCrate = wf_file.crate
 
-        addInputsResearchObject(
-            wf_file,
+        wrroc.addWorkflowInputs(
             self.materializedParams,
-            work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
+            are_envvars=False,
+        )
+        wrroc.addWorkflowInputs(
+            self.materializedEnvironment,
+            are_envvars=True,
         )
         if self.outputs is not None:
-            addExpectedOutputsResearchObject(wf_file, self.outputs)
+            wrroc.addWorkflowExpectedOutputs(self.outputs)
 
         # Save RO-crate as execution.crate.zip
         if filename is None:
@@ -3129,7 +3240,7 @@ class WF:
             filename = cast(
                 "AnyPath", os.path.join(self.outputsDir, self.STAGED_CRATE_FILE)
             )
-        wfCrate.write_zip(filename)
+        wrroc.writeWRROC(filename)
 
         self.logger.info("Staged RO-Crate created: {}".format(filename))
 
@@ -3138,7 +3249,7 @@ class WF:
     def createResultsResearchObject(
         self,
         filename: "Optional[AnyPath]" = None,
-        doMaterializedROCrate: "bool" = False,
+        payloads: "CratableItem" = NoCratableItem,
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -3148,33 +3259,28 @@ class WF:
 
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
-        assert self.repoURL is not None
-        assert self.repoTag is not None
+        assert self.remote_repo is not None
+        assert self.remote_repo.tag is not None
         assert self.stagedSetup.work_dir is not None
         assert (
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
 
-        wf_file = create_workflow_crate(
-            self.repoURL,
-            self.repoTag,
+        wrroc = WorkflowRunROCrate(
+            self.remote_repo,
             self.localWorkflow,
             self.materializedEngine,
             self.workflowEngineVersion,
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            work_dir=self.stagedSetup.work_dir,
-            do_attach=doMaterializedROCrate,
+            staged_setup=self.stagedSetup,
+            payloads=payloads,
         )
-        wfCrate = wf_file.crate
 
         for stagedExec in self.stagedExecutions:
-            add_execution_to_crate(
-                wf_file,
-                stagedSetup=self.stagedSetup,
+            wrroc.addWorkflowExecution(
                 stagedExec=stagedExec,
-                do_attach=doMaterializedROCrate,
             )
 
         # Save RO-crate as execution.crate.zip
@@ -3184,7 +3290,7 @@ class WF:
                 "AnyPath", os.path.join(self.outputsDir, self.EXECUTION_CRATE_FILE)
             )
 
-        wfCrate.write_zip(filename)
+        wrroc.writeWRROC(filename)
 
         self.logger.info("Execution RO-Crate created: {}".format(filename))
 

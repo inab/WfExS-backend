@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-# Copyright 2020-2022 Barcelona Supercomputing Center (BSC), Spain
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -155,6 +156,7 @@ if TYPE_CHECKING:
         AbstractWorkflowEngineType,
         AbsPath,
         AnyPath,
+        EnvironmentBlock,
         ExitVal,
         ExportActionBlock,
         MarshallingStatus,
@@ -387,6 +389,7 @@ class WfExSBackend:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", WF.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            environment=workflow_meta.get("environment", {}),
             outputs=workflow_meta.get("outputs", {}),
             default_actions=workflow_meta.get("default_actions", []),
             workflow_config=workflow_meta.get("workflow_config"),
@@ -744,6 +747,7 @@ class WfExSBackend:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "str" = WF.DEFAULT_TRS_ENDPOINT,
         params: "Optional[ParamsBlock]" = None,
+        environment: "Optional[EnvironmentBlock]" = None,
         outputs: "Optional[OutputsBlock]" = None,
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
         workflow_config: "Optional[WorkflowConfigBlock]" = None,
@@ -761,6 +765,7 @@ class WfExSBackend:
             descriptor_type=descriptor_type,
             trs_endpoint=trs_endpoint,
             params=params,
+            environment=environment,
             outputs=outputs,
             default_actions=default_actions,
             workflow_config=workflow_config,
@@ -1452,9 +1457,8 @@ class WfExSBackend:
         engineDesc: "Optional[WorkflowType]" = None
         guessedRepo: "Optional[RemoteRepo]" = None
         repoDir: "Optional[AbsPath]" = None
-        repoURL: "Optional[RepoURL]" = None
         putative: "bool" = False
-        repoRelPath: "Optional[str]" = None
+        cached_putative_path: "Optional[AbsPath]" = None
         if parsedRepoURL.scheme == "":
             if (trs_endpoint is not None) and len(trs_endpoint) > 0:
                 i_workflow, repoDir = self.getWorkflowRepoFromTRS(
@@ -1471,8 +1475,6 @@ class WfExSBackend:
             else:
                 raise WFException("trs_endpoint was not provided")
         else:
-            engineDesc = None
-
             # Trying to be smarter
             guessedRepo = self.guess_repo_params(parsedRepoURL, fail_ok=True)
 
@@ -1483,6 +1485,7 @@ class WfExSBackend:
                         tag=cast("RepoTag", version_id),
                         rel_path=guessedRepo.rel_path,
                         repo_type=guessedRepo.repo_type,
+                        web_url=guessedRepo.web_url,
                     )
             else:
                 (
@@ -1494,11 +1497,10 @@ class WfExSBackend:
                     offline=offline,
                     ignoreCache=ignoreCache,
                 )
-                # This can be incorrect, but let it be for now
-                if i_workflow is not None:
-                    self.cacheROCrateFilename = cached_putative_path
-                else:
+
+                if i_workflow is None:
                     repoDir = cached_putative_path
+                    repoRelPath: "Optional[str]" = None
                     if os.path.isdir(repoDir):
                         if len(parsedRepoURL.fragment) > 0:
                             frag_qs = urllib.parse.parse_qs(parsedRepoURL.fragment)
@@ -1509,38 +1511,37 @@ class WfExSBackend:
                         # Let's try getting a pretty filename
                         # when the workflow is a single file
                         repoRelPath = metadata_array[0].preferredName
+
+                    # It can be either a relative path to a directory or to a file
+                    # It could be even empty!
+                    if repoRelPath == "":
+                        repoRelPath = None
+                    # raise WFException('Unable to guess repository from RO-Crate manifest')
+                    guessedRepo = RemoteRepo(
+                        repo_url=cast("RepoURL", workflow_id),
+                        tag=cast("RepoTag", version_id),
+                        rel_path=cast("Optional[RelPath]", repoRelPath),
+                    )
                     putative = True
 
+        # This can be incorrect, but let it be for now
         if i_workflow is not None:
             guessedRepo = i_workflow.remote_repo
             engineDesc = i_workflow.workflow_type
+            if cached_putative_path is not None:
+                self.cacheROCrateFilename = cached_putative_path
 
-        if guessedRepo is None:
-            # raise WFException('Unable to guess repository from RO-Crate manifest')
-            guessedRepo = RemoteRepo(
-                repo_url=cast("RepoURL", workflow_id),
-                tag=cast("RepoTag", version_id),
-                rel_path=cast("RelPath", repoRelPath),
-            )
-
-        if repoURL is None:
-            repoURL = guessedRepo.repo_url
-        repoTag = guessedRepo.tag
-        repoRelPath = guessedRepo.rel_path
-        repoType = guessedRepo.repo_type
+        assert guessedRepo is not None
+        assert guessedRepo.repo_url is not None
 
         repoEffectiveCheckout: "Optional[RepoTag]" = None
         # A putative workflow is one which is already materialized
         # but we can only guess
         if repoDir is None:
-            parsedRepoURL = urllib.parse.urlparse(repoURL)
+            parsedRepoURL = urllib.parse.urlparse(guessedRepo.repo_url)
             assert (
                 len(parsedRepoURL.scheme) > 0
-            ), f"Repository id {repoURL} should be a parsable URI"
-            # It can be either a relative path to a directory or to a file
-            # It could be even empty!
-            if repoRelPath == "":
-                repoRelPath = None
+            ), f"Repository id {guessedRepo.repo_url} should be a parsable URI"
 
             repoDir, repoEffectiveCheckout = self.doMaterializeRepo(
                 guessedRepo,
@@ -1548,14 +1549,7 @@ class WfExSBackend:
                 registerInCache=registerInCache,
             )
 
-        repo = RemoteRepo(
-            repo_url=repoURL,
-            tag=repoTag,
-            rel_path=repoRelPath,
-            repo_type=repoType,
-        )
-
-        return repoDir, repo, engineDesc, repoEffectiveCheckout
+        return repoDir, guessedRepo, engineDesc, repoEffectiveCheckout
 
     TRS_METADATA_FILE: "Final[RelPath]" = cast("RelPath", "trs_metadata.json")
     TRS_QUERY_CACHE_FILE: "Final[RelPath]" = cast("RelPath", "trs_result.json")
