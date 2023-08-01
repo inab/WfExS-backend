@@ -415,7 +415,7 @@ class WF:
             self.creds_config = creds_config
 
             self.id = str(workflow_id)
-            self.version_id = str(version_id)
+            self.version_id = None if version_id is None else str(version_id)
             self.descriptor_type = descriptor_type
             self.params = params
             self.placeholders = placeholders

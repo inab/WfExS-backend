@@ -12,7 +12,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="https://github.com/inab/WfExS-backend.git",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -20,7 +19,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="https://github.com/inab/WfExS-backend.git",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -37,7 +35,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
                 repo_url="https://github.com/inab/WfExS-backend.git",
                 repo_type=RepoType.Git,
                 rel_path="workflow_examples/ipc/cosifer_test1_cwl.wfex.stage",
-                tag="main",
             ),
         ),
         (
@@ -45,7 +42,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="git@github.com:inab/WfExS-backend.git",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -53,7 +49,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="git@github.com:inab/WfExS-backend.git",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -70,7 +65,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
                 repo_url="git@github.com:inab/WfExS-backend.git",
                 repo_type=RepoType.Git,
                 rel_path="workflow_examples/ipc/cosifer_test1_cwl.wfex.stage",
-                tag="main",
             ),
         ),
         (
@@ -78,7 +72,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="file:///inab/WfExS-backend/.git",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -86,7 +79,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="file:///inab/WfExS-backend/.git",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -103,7 +95,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
                 repo_url="file:///inab/WfExS-backend/.git",
                 repo_type=RepoType.Git,
                 rel_path="workflow_examples/ipc/cosifer_test1_cwl.wfex.stage",
-                tag="main",
             ),
         ),
         (
@@ -119,7 +110,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="git@github.com:inab/WfExS-backend",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -127,7 +117,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="https://github.com/inab/WfExS-backend",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
         (
@@ -135,7 +124,6 @@ from wfexs_backend.fetchers.git import guess_git_repo_params
             RemoteRepo(
                 repo_url="file:///inab/WfExS-backend",
                 repo_type=RepoType.Git,
-                tag="main",
             ),
         ),
     ],
