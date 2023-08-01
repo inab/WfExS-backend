@@ -48,6 +48,7 @@ jobs:
         if: steps.doc-generate-md-if-changed.outcome == 'success' || steps.doc-generate-html-if-changed.outcome == 'success'
         with:
           title: Updated schemas documentation (triggered by ${{ github.sha }})
+          branch: create-pull-request/patch-schema-docs
           delete-branch: true
           commit-message: "[create-pull-request] Automatically commit updated contents (generated schemas documentation)"
       - name: Check outputs
