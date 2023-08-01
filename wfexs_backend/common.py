@@ -495,7 +495,7 @@ class LocalWorkflow(NamedTuple):
     relPath: Inside the checkout, the relative path to the workflow definition
     effectiveCheckout: hex hash of the materialized checkout
     langVersion: workflow language version / revision
-    relPathWorkflowFiles: files composing the workflow, which can be either local
+    relPathFiles: files composing the workflow, which can be either local
     or remote ones (i.e. CWL)
     """
 
