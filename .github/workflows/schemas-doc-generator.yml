@@ -78,6 +78,7 @@ jobs:
           path: changes-dir
       - name: Move artifacts to their right place
         run: |
+          ls -lR changes-dir
           cp -dpr changes-dir/artifact/* .
           rm -r changes-dir/artifact
       - name: Create Pull Request
