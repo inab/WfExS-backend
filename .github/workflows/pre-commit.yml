@@ -88,6 +88,7 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           title: Updated constraints (triggered by ${{ github.sha }})
+          branch: create-pull-request/patch-constraints
           delete-branch: true
           commit-message: "[create-pull-request] Automatically commit updated contents (constraints)"
       - name: Check outputs
