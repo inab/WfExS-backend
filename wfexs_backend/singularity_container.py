@@ -34,6 +34,7 @@ import uuid
 
 from .common import (
     Container,
+    ContainerType,
     DEFAULT_SINGULARITY_CMD,
 )
 
@@ -384,9 +385,34 @@ STDERR
             singTag = tag_name
             isDocker = parsedTag.scheme == "docker"
         else:
-            singTag = "docker://" + tag_name
+            if parsedTag.scheme == "":
+                singTag = "docker://" + tag_name
+                parsedTag = parse.urlparse(singTag)
+            else:
+                parsedTag = parsedTag._replace(
+                    scheme="docker",
+                    netloc=parsedTag.scheme + ":" + parsedTag.path,
+                    path="",
+                )
+                singTag = parse.urlunparse(parsedTag)
             # Assuming it is docker
             isDocker = True
+
+        # Should we enrich the tag with the registry?
+        if (
+            isDocker
+            and isinstance(tag.registries, dict)
+            and (ContainerType.Docker in tag.registries)
+        ):
+            registry = tag.registries[ContainerType.Docker]
+            # Bare case
+            if len(parsedTag.path) <= 1:
+                singTag = f"docker://{registry}/library/{parsedTag.netloc}"
+                parsedTag = parse.urlparse(singTag)
+            elif "/" not in parsedTag.path[1:]:
+                singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
+                parsedTag = parse.urlparse(singTag)
+            # Last case, it already has a registry declared
 
         containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
         containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
@@ -709,6 +735,7 @@ STDERR
             architecture=self._getContainerArchitecture(containerPath, matEnv),
             type=self.containerType,
             localPath=containerPath,
+            registries=tag.registries,
         )
 
     def materializeContainers(

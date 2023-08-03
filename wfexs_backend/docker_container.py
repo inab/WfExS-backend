@@ -273,7 +273,19 @@ STDERR
             else tag_name
         )
 
-        self.logger.info(f"downloading docker container: {tag_name}")
+        # Should we enrich the tag with the registry?
+        if isinstance(tag.registries, dict) and (
+            ContainerType.Docker in tag.registries
+        ):
+            registry = tag.registries[ContainerType.Docker]
+            # Bare case
+            if "/" not in dockerTag:
+                dockerTag = f"{registry}/library/{dockerTag}"
+            elif dockerTag.find("/") == dockerTag.rfind("/"):
+                dockerTag = f"{registry}/{dockerTag}"
+            # Last case, it already has a registry declared
+
+        self.logger.info(f"downloading docker container: {tag_name} => {dockerTag}")
         if force:
             if offline:
                 raise ContainerFactoryException(
@@ -499,4 +511,5 @@ STDERR
             operatingSystem=manifest.get("Os"),
             type=self.containerType,
             localPath=containerPath,
+            registries=tag.registries,
         )
