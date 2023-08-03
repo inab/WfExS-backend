@@ -98,6 +98,7 @@ from .utils.digests import ComputeDigestFromFile, nihDigester
 
 # Constants
 WORKDIR_INPUTS_RELDIR = "inputs"
+WORKDIR_EXTRAPOLATED_INPUTS_RELDIR = "extrapolated-inputs"
 WORKDIR_INTERMEDIATE_RELDIR = "intermediate"
 WORKDIR_META_RELDIR = "meta"
 WORKDIR_STATS_RELDIR = "stats"
