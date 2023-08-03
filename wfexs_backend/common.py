@@ -179,10 +179,12 @@ if TYPE_CHECKING:
 
 
 ## BEWARE!!!! The names of these keys MUST NOT CHANGE
+## as they match the names appearing at the stage-definitions.json
 class ContentKind(enum.Enum):
     File = "file"
     Directory = "dir"
     Value = "val"
+    ContentWithURIs = "luris"
 
 
 class ContainerType(enum.Enum):
@@ -203,10 +205,13 @@ class ContainerTaggedName:
         (including tag) which appears in the workflow.
     type: Compatible container type with this symbolic name
         Container factories have to decide whether they bear with it.
+    registries: an optional mapping from container type to registry,
+    to be used by different container materialization solutions.
     """
 
     origTaggedName: "str"
     type: "ContainerType"
+    registries: "Optional[Mapping[ContainerType, str]]" = None
 
 
 class AttributionRole(enum.Enum):
@@ -315,6 +320,7 @@ class MaterializedContent(NamedTuple):
     prettyFilename: "RelPath"
     kind: "ContentKind" = ContentKind.File
     metadata_array: "Optional[Sequence[URIWithMetadata]]" = None
+    extrapolated_local: "Optional[AbsPath]" = None
 
     @classmethod
     def _key_fixes(cls) -> "Mapping[str, str]":
@@ -672,6 +678,7 @@ class StagedSetup(NamedTuple):
     work_dir: "Optional[AbsPath]"
     workflow_dir: "Optional[AbsPath]"
     inputs_dir: "Optional[AbsPath]"
+    extrapolated_inputs_dir: "Optional[AbsPath]"
     outputs_dir: "Optional[AbsPath]"
     intermediate_dir: "Optional[AbsPath]"
     meta_dir: "Optional[AbsPath]"
@@ -706,6 +713,7 @@ class Container(ContainerTaggedName):
     origTaggedName: Symbolic name or identifier of the container
         (including tag) which appears in the workflow.
     type: Container type
+    registries:
     taggedName: Symbolic name or identifier of the container (including tag)
     localPath: The full local path to the container file (it can be None)
     signature: Signature (aka file fingerprint) of the container
@@ -714,7 +722,7 @@ class Container(ContainerTaggedName):
         Mainly from docker registries.
     """
 
-    taggedName: "URIType"
+    taggedName: "URIType" = cast("URIType", "")
     architecture: "Optional[ProcessorArchitecture]" = None
     operatingSystem: "Optional[ContainerOperatingSystem]" = None
     localPath: "Optional[AbsPath]" = None
