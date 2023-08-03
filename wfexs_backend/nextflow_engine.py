@@ -1239,6 +1239,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         r"process\..*container = '(.+)'$", flags=re.MULTILINE
     )
 
+    # Pattern for searching for (docker|podman)\.registry = ['"]([^'"]+)['"] in dumped config
+    RegistryPat: "Pattern[str]" = re.compile(
+        r"(docker|podman)\.registry = '(.+)'$", flags=re.MULTILINE
+    )
+
     C_URL_REGEX: "Final[Pattern[str]]" = re.compile(
         r"https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)"
     )
@@ -1253,7 +1258,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
     )
 
     def _genDockSingContainerTaggedName(
-        self, container_tag: "str"
+        self,
+        container_tag: "str",
+        registries: "Mapping[ContainerType, str]",
     ) -> "Optional[ContainerTaggedName]":
         this_container_url = None
         this_container_docker = None
@@ -1276,6 +1283,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             return ContainerTaggedName(
                 origTaggedName=this_container_docker,
                 type=ContainerType.Docker,
+                registries=registries if registries else None,
             )
 
         self.logger.error(
@@ -1332,11 +1340,22 @@ STDERR
         containerTagSet: "Set[str]" = set()
         assert flat_stdout is not None
         self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
+
+        # We need to learn the registries before getting the tags
+        container_registries: "MutableMapping[ContainerType, str]" = {}
+        for regMatch in self.RegistryPat.finditer(flat_stdout):
+            try:
+                container_registries[ContainerType(regMatch[1])] = regMatch[2]
+            except:
+                self.logger.debug(f"Failed to assign registry {regMatch[1]}")
+
         for contMatch in self.ContConfigPat.finditer(flat_stdout):
             # Discarding local path cases
             if contMatch[1][0] != "/" and contMatch[1] not in containerTagSet:
                 containerTagSet.add(contMatch[1])
-                tagged_container = self._genDockSingContainerTaggedName(contMatch[1])
+                tagged_container = self._genDockSingContainerTaggedName(
+                    contMatch[1], container_registries
+                )
                 if tagged_container is not None:
                     containerTags.append(tagged_container)
 
@@ -1390,7 +1409,7 @@ STDERR
                         if container_tag not in containerTagSet:
                             containerTagSet.add(container_tag)
                             tagged_container = self._genDockSingContainerTaggedName(
-                                container_tag
+                                container_tag, container_registries
                             )
                             if tagged_container is not None:
                                 containerTags.append(tagged_container)
@@ -1641,6 +1660,7 @@ STDERR
                     os.path.join(localWf.dir, localWf.relPathFiles[0]), outputMetaDir
                 )
                 print(f"includeConfig '{originalConfFile}'", file=fPC)
+
             if self.container_factory.containerType == ContainerType.Singularity:
                 print(
                     f"""
