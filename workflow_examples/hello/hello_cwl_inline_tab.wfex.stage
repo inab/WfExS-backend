@@ -1,0 +1,21 @@
+workflow_id: github:inab/hello-workflows/b0afc5871c6fdbd66576fcc5a3813ea49aca5104/cwl/hello-workflow.cwl
+workflow_config:
+  secure: false
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  an_input:
+    c-l-a-s-s: ContentWithURIs
+    value: |
+      label,url_1,url_2,anotherlabel
+      GM12878_REP2,github:inab/hello-workflows/b0afc5871c6fdbd66576fcc5a3813ea49aca5104/cwl/hello.yml,github:inab/hello-workflows/227d4b7b0c925b3baf8241fecd3dd29b1d586a41/nextflow/singularity-params.config,reverse
+    tabular:
+      uri-columns:
+        - 1
+        - 2
+      column-sep: ","
+      header-rows: 1
+environment:
+  SECRET_VARIABLE: "The secret content"
+outputs:
+  hello_output:
+    c-l-a-s-s: File

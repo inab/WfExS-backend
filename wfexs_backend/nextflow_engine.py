@@ -1471,14 +1471,24 @@ STDERR
 
             for value in matInput.values:
                 if isinstance(value, MaterializedContent):
-                    if value.kind in (ContentKind.Directory, ContentKind.File):
+                    if value.kind in (
+                        ContentKind.Directory,
+                        ContentKind.File,
+                        ContentKind.ContentWithURIs,
+                    ):
                         if not os.path.exists(value.local):
                             self.logger.warning(
                                 "Input {} has values which are not materialized".format(
                                     matInput.name
                                 )
                             )
-                        nxfValues.append(value.local)
+                        # Use the extrapolated local file containing paths
+                        # instead of the original one containing URLs
+                        nxfValues.append(
+                            value.local
+                            if value.extrapolated_local is None
+                            else value.extrapolated_local
+                        )
                     else:
                         raise WorkflowEngineException(
                             "ERROR: Input {} has values of type {} this code does not know how to handle".format(
@@ -1627,8 +1637,13 @@ STDERR
                 env_vals: "MutableSequence[str]" = []
                 for mat_val in mat_env.values:
                     if isinstance(mat_val, MaterializedContent):
-                        bindable_paths.append(mat_val.local)
-                        env_vals.append(mat_val.local)
+                        the_local = (
+                            mat_val.local
+                            if mat_val.extrapolated_local is None
+                            else mat_val.extrapolated_local
+                        )
+                        bindable_paths.append(the_local)
+                        env_vals.append(the_local)
                     else:
                         env_vals.append(str(mat_val))
                 # Now, assign it

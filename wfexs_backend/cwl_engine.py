@@ -1089,8 +1089,13 @@ STDERR
                                     env_vals: "MutableSequence[str]" = []
                                     for mat_val in mat_env.values:
                                         if isinstance(mat_val, MaterializedContent):
-                                            bindable_paths.append(mat_val.local)
-                                            env_vals.append(mat_val.local)
+                                            the_local = (
+                                                mat_val.local
+                                                if mat_val.extrapolated_local is None
+                                                else mat_val.extrapolated_local
+                                            )
+                                            bindable_paths.append(the_local)
+                                            env_vals.append(the_local)
                                         else:
                                             env_vals.append(str(mat_val))
                                     # Now, assign it
@@ -1282,12 +1287,20 @@ STDERR
                         if isinstance(
                             value, MaterializedContent
                         ):  # value of an input contains MaterializedContent
-                            if value.kind in (ContentKind.Directory, ContentKind.File):
+                            if value.kind in (
+                                ContentKind.Directory,
+                                ContentKind.File,
+                                ContentKind.ContentWithURIs,
+                            ):
                                 if not os.path.exists(value.local):
                                     self.logger.warning(
                                         "Input {} is not materialized".format(name)
                                     )
-                                value_local = value.local
+                                value_local = (
+                                    value.local
+                                    if value.extrapolated_local is None
+                                    else value.extrapolated_local
+                                )
 
                                 eInput: "MutableMapping[str, Any]" = {
                                     "class": classType,
