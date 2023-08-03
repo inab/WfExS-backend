@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Mapping,
+        MutableSequence,
         Optional,
         Sequence,
         Set,
@@ -188,6 +189,37 @@ class SingularityContainerFactory(ContainerFactory):
         self, container_filename: "AnyPath", matEnv: "Mapping[str, str]" = {}
     ) -> "Optional[ProcessorArchitecture]":
         with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
+            self.logger.debug(
+                f"Checking {container_filename} looks like a singularity container"
+            )
+            s_retval = subprocess.Popen(
+                [self.runtime_cmd, "inspect", container_filename],
+                env=matEnv,
+                stdout=s_out,
+                stderr=s_err,
+            ).wait()
+            self.logger.debug(f"singularity inspect retval: {s_retval}")
+
+            if s_retval != 0:
+                with open(s_out.name, "r") as c_stF:
+                    s_out_v = c_stF.read()
+                with open(s_err.name, "r") as c_stF:
+                    s_err_v = c_stF.read()
+                errstr = """Could not inspect singularity image {}. Retval {}
+======
+STDOUT
+======
+{}
+
+======
+STDERR
+======
+{}""".format(
+                    container_filename, s_retval, s_out_v, s_err_v
+                )
+                self.logger.error(errstr)
+                raise ContainerEngineException(errstr)
+
             self.logger.debug(f"Describing container {container_filename}")
             # Singularity command line borrowed from
             # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
@@ -222,7 +254,14 @@ STDERR
 {}""".format(
                     container_filename, s_retval, s_out_v, s_err_v
                 )
-                raise ContainerEngineException(errstr)
+                self.logger.warning(errstr)
+                self.logger.warning(
+                    f"Most probably, image {container_filename} was built using singularity older than 3.0.0"
+                )
+                self.logger.warning(
+                    "So, we cannot learn the architecture of the image using singularity"
+                )
+                return None
 
             # The default for images translated from docker are usually these
             data_bundle_id = "4"
@@ -296,7 +335,11 @@ STDERR
                         architecture = value
                         break
 
-        return cast("ProcessorArchitecture", architecture)
+        return (
+            cast("ProcessorArchitecture", architecture)
+            if architecture is not None
+            else None
+        )
 
     def materializeSingleContainer(
         self,
@@ -524,7 +567,12 @@ STDERR
                             os.unlink(tmpContainerPath)
                         except:
                             pass
-                    raise ContainerEngineException(errstr)
+                    self.logger.error(errstr)
+
+                    return FailedContainerTag(
+                        tag=tag_name,
+                        sing_tag=singTag,
+                    )
 
         # At this point we should always have a image signature
         assert imageSignature is not None
@@ -674,8 +722,8 @@ STDERR
         """
         It is assured the containers are materialized
         """
-        containersList = []
-        notFoundContainersList = []
+        containersList: "MutableSequence[Container]" = []
+        notFoundContainersList: "MutableSequence[FailedContainerTag]" = []
 
         matEnv = dict(os.environ)
         matEnv.update(self.environment)
@@ -702,7 +750,13 @@ STDERR
 
         if len(notFoundContainersList) > 0:
             raise ContainerNotFoundException(
-                f"Could not fetch metadata for next tags because they were not found:\n{', '.join(map(lambda nfc: nfc.tag + ' => ' + nfc.sing_tag, notFoundContainersList))}"
+                "Could not fetch metadata for next tags because they were not found:\n\t"
+                + "\n\t".join(
+                    map(
+                        lambda nfc: nfc.tag + " => " + nfc.sing_tag,
+                        notFoundContainersList,
+                    )
+                )
             )
 
         return containersList
