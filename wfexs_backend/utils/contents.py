@@ -26,6 +26,9 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import data_url  # type: ignore[import]
+import magic
+
 from ..common import (
     ContentKind,
     GeneratedContent,
@@ -50,6 +53,7 @@ if TYPE_CHECKING:
         Fingerprint,
         LicensedURI,
         RelPath,
+        URIType,
     )
 
     from .digests import (
@@ -309,3 +313,17 @@ def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) ->
             if dest_exists:
                 shutil.rmtree(dest)
             shutil.copytree(src, dest, copy_function=copy2_nofollow)
+
+
+def bin2dataurl(content: "bytes") -> "URIType":
+    mime_type = magic.from_buffer(content, mime=True)
+
+    if mime_type is None:
+        mime_type = "application/octet-stream"
+
+    return cast(
+        "URIType",
+        data_url.construct_data_url(
+            mime_type=mime_type, base64_encode=True, data=content
+        ),
+    )
