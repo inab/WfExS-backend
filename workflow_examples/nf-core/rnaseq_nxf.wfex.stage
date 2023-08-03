@@ -1,0 +1,31 @@
+workflow_id: git+https://github.com/nf-core/rnaseq.git@3.12.0
+workflow_config:
+  secure: false
+  nextflow:
+    profile: singularity
+placeholders:
+  assembly: "GRCh38"
+  assembly_release: "102"
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  input:
+    c-l-a-s-s: ContentWithURIs
+    url: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/samplesheet/v3.10/samplesheet_full.csv"
+    tabular:
+      uri-columns:
+        - 1
+        - 2
+      column-sep: ","
+      header-rows: 1
+  fasta:
+    c-l-a-s-s: File
+    url: "ftp://ftp.ensembl.org/pub/release-{assembly_release}/fasta/homo_sapiens/dna/Homo_sapiens.{assembly}.dna_sm.primary_assembly.fa.gz"
+  gtf:
+    c-l-a-s-s: File
+    url: "ftp://ftp.ensembl.org/pub/release-{assembly_release}/gtf/homo_sapiens/Homo_sapiens.{assembly}.{assembly_release}.gtf.gz"
+  save_reference: true
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false
