@@ -49,11 +49,13 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Iterable,
+        Iterator,
         Mapping,
         MutableMapping,
         MutableSequence,
         Optional,
         Sequence,
+        Set,
         Tuple,
         Type,
         Union,
@@ -63,6 +65,8 @@ if TYPE_CHECKING:
         Final,
         Literal,
         TypedDict,
+        Required,
+        NotRequired,
     )
 
     from .common import (
@@ -118,10 +122,22 @@ if TYPE_CHECKING:
     Sch_InputURI_Fetchable = Union[Sch_InputURI_Elem, Sequence[Sch_InputURI_Elem]]
     Sch_InputURI = Union[Sch_InputURI_Fetchable, Sequence[Sequence[Sch_InputURI_Elem]]]
 
+    Sch_Tabular = TypedDict(
+        "Sch_Tabular",
+        {
+            "uri-columns": Required[Sequence[int]],
+            "row-sep": NotRequired[str],
+            "column-sep": Required[str],
+            "header-rows": NotRequired[int],
+        },
+    )
+
     Sch_Param = TypedDict(
         "Sch_Param",
         {
             "c-l-a-s-s": str,
+            "value": Union[str, Sequence[str]],
+            "tabular": Sch_Tabular,
             "url": Sch_InputURI,
             "secondary-urls": Sch_InputURI,
             "preferred-name": Union[Literal[False], str],
@@ -189,6 +205,7 @@ from .engine import (
     WORKDIR_CONTAINERS_RELDIR,
     WORKDIR_ENGINE_TWEAKS_RELDIR,
     WORKDIR_INPUTS_RELDIR,
+    WORKDIR_EXTRAPOLATED_INPUTS_RELDIR,
     WORKDIR_INTERMEDIATE_RELDIR,
     WORKDIR_MARSHALLED_EXECUTE_FILE,
     WORKDIR_MARSHALLED_EXPORT_FILE,
@@ -200,7 +217,10 @@ from .engine import (
     WORKDIR_WORKFLOW_RELDIR,
 )
 
-from .utils.contents import link_or_copy
+from .utils.contents import (
+    bin2dataurl,
+    link_or_copy,
+)
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import config_validate
 
@@ -514,6 +534,7 @@ class WF:
 
         self.configMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
         self.inputsDir: "Optional[AbsPath]"
+        self.extrapolatedInputsDir: "Optional[AbsPath]"
         self.intermediateDir: "Optional[AbsPath]"
         self.outputsDir: "Optional[AbsPath]"
         self.engineTweaksDir: "Optional[AbsPath]"
@@ -524,13 +545,21 @@ class WF:
             assert (
                 self.workDir is not None
             ), "Workdir has to be already defined at this point"
-            # This directory will hold either symbolic links to the cached
-            # inputs, or the inputs properly post-processed (decompressed,
-            # decrypted, etc....)
+            # This directory will hold either hard links to the cached
+            # inputs, or the inputs properly pre-processed (decompressed,
+            # decrypted, etc....) before a possible extrapolation.
+            # These are the inputs used for RO-Crate building
             self.inputsDir = cast(
                 "AbsPath", os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
             )
             os.makedirs(self.inputsDir, exist_ok=True)
+            # This directory will hold either hard links to the inputs directory,
+            # or the inputs after a possible extrapolation
+            self.extrapolatedInputsDir = cast(
+                "AbsPath",
+                os.path.join(self.workDir, WORKDIR_EXTRAPOLATED_INPUTS_RELDIR),
+            )
+            os.makedirs(self.extrapolatedInputsDir, exist_ok=True)
             # This directory should hold intermediate workflow steps results
             self.intermediateDir = cast(
                 "AbsPath", os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
@@ -590,6 +619,7 @@ class WF:
             self.configMarshalled = False
             is_damaged = True
             self.inputsDir = None
+            self.extrapolatedInputsDir = None
             self.intermediateDir = None
             self.outputsDir = None
             self.engineTweaksDir = None
@@ -606,6 +636,7 @@ class WF:
             work_dir=self.workDir,
             workflow_dir=self.workflowDir,
             inputs_dir=self.inputsDir,
+            extrapolated_inputs_dir=self.extrapolatedInputsDir,
             outputs_dir=self.outputsDir,
             intermediate_dir=self.intermediateDir,
             engine_tweaks_dir=self.engineTweaksDir,
@@ -1357,10 +1388,14 @@ class WF:
         assert (
             self.inputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
+        assert (
+            self.extrapolatedInputsDir is not None
+        ), "The working directory should not be corrupted beyond basic usage"
 
         theParams, numInputs = self.fetchInputs(
             formatted_params,
             workflowInputs_destdir=self.inputsDir,
+            workflowExtrapolatedInputs_destdir=self.extrapolatedInputsDir,
             offline=offline,
             ignoreCache=ignoreCache,
             lastInput=lastInput,
@@ -1616,8 +1651,22 @@ class WF:
                 inputs = cast("Sch_Param", raw_inputs)
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
-                    if inputClass in ("File", "Directory"):  # input files
-                        if inputClass == "Directory":
+                    if inputClass not in (
+                        ContentKind.File.name,
+                        ContentKind.Directory.name,
+                        ContentKind.Value.name,
+                        ContentKind.ContentWithURIs.name,
+                    ):
+                        raise WFException(
+                            'Unrecognized input class "{}", attached to "{}"'.format(
+                                inputClass, linearKey
+                            )
+                        )
+                    if inputClass in (
+                        ContentKind.File.name,
+                        ContentKind.Directory.name,
+                    ):  # input files
+                        if inputClass == ContentKind.Directory.name:
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
                             if inputs.get("autoFill", False):
@@ -1625,13 +1674,24 @@ class WF:
                                 continue
 
                             globExplode = inputs.get("globExplode")
-                        elif inputClass == "File" and inputs.get("autoFill", False):
+                        elif inputClass == ContentKind.File.name and inputs.get(
+                            "autoFill", False
+                        ):
                             formatted_params[key] = inputs
                             continue
 
+                    # Processing url and secondary-urls
+                    if ("url" in inputs) and (
+                        inputClass
+                        in (
+                            ContentKind.File.name,
+                            ContentKind.Directory.name,
+                            ContentKind.ContentWithURIs.name,
+                        )
+                    ):  # input files
                         was_formatted = False
 
-                        remote_files: "Optional[Sch_InputURI]" = inputs.get("url")
+                        remote_files: "Sch_InputURI" = inputs["url"]
                         if remote_files is not None:
                             formatted_remote_files = (
                                 self._formatInputURIFromPlaceHolders(remote_files)
@@ -1684,9 +1744,8 @@ class WF:
                         if was_formatted:
                             some_formatted = True
                             formatted_inputs = copy.copy(inputs)
-                            if "url" in inputs:
-                                assert formatted_remote_files is not None
-                                formatted_inputs["url"] = formatted_remote_files
+                            assert formatted_remote_files is not None
+                            formatted_inputs["url"] = formatted_remote_files
                             if "secondary-urls" in inputs:
                                 assert formatted_secondary_remote_files is not None
                                 formatted_inputs[
@@ -1705,12 +1764,58 @@ class WF:
 
                         formatted_params[key] = formatted_inputs
 
-                    else:
-                        raise WFException(
-                            'Unrecognized input class "{}", attached to "{}"'.format(
-                                inputClass, linearKey
-                            )
+                    # Processing value contents
+                    if ("value" in inputs) and (
+                        inputClass
+                        in (
+                            ContentKind.File.name,
+                            ContentKind.Value.name,
+                            ContentKind.ContentWithURIs.name,
                         )
+                    ):
+                        # It could have been fixed by previous step
+                        val_inputs: "Union[str, Sequence[str]]"
+                        if key in formatted_params:
+                            val_inputs = formatted_params[key]["value"]
+                        else:
+                            val_inputs = inputs["value"]
+
+                        formatted_val_inputs = val_inputs
+                        if isinstance(val_inputs, list):
+                            if len(val_inputs) > 0 and isinstance(val_inputs[0], str):
+                                formatted_inputs_l = []
+                                did_change = False
+                                for val_input in val_inputs:
+                                    formatted_input = (
+                                        self._formatStringFromPlaceHolders(val_input)
+                                    )
+                                    formatted_inputs_l.append(formatted_input)
+                                    if formatted_input != val_input:
+                                        did_change = True
+                                        some_formatted = True
+
+                                if did_change:
+                                    formatted_val_inputs = formatted_inputs_l
+                        elif isinstance(val_inputs, str):
+                            formatted_input = self._formatStringFromPlaceHolders(
+                                val_inputs
+                            )
+                            if val_inputs != formatted_input:
+                                formatted_val_inputs = formatted_input
+
+                        # Last, copy only when needed
+                        if formatted_val_inputs != val_inputs:
+                            formatted_inputs = copy.copy(
+                                formatted_params[key]
+                                if key in formatted_params
+                                else inputs
+                            )
+                            formatted_inputs["value"] = formatted_val_inputs
+
+                            formatted_params[key] = formatted_inputs
+                        elif key not in formatted_params:
+                            formatted_params[key] = inputs
+
                 else:
                     # possible nested files
                     formatted_inputs_nested = self.formatParams(
@@ -1745,10 +1850,253 @@ class WF:
 
         return formatted_params if some_formatted else params
 
+    def _fetchContentWithURIs(
+        self,
+        inputs: "ParamsBlock",
+        linearKey: "SymbolicParamName",
+        workflowInputs_destdir: "AbsPath",
+        workflowExtrapolatedInputs_destdir: "AbsPath",
+        lastInput: "int" = 0,
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+    ) -> "Tuple[Sequence[MaterializedInput], int]":
+        tabconf = inputs.get("tabular")
+        if not isinstance(tabconf, dict):
+            raise WFException(
+                f"Content with uris {linearKey} must have 'tabular' declaration"
+            )
+
+        t_newline: "str" = (
+            tabconf.get("row-sep", "\\n").encode("utf-8").decode("unicode-escape")
+        )
+        t_skiplines: "int" = tabconf.get("header-rows", 0)
+        t_split = tabconf["column-sep"].encode("utf-8").decode("unicode-escape")
+        t_uri_cols: "Sequence[int]" = tabconf["uri-columns"]
+
+        inputDestDir = workflowInputs_destdir
+        extrapolatedInputDestDir = workflowExtrapolatedInputs_destdir
+
+        path_tokens = linearKey.split(".")
+        # Filling in the defaults
+        assert len(path_tokens) >= 1
+        pretty_relname: "Optional[RelPath]" = cast("RelPath", path_tokens[-1])
+        if len(path_tokens) > 1:
+            relative_dir = os.path.join(*path_tokens[0:-1])
+        else:
+            relative_dir = None
+
+        remote_files: "Optional[Sch_InputURI]" = inputs.get("url")
+        inline_values: "Optional[Union[str, Sequence[str]]]" = inputs.get("value")
+        # It has to exist
+        assert (remote_files is not None) or (inline_values is not None)
+
+        secondary_remote_files: "Sch_InputURI" = []
+
+        # We are sending the context name thinking in the future,
+        # as it could contain potential hints for authenticated access
+        contextName = inputs.get("security-context")
+        cacheable = not self.paranoidMode if inputs.get("cache", True) else False
+        if remote_files is not None:
+            this_cacheable = cacheable
+            this_ignoreCache = ignoreCache
+        else:
+            this_cacheable = False
+            this_ignoreCache = True
+
+        preferred_name_conf = cast("Optional[RelPath]", inputs.get("preferred-name"))
+        if isinstance(preferred_name_conf, str):
+            pretty_relname = preferred_name_conf
+
+        # Setting up the relative dir preference
+        reldir_conf = inputs.get("relative-dir")
+        if isinstance(reldir_conf, str):
+            relative_dir = reldir_conf
+        elif not reldir_conf:
+            # Remove the pre-computed relative dir
+            relative_dir = None
+
+        if relative_dir is not None:
+            newInputDestDir = os.path.realpath(os.path.join(inputDestDir, relative_dir))
+            if newInputDestDir.startswith(os.path.realpath(inputDestDir)):
+                inputDestDir = cast("AbsPath", newInputDestDir)
+                extrapolatedInputDestDir = cast(
+                    "AbsPath",
+                    os.path.realpath(
+                        os.path.join(extrapolatedInputDestDir, relative_dir)
+                    ),
+                )
+
+        # The storage dir depends on whether it can be cached or not
+        storeDir: "Union[CacheType, AbsPath]" = (
+            CacheType.Input if cacheable else workflowInputs_destdir
+        )
+
+        remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+        if remote_files is not None:
+            if isinstance(remote_files, list):  # more than one input file
+                remote_files_f = remote_files
+            else:
+                remote_files_f = [cast("Sch_InputURI_Fetchable", remote_files)]
+        else:
+            inline_values_l: "Sequence[str]"
+            if isinstance(inline_values, list):
+                # more than one inline content
+                inline_values_l = inline_values
+            else:
+                inline_values_l = [cast("str", inline_values)]
+
+            remote_files_f = [
+                # The storage dir is always the input
+                # Let's use the trick of translating the content into a data URL
+                bin2dataurl(inline_value.encode("utf-8"))
+                for inline_value in inline_values_l
+            ]
+
+        # Fetch and process the files with the URIs to be processed
+        theNewInputs: "MutableSequence[MaterializedInput]" = []
+        for remote_file in remote_files_f:
+            lastInput += 1
+            t_remote_pairs = self._fetchRemoteFile(
+                remote_file,
+                contextName,
+                offline,
+                storeDir,
+                cacheable,
+                inputDestDir,
+                globExplode=None,
+                prefix=str(lastInput) + "_",
+                prettyRelname=pretty_relname,
+                ignoreCache=this_ignoreCache,
+            )
+
+            # Time to process each file
+            these_secondary_uris: "Set[str]" = set()
+            remote_pairs: "MutableSequence[MaterializedContent]" = []
+            for t_remote_pair in t_remote_pairs:
+                remote_pairs.append(t_remote_pair)
+
+                with open(
+                    t_remote_pair.local, mode="rt", encoding="utf-8", newline=t_newline
+                ) as tH:
+                    skiplines = t_skiplines
+                    for line in tH:
+                        # Skipping first header lines
+                        if skiplines > 0:
+                            skiplines -= 1
+                            continue
+
+                        # Removing the newline, as it can ruin everything
+                        if line.endswith(t_newline):
+                            line = line[: -len(t_newline)]
+
+                        cols = line.split(t_split, -1)
+                        for t_uri_col in t_uri_cols:
+                            if t_uri_col < len(cols) and len(cols[t_uri_col]) > 0:
+                                # Should we check whether it is a URI?
+                                these_secondary_uris.add(cols[t_uri_col])
+
+            secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]"
+            if len(these_secondary_uris) > 0:
+                secondary_uri_mapping: "MutableMapping[str, str]" = {}
+                secondary_remote_pairs = []
+                # Fetch each gathered URI
+                for secondary_remote_file in these_secondary_uris:
+                    # The last fetched content prefix is the one used
+                    # for all the secondaries
+                    t_secondary_remote_pairs = self._fetchRemoteFile(
+                        cast("URIType", secondary_remote_file),
+                        contextName,
+                        offline,
+                        storeDir,
+                        cacheable,
+                        inputDestDir,
+                        globExplode=None,
+                        prefix=str(lastInput) + "_",
+                        ignoreCache=ignoreCache,
+                    )
+
+                    # Rescuing the correspondence to be used later
+                    for t_secondary_remote_pair in t_secondary_remote_pairs:
+                        secondary_remote_pairs.append(t_secondary_remote_pair)
+                        if (
+                            t_secondary_remote_pair.licensed_uri.uri
+                            in these_secondary_uris
+                        ):
+                            secondary_uri_mapping[
+                                t_secondary_remote_pair.licensed_uri.uri
+                            ] = t_secondary_remote_pair.local
+
+                # Now, reopen each file to replace URLs by paths
+                for i_remote_pair, remote_pair in enumerate(remote_pairs):
+                    extrapolated_local = os.path.join(
+                        extrapolatedInputDestDir,
+                        os.path.relpath(remote_pair.local, inputDestDir),
+                    )
+                    with open(
+                        remote_pair.local,
+                        mode="rt",
+                        encoding="utf-8",
+                        newline=t_newline,
+                    ) as tH:
+                        with open(
+                            extrapolated_local,
+                            mode="wt",
+                            encoding="utf-8",
+                            newline=t_newline,
+                        ) as tW:
+                            skiplines = t_skiplines
+                            for line in tH:
+                                # Skipping first header lines
+                                if skiplines > 0:
+                                    tW.write(line)
+                                    skiplines -= 1
+                                    continue
+
+                                if line.endswith(t_newline):
+                                    line = line[: -len(t_newline)]
+
+                                cols = line.split(t_split, -1)
+                                # Patching each column
+                                fixed_row = False
+                                for t_uri_col in t_uri_cols:
+                                    if (
+                                        t_uri_col < len(cols)
+                                        and len(cols[t_uri_col]) > 0
+                                    ):
+                                        # Should we check whether it is a URI?
+                                        cols[t_uri_col] = secondary_uri_mapping[
+                                            cols[t_uri_col]
+                                        ]
+                                        fixed_row = True
+
+                                if fixed_row:
+                                    print(t_split.join(cols), file=tW)
+                                else:
+                                    print(line, file=tW)
+
+                    # Last, fix it
+                    remote_pairs[i_remote_pair] = remote_pair._replace(
+                        kind=ContentKind.ContentWithURIs,
+                        extrapolated_local=cast("AbsPath", extrapolated_local),
+                    )
+            else:
+                secondary_remote_pairs = None
+
+            theNewInputs.append(
+                MaterializedInput(
+                    name=linearKey,
+                    values=remote_pairs,
+                    secondaryInputs=secondary_remote_pairs,
+                )
+            )
+
+        return theNewInputs, lastInput
+
     def fetchInputs(
         self,
-        params: "Union[ParamsBlock, Sequence[Mapping[str, Any]]]",
+        params: "Union[ParamsBlock, Sequence[ParamsBlock]]",
         workflowInputs_destdir: "AbsPath",
+        workflowExtrapolatedInputs_destdir: "AbsPath",
         prefix: "str" = "",
         lastInput: "int" = 0,
         offline: "bool" = False,
@@ -1760,6 +2108,7 @@ class WF:
 
         :param params: Optional params for the workflow execution.
         :param workflowInputs_destdir:
+        :param workflowExtrapolatedInputs_destdir:
         :param prefix:
         :param lastInput:
         :param offline:
@@ -1779,24 +2128,23 @@ class WF:
             if isinstance(inputs, dict):
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
-                    if inputClass in ("File", "Directory"):  # input files
+                    if inputClass in (
+                        ContentKind.File.name,
+                        ContentKind.Directory.name,
+                    ):  # input files
                         inputDestDir = workflowInputs_destdir
                         globExplode = None
 
                         path_tokens = linearKey.split(".")
                         # Filling in the defaults
                         assert len(path_tokens) >= 1
-                        if len(path_tokens) >= 1:
-                            pretty_relname = path_tokens[-1]
-                            if len(path_tokens) > 1:
-                                relative_dir = os.path.join(*path_tokens[0:-1])
-                            else:
-                                relative_dir = None
+                        pretty_relname = path_tokens[-1]
+                        if len(path_tokens) > 1:
+                            relative_dir = os.path.join(*path_tokens[0:-1])
                         else:
-                            pretty_relname = None
                             relative_dir = None
 
-                        if inputClass == "Directory":
+                        if inputClass == ContentKind.Directory.name:
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
                             if inputs.get("autoFill", False):
@@ -1815,7 +2163,9 @@ class WF:
                                 continue
 
                             globExplode = inputs.get("globExplode")
-                        elif inputClass == "File" and inputs.get("autoFill", False):
+                        elif inputClass == ContentKind.File.name and inputs.get(
+                            "autoFill", False
+                        ):
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
                             autoFilledFile = os.path.join(self.outputsDir, path_tokens)
@@ -1832,27 +2182,39 @@ class WF:
                             continue
 
                         remote_files: "Optional[Sch_InputURI]" = inputs.get("url")
+                        inline_values: "Optional[Union[str, Sequence[str]]]" = (
+                            inputs.get("value")
+                        )
                         # It has to exist
-                        if remote_files is not None:
-                            # We are sending the context name thinking in the future,
-                            # as it could contain potential hints for authenticated access
-                            contextName = inputs.get("security-context")
+                        if remote_files is not None or (
+                            inputClass == ContentKind.File.name
+                            and (inline_values is not None)
+                        ):
+                            secondary_remote_files: "Optional[Sch_InputURI]"
+                            if remote_files is not None:
+                                # We are sending the context name thinking in the future,
+                                # as it could contain potential hints for authenticated access
+                                contextName = inputs.get("security-context")
 
-                            secondary_remote_files: "Optional[Sch_InputURI]" = (
-                                inputs.get("secondary-urls")
-                            )
+                                secondary_remote_files = inputs.get("secondary-urls")
+                                cacheable = (
+                                    not self.paranoidMode
+                                    if inputs.get("cache", True)
+                                    else False
+                                )
+                                this_ignoreCache = ignoreCache
+                            else:
+                                contextName = None
+                                secondary_remote_files = None
+                                cacheable = False
+                                this_ignoreCache = True
+
                             preferred_name_conf = inputs.get("preferred-name")
                             if isinstance(preferred_name_conf, str):
                                 pretty_relname = preferred_name_conf
                             elif not preferred_name_conf:
                                 # Remove the pre-computed relative dir
                                 pretty_relname = None
-
-                            cacheable = (
-                                not self.paranoidMode
-                                if inputs.get("cache", True)
-                                else False
-                            )
 
                             # Setting up the relative dir preference
                             reldir_conf = inputs.get("relative-dir")
@@ -1877,13 +2239,28 @@ class WF:
                             )
 
                             remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
-                            if isinstance(
-                                remote_files, list
-                            ):  # more than one input file
-                                remote_files_f = remote_files
+                            if remote_files is not None:
+                                if isinstance(
+                                    remote_files, list
+                                ):  # more than one input file
+                                    remote_files_f = remote_files
+                                else:
+                                    remote_files_f = [
+                                        cast("Sch_InputURI_Fetchable", remote_files)
+                                    ]
                             else:
+                                inline_values_l: "Sequence[str]"
+                                if isinstance(inline_values, list):
+                                    # more than one inline content
+                                    inline_values_l = inline_values
+                                else:
+                                    inline_values_l = [cast("str", inline_values)]
+
                                 remote_files_f = [
-                                    cast("Sch_InputURI_Fetchable", remote_files)
+                                    # The storage dir is always the input
+                                    # Let's use the trick of translating the content into a data URL
+                                    bin2dataurl(inline_value.encode("utf-8"))
+                                    for inline_value in inline_values_l
                                 ]
 
                             remote_pairs: "MutableSequence[MaterializedContent]" = []
@@ -1899,12 +2276,14 @@ class WF:
                                     globExplode,
                                     prefix=str(lastInput) + "_",
                                     prettyRelname=pretty_relname,
-                                    ignoreCache=ignoreCache,
+                                    ignoreCache=this_ignoreCache,
                                 )
                                 remote_pairs.extend(t_remote_pairs)
 
                             secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]"
-                            if secondary_remote_files is not None:
+                            if (remote_files is not None) and (
+                                secondary_remote_files is not None
+                            ):
                                 secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
                                 if isinstance(
                                     secondary_remote_files, list
@@ -1947,7 +2326,7 @@ class WF:
                                 )
                             )
                         else:
-                            if inputClass == "File":
+                            if inputClass == ContentKind.File.name:
                                 # Empty input, i.e. empty file
                                 inputDestPath = cast(
                                     "AbsPath",
@@ -1982,6 +2361,31 @@ class WF:
                                     ],
                                 )
                             )
+
+                    elif inputClass == ContentKind.ContentWithURIs.name:
+                        theNewInputs, lastInput = self._fetchContentWithURIs(
+                            inputs,
+                            linearKey,
+                            workflowInputs_destdir,
+                            workflowExtrapolatedInputs_destdir,
+                            lastInput=lastInput,
+                            offline=offline,
+                            ignoreCache=ignoreCache,
+                        )
+                        theInputs.extend(theNewInputs)
+                    elif inputClass == ContentKind.Value.name:
+                        input_val = inputs.get("value")
+                        if input_val is None:
+                            raise WFException(f"Value {linearKey} cannot be null")
+
+                        if not isinstance(input_val, list):
+                            input_val = [input_val]
+                        theInputs.append(
+                            MaterializedInput(
+                                name=linearKey,
+                                values=input_val,
+                            )
+                        )
                     else:
                         raise WFException(
                             'Unrecognized input class "{}", attached to "{}"'.format(
@@ -1993,6 +2397,7 @@ class WF:
                     newInputsAndParams, lastInput = self.fetchInputs(
                         inputs,
                         workflowInputs_destdir=workflowInputs_destdir,
+                        workflowExtrapolatedInputs_destdir=workflowExtrapolatedInputs_destdir,
                         prefix=linearKey + ".",
                         lastInput=lastInput,
                         offline=offline,
@@ -2002,7 +2407,12 @@ class WF:
             else:
                 if not isinstance(inputs, list):
                     inputs = [inputs]
-                theInputs.append(MaterializedInput(linearKey, inputs))
+                theInputs.append(
+                    MaterializedInput(
+                        name=linearKey,
+                        values=inputs,
+                    )
+                )
 
         return theInputs, lastInput
 
