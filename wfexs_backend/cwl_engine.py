@@ -1059,7 +1059,7 @@ STDERR
                                 else:
                                     cmd_arr.extend(
                                         [
-                                            "--disable-pull",
+                                            # "--disable-pull",
                                             "--podman",
                                         ]
                                     )
