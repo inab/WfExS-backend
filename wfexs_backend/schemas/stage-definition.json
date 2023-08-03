@@ -151,7 +151,68 @@
 					"type": "string",
 					"enum": [
 						"File",
-						"Directory"
+						"Directory",
+						"Value",
+						"ContentWithURIs"
+					]
+				},
+				"value": {
+					"description": "When 'c-l-a-s-s' is a single file or a value, the assigned value",
+					"oneOf": [
+						{
+							"type": "string",
+							"minLength": 1
+						},
+						{
+							"type": "array",
+							"items": {
+								"type": "string",
+								"minLength": 1
+							},
+							"minItems": 1
+						}
+					]
+				},
+				"tabular": {
+					"description": "When it is content with URIs, we are telling it is a tabular one with this key. URIs are fetched, and the absolute paths replace them in the generated content tab",
+					"type": "object",
+					"properties": {
+						"uri-columns": {
+							"description": "The columns where URIs to be fetched are found",
+							"type": "array",
+							"items": {
+								"type": "integer",
+								"minInclusive": 0
+							},
+							"uniqueItems": true,
+							"minItems": 1
+						},
+						"row-sep": {
+							"description": "The string used to split the tabulated content by rows",
+							"type": "string",
+							"enum": [
+								"\n",
+								"\r",
+								"\t\n"
+							],
+							"default": "\n",
+							"minLength": 1
+						},
+						"column-sep": {
+							"description": "The regular expression used to split the tabulated content by columns",
+							"type": "string",
+							"minLength": 1
+						},
+						"header-rows": {
+							"description": "How many header rows should be skipped?",
+							"type": "integer",
+							"minInclusive": 0,
+							"default": 0
+						}
+					},
+					"required": [
+						"uri-columns",
+						"column-sep"
 					]
 				},
 				"url": {
@@ -196,36 +257,218 @@
 				"c-l-a-s-s"
 			],
 			"additionalProperties": false,
-			"if": {
-				"properties": {
-					"c-l-a-s-s": {
-						"const": "Directory"
+			"allOf": [
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"enum": [
+									"Directory",
+									"File"
+								]
+							}
+						},
+						"required": [
+							"url"
+						]
+					},
+					"then":	{
+						"not": {
+							"required": [
+								"value",
+								"tabular",
+								"autoFill",
+								"autoPrefix"
+							]
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"const": "ContentWithURIs"
+							}
+						},
+						"required": [
+							"url"
+						]
+					},
+					"then":	{
+						"not": {
+							"required": [
+								"value",
+								"autoFill",
+								"autoPrefix"
+							]
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"enum": [
+									"Directory",
+									"File"
+								]
+							}
+						},
+						"required": [
+							"autoFill"
+						]
+					},
+					"then":	{
+						"not": {
+							"required": [
+								"value",
+								"tabular",
+								"url",
+								"secondary-urls",
+								"security-context",
+								"globExplode"
+							]
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"const": "Directory"
+							}
+						}
+					},
+					"then": {
+						"not": {
+							"required": [
+								"value"
+							]
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"const": "File"
+							}
+						},
+						"required": [
+							"value"
+						]
+					},
+					"then":	{
+						"not": {
+							"required": [
+								"url",
+								"tabular",
+								"secondary-urls",
+								"security-context",
+								"globExplode",
+								"autoFill",
+								"autoPrefix"
+							]
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"const": "ContentWithURIs"
+							}
+						},
+						"required": [
+							"value"
+						]
+					},
+					"then":	{
+						"not": {
+							"required": [
+								"url",
+								"secondary-urls",
+								"security-context",
+								"globExplode",
+								"autoFill",
+								"autoPrefix"
+							]
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"const": "Value"
+							}
+						}
+					},
+					"then": {
+						"required": [
+							"value"
+						],
+						"not": {
+							"required": [
+								"tabular",
+								"url",
+								"secondary-urls",
+								"preferred-name",
+								"relative-dir",
+								"security-context",
+								"globExplode",
+								"autoFill",
+								"autoPrefix"
+							]
+						}
+					}
+				},
+				{
+					"if": {
+						"properties": {
+							"c-l-a-s-s": {
+								"const": "ContentWithURIs"
+							}
+						}
+					},
+					"then": {
+						"required": [
+							"tabular"
+						],
+						"not": {
+							"required": [
+								"globExplode",
+								"autoFill",
+								"autoPrefix"
+							]
+						},
+						"if": {
+							"required": [
+								"url"
+							]
+						},
+						"then": {
+							"not": {
+								"required": [
+									"value"
+								]
+							}
+						},
+						"else": {
+							"required": [
+								"value"
+							],
+							"not": {
+								"required": [
+									"url",
+									"secondary-urls",
+									"security-context"
+								]
+							}
+						}
 					}
 				}
-			},
-			"then":	{
-				"if": {
-					"required": [
-						"url"
-					]
-				},
-				"then": {
-					"not": {
-						"required": [
-							"autoFill",
-							"autoPrefix"
-						]
-					}
-				},
-				"else": {
-					"not": {
-						"required": [
-							"security-context",
-							"globExplode"
-						]
-					}
-				}
-			}
+			]
 		},
 		"EnvVar": {
 			"oneOf": [
