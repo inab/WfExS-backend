@@ -98,6 +98,7 @@ from .fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
 from .fetchers.ftp import SCHEME_HANDLERS as FTP_SCHEME_HANDLERS
 from .fetchers.sftp import SCHEME_HANDLERS as SFTP_SCHEME_HANDLERS
 from .fetchers.file import SCHEME_HANDLERS as FILE_SCHEME_HANDLERS
+from .fetchers.data import SCHEME_HANDLERS as DATA_SCHEME_HANDLERS
 
 from .fetchers.git import (
     GitFetcher,
@@ -591,6 +592,7 @@ class WfExSBackend:
         self.addSchemeHandlers(FTP_SCHEME_HANDLERS, fetchers_setup_block)
         self.addSchemeHandlers(SFTP_SCHEME_HANDLERS, fetchers_setup_block)
         self.addSchemeHandlers(FILE_SCHEME_HANDLERS, fetchers_setup_block)
+        self.addSchemeHandlers(DATA_SCHEME_HANDLERS, fetchers_setup_block)
 
         # Registry of export plugins is created here
         self._export_plugins: "MutableMapping[SymbolicName, Type[AbstractExportPlugin]]" = (
