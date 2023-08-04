@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import copy
 import datetime
 import json
 import logging
@@ -202,10 +203,11 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         # Getting a fixed version of the engine
         toolsSect = local_config.get("tools", {}) if local_config else {}
-        engineConf = toolsSect.get(self.ENGINE_NAME, {})
+        engineConf = copy.deepcopy(toolsSect.get(self.ENGINE_NAME, {}))
         workflowEngineConf = (
             workflow_config.get(self.ENGINE_NAME, {}) if workflow_config else {}
         )
+        engineConf.update(workflowEngineConf)
 
         default_cwltool_version = self.DEFAULT_CWLTOOL_VERSION
         pymatched = False
@@ -224,9 +226,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 break
 
         # These are the requested versions
-        requested_cwltool_version = workflowEngineConf.get("version")
-        if requested_cwltool_version is None:
-            requested_cwltool_version = engineConf.get("version")
+        requested_cwltool_version = engineConf.get("version")
 
         if (requested_cwltool_version is None) or (
             pymatched and requested_cwltool_version > default_cwltool_version

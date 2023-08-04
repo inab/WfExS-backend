@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import copy
 import datetime
 import functools
 import itertools
@@ -250,15 +251,16 @@ class NextflowWorkflowEngine(WorkflowEngine):
             os.path.commonpath([self.java_cmd, wfexs_dirname]) == wfexs_dirname
         )
 
-        engineConf = toolsSect.get(self.ENGINE_NAME, {})
+        engineConf = copy.deepcopy(toolsSect.get(self.ENGINE_NAME, {}))
         workflowEngineConf = (
             workflow_config.get(self.ENGINE_NAME, {}) if workflow_config else {}
         )
+        engineConf.update(workflowEngineConf)
 
         self.nxf_image = engineConf.get(
             "dockerImage", self.DEFAULT_NEXTFLOW_DOCKER_IMAGE
         )
-        nxf_version = workflowEngineConf.get("version")
+        nxf_version = engineConf.get("version")
         if nxf_version is None:
             if self.container_factory.containerType == ContainerType.Podman:
                 default_nextflow_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
@@ -275,7 +277,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.max_cpus = engineConf.get("maxProcesses", self.DEFAULT_MAX_CPUS)
 
         # The profile to force, in case it cannot be guessed
-        nxf_profile: "Union[str, Sequence[str]]" = workflowEngineConf.get("profile", [])
+        nxf_profile: "Union[str, Sequence[str]]" = engineConf.get("profile", [])
         self.nxf_profile: "Sequence[str]"
         if isinstance(nxf_profile, list):
             self.nxf_profile = nxf_profile
