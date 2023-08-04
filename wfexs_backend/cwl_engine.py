@@ -284,6 +284,10 @@ class CWLWorkflowEngine(WorkflowEngine):
         if localWf.relPath is not None:
             cwlPath = cast("AbsPath", os.path.join(cwlPath, localWf.relPath))
 
+        if os.path.isdir(cwlPath):
+            self.logger.warning("CWL entrypoint cannot be a directory")
+            return None, None
+
         # Is this a yaml?
         cwlVersion = None
         try:
