@@ -601,6 +601,27 @@
 							"minLength": 1,
 							"default": "19.04.1"
 						},
+						"maxRetries": {
+							"title": "Retries in docker mode",
+							"description": "Retries when `engineMode` is `docker`.\nRetries system was introduced when using docker-in-docker pattern because an insidious\nbug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-symlinks-on-bind-mounts/32138",
+							"type": "integer",
+							"minimum": 0,
+							"default": 5
+						},
+						"maxProcesses": {
+							"title": "Max number of CPUs",
+							"description": "Number of CPUs to be used by Nextflow. When this key has an explicit value of `null`, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes",
+							"oneOf": [
+								{
+									"type": "integer",
+									"minimum": 1,
+									"default": 4
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
 						"profile": {
 							"description": "If defined, the profile/s to enable",
 							"oneOf": [

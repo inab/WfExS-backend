@@ -3,6 +3,7 @@ workflow_config:
   secure: false
   nextflow:
     profile: singularity
+    maxProcesses: 8
 placeholders:
   assembly: "GRCh38"
   assembly_release: "102"
