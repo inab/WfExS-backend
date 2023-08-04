@@ -12,6 +12,7 @@ placeholders:
 params:
   input:
     c-l-a-s-s: ContentWithURIs
+    preferred-name: samplesheet_test.csv
     url: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/samplesheet/v3.10/samplesheet_test.csv"
     tabular:
       uri-columns:
