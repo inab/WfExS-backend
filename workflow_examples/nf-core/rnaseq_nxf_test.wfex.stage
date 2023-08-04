@@ -12,7 +12,6 @@ placeholders:
 params:
   input:
     c-l-a-s-s: ContentWithURIs
-    preferred-name: input.csv
     url: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/samplesheet/v3.10/samplesheet_test.csv"
     tabular:
       uri-columns:
@@ -36,8 +35,13 @@ params:
     c-l-a-s-s: File
     url: "{test_datasets}/gfp.fa.gz"
   bbsplit_fasta_list:
-    c-l-a-s-s: File
+    c-l-a-s-s: ContentWithURIs
     url: "{test_datasets}/bbsplit_fasta_list.txt"
+    tabular:
+      uri-columns:
+        - 1
+      column-sep: ","
+      header-rows: 0
   hisat2_index:
     c-l-a-s-s: File
     url: "{test_datasets}/hisat2.tar.gz"
