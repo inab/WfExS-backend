@@ -10,6 +10,7 @@ placeholders:
 params:
   input:
     c-l-a-s-s: ContentWithURIs
+    preferred-name: input.csv
     value: |
       sample,fastq_1,fastq_2,strandedness
       GM12878_REP2,s3://ngi-igenomes/test-data/rnaseq/SRX1603630_T1_1.fastq.gz,s3://ngi-igenomes/test-data/rnaseq/SRX1603630_T1_2.fastq.gz,reverse
