@@ -85,11 +85,15 @@ import rocrate.model.computationalworkflow  # type: ignore[import]
 import rocrate.model.computerlanguage  # type: ignore[import]
 import rocrate.model.file  # type: ignore[import]
 import rocrate.model.file_or_dir  # type: ignore[import]
+import rocrate.model.metadata  # type: ignore[import]
 import rocrate.model.softwareapplication  # type: ignore[import]
 import rocrate.model.creativework  # type: ignore[import]
 import rocrate.rocrate  # type: ignore[import]
 
-from rocrate.utils import is_url  # type: ignore[import]
+from rocrate.utils import (  # type: ignore[import]
+    get_norm_value,
+    is_url,
+)
 
 from .utils.digests import (
     ComputeDigestFromDirectory,
@@ -266,6 +270,10 @@ class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[m
     pass
 
 
+class FixedWorkflow(FixedMixin, rocrate.model.computationalworkflow.ComputationalWorkflow):  # type: ignore[misc]
+    pass
+
+
 class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
     """
     This subclass fixes the limitations from original ROCrate class
@@ -331,6 +339,70 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
 
     add_directory = add_dataset
 
+    def add_workflow(
+        self,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+        main: "bool" = False,
+        lang: "str" = "cwl",
+        lang_version: "Optional[str]" = None,
+        gen_cwl: "bool" = False,
+        cls: "rocrate.model.computationalworkflow.ComputationalWorkflow" = FixedWorkflow,
+    ) -> "FixedWorkflow":
+        workflow = self.add(
+            cls(
+                self,
+                source=source,
+                dest_path=dest_path,
+                identifier=identifier,
+                fetch_remote=fetch_remote,
+                validate_url=validate_url,
+                properties=properties,
+            )
+        )
+        if isinstance(lang, rocrate.model.computerlanguage.ComputerLanguage):
+            assert lang.crate is self
+        else:
+            lang = rocrate.model.computerlanguage.get_lang(
+                self, lang, version=lang_version
+            )
+            self.add(lang)
+        lang_str = lang.id.rsplit("#", 1)[1]
+        workflow.lang = lang
+        if main:
+            self.mainEntity = workflow
+            profiles = set(
+                _.rstrip("/") for _ in get_norm_value(self.metadata, "conformsTo")
+            )
+            profiles.add(rocrate.model.metadata.WORKFLOW_PROFILE)
+            self.metadata["conformsTo"] = [{"@id": _} for _ in sorted(profiles)]
+        if gen_cwl and lang_str != "cwl":
+            assert source is not None
+            if lang_str != "galaxy":
+                raise ValueError(
+                    f"conversion from {lang.name} to abstract CWL not supported"
+                )
+            cwl_source = rocrate.model.computationalworkflow.galaxy_to_abstract_cwl(
+                source
+            )
+            cwl_dest_path = pathlib.Path(source).with_suffix(".cwl").name
+            cwl_workflow = self.add_workflow(
+                source=cwl_source,
+                dest_path=cwl_dest_path,
+                fetch_remote=fetch_remote,
+                properties=properties,
+                main=False,
+                lang="cwl",
+                gen_cwl=False,
+                cls=rocrate.model.computationalworkflow.WorkflowDescription,
+            )
+            workflow.subjectOf = cwl_workflow
+        return cast("FixedWorkflow", workflow)
+
 
 class WorkflowRunROCrate:
     """
@@ -345,6 +417,7 @@ class WorkflowRunROCrate:
     def __init__(
         self,
         remote_repo: "RemoteRepo",
+        workflow_pid: "Optional[str]",
         localWorkflow: "LocalWorkflow",
         materializedEngine: "MaterializedWorkflowEngine",
         workflowEngineVersion: "Optional[WorkflowEngineVersionStr]",
@@ -388,253 +461,60 @@ class WorkflowRunROCrate:
 
         self.wf_wfexs = self._add_wfexs_to_crate()
 
-        matWf = materializedEngine.workflow
-        if matWf.relPath is not None:
-            if os.path.isabs(matWf.relPath):
-                matWf_local_path = cast("AbsPath", matWf.relPath)
-            else:
-                matWf_local_path = cast(
-                    "AbsPath", os.path.join(matWf.dir, matWf.relPath)
-                )
-        else:
-            matWf_local_path = matWf.dir
-
-        wf_url: "str"
-        wf_entrypoint_url: "str"
-        if remote_repo.web_url is not None:
-            wf_url = remote_repo.web_url
-            wf_entrypoint_url = wf_url
-        else:
-            wf_url = remote_repo.repo_url.replace(".git", "/")
-            if remote_repo.tag is not None:
-                wf_url += "tree/" + remote_repo.tag
-            if localWorkflow.relPath is not None:
-                wf_url += localWorkflow.dir.rsplit("workflow")[1]
-
-            parsed_repo_url = urllib.parse.urlparse(remote_repo.repo_url)
-            if parsed_repo_url.netloc == "github.com":
-                assert (
-                    matWf.effectiveCheckout is not None
-                ), "The effective checkout should be available"
-
-                parsed_repo_path = parsed_repo_url.path.split("/")
-                repo_name = parsed_repo_path[2]
-                # TODO: should we urldecode repo_name?
-                if repo_name.endswith(".git"):
-                    repo_name = repo_name[:-4]
-                wf_entrypoint_path = [
-                    "",  # Needed to prepend a slash
-                    parsed_repo_path[1],
-                    # TODO: should we urlencode repo_name?
-                    repo_name,
-                    matWf.effectiveCheckout,
-                ]
-
-                if localWorkflow.relPath is not None:
-                    wf_entrypoint_path.append(localWorkflow.relPath)
-
-                wf_entrypoint_url = urllib.parse.urlunparse(
-                    (
-                        "https",
-                        "raw.githubusercontent.com",
-                        "/".join(wf_entrypoint_path),
-                        "",
-                        "",
-                        "",
-                    )
-                )
-
-            elif "gitlab" in parsed_repo_url.netloc:
-                parsed_repo_path = parsed_repo_url.path.split("/")
-                # FIXME: cover the case of nested groups
-                repo_name = parsed_repo_path[2]
-                if repo_name.endswith(".git"):
-                    repo_name = repo_name[:-4]
-                wf_entrypoint_path = [parsed_repo_path[1], repo_name]
-                if remote_repo.tag is not None and localWorkflow.relPath is not None:
-                    # TODO: should we urlencode repoTag?
-                    wf_entrypoint_path.extend(
-                        ["-", "raw", remote_repo.tag, localWorkflow.relPath]
-                    )
-
-                wf_entrypoint_url = urllib.parse.urlunparse(
-                    (
-                        parsed_repo_url.scheme,
-                        parsed_repo_url.netloc,
-                        "/".join(wf_entrypoint_path),
-                        "",
-                        "",
-                        "",
-                    )
-                )
-
-            else:
-                raise ROCrateGenerationException(
-                    "FIXME: Unsupported http(s) git repository {}".format(
-                        remote_repo.repo_url
-                    )
-                )
-
-        # This is needed to avoid future collisions with other workflows stored in the RO-Crate
-        rocrate_wf_folder = str(uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url))
-
-        # TODO: research why relPathFiles is not populated in matWf
-        lW = localWorkflow if matWf.relPathFiles is None else matWf
-
-        workflow_path = pathlib.Path(matWf_local_path)
-        if matWf_local_path != wf_local_path:
-            rocrate_wf_id = rocrate_wf_folder + "/" + os.path.basename(matWf_local_path)
-        else:
-            rocrate_wf_id = (
-                rocrate_wf_folder + "/" + os.path.relpath(matWf_local_path, matWf.dir)
-            )
-        local_rocrate_wf_id = (
-            rocrate_wf_folder + "/" + os.path.relpath(wf_local_path, localWorkflow.dir)
-        )
-
-        wf_file = self.crate.add_workflow(
-            source=workflow_path,
-            dest_path=rocrate_wf_id,
-            fetch_remote=False,
-            main=True,
-            lang=self.compLang,
-            gen_cwl=False,
-        )
-        self.wf_file: "rocrate.model.computationalworkflow.ComputationalWorkflow" = (
-            wf_file
-        )
-
-        self.wf_file.append_to(
-            "conformsTo",
-            # As of https://www.researchobject.org/ro-crate/1.1/workflows.html#complying-with-bioschemas-computational-workflow-profile
-            {
-                "@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"
-            },
-        )
-
+        # Description of the workflow engine as a software application
         self.weng_crate = rocrate.model.softwareapplication.SoftwareApplication(
             self.crate, identifier=materializedEngine.instance.engine_url
         )
+        self.crate.add(self.weng_crate)
         if workflowEngineVersion is not None:
             self.weng_crate["softwareVersion"] = workflowEngineVersion
-            self.wf_file["runtimePlatform"] = workflowEngineVersion
-        self.crate.add(self.weng_crate)
-        self.wf_file.append_to("softwareRequirements", self.weng_crate)
 
-        if materializedEngine.containers is not None:
-            self._add_containers_to_workflow(
-                materializedEngine.containers,
-            )
-        if materializedEngine.operational_containers is not None:
-            self._add_containers_to_workflow(
-                materializedEngine.operational_containers,
-                weng_crate=self.weng_crate,
-            )
+        # TODO: research why relPathFiles is not populated sometimes in matWf
+        matWf = materializedEngine.workflow
+        ran_is_original = (
+            localWorkflow.dir == matWf.dir and localWorkflow.relPath == matWf.relPath
+        )
+        original_workflow_crate = self._add_workflow_to_crate(
+            localWorkflow,
+            lang=self.compLang,
+            the_uri=workflow_pid,
+            the_description="Workflow Entrypoint"
+            if ran_is_original
+            else "Unconsolidated Workflow Entrypoint",
+            the_weng_crate=self.weng_crate,
+            materialized_engine=materializedEngine,
+            main=ran_is_original,
+            remote_repo=remote_repo,
+            gen_cwl=False,
+            do_attach=CratableItem.Workflow in payloads,
+        )
 
-        local_rel_entities = []
-        if lW.relPathFiles:
-            for rel_file in lW.relPathFiles:
-                # First, are we dealing with relative files or with URIs?
-                p_rel_file = urllib.parse.urlparse(rel_file)
-                if p_rel_file.scheme != "":
-                    the_entity = rocrate.model.creativework.CreativeWork(
-                        self.crate,
-                        identifier=rel_file,
-                    )
-                    self.crate.add(the_entity)
-                    local_rel_entities.append(the_entity)
-                else:
-                    rocrate_file_id = rocrate_wf_folder + "/" + rel_file
-                    if rocrate_file_id != rocrate_wf_id:
-                        the_entity = self._add_file_to_crate(
-                            the_path=os.path.join(lW.dir, rel_file),
-                            the_name=cast(
-                                "RelPath", os.path.join(rocrate_wf_folder, rel_file)
-                            ),
-                            the_uri=cast("URIType", rocrate_file_id),
-                            # TODO: uncomment this once a workflow can remain
-                            # as a remote only one
-                            # do_attach=CratableItem.Workflow in payloads,
-                            do_attach=True,
-                        )
-                        local_rel_entities.append(the_entity)
-
-        if local_rocrate_wf_id != rocrate_wf_id:
-            local_wf_file_pre = self.crate.get(local_rocrate_wf_id)
-
-            local_wf_file = self.crate.add_workflow(
-                source=workflow_path,
-                dest_path=local_rocrate_wf_id,
-                fetch_remote=False,
-                main=False,
+        ran_workflow_crate: "FixedWorkflow"
+        if not ran_is_original:
+            ran_workflow_crate = self._add_workflow_to_crate(
+                matWf,
                 lang=self.compLang,
+                the_description="Consolidated Workflow Entrypoint",
+                the_weng_crate=self.weng_crate,
+                materialized_engine=materializedEngine,
+                main=True,
                 gen_cwl=False,
+                do_attach=True,
             )
-            local_wf_file["codeRepository"] = remote_repo.repo_url
-            if materializedEngine.workflow.effectiveCheckout is not None:
-                local_wf_file["version"] = materializedEngine.workflow.effectiveCheckout
-            local_wf_file["description"] = "Unconsolidated Workflow Entrypoint"
-            local_wf_file["contentUrl"] = wf_entrypoint_url
-            local_wf_file["url"] = wf_url
-            local_wf_file.append_to("hasPart", local_rel_entities)
-            if localWorkflow.relPath is not None:
-                local_wf_file["alternateName"] = localWorkflow.relPath
-
-            # Transferring the properties
-            for prop_name in ("contentSize", "encodingFormat", "identifier", "sha256"):
-                if prop_name in local_wf_file_pre:
-                    local_wf_file[prop_name] = local_wf_file_pre[prop_name]
-
-            self.wf_file["isBasedOn"] = local_wf_file
-
-            consolidated_rel_entities = []
-            if matWf.relPathFiles:
-                for rel_file in matWf.relPathFiles:
-                    # First, are we dealing with relative files or with URIs?
-                    p_rel_file = urllib.parse.urlparse(rel_file)
-                    if p_rel_file.scheme != "":
-                        the_entity = rocrate.model.creativework.CreativeWork(
-                            self.crate,
-                            identifier=rel_file,
-                        )
-                        self.crate.add(the_entity)
-                        consolidated_rel_entities.append(the_entity)
-                    else:
-                        rocrate_file_id = rocrate_wf_folder + "/" + rel_file
-                        if rocrate_file_id != rocrate_wf_id:
-                            the_entity = self._add_file_to_crate(
-                                the_path=os.path.join(matWf.dir, rel_file),
-                                the_name=cast(
-                                    "RelPath", os.path.join(rocrate_wf_folder, rel_file)
-                                ),
-                                the_uri=cast("URIType", rocrate_file_id),
-                                # TODO: uncomment this once a workflow can remain
-                                # as a remote only one
-                                # do_attach=CratableItem.Workflow in payloads,
-                                do_attach=True,
-                            )
-                            consolidated_rel_entities.append(the_entity)
-            self.wf_file.append_to("hasPart", consolidated_rel_entities)
+            ran_workflow_crate["isBasedOn"] = original_workflow_crate
 
             # Now, describe the transformation
             wf_consolidate_action = CreateAction(self.crate, "Workflow consolidation")
             wf_consolidate_action = self.crate.add(wf_consolidate_action)
-            wf_consolidate_action["object"] = local_wf_file
-            wf_consolidate_action["result"] = self.wf_file
+            wf_consolidate_action["object"] = original_workflow_crate
+            wf_consolidate_action["result"] = ran_workflow_crate
             wf_consolidate_action["instrument"] = self.weng_crate
             wf_consolidate_action["agent"] = self.wf_wfexs
         else:
-            self.wf_file["codeRepository"] = remote_repo.repo_url
-            if materializedEngine.workflow.effectiveCheckout is not None:
-                self.wf_file["version"] = materializedEngine.workflow.effectiveCheckout
-            self.wf_file["description"] = "Workflow Entrypoint"
-            self.wf_file["url"] = wf_url
-            self.wf_file.append_to("hasPart", local_rel_entities)
-            if matWf.relPath is not None:
-                self.wf_file["alternateName"] = matWf.relPath
+            ran_workflow_crate = original_workflow_crate
 
-        # if 'url' in self.wf_file.properties():
-        #    self.wf_file['codeRepository'] = self.wf_file['url']
+        # From now on, we use this elsewhere
+        self.wf_file = ran_workflow_crate
 
         # TODO: add extra files, like the diagram, an abstract CWL
         # representation of the workflow (when it is not a CWL workflow)
@@ -711,6 +591,7 @@ class WorkflowRunROCrate:
     def _add_containers_to_workflow(
         self,
         containers: "Sequence[Container]",
+        the_workflow_crate: "FixedWorkflow",
         weng_crate: "Optional[rocrate.model.softwareapplication.SoftwareApplication]" = None,
     ) -> None:
         # Operational containers are needed by the workflow engine, not by the workflow
@@ -720,7 +601,7 @@ class WorkflowRunROCrate:
             if weng_crate is not None:
                 sa_crate = weng_crate
             else:
-                sa_crate = self.wf_file
+                sa_crate = the_workflow_crate
             for container in containers:
                 crate_cont_type = self.cached_cts.get(container.type)
                 if crate_cont_type is None:
@@ -734,7 +615,9 @@ class WorkflowRunROCrate:
                         container_type["softwareVersion"] = self.containerEngineVersion
 
                     crate_cont_type = self.crate.add(container_type)
-                    self.wf_file.append_to("softwareRequirements", crate_cont_type)
+                    the_workflow_crate.append_to(
+                        "softwareRequirements", crate_cont_type
+                    )
                     self.cached_cts[container.type] = crate_cont_type
 
                 if do_attach and container.localPath is not None:
@@ -785,7 +668,13 @@ class WorkflowRunROCrate:
                 software_container["softwareRequirements"] = crate_cont_type
 
                 crate_cont = self.crate.add(software_container)
-                sa_crate.append_to("softwareRequirements", crate_cont)
+
+                # TODO: Optimize this
+                for req in sa_crate["softwareRequirements"]:
+                    if req.id == crate_cont.id:
+                        break
+                else:
+                    sa_crate.append_to("softwareRequirements", crate_cont)
 
     def addWorkflowInputs(
         self,
@@ -1115,6 +1004,246 @@ class WorkflowRunROCrate:
                         the_files_crates.extend(the_subfiles_crates)
 
         return crate_dataset, the_files_crates
+
+    def _add_workflow_to_crate(
+        self,
+        the_workflow: "LocalWorkflow",
+        lang: "rocrate.model.computerlanguage.ComputerLanguage",
+        the_description: "Optional[str]",
+        the_weng_crate: "rocrate.model.softwareapplication.SoftwareApplication",
+        materialized_engine: "MaterializedWorkflowEngine",
+        the_uri: "Optional[str]" = None,
+        remote_repo: "Optional[RemoteRepo]" = None,
+        main: "bool" = False,
+        gen_cwl: "bool" = False,
+        do_attach: "bool" = True,
+    ) -> "FixedWorkflow":
+        # Determining the absolute path of the workflow
+        the_path: "str"
+        if the_workflow.relPath is not None:
+            if os.path.isabs(the_workflow.relPath):
+                the_path = the_workflow.relPath
+            else:
+                the_path = os.path.join(the_workflow.dir, the_workflow.relPath)
+        else:
+            the_path = the_workflow.dir
+
+        wf_url: "Optional[str]" = None
+        wf_entrypoint_url: "Optional[str]" = None
+        if remote_repo is not None:
+            if remote_repo.web_url is not None:
+                wf_url = remote_repo.web_url
+                wf_entrypoint_url = wf_url
+            else:
+                wf_url = remote_repo.repo_url.replace(".git", "/")
+                if remote_repo.tag is not None:
+                    wf_url += "tree/" + remote_repo.tag
+                if the_workflow.relPath is not None:
+                    wf_url += the_workflow.dir.rsplit("workflow")[1]
+
+                parsed_repo_url = urllib.parse.urlparse(remote_repo.repo_url)
+                if parsed_repo_url.netloc == "github.com":
+                    assert (
+                        materialized_engine.workflow.effectiveCheckout is not None
+                    ), "The effective checkout should be available"
+
+                    parsed_repo_path = parsed_repo_url.path.split("/")
+                    repo_name = parsed_repo_path[2]
+                    # TODO: should we urldecode repo_name?
+                    if repo_name.endswith(".git"):
+                        repo_name = repo_name[:-4]
+                    wf_entrypoint_path = [
+                        "",  # Needed to prepend a slash
+                        parsed_repo_path[1],
+                        # TODO: should we urlencode repo_name?
+                        repo_name,
+                        materialized_engine.workflow.effectiveCheckout,
+                    ]
+
+                    if the_workflow.relPath is not None:
+                        wf_entrypoint_path.append(the_workflow.relPath)
+
+                    wf_entrypoint_url = urllib.parse.urlunparse(
+                        (
+                            "https",
+                            "raw.githubusercontent.com",
+                            "/".join(wf_entrypoint_path),
+                            "",
+                            "",
+                            "",
+                        )
+                    )
+
+                elif "gitlab" in parsed_repo_url.netloc:
+                    parsed_repo_path = parsed_repo_url.path.split("/")
+                    # FIXME: cover the case of nested groups
+                    repo_name = parsed_repo_path[2]
+                    if repo_name.endswith(".git"):
+                        repo_name = repo_name[:-4]
+                    wf_entrypoint_path = [parsed_repo_path[1], repo_name]
+                    if remote_repo.tag is not None and the_workflow.relPath is not None:
+                        # TODO: should we urlencode repoTag?
+                        wf_entrypoint_path.extend(
+                            ["-", "raw", remote_repo.tag, the_workflow.relPath]
+                        )
+
+                    wf_entrypoint_url = urllib.parse.urlunparse(
+                        (
+                            parsed_repo_url.scheme,
+                            parsed_repo_url.netloc,
+                            "/".join(wf_entrypoint_path),
+                            "",
+                            "",
+                            "",
+                        )
+                    )
+
+                else:
+                    raise ROCrateGenerationException(
+                        "FIXME: Unsupported http(s) git repository {}".format(
+                            remote_repo.repo_url
+                        )
+                    )
+        else:
+            # If there is no information about the remote origin
+            # of the workflow, better keep a copy in the RO-Crate
+            do_attach = True
+
+        # The do_attach logic helps on the ill internal logic of add_workflow
+        # and add_file when an id has to be assigned
+        the_name: "Optional[str]" = None
+        the_alternate_name: "Optional[str]" = None
+        rocrate_wf_folder: "Optional[str]" = None
+        if do_attach:
+            if wf_entrypoint_url is not None:
+                # This is needed to avoid future collisions with other workflows stored in the RO-Crate
+                rocrate_wf_folder = str(
+                    uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url)
+                )
+            else:
+                rocrate_wf_folder = str(uuid.uuid4())
+
+            the_alternate_name = os.path.relpath(the_path, the_workflow.dir)
+            the_name = rocrate_wf_folder + "/" + the_alternate_name
+
+        # When the id is none and ...
+        the_id = the_name if do_attach or (the_uri is None) else the_uri
+        assert the_id is not None
+
+        if rocrate_wf_folder is not None:
+            rocrate_file_id_base = rocrate_wf_folder
+        else:
+            rocrate_file_id_base = the_id
+
+        the_workflow_crate = self.crate.add_workflow(
+            identifier=the_id,
+            source=the_path if do_attach else None,
+            dest_path=the_name if do_attach else None,
+            main=main,
+            lang=lang,
+            gen_cwl=gen_cwl,
+            fetch_remote=False,
+        )
+
+        the_workflow_crate.append_to(
+            "conformsTo",
+            # As of https://www.researchobject.org/ro-crate/1.1/workflows.html#complying-with-bioschemas-computational-workflow-profile
+            {
+                "@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"
+            },
+        )
+        the_workflow_crate.append_to("softwareRequirements", the_weng_crate)
+        workflow_engine_version = the_weng_crate.get("softwareVersion")
+        if workflow_engine_version is not None:
+            the_workflow_crate["runtimePlatform"] = workflow_engine_version
+
+        if materialized_engine.containers is not None:
+            self._add_containers_to_workflow(
+                materialized_engine.containers,
+                the_workflow_crate,
+            )
+        if materialized_engine.operational_containers is not None:
+            self._add_containers_to_workflow(
+                materialized_engine.operational_containers,
+                the_workflow_crate,
+                weng_crate=the_weng_crate,
+            )
+
+        if do_attach and (the_uri is not None):
+            if the_uri.startswith("http") or the_uri.startswith("ftp"):
+                # See https://github.com/ResearchObject/ro-crate/pull/259
+                uri_key = "contentUrl"
+            else:
+                uri_key = "identifier"
+
+            the_workflow_crate[uri_key] = the_uri
+
+        if the_alternate_name is not None:
+            the_workflow_crate["alternateName"] = the_alternate_name
+
+        if os.path.isfile(the_path):
+            the_size = os.stat(the_path).st_size
+
+            the_signature = cast(
+                "Fingerprint", ComputeDigestFromFile(the_path, repMethod=hexDigest)
+            )
+            the_workflow_crate.append_to("contentSize", the_size, compact=True)
+            the_workflow_crate.append_to("sha256", the_signature, compact=True)
+            the_workflow_crate.append_to(
+                "encodingFormat",
+                magic.from_file(the_path, mime=True),  # type: ignore[no-untyped-call]
+                compact=True,
+            )
+
+        if remote_repo is not None:
+            the_workflow_crate["codeRepository"] = remote_repo.repo_url
+
+        effective_checkout = materialized_engine.workflow.effectiveCheckout
+        if effective_checkout is None:
+            effective_checkout = the_workflow.effectiveCheckout
+        if effective_checkout is not None:
+            the_workflow_crate["version"] = effective_checkout
+
+        if the_description is not None:
+            the_workflow_crate["description"] = the_description
+        if wf_url is not None:
+            the_workflow_crate["url"] = wf_url
+
+        if the_workflow.relPathFiles:
+            rel_entities = []
+            for rel_file in the_workflow.relPathFiles:
+                if rel_file == the_workflow.relPath:
+                    # Ignore itself, so it is not overwritten
+                    continue
+
+                # First, are we dealing with relative files or with URIs?
+                p_rel_file = urllib.parse.urlparse(rel_file)
+                if p_rel_file.scheme != "":
+                    the_entity = rocrate.model.creativework.CreativeWork(
+                        self.crate,
+                        identifier=rel_file,
+                    )
+                    self.crate.add(the_entity)
+                    rel_entities.append(the_entity)
+                else:
+                    rocrate_file_id = rocrate_file_id_base + "/" + rel_file
+                    the_entity = self._add_file_to_crate(
+                        the_path=os.path.join(the_workflow.dir, rel_file),
+                        the_name=cast(
+                            "RelPath", os.path.join(rocrate_wf_folder, rel_file)
+                        )
+                        if rocrate_wf_folder is not None
+                        else None,
+                        the_alternate_name=cast("RelPath", rel_file),
+                        the_uri=cast("URIType", rocrate_file_id),
+                        do_attach=do_attach,
+                    )
+                    rel_entities.append(the_entity)
+
+            if len(rel_entities) > 0:
+                the_workflow_crate.append_to("hasPart", rel_entities)
+
+        return the_workflow_crate
 
     def addWorkflowExpectedOutputs(
         self,

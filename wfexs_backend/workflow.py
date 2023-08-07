@@ -3623,6 +3623,7 @@ class WF:
 
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
+            self.getPID(),
             self.localWorkflow,
             self.materializedEngine,
             self.workflowEngineVersion,
@@ -3678,6 +3679,7 @@ class WF:
 
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
+            self.getPID(),
             self.localWorkflow,
             self.materializedEngine,
             self.workflowEngineVersion,
