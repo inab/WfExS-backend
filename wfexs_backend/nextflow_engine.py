@@ -538,7 +538,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             nextNewNxfConfigs.append(absIncludePath)
                         else:
                             self.logger.warning(
-                                f"Config file {relIncludePath} included from {relNewNxfConfig} not found"
+                                f"Nextflow config file {relIncludePath} included from {relNewNxfConfig} not found"
                             )
             # Next round
             newNxfConfigs = nextNewNxfConfigs
