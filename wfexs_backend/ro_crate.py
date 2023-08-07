@@ -531,7 +531,7 @@ class WorkflowRunROCrate:
                 weng_crate=self.weng_crate,
             )
 
-        rel_entities = []
+        local_rel_entities = []
         if lW.relPathFiles:
             for rel_file in lW.relPathFiles:
                 # First, are we dealing with relative files or with URIs?
@@ -542,7 +542,7 @@ class WorkflowRunROCrate:
                         identifier=rel_file,
                     )
                     self.crate.add(the_entity)
-                    rel_entities.append(the_entity)
+                    local_rel_entities.append(the_entity)
                 else:
                     rocrate_file_id = rocrate_wf_folder + "/" + rel_file
                     if rocrate_file_id != rocrate_wf_id:
@@ -552,9 +552,12 @@ class WorkflowRunROCrate:
                                 "RelPath", os.path.join(rocrate_wf_folder, rel_file)
                             ),
                             the_uri=cast("URIType", rocrate_file_id),
-                            do_attach=CratableItem.Workflow in payloads,
+                            # TODO: uncomment this once a workflow can remain
+                            # as a remote only one
+                            # do_attach=CratableItem.Workflow in payloads,
+                            do_attach=True,
                         )
-                        rel_entities.append(the_entity)
+                        local_rel_entities.append(the_entity)
 
         if local_rocrate_wf_id != rocrate_wf_id:
             local_wf_file_pre = self.crate.get(local_rocrate_wf_id)
@@ -573,7 +576,7 @@ class WorkflowRunROCrate:
             local_wf_file["description"] = "Unconsolidated Workflow Entrypoint"
             local_wf_file["contentUrl"] = wf_entrypoint_url
             local_wf_file["url"] = wf_url
-            local_wf_file["hasPart"] = rel_entities
+            local_wf_file.append_to("hasPart", local_rel_entities)
             if localWorkflow.relPath is not None:
                 local_wf_file["alternateName"] = localWorkflow.relPath
 
@@ -583,6 +586,35 @@ class WorkflowRunROCrate:
                     local_wf_file[prop_name] = local_wf_file_pre[prop_name]
 
             self.wf_file["isBasedOn"] = local_wf_file
+
+            consolidated_rel_entities = []
+            if matWf.relPathFiles:
+                for rel_file in matWf.relPathFiles:
+                    # First, are we dealing with relative files or with URIs?
+                    p_rel_file = urllib.parse.urlparse(rel_file)
+                    if p_rel_file.scheme != "":
+                        the_entity = rocrate.model.creativework.CreativeWork(
+                            self.crate,
+                            identifier=rel_file,
+                        )
+                        self.crate.add(the_entity)
+                        consolidated_rel_entities.append(the_entity)
+                    else:
+                        rocrate_file_id = rocrate_wf_folder + "/" + rel_file
+                        if rocrate_file_id != rocrate_wf_id:
+                            the_entity = self._add_file_to_crate(
+                                the_path=os.path.join(matWf.dir, rel_file),
+                                the_name=cast(
+                                    "RelPath", os.path.join(rocrate_wf_folder, rel_file)
+                                ),
+                                the_uri=cast("URIType", rocrate_file_id),
+                                # TODO: uncomment this once a workflow can remain
+                                # as a remote only one
+                                # do_attach=CratableItem.Workflow in payloads,
+                                do_attach=True,
+                            )
+                            consolidated_rel_entities.append(the_entity)
+            self.wf_file.append_to("hasPart", consolidated_rel_entities)
 
             # Now, describe the transformation
             wf_consolidate_action = CreateAction(self.crate, "Workflow consolidation")
@@ -597,7 +629,7 @@ class WorkflowRunROCrate:
                 self.wf_file["version"] = materializedEngine.workflow.effectiveCheckout
             self.wf_file["description"] = "Workflow Entrypoint"
             self.wf_file["url"] = wf_url
-            self.wf_file["hasPart"] = rel_entities
+            self.wf_file.append_to("hasPart", local_rel_entities)
             if matWf.relPath is not None:
                 self.wf_file["alternateName"] = matWf.relPath
 
