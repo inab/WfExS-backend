@@ -1,4 +1,4 @@
-workflow_id: git+https://github.com/wombat-p/WOMBAT-Pipelines.git@913e28b6372d47d7ce2633f66ba8f21895650a60
+workflow_id: git+https://github.com/wombat-p/WOMBAT-Pipelines.git@3d7d20bce3b2e89d2c48892b27a0b05862f87615
 workflow_config:
   secure: false
   nextflow:
@@ -7,7 +7,7 @@ workflow_config:
       - test_full
 # All the inputs must be URLs or CURIEs from identifiers.org
 placeholders:
-  test_data_prefix: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/913e28b6372d47d7ce2633f66ba8f21895650a60/test_data
+  test_data_prefix: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/3d7d20bce3b2e89d2c48892b27a0b05862f87615/test_data
 params:
   fasta:
     c-l-a-s-s: File
@@ -27,6 +27,9 @@ params:
   parameters:
     c-l-a-s-s: File
     url: "{test_data_prefix}/test_params.yml"
+  sdrfmapping:
+    c-l-a-s-s: File
+    url: "https://raw.githubusercontent.com/bigbio/proteomics-metadata-standard/master/sdrf-proteomics/assets/param2sdrf.yml"
   run_statistics: true
   workflow: "all"
   outdir:
