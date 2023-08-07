@@ -5,7 +5,7 @@ workflow_config:
     profile:
       - singularity
       - test
-    maxProcesses: 8
+    maxProcesses: 16
 placeholders:
   test_datasets: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/reference"
 # All the inputs must be URLs or CURIEs from identifiers.org
