@@ -1716,7 +1716,7 @@ singularity.enabled = false
 podman.enabled = false
 docker.enabled = true
 docker.envWhitelist = '{','.join(envWhitelist)}'
-docker.runOptions = '{volFlag} {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z"'
+docker.runOptions = '{volFlag} {self.cacheWorkflowInputsDir}:{self.cacheWorkflowInputsDir}:ro,Z {optStaticBinsMonkeyPatch}'
 docker.fixOwnership = true
 """,
                     file=fPC,
