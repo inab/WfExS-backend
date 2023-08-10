@@ -6,7 +6,15 @@
             {%- filter md_heading(depth) -%}If (
                 {{- first_property.property_name | md_escape_for_table -}}
                 {{- " = " -}}
-                {{- first_property.kw_const.literal | python_to_json -}}
+                {% if first_property.kw_const is not none %}
+                    {{- first_property.kw_const.literal | python_to_json -}}
+                {% elif first_property.kw_enum is not none %}
+                    {% with schema=first_property %}
+                        {% include "section_one_of.md" %}
+                    {% endwith %}
+                {% else %}
+                    {{- "(unimplemented rendering)" -}}
+                {% endif %}
             ){%- endfilter -%}
         {% else %}
             If(_complex condition_)
@@ -20,7 +28,15 @@
             {%- filter md_heading(depth) -%}Else (i.e. {{ " " }}
                 {{- first_property.property_name | md_escape_for_table -}}
                 {{- " != " -}}
-                {{- first_property.kw_const.literal | python_to_json -}}
+                {% if first_property.kw_const is not none %}
+                    {{- first_property.kw_const.literal | python_to_json -}}
+                {% elif first_property.kw_enum is not none %}
+                    {% with schema=first_property %}
+                        {% include "section_one_of.md" %}
+                    {% endwith %}
+                {% else %}
+                    {{- "(unimplemented rendering)" -}}
+                {% endif %}
             ){%- endfilter -%}
         {% else %}
             IfNot(_complex condition_)

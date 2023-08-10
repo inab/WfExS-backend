@@ -28,7 +28,7 @@ git_date() {
 }
 
 for schema in "${wfexsDir}"/"${schemas_path}"/*.json ; do
-	doregen=
+	doregen=${default_do_regen:-}
 	destfile="${wfexsDir}"/"${doc_schemas_path}"/"$(basename "$schema" .json)"_schema.md
 	if [ -n "$doRebuild" ] ; then
 		rm -f "$destfile"
@@ -44,5 +44,6 @@ for schema in "${wfexsDir}"/"${schemas_path}"/*.json ; do
 
 	if [ -n "$doregen" ] ; then
 		generate-schema-doc --config custom_template_path="${wfexsDir}/${doc_schemas_path}/templates/md/base.md" --config examples_as_yaml --config description_is_markdown --config no_collapse_long_descriptions "$schema" "$destfile"
+#		generate-schema-doc --config template_name=md --config examples_as_yaml --config description_is_markdown --config no_collapse_long_descriptions "$schema" "$destfile"
 	fi
 done
