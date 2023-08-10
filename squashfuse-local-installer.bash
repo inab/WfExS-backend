@@ -18,7 +18,7 @@
 # These are the software versions being installed
 # in the virtual environment
 APPTAINER_VER=1.2.2
-SQUASHFUSER_VER=0.2.0
+SQUASHFUSE_VER=0.2.0
 GO_VER=1.20.7
 
 # These are placeholders
@@ -38,7 +38,7 @@ case "${wfexsDir}" in
 	;;
 esac
 
-downloadDir="$(mktemp -d --tmpdir wfexs_apptainer_installer.XXXXXXXXXXX)"
+downloadDir="$(mktemp -d --tmpdir wfexs_squashfuse_installer.XXXXXXXXXXX)"
 echo "$0: ${downloadDir} will be used to download third party dependencies, and later removed"
 
 cleanup() {
@@ -58,10 +58,7 @@ if [ $# -gt 0 ]; then
 	if [ "$1" == "force" ] ; then
 		doForce=1
 		if [ $# -gt 1 ] ; then
-			APPTAINER_VER="$2"
-			if [ $# -gt 2 ] ; then
-				GO_VER="$3"
-			fi
+			SQUASHFUSE_VER="$2"
 		fi
 	fi
 fi
@@ -97,16 +94,13 @@ if [ -n "$failed" ] ; then
 fi
 
 
-# Now, it is time to check apptainer binaries availability
+# Now, it is time to check squashfuse binaries availability
 if [ -z "$doForce" ] ; then
-	if [ -x "${envDir}/bin/apptainer" ] ; then
-		echo "Apptainer $(apptainer version) is already available in the environment. Skipping install"
+	if [ -x "${envDir}/bin/squashfuse" ] ; then
+		echo "Squashfuse $("${envDir}/bin/squashfuse" --version 2>&1|head -n 1) is already available in the environment. Skipping install"
 		exit 0
 	fi
 fi
-
-# Compilation artifacts should go to the temporary download directory
-checkInstallGO "${GO_VER}" "${platformOS}" "${platformArchGO}" "${downloadDir}"
 
 # Fetch and compile apptainer
 squashfuseBundlePrefix=squashfuse-"${SQUASHFUSE_VER}"
@@ -114,11 +108,11 @@ squashfuseBundle="${squashfuseBundlePrefix}".tar.gz
 
 ( cd "${downloadDir}" && curl -L -O https://github.com/vasi/squashfuse/archive/"${SQUASHFUSE_VER}"/"${squashfuseBundle}" )
 tar -x -z -C "${downloadDir}" -f "${downloadDir}/${squashfuseBundle}"
-# Removing apptainer bundle
+# Removing squashfuse bundle
 rm "${downloadDir}/${squashfuseBundle}"
 cd "${downloadDir}"/"${squashfuseBundlePrefix}"
 
-# Now, the right moment to compile and install rootless apptainer
+# Now, the right moment to compile and install rootless squashfuse
 ./autogen.sh
 CFLAGS=-std=c99 ./configure --enable-multithreading --prefix="${envDir}"
 make && make install
