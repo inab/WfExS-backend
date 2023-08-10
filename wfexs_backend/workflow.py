@@ -41,6 +41,7 @@ from typing import (
 
 from .common import (
     CratableItem,
+    DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
     StagedExecution,
 )
@@ -103,6 +104,10 @@ if TYPE_CHECKING:
         WritableSecurityContextConfig,
         WritableWorkflowMetaConfigBlock,
         URIType,
+    )
+
+    from .encrypted_fs import (
+        EncryptedFSType,
     )
 
     Sch_PlainURI = URIType
@@ -376,6 +381,11 @@ class WF:
         if not isinstance(workflow_config, dict):
             workflow_config = {}
 
+        if workflow_config.get("containerType") is None:
+            workflow_config["containerType"] = self.wfexs.local_config.get(
+                "tools", {}
+            ).get("containerType", DEFAULT_CONTAINER_TYPE.value)
+
         self.outputs: "Optional[Sequence[ExpectedOutput]]"
         self.default_actions: "Optional[Sequence[ExportAction]]"
         self.trs_endpoint: "Optional[str]"
@@ -472,11 +482,11 @@ class WF:
         else:
             self.workdir_creation = creation
 
-        self.encfs_type = None
-        self.encfsCond = None
-        self.encfsThread = None
+        self.encfs_type: "Optional[EncryptedFSType]" = None
+        self.encfsCond: "Optional[threading.Condition]" = None
+        self.encfsThread: "Optional[threading.Thread]" = None
         self.fusermount_cmd = cast("AnyPath", "")
-        self.encfs_idleMinutes = None
+        self.encfs_idleMinutes: "Optional[int]" = None
         self.doUnmount = False
 
         checkSecure = True
@@ -525,7 +535,8 @@ class WF:
 
         doSecureWorkDir = self.secure or self.paranoidMode
 
-        was_setup = self.setupWorkdir(
+        self.tempDir: "AbsPath"
+        was_setup, self.tempDir = self.setupWorkdir(
             doSecureWorkDir,
             fail_ok=fail_ok,
             public_key_filenames=public_key_filenames,
@@ -726,7 +737,7 @@ class WF:
         fail_ok: "bool" = False,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
-    ) -> "bool":
+    ) -> "Tuple[bool, AbsPath]":
         uniqueRawWorkDir = self.rawWorkDir
 
         allowOther = False
@@ -882,10 +893,9 @@ class WF:
         # Setting up working directories, one per instance
         self.encWorkDir = uniqueEncWorkDir
         self.workDir = uniqueWorkDir
-        self.tempDir = uniqueTempDir
         self.allowOther = allowOther
 
-        return was_setup
+        return was_setup, uniqueTempDir
 
     def unmountWorkdir(self) -> None:
         if self.doUnmount and (self.encWorkDir is not None):
@@ -2791,16 +2801,8 @@ class WF:
                         workflow_meta["workflow_type"] = self.descriptor_type
                     if self.trs_endpoint is not None:
                         workflow_meta["trs_endpoint"] = self.trs_endpoint
-                    workflow_config = self.workflow_config
-                    if self.engine is not None:
-                        if workflow_config is None:
-                            workflow_config = {}
-                        if workflow_config.get("containerType") is None:
-                            workflow_config[
-                                "containerType"
-                            ] = self.engine.configuredContainerType.value
-                    if workflow_config is not None:
-                        workflow_meta["workflow_config"] = workflow_config
+                    if self.workflow_config is not None:
+                        workflow_meta["workflow_config"] = self.workflow_config
                     if self.params is not None:
                         workflow_meta["params"] = self.params
                     if self.environment is not None:
