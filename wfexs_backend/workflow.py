@@ -2791,8 +2791,16 @@ class WF:
                         workflow_meta["workflow_type"] = self.descriptor_type
                     if self.trs_endpoint is not None:
                         workflow_meta["trs_endpoint"] = self.trs_endpoint
-                    if self.workflow_config is not None:
-                        workflow_meta["workflow_config"] = self.workflow_config
+                    workflow_config = self.workflow_config
+                    if self.engine is not None:
+                        if workflow_config is None:
+                            workflow_config = {}
+                        if workflow_config.get("containerType") is None:
+                            workflow_config[
+                                "containerType"
+                            ] = self.engine.configuredContainerType.value
+                    if workflow_config is not None:
+                        workflow_meta["workflow_config"] = workflow_config
                     if self.params is not None:
                         workflow_meta["params"] = self.params
                     if self.environment is not None:

@@ -416,6 +416,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             config_directory=config_directory,
         )
 
+    def getConfiguredContainerType(self) -> "ContainerType":
+        return self.container_factory.containerType
+
     @classmethod
     @abc.abstractmethod
     def SupportedContainerTypes(cls) -> "Set[ContainerType]":

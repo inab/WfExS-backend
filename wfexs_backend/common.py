@@ -523,6 +523,14 @@ class AbstractWorkflowEngineType(abc.ABC):
     def workflowType(self) -> "WorkflowType":
         return self.MyWorkflowType()
 
+    @abc.abstractmethod
+    def getConfiguredContainerType(self) -> "ContainerType":
+        pass
+
+    @property
+    def configuredContainerType(self) -> "ContainerType":
+        return self.getConfiguredContainerType()
+
     @property
     @abc.abstractmethod
     def engine_url(self) -> "URIType":
