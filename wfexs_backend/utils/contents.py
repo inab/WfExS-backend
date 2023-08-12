@@ -242,6 +242,9 @@ def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) ->
     # We should not deal with symlinks
     src = cast("AbsPath", os.path.realpath(src))
     dest = cast("AbsPath", os.path.realpath(dest))
+    # Avoid losing everything by overwriting itself
+    if os.path.exists(dest) and os.path.samefile(src, dest):
+        return
 
     # First, check whether inputs and content
     # are in the same filesystem
@@ -313,6 +316,28 @@ def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) ->
             if dest_exists:
                 shutil.rmtree(dest)
             shutil.copytree(src, dest, copy_function=copy2_nofollow)
+
+
+def real_unlink_if_exists(the_path: "AnyPath", fail_ok: "bool" = False) -> "None":
+    if os.path.lexists(the_path):
+        try:
+            canonical_to_be_erased = os.path.realpath(the_path)
+            if os.path.exists(canonical_to_be_erased):
+                os.unlink(canonical_to_be_erased)
+        except Exception as e:
+            if fail_ok:
+                raise e
+        try:
+            os.unlink(the_path)
+        except Exception as e:
+            if fail_ok:
+                raise e
+    elif os.path.exists(the_path):
+        try:
+            os.unlink(the_path)
+        except Exception as e:
+            if fail_ok:
+                raise e
 
 
 def bin2dataurl(content: "bytes") -> "URIType":
