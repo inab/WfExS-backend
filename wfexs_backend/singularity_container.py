@@ -118,12 +118,14 @@ class SingularityContainerFactory(ContainerFactory):
     def __init__(
         self,
         cacheDir: "Optional[AnyPath]" = None,
+        stagedContainersDir: "Optional[AnyPath]" = None,
         local_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
         tempDir: "Optional[AnyPath]" = None,
     ):
         super().__init__(
             cacheDir=cacheDir,
+            stagedContainersDir=stagedContainersDir,
             local_config=local_config,
             engine_name=engine_name,
             tempDir=tempDir,
@@ -133,7 +135,7 @@ class SingularityContainerFactory(ContainerFactory):
 
         # This is needed due a bug in singularity 3.6, where
         # singularity pull --disable-cache does not create a container
-        singularityCacheDir = os.path.join(self.containersCacheDir, ".singularity")
+        singularityCacheDir = os.path.join(self.stagedContainersDir, ".singularity")
         os.makedirs(singularityCacheDir, exist_ok=True)
 
         self._environment.update(
@@ -709,23 +711,21 @@ STDERR
 
         # Last, but not the least important
         # Hardlink or copy the container and its metadata
-        if containers_dir is not None:
-            containerPath = cast(
-                "AbsPath", os.path.join(containers_dir, containerFilename)
-            )
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
 
-            # Do not allow overwriting in offline mode
-            if not offline:
-                containerPathMeta = cast(
-                    "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
-                )
-                os.makedirs(containers_dir, exist_ok=True)
-                if force or not os.path.exists(containerPath):
-                    link_or_copy(localContainerPath, containerPath)
-                if force or not os.path.exists(containerPathMeta):
-                    link_or_copy(localContainerPathMeta, containerPathMeta)
-        else:
-            containerPath = localContainerPath
+        containerPath = cast("AbsPath", os.path.join(containers_dir, containerFilename))
+
+        # Do not allow overwriting in offline mode
+        if not offline:
+            containerPathMeta = cast(
+                "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
+            )
+            os.makedirs(containers_dir, exist_ok=True)
+            if force or not os.path.exists(containerPath):
+                link_or_copy(localContainerPath, containerPath)
+            if force or not os.path.exists(containerPathMeta):
+                link_or_copy(localContainerPathMeta, containerPathMeta)
 
         return Container(
             origTaggedName=tag_name,
@@ -751,6 +751,9 @@ STDERR
         """
         containersList: "MutableSequence[Container]" = []
         notFoundContainersList: "MutableSequence[FailedContainerTag]" = []
+
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
 
         matEnv = dict(os.environ)
         matEnv.update(self.environment)

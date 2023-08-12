@@ -689,6 +689,7 @@ class StagedSetup(NamedTuple):
     extrapolated_inputs_dir: "Optional[AbsPath]"
     outputs_dir: "Optional[AbsPath]"
     intermediate_dir: "Optional[AbsPath]"
+    containers_dir: "Optional[AbsPath]"
     meta_dir: "Optional[AbsPath]"
     temp_dir: "AbsPath"
     secure_exec: "bool"

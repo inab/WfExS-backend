@@ -72,12 +72,14 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
     def __init__(
         self,
         cacheDir: "Optional[AnyPath]" = None,
+        stagedContainersDir: "Optional[AnyPath]" = None,
         local_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
         tempDir: "Optional[AnyPath]" = None,
     ):
         super().__init__(
             cacheDir=cacheDir,
+            stagedContainersDir=stagedContainersDir,
             local_config=local_config,
             engine_name=engine_name,
             tempDir=tempDir,
@@ -164,6 +166,39 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
 
             return cast("ExitVal", d_retval), d_out_v, d_err_v
 
+    def _load(
+        self,
+        archivefile: "AbsPath",
+        dockerTag: "str",
+        matEnv: "Mapping[str, str]",
+    ) -> "Tuple[ExitVal, str, str]":
+        with lzma.open(
+            archivefile, mode="rb"
+        ) as d_in, tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
+            self.logger.debug(f"loading docker container {dockerTag}")
+            with subprocess.Popen(
+                [self.runtime_cmd, "load"],
+                env=matEnv,
+                stdin=d_in,
+                stdout=d_out,
+                stderr=d_err,
+            ) as sp:
+                d_retval = sp.wait()
+
+            self.logger.debug(f"docker load {dockerTag} retval: {d_retval}")
+
+            with open(d_out.name, "r") as c_stF:
+                d_out_v = c_stF.read()
+
+            self.logger.debug(f"docker load stdout: {d_out_v}")
+
+            with open(d_err.name, "r") as c_stF:
+                d_err_v = c_stF.read()
+
+            self.logger.debug(f"docker load stderr: {d_err_v}")
+
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
+
     def _save(
         self,
         dockerTag: "str",
@@ -181,7 +216,7 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
                 stderr=d_err,
             ) as sp:
                 if sp.stdout is not None:
-                    shutil.copyfileobj(sp.stdout, d_out)
+                    shutil.copyfileobj(sp.stdout, d_out, 1024 * 1024)
                 d_retval = sp.wait()
 
             self.logger.debug(f"docker save {dockerTag} retval: {d_retval}")
@@ -289,7 +324,7 @@ STDERR
         if force:
             if offline:
                 raise ContainerFactoryException(
-                    f"Banned remove podman containers in offline mode from {tag_name}"
+                    f"Banned remove docker containers in offline mode from {tag_name}"
                 )
 
             # Blindly remove
@@ -302,7 +337,7 @@ STDERR
         if d_retval != 0:
             if offline:
                 raise ContainerFactoryException(
-                    f"Banned pull podman containers in offline mode from {tag_name}"
+                    f"Banned pull docker containers in offline mode from {tag_name}"
                 )
 
             d_retval, d_out_v, d_err_v = self._pull(dockerTag, matEnv)
@@ -479,21 +514,18 @@ STDERR
             )
 
         # Last, hardlink or copy the container and its metadata
-        if containers_dir is not None:
-            containerPath = cast(
-                "AbsPath", os.path.join(containers_dir, containerFilename)
-            )
-            containerPathMeta = cast(
-                "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
-            )
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
+        containerPath = cast("AbsPath", os.path.join(containers_dir, containerFilename))
+        containerPathMeta = cast(
+            "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
+        )
 
-            # Do not allow overwriting in offline mode
-            if not offline or not os.path.exists(containerPath):
-                link_or_copy(localContainerPath, containerPath)
-            if not offline or not os.path.exists(containerPathMeta):
-                link_or_copy(localContainerPathMeta, containerPathMeta)
-        else:
-            containerPath = localContainerPath
+        # Do not allow overwriting in offline mode
+        if not offline or not os.path.exists(containerPath):
+            link_or_copy(localContainerPath, containerPath)
+        if not offline or not os.path.exists(containerPathMeta):
+            link_or_copy(localContainerPathMeta, containerPathMeta)
 
         # Learning about the intended processor architecture and variant
         architecture = manifest.get("Architecture")

@@ -153,6 +153,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         outputMetaDir: "Optional[AnyPath]" = None,
         intermediateDir: "Optional[AnyPath]" = None,
         tempDir: "Optional[AnyPath]" = None,
+        stagedContainersDir: "Optional[AnyPath]" = None,
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
         config_directory: "Optional[AnyPath]" = None,
@@ -295,6 +296,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             atexit.register(shutil.rmtree, tempDir)
         self.tempDir = tempDir
 
+        # This directory will hold the staged containers to be used
+        if stagedContainersDir is None:
+            stagedContainersDir = cast(
+                "AbsPath", os.path.join(workDir, WORKDIR_CONTAINERS_RELDIR)
+            )
+        elif not os.path.isabs(stagedContainersDir):
+            stagedContainersDir = cast("AbsPath", os.path.abspath(stagedContainersDir))
+        os.makedirs(stagedContainersDir, exist_ok=True)
+        self.stagedContainersDir = cast("AbsPath", stagedContainersDir)
+
         # Setting up common properties
         self.docker_cmd = local_config.get("tools", {}).get(
             "dockerCommand", DEFAULT_DOCKER_CMD
@@ -332,6 +343,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 self.logger.debug(f"Container type {container_type}")
                 self.container_factory = containerFactory(
                     cacheDir=cacheDir,
+                    stagedContainersDir=stagedContainersDir,
                     local_config=local_config,
                     engine_name=self.__class__.__name__,
                     tempDir=self.tempDir,
@@ -412,6 +424,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             cacheDir=cache_dir,
             cacheWorkflowDir=cache_workflow_dir,
             cacheWorkflowInputsDir=cache_workflow_inputs_dir,
+            stagedContainersDir=staged_setup.containers_dir,
             local_config=local_config,
             config_directory=config_directory,
         )
@@ -532,7 +545,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def materialize_containers(
         self,
         listOfContainerTags: "Sequence[ContainerTaggedName]",
-        containersDir: "AnyPath",
+        containersDir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         return (

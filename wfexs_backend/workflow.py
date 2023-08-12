@@ -650,6 +650,7 @@ class WF:
             extrapolated_inputs_dir=self.extrapolatedInputsDir,
             outputs_dir=self.outputsDir,
             intermediate_dir=self.intermediateDir,
+            containers_dir=self.containersDir,
             engine_tweaks_dir=self.engineTweaksDir,
             meta_dir=self.metaDir,
             temp_dir=self.tempDir,

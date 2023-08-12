@@ -38,6 +38,7 @@ from .common import (
 
 if TYPE_CHECKING:
     from typing import (
+        Any,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -48,7 +49,10 @@ if TYPE_CHECKING:
         Union,
     )
 
-    from typing_extensions import Final
+    from typing_extensions import (
+        TypedDict,
+        Final,
+    )
 
     from .common import (
         AbsPath,
@@ -59,9 +63,16 @@ if TYPE_CHECKING:
         ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
+        Fingerprint,
         ProcessorArchitecture,
         RelPath,
     )
+
+    class DockerManifestMetadata(TypedDict):
+        image_signature: "Fingerprint"
+        manifests_signature: "Fingerprint"
+        manifests: "Sequence[Mapping[str, Any]]"
+
 
 from . import common
 
@@ -99,6 +110,7 @@ class ContainerFactory(abc.ABC):
     def __init__(
         self,
         cacheDir: "Optional[AnyPath]" = None,
+        stagedContainersDir: "Optional[AnyPath]" = None,
         local_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
         tempDir: "Optional[AnyPath]" = None,
@@ -143,9 +155,14 @@ class ContainerFactory(abc.ABC):
         self.tempDir = tempDir
         # But, for materialized containers, we should use common directories
         # This for the containers themselves
-        self.containersCacheDir = os.path.join(
-            cacheDir, "containers", self.__class__.__name__
+        self.containersCacheDir = cast(
+            "AnyPath", os.path.join(cacheDir, "containers", self.__class__.__name__)
         )
+        # stagedContainersDir
+        if stagedContainersDir is None:
+            stagedContainersDir = self.containersCacheDir
+        self.stagedContainersDir = stagedContainersDir
+
         # This for the symlinks to the containers, following the engine convention
         self.engineContainersSymlinkDir = cast(
             "AbsPath", os.path.join(self.containersCacheDir, engine_name)
@@ -260,7 +277,7 @@ STDERR
         self,
         tagList: "Sequence[ContainerTaggedName]",
         simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        containers_dir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Sequence[Container]":
@@ -270,6 +287,8 @@ STDERR
         materialized_containers: "MutableSequence[Container]" = []
         not_found_containers: "MutableSequence[str]" = []
 
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
         for tag in tagList:
             if self.AcceptsContainer(tag):
                 container = self.materializeSingleContainer(
