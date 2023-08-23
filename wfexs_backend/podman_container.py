@@ -529,9 +529,6 @@ STDERR
                 self.logger.warning(
                     f"Unable to trust Podman container {dockerTag} => {podmanPullTag} . Discarding cached contents"
                 )
-                import sys
-
-                sys.exit(1)
                 real_unlink_if_exists(localContainerPathMeta)
                 real_unlink_if_exists(localContainerPath)
 
