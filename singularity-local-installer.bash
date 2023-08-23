@@ -17,7 +17,7 @@
 
 # These are the software versions being installed
 # in the virtual environment
-SINGULARITY_VER=3.10.2
+SINGULARITY_VER=3.10.4
 GO_VER=1.17.13
 
 # These are placeholders
