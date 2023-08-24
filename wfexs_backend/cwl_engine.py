@@ -123,15 +123,17 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     CWL_REPO = "https://github.com/common-workflow-language/"
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
+    DEVEL_CWLTOOL_REPO = "https://github.com/jmfernandez/" + CWLTOOL_PYTHON_PACKAGE
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
 
     DEFAULT_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20230719185429")
 
-    DEVEL_CWLTOOL_PACKAGE = f"git+{CWLTOOL_REPO}.git"
+    # DEVEL_CWLTOOL_PACKAGE = f"git+{CWLTOOL_REPO}.git"
+    DEVEL_CWLTOOL_PACKAGE = f"git+{DEVEL_CWLTOOL_REPO}.git"
     # Set this constant to something meaningful only when a hotfix
     # between releases is needed
-    # DEVEL_CWLTOOL_VERSION = 'ed9dd4c3472e940a52dfe90049895f470bfd7329'
-    DEVEL_CWLTOOL_VERSION = None
+    DEVEL_CWLTOOL_VERSION = "191841853da642f2446b7298bc814db81e7149a7"
+    # DEVEL_CWLTOOL_VERSION = None
 
     # DEFAULT_CWL_UTILS_VERSION = 'v0.10'
     # DEFAULT_SCHEMA_SALAD_VERSION = '8.2.20211116214159'
@@ -180,6 +182,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         outputMetaDir: "Optional[AnyPath]" = None,
         intermediateDir: "Optional[AnyPath]" = None,
         tempDir: "Optional[AnyPath]" = None,
+        stagedContainersDir: "Optional[AnyPath]" = None,
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
         config_directory: "Optional[AnyPath]" = None,
@@ -196,6 +199,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             intermediateDir=intermediateDir,
             outputMetaDir=outputMetaDir,
             tempDir=tempDir,
+            stagedContainersDir=stagedContainersDir,
             secure_exec=secure_exec,
             allowOther=allowOther,
             config_directory=config_directory,
@@ -209,21 +213,28 @@ class CWLWorkflowEngine(WorkflowEngine):
         )
         engineConf.update(workflowEngineConf)
 
-        default_cwltool_version = self.DEFAULT_CWLTOOL_VERSION
         pymatched = False
-        for pyver_maj, pyver_min, matched_cwltool_version in self.CWLTOOL_MAX_PYVER:
-            if pyver_maj == sys.version_info.major:
-                if pyver_min is None:
-                    # This one is temporary, until it finds something better
+        if self.DEVEL_CWLTOOL_VERSION is not None:
+            default_cwltool_version = cast(
+                "EngineVersion",
+                self.DEVEL_CWLTOOL_PACKAGE + "@" + self.DEVEL_CWLTOOL_VERSION,
+            )
+        else:
+            default_cwltool_version = self.DEFAULT_CWLTOOL_VERSION
+
+            for pyver_maj, pyver_min, matched_cwltool_version in self.CWLTOOL_MAX_PYVER:
+                if pyver_maj == sys.version_info.major:
+                    if pyver_min is None:
+                        # This one is temporary, until it finds something better
+                        default_cwltool_version = matched_cwltool_version
+                    elif pyver_min == sys.version_info.minor:
+                        # If perfect match, use it!
+                        default_cwltool_version = matched_cwltool_version
+                        pymatched = True
+                        break
+                else:
                     default_cwltool_version = matched_cwltool_version
-                elif pyver_min == sys.version_info.minor:
-                    # If perfect match, use it!
-                    default_cwltool_version = matched_cwltool_version
-                    pymatched = True
                     break
-            else:
-                default_cwltool_version = matched_cwltool_version
-                break
 
         # These are the requested versions
         requested_cwltool_version = engineConf.get("version")
@@ -343,23 +354,18 @@ class CWLWorkflowEngine(WorkflowEngine):
         )
 
     def _materializeEngineVersionLocal(
-        self, engineVersion: "Optional[EngineVersion]"
+        self, engineVersion: "EngineVersion"
     ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
-        if engineVersion is None:
-            if self.DEVEL_CWLTOOL_VERSION is not None:
-                engineVersion = cast("EngineVersion", "@" + self.DEVEL_CWLTOOL_VERSION)
-            else:
-                engineVersion = self.cwltool_version
 
-        if engineVersion.startswith("@"):
+        if engineVersion.startswith(self.DEVEL_CWLTOOL_PACKAGE + "@"):
             cwltoolPackage = self.DEVEL_CWLTOOL_PACKAGE
             cwltoolMatchOp = "@"
-            inst_engineVersion = engineVersion[1:]
+            inst_engineVersion = engineVersion[len(self.DEVEL_CWLTOOL_PACKAGE) + 1 :]
         else:
             cwltoolPackage = self.CWLTOOL_PYTHON_PACKAGE
             cwltoolMatchOp = "=="
