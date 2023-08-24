@@ -660,9 +660,7 @@ class WorkflowType(NamedTuple):
 
 
 class RepoType(enum.Enum):
-    GitHub = "github"
-    GitLab = "gitlab"
-    BitBucket = "bitbucket"
+    Git = "git"
     Raw = "raw"
     Other = "other"
     SoftwareHeritage = "swh"
