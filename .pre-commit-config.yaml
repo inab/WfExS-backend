@@ -10,7 +10,7 @@ repos:
         types:
           - python
         exclude: "^[^/]*env/|dev-[^/]*/"
-        entry: pylint -j 4
+        entry: pylint -j 4 --source-roots .
       - id: mypy
         name: Local MyPy
         language: system
