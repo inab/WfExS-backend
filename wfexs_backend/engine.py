@@ -548,6 +548,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         containersDir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
+        if containersDir is None:
+            containersDir = self.stagedContainersDir
+
         return (
             self.container_factory.engine_version(),
             self.container_factory.materializeContainers(
@@ -558,6 +561,26 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             ),
             *self.container_factory.architecture,
         )
+
+    def deploy_containers(
+        self,
+        containers_list: "Sequence[Container]",
+        containersDir: "Optional[AnyPath]" = None,
+        force: "bool" = False,
+    ) -> "Sequence[Container]":
+        if containersDir is None:
+            containersDir = self.stagedContainersDir
+
+        return self.container_factory.deployContainers(
+            containers_list=containers_list,
+            simpleFileNameMethod=self.simpleContainerFileName,
+            containers_dir=containersDir,
+            force=force,
+        )
+
+    @property
+    def staged_containers_dir(self) -> "AnyPath":
+        return self.stagedContainersDir
 
     @abc.abstractmethod
     def launchWorkflow(
@@ -577,6 +600,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
     ) -> "StagedExecution":
+        # Now, deploy the containers to the local registry (needed for Docker)
+        if matWfEng.containers is not None:
+            matWfEng.instance.deploy_containers(
+                matWfEng.containers, matWfEng.instance.staged_containers_dir
+            )
+        if matWfEng.operational_containers is not None:
+            matWfEng.instance.deploy_containers(
+                matWfEng.operational_containers, matWfEng.instance.staged_containers_dir
+            )
+
+        # And once deployed, let's run the workflow!
         stagedExec = matWfEng.instance.launchWorkflow(
             matWfEng, inputs, environment, outputs
         )

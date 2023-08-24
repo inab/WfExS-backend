@@ -560,6 +560,20 @@ class AbstractWorkflowEngineType(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def deploy_containers(
+        self,
+        containers_list: "Sequence[Container]",
+        containersDir: "Optional[AnyPath]" = None,
+        force: "bool" = False,
+    ) -> "Sequence[Container]":
+        pass
+
+    @property
+    @abc.abstractmethod
+    def staged_containers_dir(self) -> "AnyPath":
+        pass
+
+    @abc.abstractmethod
     def materializeEngine(
         self, localWf: "LocalWorkflow", engineVersion: "Optional[EngineVersion]" = None
     ) -> "Optional[MaterializedWorkflowEngine]":

@@ -39,6 +39,10 @@ if TYPE_CHECKING:
         Union,
     )
 
+    from typing_extensions import (
+        Final,
+    )
+
     from .common import (
         AbsPath,
         AnyPath,
@@ -71,12 +75,23 @@ from .utils.contents import (
     link_or_copy,
     real_unlink_if_exists,
 )
-from .utils.digests import ComputeDigestFromFile, ComputeDigestFromObject
+from .utils.digests import ComputeDigestFromFile
 
 DOCKER_PROTO = "docker://"
 
 
 class PodmanContainerFactory(AbstractDockerContainerFactory):
+    TRIMMABLE_MANIFEST_KEYS: "Final[Sequence[str]]" = [
+        "Digest",
+        "RepoDigests",
+        "Size",
+        "VirtualSize",
+    ]
+
+    @classmethod
+    def trimmable_manifest_keys(cls) -> "Sequence[str]":
+        return cls.TRIMMABLE_MANIFEST_KEYS
+
     def __init__(
         self,
         cacheDir: "Optional[AnyPath]" = None,
@@ -399,6 +414,7 @@ STDERR
         # Now it is time to check whether the local cache of the container
         # does exist and it is right
         trusted_copy = False
+        image_id: "Optional[Fingerprint]" = None
         imageSignature: "Optional[Fingerprint]" = None
         manifestsImageSignature: "Optional[Fingerprint]" = None
         manifests = None
@@ -410,6 +426,7 @@ STDERR
                     signaturesAndManifest = cast(
                         "DockerManifestMetadata", json.load(mH)
                     )
+                    image_id = signaturesAndManifest["image_id"]
                     imageSignature = signaturesAndManifest["image_signature"]
                     manifestsImageSignature = signaturesAndManifest[
                         "manifests_signature"
@@ -417,8 +434,9 @@ STDERR
                     manifests = signaturesAndManifest["manifests"]
 
                     # Check the status of the gathered manifests
-                    trusted_copy = manifestsImageSignature == ComputeDigestFromObject(
-                        manifests
+                    trusted_copy = (
+                        manifestsImageSignature
+                        == self._gen_trimmed_manifests_signature(manifests)
                     )
             except Exception as e:
                 self.logger.exception(
@@ -427,11 +445,15 @@ STDERR
                 trusted_copy = False
 
             # Let's check metadata coherence
-            assert imageSignature is not None
-            assert manifestsImageSignature is not None
-            assert manifests is not None
+            if trusted_copy:
+                trusted_copy = (
+                    imageSignature is not None
+                    and manifestsImageSignature is not None
+                    and manifests is not None
+                )
 
             if trusted_copy:
+                assert manifestsImageSignature is not None
                 if os.path.islink(localContainerPathMeta):
                     # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
                     unlinkedContainerPathMeta = os.readlink(localContainerPathMeta)
@@ -480,6 +502,7 @@ STDERR
                 )
 
             if trusted_copy:
+                assert imageSignature is not None
                 if os.path.islink(localContainerPath):
                     # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
                     unlinkedContainerPath = os.readlink(localContainerPath)
@@ -560,6 +583,7 @@ STDERR
             try:
                 manifests = cast("Sequence[Mapping[str, Any]]", json.loads(d_out_v))
                 manifest = manifests[0]
+                image_id = cast("Fingerprint", manifest["Id"])
             except Exception as e:
                 raise ContainerFactoryException(
                     f"FATAL ERROR: Podman finished properly but it did not properly materialize {tag_name}: {e}"
@@ -572,7 +596,7 @@ STDERR
             )
 
             # Let's materialize the container image for preservation
-            manifestsImageSignature = ComputeDigestFromObject(manifests)
+            manifestsImageSignature = self._gen_trimmed_manifests_signature(manifests)
             canonicalContainerPath = os.path.join(
                 self.containersCacheDir,
                 manifestsImageSignature.replace("=", "~")
@@ -618,6 +642,7 @@ STDERR
             # Last, save the metadata itself for further usage
             with open(canonicalContainerPathMeta, mode="w", encoding="utf-8") as tcpM:
                 manifest_metadata: "DockerManifestMetadata" = {
+                    "image_id": image_id,
                     "image_signature": imageSignature,
                     "manifests_signature": manifestsImageSignature,
                     "manifests": manifests,
@@ -656,54 +681,9 @@ STDERR
         if not offline or not os.path.exists(containerPathMeta):
             link_or_copy(localContainerPathMeta, containerPathMeta)
 
-        # Should we load the image?
-        d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
-        #        d_retval, d_out_v, d_err_v = self._images(matEnv)
+        # Now the image is not loaded here, but later in deploySingleContainer
 
-        if d_retval not in (0, 125):
-            errstr = """Could not inspect podman image {}. Retval {}
-======
-STDOUT
-======
-{}
-
-======
-STDERR
-======
-{}""".format(
-                podmanPullTag, d_retval, d_out_v, d_err_v
-            )
-            raise ContainerEngineException(errstr)
-
-        # Parsing the output from podman inspect
-        try:
-            ins_manifests = json.loads(d_out_v)
-        except Exception as e:
-            raise ContainerFactoryException(
-                f"FATAL ERROR: Podman inspect finished properly but it did not properly answered for {tag_name}: {e}"
-            )
-
-        # Let's load then
-        if manifestsImageSignature != ComputeDigestFromObject(ins_manifests):
-            # Should we load the image?
-            d_retval, d_out_v, d_err_v = self._load(containerPath, dockerTag, matEnv)
-
-            if d_retval != 0:
-                errstr = """Could not load podman image {}. Retval {}
-======
-STDOUT
-======
-{}
-
-======
-STDERR
-======
-{}""".format(
-                    podmanPullTag, d_retval, d_out_v, d_err_v
-                )
-                raise ContainerEngineException(errstr)
-
-        # Then, compute the signature
+        # Then, compute the fingerprint based on remote repo's information
         fingerprint = None
         if len(manifest["RepoDigests"]) > 0:
             fingerprint = manifest["RepoDigests"][0]
@@ -719,7 +699,7 @@ STDERR
         return Container(
             origTaggedName=tag_name,
             taggedName=cast("URIType", dockerTag),
-            signature=manifest["Id"],
+            signature=image_id,
             fingerprint=fingerprint,
             architecture=architecture,
             operatingSystem=manifest.get("Os"),
@@ -727,3 +707,101 @@ STDERR
             localPath=containerPath,
             registries=tag.registries,
         )
+
+    def deploySingleContainer(
+        self,
+        container: "Container",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[AnyPath]" = None,
+        force: "bool" = False,
+    ) -> "bool":
+        # Should we load the image?
+        matEnv = dict(os.environ)
+        matEnv.update(self.environment)
+        dockerTag = container.taggedName
+        tag_name = container.origTaggedName
+
+        # These are the paths to the copy of the saved container
+        containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
+        containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
+
+        # Keep a copy outside the cache directory
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
+        containerPath = cast("AbsPath", os.path.join(containers_dir, containerFilename))
+        containerPathMeta = cast(
+            "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
+        )
+
+        imageSignature: "Optional[Fingerprint]" = None
+        manifestsImageSignature: "Optional[Fingerprint]" = None
+        manifests = None
+        manifest = None
+        if not os.path.isfile(containerPathMeta):
+            errmsg = f"FATAL ERROR: Podman saved image {containerFilenameMeta} is not in the staged working dir for {tag_name}"
+            self.logger.error(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        try:
+            with open(containerPathMeta, mode="r", encoding="utf-8") as mH:
+                signaturesAndManifest = cast("DockerManifestMetadata", json.load(mH))
+                imageSignature = signaturesAndManifest["image_signature"]
+                manifestsImageSignature = signaturesAndManifest["manifests_signature"]
+                manifests = signaturesAndManifest["manifests"]
+        except Exception as e:
+            errmsg = f"Problems extracting podman metadata at {containerPathMeta}"
+            self.logger.exception(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
+        #        d_retval, d_out_v, d_err_v = self._images(matEnv)
+
+        if d_retval not in (0, 125):
+            errstr = """Could not inspect podman image {}. Retval {}
+======
+STDOUT
+======
+{}
+
+======
+STDERR
+======
+{}""".format(
+                dockerTag, d_retval, d_out_v, d_err_v
+            )
+            raise ContainerEngineException(errstr)
+
+        # Parsing the output from podman inspect
+        try:
+            ins_manifests = json.loads(d_out_v)
+        except Exception as e:
+            errmsg = f"FATAL ERROR: Podman inspect finished properly but it did not properly answered for {tag_name}"
+            self.logger.exception(errmsg)
+            raise ContainerFactoryException(errmsg) from e
+
+        # Let's load then
+        do_redeploy = manifestsImageSignature != self._gen_trimmed_manifests_signature(
+            ins_manifests
+        )
+        if do_redeploy:
+            self.logger.debug(f"Redeploying {dockerTag}")
+            # Should we load the image?
+            d_retval, d_out_v, d_err_v = self._load(containerPath, dockerTag, matEnv)
+
+            if d_retval != 0:
+                errstr = """Could not load podman image {}. Retval {}
+======
+STDOUT
+======
+{}
+
+======
+STDERR
+======
+{}""".format(
+                    dockerTag, d_retval, d_out_v, d_err_v
+                )
+                self.logger.error(errstr)
+                raise ContainerEngineException(errstr)
+
+        return do_redeploy

@@ -790,3 +790,16 @@ STDERR
             )
 
         return containersList
+
+    def deploySingleContainer(
+        self,
+        container: "Container",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[AnyPath]" = None,
+        force: "bool" = False,
+    ) -> "bool":
+        """
+        This is almost no-op, but it should check
+        the integrity of the local images
+        """
+        return force

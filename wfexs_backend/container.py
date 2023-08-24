@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import copy
 import os
 import tempfile
 import atexit
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import (
+        TypeAlias,
         TypedDict,
         Final,
     )
@@ -68,13 +70,18 @@ if TYPE_CHECKING:
         RelPath,
     )
 
+    DockerLikeManifest: TypeAlias = Mapping[str, Any]
+    MutableDockerLikeManifest: TypeAlias = MutableMapping[str, Any]
+
     class DockerManifestMetadata(TypedDict):
+        image_id: "Fingerprint"
         image_signature: "Fingerprint"
         manifests_signature: "Fingerprint"
-        manifests: "Sequence[Mapping[str, Any]]"
+        manifests: "Sequence[DockerLikeManifest]"
 
 
 from . import common
+from .utils.digests import ComputeDigestFromObject
 
 
 class ContainerFactoryException(AbstractWfExSException):
@@ -315,12 +322,52 @@ STDERR
         self,
         tag: "ContainerTaggedName",
         simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        containers_dir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Optional[Container]":
         """
-        It is assured the containers are materialized
+        It is assured the container is properly materialized
+        """
+        pass
+
+    def deployContainers(
+        self,
+        containers_list: "Sequence[Container]",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[AnyPath]" = None,
+        force: "bool" = False,
+    ) -> "Sequence[Container]":
+        """
+        It is assured the containers are properly deployed
+        """
+        redeployed_containers: "MutableSequence[Container]" = []
+
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
+        for container in containers_list:
+            if self.AcceptsContainer(container):
+                was_redeployed = self.deploySingleContainer(
+                    container,
+                    simpleFileNameMethod,
+                    containers_dir=containers_dir,
+                    force=force,
+                )
+                if was_redeployed is not None:
+                    redeployed_containers.append(container)
+
+        return redeployed_containers
+
+    @abc.abstractmethod
+    def deploySingleContainer(
+        self,
+        container: "Container",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[AnyPath]" = None,
+        force: "bool" = False,
+    ) -> "bool":
+        """
+        It is assured the container is properly deployed
         """
         pass
 
@@ -370,6 +417,18 @@ class NoContainerFactory(ContainerFactory):
         """
         return None
 
+    def deploySingleContainer(
+        self,
+        container: "Container",
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containers_dir: "Optional[AnyPath]" = None,
+        force: "bool" = False,
+    ) -> "bool":
+        """
+        This is a no-op
+        """
+        return False
+
 
 class AbstractDockerContainerFactory(ContainerFactory):
     ACCEPTED_CONTAINER_TYPES = set(
@@ -387,3 +446,26 @@ class AbstractDockerContainerFactory(ContainerFactory):
         return not cls.ACCEPTED_CONTAINER_TYPES.isdisjoint(
             container_type if isinstance(container_type, set) else (container_type,)
         )
+
+    @classmethod
+    @abc.abstractmethod
+    def trimmable_manifest_keys(cls) -> "Sequence[str]":
+        pass
+
+    def _gen_trimmed_manifests_signature(
+        self, manifests: "Sequence[DockerLikeManifest]"
+    ) -> "Fingerprint":
+        trimmed_manifests: "MutableSequence[DockerLikeManifest]" = []
+        some_trimmed = False
+        for manifest in manifests:
+            # Copy the manifest
+            trimmed_manifest = cast("MutableDockerLikeManifest", copy.copy(manifest))
+            # And trim the keys
+            for key in self.trimmable_manifest_keys():
+                if key in trimmed_manifest:
+                    del trimmed_manifest[key]
+                    some_trimmed = True
+
+            trimmed_manifests.append(trimmed_manifest)
+
+        return ComputeDigestFromObject(trimmed_manifests if some_trimmed else manifests)
