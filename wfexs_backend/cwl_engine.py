@@ -123,7 +123,8 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     CWL_REPO = "https://github.com/common-workflow-language/"
     CWLTOOL_REPO = CWL_REPO + CWLTOOL_PYTHON_PACKAGE
-    DEVEL_CWLTOOL_REPO = "https://github.com/jmfernandez/" + CWLTOOL_PYTHON_PACKAGE
+    # DEVEL_CWLTOOL_REPO = "https://github.com/jmfernandez/" + CWLTOOL_PYTHON_PACKAGE
+    DEVEL_CWLTOOL_REPO = CWLTOOL_REPO
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
 
     DEFAULT_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20230719185429")
@@ -132,7 +133,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     DEVEL_CWLTOOL_PACKAGE = f"git+{DEVEL_CWLTOOL_REPO}.git"
     # Set this constant to something meaningful only when a hotfix
     # between releases is needed
-    DEVEL_CWLTOOL_VERSION = "191841853da642f2446b7298bc814db81e7149a7"
+    DEVEL_CWLTOOL_VERSION = "509ffb9d6802c837ec2a818b799ef4c332c34d04"
     # DEVEL_CWLTOOL_VERSION = None
 
     # DEFAULT_CWL_UTILS_VERSION = 'v0.10'
