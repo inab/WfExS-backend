@@ -1177,8 +1177,8 @@ class WorkflowRunROCrate:
         # The do_attach logic helps on the ill internal logic of add_workflow
         # and add_file when an id has to be assigned
         the_name: "Optional[str]" = None
-        the_alternate_name: "Optional[str]" = None
         rocrate_wf_folder: "str" = os.path.relpath(the_workflow.dir, self.work_dir)
+        the_alternate_name: "str"
         if do_attach:
             # if wf_entrypoint_url is not None:
             #    # This is needed to avoid future collisions with other workflows stored in the RO-Crate
@@ -1190,6 +1190,13 @@ class WorkflowRunROCrate:
 
             the_alternate_name = os.path.relpath(the_path, the_workflow.dir)
             the_name = rocrate_wf_folder + "/" + the_alternate_name
+        else:
+            the_alternate_name = cast(
+                "RelPath",
+                os.path.join(
+                    rocrate_wf_folder, os.path.relpath(the_path, the_workflow.dir)
+                ),
+            )
 
         # When the id is none and ...
         the_id = the_name if do_attach or (the_uri is None) else the_uri
