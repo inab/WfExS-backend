@@ -574,7 +574,7 @@ class WorkflowRunROCrate:
         here, just at the same time
         """
 
-        self.crate = FixedROCrate(gen_preview=True)
+        self.crate = FixedROCrate(gen_preview=False)
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
             identifier=wf_type.rocrate_programming_language,
