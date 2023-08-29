@@ -851,6 +851,7 @@ class WorkflowRunROCrate:
                     parameter_no_value = Intangible(
                         self.crate,
                         in_item.name,
+                        additionalType="String",
                     )
                     crate_pnv = self.crate.add(parameter_no_value)
                     if isinstance(crate_coll, Collection):
@@ -1177,15 +1178,15 @@ class WorkflowRunROCrate:
         # and add_file when an id has to be assigned
         the_name: "Optional[str]" = None
         the_alternate_name: "Optional[str]" = None
-        rocrate_wf_folder: "Optional[str]" = None
+        rocrate_wf_folder: "str" = os.path.relpath(the_workflow.dir, self.work_dir)
         if do_attach:
-            if wf_entrypoint_url is not None:
-                # This is needed to avoid future collisions with other workflows stored in the RO-Crate
-                rocrate_wf_folder = str(
-                    uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url)
-                )
-            else:
-                rocrate_wf_folder = str(uuid.uuid4())
+            # if wf_entrypoint_url is not None:
+            #    # This is needed to avoid future collisions with other workflows stored in the RO-Crate
+            #    rocrate_wf_folder = str(
+            #        uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url)
+            #    )
+            # else:
+            #    rocrate_wf_folder = str(uuid.uuid4())
 
             the_alternate_name = os.path.relpath(the_path, the_workflow.dir)
             the_name = rocrate_wf_folder + "/" + the_alternate_name
@@ -1194,10 +1195,7 @@ class WorkflowRunROCrate:
         the_id = the_name if do_attach or (the_uri is None) else the_uri
         assert the_id is not None
 
-        if rocrate_wf_folder is not None:
-            rocrate_file_id_base = rocrate_wf_folder
-        else:
-            rocrate_file_id_base = the_id
+        rocrate_file_id_base = the_id if the_uri is None else the_uri
 
         the_workflow_crate = self.crate.add_workflow(
             identifier=the_id,
@@ -1291,14 +1289,15 @@ class WorkflowRunROCrate:
                     rel_entities.append(the_entity)
                 else:
                     rocrate_file_id = rocrate_file_id_base + "/" + rel_file
+                    the_name = cast(
+                        "RelPath", os.path.join(rocrate_wf_folder, rel_file)
+                    )
                     the_entity = self._add_file_to_crate(
                         the_path=os.path.join(the_workflow.dir, rel_file),
-                        the_name=cast(
-                            "RelPath", os.path.join(rocrate_wf_folder, rel_file)
-                        )
-                        if rocrate_wf_folder is not None
-                        else None,
-                        the_alternate_name=cast("RelPath", rel_file),
+                        the_name=the_name,
+                        the_alternate_name=cast("RelPath", rel_file)
+                        if do_attach
+                        else the_name,
                         the_uri=cast("URIType", rocrate_file_id),
                         do_attach=do_attach,
                         is_soft_source=True,
