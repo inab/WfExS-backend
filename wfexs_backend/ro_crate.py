@@ -163,6 +163,32 @@ class PropertyValue(rocrate.model.entity.Entity):  # type: ignore[misc]
         super().__init__(crate, identifier=identifier, properties=pv_properties)
 
 
+class Intangible(rocrate.model.entity.Entity):  # type: ignore[misc]
+    """
+    Although an intangible is a more general concept than PropertyValue
+    keep them isolated for now.
+    """
+
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        name: "str",
+        additionalType: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        pv_properties = {
+            "name": name,
+        }
+
+        if additionalType is not None:
+            pv_properties["additionalType"] = additionalType
+
+        if properties is not None:
+            pv_properties.update(properties)
+        super().__init__(crate, identifier=identifier, properties=pv_properties)
+
+
 class Action(rocrate.model.entity.Entity):  # type: ignore[misc]
     def __init__(
         self,
@@ -510,6 +536,9 @@ class WorkflowRunROCrate:
             wf_consolidate_action["result"] = ran_workflow_crate
             wf_consolidate_action["instrument"] = self.weng_crate
             wf_consolidate_action["agent"] = self.wf_wfexs
+            wf_consolidate_action.append_to(
+                "actionStatus", {"@id": "http://schema.org/CompletedActionStatus"}
+            )
         else:
             ran_workflow_crate = original_workflow_crate
 
@@ -783,18 +812,39 @@ class WorkflowRunROCrate:
                         pass  # TODO: raise exception
 
             else:
+                # Detecting nullified values
+                some_not_null = False
                 for itemInAtomicValues in cast(
                     "Sequence[Union[bool,str,float,int]]", in_item.values
                 ):
-                    assert isinstance(itemInAtomicValues, (bool, str, float, int))
-                    parameter_value = PropertyValue(
-                        self.crate, in_item.name, itemInAtomicValues
+                    if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                        some_not_null = True
+                        break
+
+                if some_not_null:
+                    for itemInAtomicValues in cast(
+                        "Sequence[Union[bool,str,float,int]]", in_item.values
+                    ):
+                        if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                            parameter_value = PropertyValue(
+                                self.crate, in_item.name, itemInAtomicValues
+                            )
+                            crate_pv = self.crate.add(parameter_value)
+                            if isinstance(crate_coll, Collection):
+                                crate_coll.append_to("hasPart", crate_pv)
+                            else:
+                                crate_coll = crate_pv
+                else:
+                    # Let's suppose it is an str
+                    parameter_no_value = Intangible(
+                        self.crate,
+                        in_item.name,
                     )
-                    crate_pv = self.crate.add(parameter_value)
+                    crate_pnv = self.crate.add(parameter_no_value)
                     if isinstance(crate_coll, Collection):
-                        crate_coll.append_to("hasPart", crate_pv)
+                        crate_coll.append_to("hasPart", crate_pnv)
                     else:
-                        crate_coll = crate_pv
+                        crate_coll = crate_pnv
 
             # Avoiding corner cases
             if crate_coll is not None:
@@ -1304,6 +1354,12 @@ class WorkflowRunROCrate:
         self.crate.root_dataset.append_to("mentions", crate_action)
         crate_action["instrument"] = self.wf_file
         # subjectOf is not fulfilled as this execution has not public page
+        if stagedExec.exitVal == 0:
+            action_status = "http://schema.org/CompletedActionStatus"
+        else:
+            action_status = "http://schema.org/FailedActionStatus"
+
+        crate_action.append_to("actionStatus", {"@id": action_status})
 
         crate_inputs = self.addWorkflowInputs(
             stagedExec.augmentedInputs,
