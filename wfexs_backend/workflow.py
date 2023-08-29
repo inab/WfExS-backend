@@ -1034,10 +1034,15 @@ class WF:
             )
 
         # Last, try loading the security contexts credentials file
-        if securityContextsConfigFilename and os.path.exists(
-            securityContextsConfigFilename
-        ):
-            creds_config = cls.ReadSecurityContextFile(securityContextsConfigFilename)
+        if securityContextsConfigFilename:
+            if os.path.exists(securityContextsConfigFilename):
+                creds_config = cls.ReadSecurityContextFile(
+                    securityContextsConfigFilename
+                )
+            else:
+                raise WFException(
+                    f"Security context file {securityContextsConfigFilename} is not reachable"
+                )
         else:
             creds_config = {}
 
