@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Tuple,
+        Type,
         Union,
     )
 
@@ -224,16 +225,6 @@ class ControlAction(Action):
     pass
 
 
-class SoftwareContainer(rocrate.model.file.File):  # type: ignore[misc]
-    TYPES = ["File", "SoftwareApplication"]
-
-    def _empty(self) -> "Mapping[str, Any]":
-        return {
-            "@id": self.id,
-            "@type": self.TYPES[:],
-        }
-
-
 class Collection(rocrate.model.creativework.CreativeWork):  # type: ignore[misc]
     def __init__(
         self,
@@ -292,6 +283,26 @@ class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
     pass
 
 
+class SoftwareContainer(FixedFile):  # type: ignore[misc]
+    TYPES = ["File", "SoftwareApplication"]
+
+    def _empty(self) -> "Mapping[str, Any]":
+        return {
+            "@id": self.id,
+            "@type": self.TYPES[:],
+        }
+
+
+class SourceCodeFile(FixedFile):  # type: ignore[misc]
+    TYPES = ["File", "SoftwareSourceCode"]
+
+    def _empty(self) -> "Mapping[str, Any]":
+        return {
+            "@id": self.id,
+            "@type": self.TYPES[:],
+        }
+
+
 class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[misc]
     pass
 
@@ -313,6 +324,7 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         fetch_remote: "bool" = False,
         validate_url: "bool" = False,
         properties: "Optional[Mapping[str, Any]]" = None,
+        clazz: "Type[FixedFile]" = FixedFile,
     ) -> "FixedFile":
         """
         source: The absolute path to the local copy of the file, if exists.
@@ -322,7 +334,7 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         return cast(
             "FixedFile",
             self.add(
-                FixedFile(
+                clazz(
                     self,
                     source=source,
                     dest_path=dest_path,
@@ -917,6 +929,7 @@ class WorkflowRunROCrate:
         the_alternate_name: "Optional[RelPath]" = None,
         the_size: "Optional[int]" = None,
         the_signature: "Optional[Fingerprint]" = None,
+        is_soft_source: "bool" = False,
         do_attach: "bool" = True,
     ) -> "FixedFile":
         # The do_attach logic helps on the ill internal logic of add_file
@@ -935,6 +948,7 @@ class WorkflowRunROCrate:
             identifier=the_id,
             source=the_path if do_attach else None,
             dest_path=the_name if do_attach else None,
+            clazz=SourceCodeFile if is_soft_source else FixedFile,
         )
         if do_attach and (the_uri is not None):
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
@@ -1287,6 +1301,7 @@ class WorkflowRunROCrate:
                         the_alternate_name=cast("RelPath", rel_file),
                         the_uri=cast("URIType", rocrate_file_id),
                         do_attach=do_attach,
+                        is_soft_source=True,
                     )
                     rel_entities.append(the_entity)
 
