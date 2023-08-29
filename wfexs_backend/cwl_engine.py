@@ -103,7 +103,10 @@ import yaml
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
 from .engine import WorkflowEngine, WorkflowEngineException
 
-from .utils.contents import CWLClass2WfExS
+from .utils.contents import (
+    CWLClass2WfExS,
+    link_or_copy,
+)
 
 
 # Next methods are borrowed from
@@ -656,13 +659,16 @@ STDERR
             return localWf
 
     def materializeWorkflow(
-        self, matWorkflowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
+        self,
+        matWorkflowEngine: "MaterializedWorkflowEngine",
+        consolidatedWorkflowDir: "AbsPath",
+        offline: "bool" = False,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
-        Method to ensure the workflow has been materialized. It returns the
-        localWorkflow directory, as well as the list of containers.
-
-        For Nextflow it is usually a no-op, but for CWL it requires resolution.
+        Method to ensure the workflow has been materialized. In the case
+        of CWL, it returns a new materialized workflow engine, which points
+        to a newly genereated LocalWorkflow instance pointing to the
+        consolidated workflow. Also, it returns the list of containers.
         """
         localWf = matWorkflowEngine.workflow
         localWorkflowDir = localWf.dir
@@ -697,54 +703,65 @@ STDERR
             os.path.join(localWorkflowUsedHashes_head, localWorkflowUsedHashes_tail)
             + ".cwl"
         ).replace("/", "_")
-        packedLocalWorkflowFile = os.path.join(
-            self.cacheWorkflowPackDir, localWorkflowPackedName
-        )
 
         # TODO: check whether the repo is newer than the packed file
 
+        consolidatedPackedWorkflowFile = cast(
+            "AbsPath", os.path.join(consolidatedWorkflowDir, localWorkflowPackedName)
+        )
         if (
-            not os.path.isfile(packedLocalWorkflowFile)
-            or os.path.getsize(packedLocalWorkflowFile) == 0
+            not os.path.isfile(consolidatedPackedWorkflowFile)
+            or os.path.getsize(consolidatedPackedWorkflowFile) == 0
         ):
-            if offline:
-                raise WorkflowEngineException(
-                    "Cannot allow to materialize packed CWL workflow in offline mode. Risk to access external content."
-                )
+            packedLocalWorkflowFile = cast(
+                "AbsPath",
+                os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName),
+            )
+            if (
+                not os.path.isfile(packedLocalWorkflowFile)
+                or os.path.getsize(packedLocalWorkflowFile) == 0
+            ):
+                if offline:
+                    raise WorkflowEngineException(
+                        "Cannot allow to materialize packed CWL workflow in offline mode. Risk to access external content."
+                    )
 
-            # Execute cwltool --pack
-            with open(packedLocalWorkflowFile, mode="wb") as packedH:
-                with tempfile.NamedTemporaryFile() as cwltool_pack_stderr:
-                    # Writing straight to the file
-                    retVal = subprocess.Popen(
-                        [
-                            f"{cwltool_install_dir}/bin/cwltool",
-                            "--no-doc-cache",
-                            "--pack",
-                            localWorkflowFile,
-                        ],
-                        stdout=packedH,
-                        stderr=cwltool_pack_stderr,
-                        cwd=cwltool_install_dir,
-                    ).wait()
+                # Execute cwltool --pack
+                with open(packedLocalWorkflowFile, mode="wb") as packedH:
+                    with tempfile.NamedTemporaryFile() as cwltool_pack_stderr:
+                        # Writing straight to the file
+                        retVal = subprocess.Popen(
+                            [
+                                f"{cwltool_install_dir}/bin/cwltool",
+                                "--no-doc-cache",
+                                "--pack",
+                                localWorkflowFile,
+                            ],
+                            stdout=packedH,
+                            stderr=cwltool_pack_stderr,
+                            cwd=cwltool_install_dir,
+                        ).wait()
 
-                    # Proper error handling
-                    if retVal != 0:
-                        # Reading the output and error for the report
-                        with open(cwltool_pack_stderr.name, "r") as c_stF:
-                            cwltool_pack_stderr_v = c_stF.read()
+                        # Proper error handling
+                        if retVal != 0:
+                            # Reading the output and error for the report
+                            with open(cwltool_pack_stderr.name, "r") as c_stF:
+                                cwltool_pack_stderr_v = c_stF.read()
 
-                        errstr = "Could not pack CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
-                            engineVersion, retVal, cwltool_pack_stderr_v
-                        )
-                        raise WorkflowEngineException(errstr)
+                            errstr = "Could not pack CWL running cwltool --pack {}. Retval {}\n======\nSTDERR\n======\n{}".format(
+                                engineVersion, retVal, cwltool_pack_stderr_v
+                            )
+                            raise WorkflowEngineException(errstr)
+
+                # Last, deploy a copy of this packed workflow in the working directory
+            link_or_copy(packedLocalWorkflowFile, consolidatedPackedWorkflowFile)
 
         containerTags: "Set[str]" = set()
 
         # Getting the identifiers
         cwlVersion = None
         # TODO: collect conda hints
-        with open(packedLocalWorkflowFile, encoding="utf-8") as pLWH:
+        with open(consolidatedPackedWorkflowFile, encoding="utf-8") as pLWH:
             wf_yaml = yaml.safe_load(pLWH)  # parse packed CWL
             cwlVersion = wf_yaml.get("cwlVersion", "v1.0")
             dockerExprParser = jsonpath_ng.ext.parse(
@@ -763,11 +780,12 @@ STDERR
                 containerTags.add(dockerPullId)
 
         newLocalWf = LocalWorkflow(
-            dir=localWf.dir,
-            relPath=cast("RelPath", packedLocalWorkflowFile),
+            dir=consolidatedWorkflowDir,
+            relPath=cast("RelPath", localWorkflowPackedName),
             effectiveCheckout=localWf.effectiveCheckout,
             langVersion=cwlVersion,
-            relPathFiles=localWf.relPathFiles,
+            # No file should be needed
+            relPathFiles=[],
         )
         newWfEngine = MaterializedWorkflowEngine(
             instance=matWorkflowEngine.instance,

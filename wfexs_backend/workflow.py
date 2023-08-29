@@ -207,6 +207,7 @@ from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 from .engine import (
     WorkflowEngine,
     WorkflowEngineException,
+    WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR,
     WORKDIR_CONTAINERS_RELDIR,
     WORKDIR_ENGINE_TWEAKS_RELDIR,
     WORKDIR_INPUTS_RELDIR,
@@ -551,6 +552,7 @@ class WF:
         self.engineTweaksDir: "Optional[AbsPath]"
         self.metaDir: "Optional[AbsPath]"
         self.workflowDir: "Optional[AbsPath]"
+        self.consolidatedWorkflowDir: "Optional[AbsPath]"
         self.containersDir: "Optional[AbsPath]"
         if was_setup:
             assert (
@@ -597,6 +599,11 @@ class WF:
             self.workflowDir = cast(
                 "AbsPath", os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR)
             )
+            # This directory will hold a copy of the consolidated workflow
+            self.consolidatedWorkflowDir = cast(
+                "AbsPath",
+                os.path.join(self.workDir, WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR),
+            )
             # This directory will hold either a hardlink or a copy of the containers
             self.containersDir = cast(
                 "AbsPath", os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR)
@@ -636,6 +643,7 @@ class WF:
             self.engineTweaksDir = None
             self.metaDir = None
             self.workflowDir = None
+            self.consolidatedWorkflowDir = None
             self.containersDir = None
 
         self.stagedSetup = StagedSetup(
@@ -646,6 +654,7 @@ class WF:
             raw_work_dir=self.rawWorkDir,
             work_dir=self.workDir,
             workflow_dir=self.workflowDir,
+            consolidated_workflow_dir=self.consolidatedWorkflowDir,
             inputs_dir=self.inputsDir,
             extrapolated_inputs_dir=self.extrapolatedInputsDir,
             outputs_dir=self.outputsDir,
@@ -1313,6 +1322,9 @@ class WF:
             assert (
                 self.containersDir is not None
             ), "The destination directory should be available here"
+            assert (
+                self.consolidatedWorkflowDir is not None
+            ), "The consolidated workflow directory should be available here"
             if not offline:
                 os.makedirs(self.containersDir, exist_ok=True)
             (
@@ -1321,7 +1333,10 @@ class WF:
                 self.containerEngineOs,
                 self.arch,
             ) = WorkflowEngine.MaterializeWorkflowAndContainers(
-                self.materializedEngine, self.containersDir, offline=offline
+                self.materializedEngine,
+                self.containersDir,
+                self.consolidatedWorkflowDir,
+                offline=offline,
             )
 
     def injectInputs(

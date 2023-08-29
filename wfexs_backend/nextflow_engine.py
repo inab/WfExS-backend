@@ -1302,13 +1302,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
         return None
 
     def materializeWorkflow(
-        self, matWorkflowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
+        self,
+        matWorkflowEngine: "MaterializedWorkflowEngine",
+        consolidatedWorkflowDir: "AbsPath",
+        offline: "bool" = False,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
-        Method to ensure the workflow has been materialized. It returns the
-        localWorkflow directory, as well as the list of containers
-
-        For Nextflow it is usually a no-op, but for CWL it requires resolution
+        Method to ensure the workflow has been materialized. In the case
+        of Nextflow, it returns the input matWorkflowEngine after the checks,
+        as well as the list of containers
         """
 
         # Default nextflow profile is 'standard'
