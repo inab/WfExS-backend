@@ -604,11 +604,13 @@ class WorkflowRunROCrate:
                 identifier="https://w3id.org/ro/wfrun/workflow/0.2",
                 properties={"name": "Workflow Run Crate", "version": "0.2"},
             ),
-            rocrate.model.creativework.CreativeWork(
-                self.crate,
-                identifier="https://w3id.org/ro/wfrun/provenance/0.2",
-                properties={"name": "Provenance Run Crate", "version": "0.2"},
-            ),
+            # TODO: This one can be enabled only when proper provenance
+            # describing the execution steps is implemented
+            # rocrate.model.creativework.CreativeWork(
+            #     self.crate,
+            #     identifier="https://w3id.org/ro/wfrun/provenance/0.2",
+            #     properties={"name": "Provenance Run Crate", "version": "0.2"},
+            # ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
                 identifier="https://w3id.org/workflowhub/workflow-ro-crate/1.0",
@@ -1387,14 +1389,6 @@ class WorkflowRunROCrate:
         )
         crate_action["object"] = crate_inputs
 
-        control_action = ControlAction(
-            self.crate,
-            "Orchestration of " + self.wf_file.id + " for" + stagedExec.outputsDir,
-        )
-        self.crate.add(control_action)
-        control_action["instrument"] = self.wf_file
-        control_action["object"] = crate_action
-
         # TODO: Add engine specific traces
         # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces
         # TODO: Add "augmented environment variables"
@@ -1405,20 +1399,36 @@ class WorkflowRunROCrate:
         )
         crate_action["result"] = crate_outputs
 
-        org_action = OrganizeAction(
-            self.crate,
-            "Orchestration of " + stagedExec.outputsDir + " from " + self.wf_file.id,
-            stagedExec.started,
-            stagedExec.ended,
-        )
-        self.crate.add(org_action)
-        org_action["agent"] = self.wf_wfexs
-        # The used workflow engine
-        org_action["instrument"] = self.weng_crate
-
-        org_action.append_to("object", control_action)
-        # TODO: add configuration files (if available) to object
-        org_action["result"] = crate_action
+        # TODO: Uncomment this when we are able to describe
+        # the internal workflow execution. Each workflow step
+        # should be described through a ControlAction, and all these
+        # instances should be linked from the "object" property
+        # of this OrganizeAction.
+        # Also, each step will have its own CreateAction
+        #
+        # control_action = ControlAction(
+        #     self.crate,
+        #     "Orchestration of " + self.wf_file.id + " for" + stagedExec.outputsDir,
+        # )
+        # self.crate.add(control_action)
+        # The "instrument" should be the step itself, not the workflow
+        # control_action["instrument"] = self.wf_file
+        # control_action["object"] = crate_action
+        #
+        # org_action = OrganizeAction(
+        #     self.crate,
+        #     "Orchestration of " + stagedExec.outputsDir + " from " + self.wf_file.id,
+        #     stagedExec.started,
+        #     stagedExec.ended,
+        # )
+        # self.crate.add(org_action)
+        # org_action["agent"] = self.wf_wfexs
+        # # The used workflow engine
+        # org_action["instrument"] = self.weng_crate
+        #
+        # org_action.append_to("object", control_action)
+        # # TODO: add configuration files (if available) to object
+        # org_action["result"] = crate_action
 
     def _add_workflow_execution_outputs(
         self,
