@@ -412,7 +412,7 @@ class WorkflowRunROCrate:
     ContainerTypeIds: "Final[Mapping[ContainerType, str]]" = {
         ContainerType.Singularity: "https://apptainer.org/",
         ContainerType.Docker: "https://www.docker.com/",
-        ContainerType.Podman: "https://podman.io/"
+        ContainerType.Podman: "https://podman.io/",
     }
 
     def __init__(
