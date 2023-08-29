@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Tuple,
+        Type,
         Union,
     )
 
@@ -163,6 +164,32 @@ class PropertyValue(rocrate.model.entity.Entity):  # type: ignore[misc]
         super().__init__(crate, identifier=identifier, properties=pv_properties)
 
 
+class Intangible(rocrate.model.entity.Entity):  # type: ignore[misc]
+    """
+    Although an intangible is a more general concept than PropertyValue
+    keep them isolated for now.
+    """
+
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        name: "str",
+        additionalType: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        pv_properties = {
+            "name": name,
+        }
+
+        if additionalType is not None:
+            pv_properties["additionalType"] = additionalType
+
+        if properties is not None:
+            pv_properties.update(properties)
+        super().__init__(crate, identifier=identifier, properties=pv_properties)
+
+
 class Action(rocrate.model.entity.Entity):  # type: ignore[misc]
     def __init__(
         self,
@@ -196,16 +223,6 @@ class OrganizeAction(Action):
 
 class ControlAction(Action):
     pass
-
-
-class SoftwareContainer(rocrate.model.file.File):  # type: ignore[misc]
-    TYPES = ["File", "SoftwareApplication"]
-
-    def _empty(self) -> "Mapping[str, Any]":
-        return {
-            "@id": self.id,
-            "@type": self.TYPES[:],
-        }
 
 
 class Collection(rocrate.model.creativework.CreativeWork):  # type: ignore[misc]
@@ -266,6 +283,26 @@ class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
     pass
 
 
+class SoftwareContainer(FixedFile):  # type: ignore[misc]
+    TYPES = ["File", "SoftwareApplication"]
+
+    def _empty(self) -> "Mapping[str, Any]":
+        return {
+            "@id": self.id,
+            "@type": self.TYPES[:],
+        }
+
+
+class SourceCodeFile(FixedFile):  # type: ignore[misc]
+    TYPES = ["File", "SoftwareSourceCode"]
+
+    def _empty(self) -> "Mapping[str, Any]":
+        return {
+            "@id": self.id,
+            "@type": self.TYPES[:],
+        }
+
+
 class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[misc]
     pass
 
@@ -287,6 +324,7 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         fetch_remote: "bool" = False,
         validate_url: "bool" = False,
         properties: "Optional[Mapping[str, Any]]" = None,
+        clazz: "Type[FixedFile]" = FixedFile,
     ) -> "FixedFile":
         """
         source: The absolute path to the local copy of the file, if exists.
@@ -296,7 +334,7 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         return cast(
             "FixedFile",
             self.add(
-                FixedFile(
+                clazz(
                     self,
                     source=source,
                     dest_path=dest_path,
@@ -511,6 +549,9 @@ class WorkflowRunROCrate:
             wf_consolidate_action["result"] = ran_workflow_crate
             wf_consolidate_action["instrument"] = self.weng_crate
             wf_consolidate_action["agent"] = self.wf_wfexs
+            wf_consolidate_action.append_to(
+                "actionStatus", {"@id": "http://schema.org/CompletedActionStatus"}
+            )
         else:
             ran_workflow_crate = original_workflow_crate
 
@@ -534,7 +575,7 @@ class WorkflowRunROCrate:
         here, just at the same time
         """
 
-        self.crate = FixedROCrate(gen_preview=True)
+        self.crate = FixedROCrate(gen_preview=False)
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
             identifier=wf_type.rocrate_programming_language,
@@ -564,11 +605,13 @@ class WorkflowRunROCrate:
                 identifier="https://w3id.org/ro/wfrun/workflow/0.2",
                 properties={"name": "Workflow Run Crate", "version": "0.2"},
             ),
-            rocrate.model.creativework.CreativeWork(
-                self.crate,
-                identifier="https://w3id.org/ro/wfrun/provenance/0.2",
-                properties={"name": "Provenance Run Crate", "version": "0.2"},
-            ),
+            # TODO: This one can be enabled only when proper provenance
+            # describing the execution steps is implemented
+            # rocrate.model.creativework.CreativeWork(
+            #     self.crate,
+            #     identifier="https://w3id.org/ro/wfrun/provenance/0.2",
+            #     properties={"name": "Provenance Run Crate", "version": "0.2"},
+            # ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
                 identifier="https://w3id.org/workflowhub/workflow-ro-crate/1.0",
@@ -671,10 +714,14 @@ class WorkflowRunROCrate:
                 crate_cont = self.crate.add(software_container)
 
                 # TODO: Optimize this
-                for req in sa_crate["softwareRequirements"]:
-                    if req.id == crate_cont.id:
-                        break
-                else:
+                do_append = True
+                if "softwareRequirements" in sa_crate:
+                    for req in sa_crate["softwareRequirements"]:
+                        if req.id == crate_cont.id:
+                            do_append = False
+                            break
+
+                if do_append:
                     sa_crate.append_to("softwareRequirements", crate_cont)
 
     def addWorkflowInputs(
@@ -784,18 +831,40 @@ class WorkflowRunROCrate:
                         pass  # TODO: raise exception
 
             else:
+                # Detecting nullified values
+                some_not_null = False
                 for itemInAtomicValues in cast(
                     "Sequence[Union[bool,str,float,int]]", in_item.values
                 ):
-                    assert isinstance(itemInAtomicValues, (bool, str, float, int))
-                    parameter_value = PropertyValue(
-                        self.crate, in_item.name, itemInAtomicValues
+                    if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                        some_not_null = True
+                        break
+
+                if some_not_null:
+                    for itemInAtomicValues in cast(
+                        "Sequence[Union[bool,str,float,int]]", in_item.values
+                    ):
+                        if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                            parameter_value = PropertyValue(
+                                self.crate, in_item.name, itemInAtomicValues
+                            )
+                            crate_pv = self.crate.add(parameter_value)
+                            if isinstance(crate_coll, Collection):
+                                crate_coll.append_to("hasPart", crate_pv)
+                            else:
+                                crate_coll = crate_pv
+                else:
+                    # Let's suppose it is an str
+                    parameter_no_value = Intangible(
+                        self.crate,
+                        in_item.name,
+                        additionalType="String",
                     )
-                    crate_pv = self.crate.add(parameter_value)
+                    crate_pnv = self.crate.add(parameter_no_value)
                     if isinstance(crate_coll, Collection):
-                        crate_coll.append_to("hasPart", crate_pv)
+                        crate_coll.append_to("hasPart", crate_pnv)
                     else:
-                        crate_coll = crate_pv
+                        crate_coll = crate_pnv
 
             # Avoiding corner cases
             if crate_coll is not None:
@@ -868,6 +937,7 @@ class WorkflowRunROCrate:
         the_alternate_name: "Optional[RelPath]" = None,
         the_size: "Optional[int]" = None,
         the_signature: "Optional[Fingerprint]" = None,
+        is_soft_source: "bool" = False,
         do_attach: "bool" = True,
     ) -> "FixedFile":
         # The do_attach logic helps on the ill internal logic of add_file
@@ -886,6 +956,7 @@ class WorkflowRunROCrate:
             identifier=the_id,
             source=the_path if do_attach else None,
             dest_path=the_name if do_attach else None,
+            clazz=SourceCodeFile if is_soft_source else FixedFile,
         )
         if do_attach and (the_uri is not None):
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
@@ -1113,28 +1184,32 @@ class WorkflowRunROCrate:
         # The do_attach logic helps on the ill internal logic of add_workflow
         # and add_file when an id has to be assigned
         the_name: "Optional[str]" = None
-        the_alternate_name: "Optional[str]" = None
-        rocrate_wf_folder: "Optional[str]" = None
+        rocrate_wf_folder: "str" = os.path.relpath(the_workflow.dir, self.work_dir)
+        the_alternate_name: "str"
         if do_attach:
-            if wf_entrypoint_url is not None:
-                # This is needed to avoid future collisions with other workflows stored in the RO-Crate
-                rocrate_wf_folder = str(
-                    uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url)
-                )
-            else:
-                rocrate_wf_folder = str(uuid.uuid4())
+            # if wf_entrypoint_url is not None:
+            #    # This is needed to avoid future collisions with other workflows stored in the RO-Crate
+            #    rocrate_wf_folder = str(
+            #        uuid.uuid5(uuid.NAMESPACE_URL, wf_entrypoint_url)
+            #    )
+            # else:
+            #    rocrate_wf_folder = str(uuid.uuid4())
 
             the_alternate_name = os.path.relpath(the_path, the_workflow.dir)
             the_name = rocrate_wf_folder + "/" + the_alternate_name
+        else:
+            the_alternate_name = cast(
+                "RelPath",
+                os.path.join(
+                    rocrate_wf_folder, os.path.relpath(the_path, the_workflow.dir)
+                ),
+            )
 
         # When the id is none and ...
         the_id = the_name if do_attach or (the_uri is None) else the_uri
         assert the_id is not None
 
-        if rocrate_wf_folder is not None:
-            rocrate_file_id_base = rocrate_wf_folder
-        else:
-            rocrate_file_id_base = the_id
+        rocrate_file_id_base = the_id if the_uri is None else the_uri
 
         the_workflow_crate = self.crate.add_workflow(
             identifier=the_id,
@@ -1228,16 +1303,18 @@ class WorkflowRunROCrate:
                     rel_entities.append(the_entity)
                 else:
                     rocrate_file_id = rocrate_file_id_base + "/" + rel_file
+                    the_name = cast(
+                        "RelPath", os.path.join(rocrate_wf_folder, rel_file)
+                    )
                     the_entity = self._add_file_to_crate(
                         the_path=os.path.join(the_workflow.dir, rel_file),
-                        the_name=cast(
-                            "RelPath", os.path.join(rocrate_wf_folder, rel_file)
-                        )
-                        if rocrate_wf_folder is not None
-                        else None,
-                        the_alternate_name=cast("RelPath", rel_file),
+                        the_name=the_name,
+                        the_alternate_name=cast("RelPath", rel_file)
+                        if do_attach
+                        else the_name,
                         the_uri=cast("URIType", rocrate_file_id),
                         do_attach=do_attach,
+                        is_soft_source=True,
                     )
                     rel_entities.append(the_entity)
 
@@ -1305,19 +1382,17 @@ class WorkflowRunROCrate:
         self.crate.root_dataset.append_to("mentions", crate_action)
         crate_action["instrument"] = self.wf_file
         # subjectOf is not fulfilled as this execution has not public page
+        if stagedExec.exitVal == 0:
+            action_status = "http://schema.org/CompletedActionStatus"
+        else:
+            action_status = "http://schema.org/FailedActionStatus"
+
+        crate_action.append_to("actionStatus", {"@id": action_status})
 
         crate_inputs = self.addWorkflowInputs(
             stagedExec.augmentedInputs,
         )
         crate_action["object"] = crate_inputs
-
-        control_action = ControlAction(
-            self.crate,
-            "Orchestration of " + self.wf_file.id + " for" + stagedExec.outputsDir,
-        )
-        self.crate.add(control_action)
-        control_action["instrument"] = self.wf_file
-        control_action["object"] = crate_action
 
         # TODO: Add engine specific traces
         # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces
@@ -1329,20 +1404,36 @@ class WorkflowRunROCrate:
         )
         crate_action["result"] = crate_outputs
 
-        org_action = OrganizeAction(
-            self.crate,
-            "Orchestration of " + stagedExec.outputsDir + " from " + self.wf_file.id,
-            stagedExec.started,
-            stagedExec.ended,
-        )
-        self.crate.add(org_action)
-        org_action["agent"] = self.wf_wfexs
-        # The used workflow engine
-        org_action["instrument"] = self.weng_crate
-
-        org_action.append_to("object", control_action)
-        # TODO: add configuration files (if available) to object
-        org_action["result"] = crate_action
+        # TODO: Uncomment this when we are able to describe
+        # the internal workflow execution. Each workflow step
+        # should be described through a ControlAction, and all these
+        # instances should be linked from the "object" property
+        # of this OrganizeAction.
+        # Also, each step will have its own CreateAction
+        #
+        # control_action = ControlAction(
+        #     self.crate,
+        #     "Orchestration of " + self.wf_file.id + " for" + stagedExec.outputsDir,
+        # )
+        # self.crate.add(control_action)
+        # The "instrument" should be the step itself, not the workflow
+        # control_action["instrument"] = self.wf_file
+        # control_action["object"] = crate_action
+        #
+        # org_action = OrganizeAction(
+        #     self.crate,
+        #     "Orchestration of " + stagedExec.outputsDir + " from " + self.wf_file.id,
+        #     stagedExec.started,
+        #     stagedExec.ended,
+        # )
+        # self.crate.add(org_action)
+        # org_action["agent"] = self.wf_wfexs
+        # # The used workflow engine
+        # org_action["instrument"] = self.weng_crate
+        #
+        # org_action.append_to("object", control_action)
+        # # TODO: add configuration files (if available) to object
+        # org_action["result"] = crate_action
 
     def _add_workflow_execution_outputs(
         self,

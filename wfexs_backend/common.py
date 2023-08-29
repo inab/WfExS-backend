@@ -591,11 +591,14 @@ class AbstractWorkflowEngineType(abc.ABC):
 
     @abc.abstractmethod
     def materializeWorkflow(
-        self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
+        self,
+        matWorfklowEngine: "MaterializedWorkflowEngine",
+        consolidatedWorkflowDir: "AbsPath",
+        offline: "bool" = False,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
-        Method to ensure the workflow has been materialized. It returns the
-        localWorkflow directory, as well as the list of containers
+        Method to ensure the workflow has been materialized. It returns a
+        possibly updated materialized workflow engine, as well as the list of containers
 
         For Nextflow it is usually a no-op, but for CWL it requires resolution
         """
@@ -704,6 +707,7 @@ class StagedSetup(NamedTuple):
     raw_work_dir: "AbsPath"
     work_dir: "Optional[AbsPath]"
     workflow_dir: "Optional[AbsPath]"
+    consolidated_workflow_dir: "Optional[AbsPath]"
     inputs_dir: "Optional[AbsPath]"
     extrapolated_inputs_dir: "Optional[AbsPath]"
     outputs_dir: "Optional[AbsPath]"

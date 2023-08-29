@@ -105,6 +105,7 @@ WORKDIR_STATS_RELDIR = "stats"
 WORKDIR_OUTPUTS_RELDIR = "outputs"
 WORKDIR_ENGINE_TWEAKS_RELDIR = "engineTweaks"
 WORKDIR_WORKFLOW_RELDIR = "workflow"
+WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR = "consolidated-workflow"
 WORKDIR_CONTAINERS_RELDIR = "containers"
 
 WORKDIR_STDOUT_FILE = "stdout.txt"
@@ -516,7 +517,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     @abc.abstractmethod
     def materializeWorkflow(
-        self, matWorfklowEngine: "MaterializedWorkflowEngine", offline: "bool" = False
+        self,
+        matWorfklowEngine: "MaterializedWorkflowEngine",
+        consolidatedWorkflowDir: "AbsPath",
+        offline: "bool" = False,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
@@ -622,10 +626,11 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         cls,
         matWfEng: "MaterializedWorkflowEngine",
         containersDir: "AbsPath",
+        consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
     ) -> "Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr, ContainerOperatingSystem, ProcessorArchitecture]":
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
-            matWfEng, offline=offline
+            matWfEng, consolidatedWorkflowDir, offline=offline
         )
 
         (
