@@ -667,6 +667,12 @@ class RepoType(enum.Enum):
     TRS = "trs"
 
 
+class RepoGuessFlavor(enum.Enum):
+    GitHub = "github"
+    GitLab = "gitlab"
+    BitBucket = "bitbucket"
+
+
 class RemoteRepo(NamedTuple):
     """
     Remote repository description
@@ -677,6 +683,7 @@ class RemoteRepo(NamedTuple):
     rel_path: "Optional[RelPath]" = None
     repo_type: "Optional[RepoType]" = None
     web_url: "Optional[URIType]" = None
+    guess_flavor: "Optional[RepoGuessFlavor]" = None
 
 
 class IdentifiedWorkflow(NamedTuple):
