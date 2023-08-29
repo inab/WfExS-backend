@@ -713,10 +713,14 @@ class WorkflowRunROCrate:
                 crate_cont = self.crate.add(software_container)
 
                 # TODO: Optimize this
-                for req in sa_crate["softwareRequirements"]:
-                    if req.id == crate_cont.id:
-                        break
-                else:
+                do_append = True
+                if "softwareRequirements" in sa_crate:
+                    for req in sa_crate["softwareRequirements"]:
+                        if req.id == crate_cont.id:
+                            do_append = False
+                            break
+
+                if do_append:
                     sa_crate.append_to("softwareRequirements", crate_cont)
 
     def addWorkflowInputs(
