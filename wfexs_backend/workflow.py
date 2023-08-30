@@ -2188,7 +2188,9 @@ class WF:
 
                                 theInputs.append(
                                     MaterializedInput(
-                                        linearKey, [autoFilledDir], autoFilled=True
+                                        name=linearKey,
+                                        values=[autoFilledDir],
+                                        autoFilled=True,
                                     )
                                 )
                                 continue
@@ -2207,7 +2209,9 @@ class WF:
 
                             theInputs.append(
                                 MaterializedInput(
-                                    linearKey, [autoFilledFile], autoFilled=True
+                                    name=linearKey,
+                                    values=[autoFilledFile],
+                                    autoFilled=True,
                                 )
                             )
                             continue
