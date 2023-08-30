@@ -130,6 +130,7 @@ from .workflow import (
 )
 
 from .fetchers.trs_files import (
+    TRS_SCHEME_PREFIX,
     INTERNAL_TRS_SCHEME_PREFIX,
 )
 
@@ -1452,7 +1453,8 @@ class WfExSBackend:
         and the version will represent either the branch, tag or specific commit.
         So, the whole TRS fetching machinery is bypassed.
         """
-        parsedRepoURL = urllib.parse.urlparse(str(workflow_id))
+        putative_repo_url = str(workflow_id)
+        parsedRepoURL = urllib.parse.urlparse(putative_repo_url)
 
         # It is not an absolute URL, so it is being an identifier in the workflow
         i_workflow: "Optional[IdentifiedWorkflow]" = None
@@ -1461,7 +1463,30 @@ class WfExSBackend:
         repoDir: "Optional[AbsPath]" = None
         putative: "bool" = False
         cached_putative_path: "Optional[AbsPath]" = None
-        if parsedRepoURL.scheme == "":
+        if parsedRepoURL.scheme in ("", TRS_SCHEME_PREFIX):
+            # Extracting the TRS endpoint details from the parsedRepoURL
+            if parsedRepoURL.scheme == TRS_SCHEME_PREFIX:
+                # Duplication of code borrowed from trs_files.py
+                path_steps: "Sequence[str]" = parsedRepoURL.path.split("/")
+                if len(path_steps) < 3 or path_steps[0] != "":
+                    raise WfExSBackendException(
+                        f"Ill-formed TRS CURIE {putative_repo_url}. It should be in the format of {TRS_SCHEME_PREFIX}://id/version or {TRS_SCHEME_PREFIX}://prefix-with-slashes/id/version"
+                    )
+                trs_steps = cast("MutableSequence[str]", path_steps[0:-2])
+                trs_steps.extend(["ga4gh", "trs", "v2", "tools"])
+                trs_endpoint = urllib.parse.urlunparse(
+                    urllib.parse.ParseResult(
+                        scheme="https",
+                        netloc=parsedRepoURL.netloc,
+                        path="/".join(trs_steps),
+                        params="",
+                        query="",
+                        fragment="",
+                    )
+                )
+
+                workflow_id = urllib.parse.unquote(path_steps[-2])
+                version_id = urllib.parse.unquote(path_steps[-1])
             if (trs_endpoint is not None) and len(trs_endpoint) > 0:
                 i_workflow, repoDir = self.getWorkflowRepoFromTRS(
                     trs_endpoint,

@@ -1155,7 +1155,7 @@ class WF:
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
 
-        If the workflow id is an URL, it is supposed to be a git repository,
+        If the workflow id is an URL, it is supposed to be a repository (git, swh, ...),
         and the version will represent either the branch, tag or specific commit.
         So, the whole TRS fetching machinery is bypassed.
         """
