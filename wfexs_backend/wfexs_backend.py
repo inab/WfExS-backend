@@ -2026,7 +2026,10 @@ class WfExSBackend:
             if not os.path.exists(roCrateFile):
                 if os.path.lexists(roCrateFile):
                     os.unlink(roCrateFile)
-                os.symlink(os.path.basename(cached_content.path), roCrateFile)
+                os.symlink(
+                    os.path.relpath(cached_content.path, self.cacheROCrateDir),
+                    roCrateFile,
+                )
 
             return (
                 self.getWorkflowRepoFromROCrateFile(
