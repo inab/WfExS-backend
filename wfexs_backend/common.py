@@ -669,6 +669,16 @@ class RepoType(enum.Enum):
     SoftwareHeritage = "swh"
     TRS = "trs"
 
+    @classmethod
+    def _undeprecate_table(cls) -> "Mapping[str, str]":
+        # These fixes are needed to map deprecated values
+        # to the most approximate ones
+        return {
+            "github": "git",
+            "gitlab": "git",
+            "bitbucket": "git",
+        }
+
 
 class RepoGuessFlavor(enum.Enum):
     GitHub = "github"

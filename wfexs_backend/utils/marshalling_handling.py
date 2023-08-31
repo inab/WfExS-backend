@@ -109,7 +109,12 @@ def unmarshall_namedtuple(
         if "_enum" in obj:  # originally an enum
             try:
                 clazz = myglobals[obj["_enum"]]
-                retval = clazz(obj["value"])
+                the_value = obj["value"]
+                u_table_m = getattr(clazz, "_undeprecate_table", None)
+                if callable(u_table_m):
+                    u_table = u_table_m()
+                    the_value = u_table.get(the_value, the_value)
+                retval = clazz(the_value)
             except:
                 logger.error(
                     f"Unmarshalling Error peeking class implementation for {obj['_enum']}"
