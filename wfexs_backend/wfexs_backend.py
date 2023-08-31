@@ -2061,6 +2061,7 @@ class WfExSBackend:
         mainEntityId = None
         workflowPID = None
         workflowUploadURL = None
+        workflowRepoURL = None
         workflowTypeId = None
         for e in roCrateObj.get_entities():
             if (
@@ -2072,6 +2073,7 @@ class WfExSBackend:
             elif e["@id"] == mainEntityIdHolder:
                 eAsLD = e.as_jsonld()
                 mainEntityId = eAsLD["mainEntity"]["@id"]
+                workflowRepoURL = eAsLD.get("isBasedOn")
                 workflowPID = eAsLD.get("identifier")
             elif e["@id"] == mainEntityId:
                 eAsLD = e.as_jsonld()
@@ -2140,14 +2142,24 @@ class WfExSBackend:
         # Some RO-Crates might have this value missing or ill-built
         remote_repo: "Optional[RemoteRepo]" = None
         if workflowUploadURL is not None:
-            remote_repo = self.guess_repo_params(workflowUploadURL, fail_ok=True)
+            try:
+                remote_repo = self.guess_repo_params(workflowUploadURL, fail_ok=True)
+            except:
+                self.logger.exception(
+                    f"Unable to use RO-Crate derived {workflowUploadURL} as workflow source"
+                )
 
-        if remote_repo is None:
-            remote_repo = self.guess_repo_params(
-                roCrateObj.root_dataset["isBasedOn"], fail_ok=True
-            )
+        if workflowRepoURL is not None and (
+            remote_repo is None or remote_repo.repo_type is None
+        ):
+            try:
+                remote_repo = self.guess_repo_params(workflowRepoURL, fail_ok=True)
+            except:
+                self.logger.exception(
+                    f"Unable to use RO-Crate derived {workflowRepoURL} as workflow source"
+                )
 
-        if remote_repo is None:
+        if remote_repo is None or remote_repo.repo_type is None:
             raise WfExSBackendException(
                 "Unable to guess repository from RO-Crate manifest"
             )
