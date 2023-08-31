@@ -365,6 +365,7 @@ class MaterializedInput(NamedTuple):
     values: "MaterializedInputValues"
     secondaryInputs: "Optional[Sequence[MaterializedContent]]" = None
     autoFilled: "bool" = False
+    implicit: "bool" = False
 
 
 if TYPE_CHECKING:

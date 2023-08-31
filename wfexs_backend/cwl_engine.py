@@ -150,6 +150,8 @@ class CWLWorkflowEngine(WorkflowEngine):
         (None, None, DEFAULT_CWLTOOL_VERSION),
     ]
 
+    INPUT_DECLARATIONS_FILENAME = "inputdeclarations.yaml"
+
     NODEJS_WRAPPER = "nodejs_wrapper.bash"
 
     NODEJS_CONTAINER_TAG = ContainerTaggedName(
@@ -915,7 +917,7 @@ STDERR
             self.generateDotWorkflow(matWfEng, dagFile)
 
             # Then, all the preparations
-            cwl_dict_inputs = dict()
+            cwl_dict_inputs: "MutableMapping[SymbolicParamName, Any]" = dict()
             with open(localWorkflowFile, "r") as cwl_file:
                 cwl_yaml = yaml.safe_load(cwl_file)  # convert packed CWL to YAML
 
@@ -970,11 +972,9 @@ STDERR
                         inputId = cwl_yaml_input_id
 
                     if inputId not in cwl_dict_inputs:
-                        cwl_dict_inputs[inputId] = cwl_yaml_input
-
-            # TODO change the hardcoded filename
-            inputsFileName = "inputdeclarations.yaml"
-            yamlFile = cast("AnyPath", os.path.join(self.workDir, inputsFileName))
+                        cwl_dict_inputs[
+                            cast("SymbolicParamName", inputId)
+                        ] = cwl_yaml_input
 
             outputDirPostfix = "_" + str(int(time.time()))
             outputsDir = cast(
@@ -983,12 +983,16 @@ STDERR
             os.makedirs(outputsDir, exist_ok=True)
             outputMetaDir = os.path.join(self.outputMetaDir, outputDirPostfix)
             os.makedirs(outputMetaDir, exist_ok=True)
+            inputsFileName = cast(
+                "AbsPath", os.path.join(outputMetaDir, self.INPUT_DECLARATIONS_FILENAME)
+            )
+
             try:
                 # Create YAML file
-                augmentedInputs = self.createYAMLFile(
-                    matInputs, cwl_dict_inputs, yamlFile
+                cwlizedInputs = self.createYAMLFile(
+                    matInputs, cwl_dict_inputs, inputsFileName
                 )
-                if os.path.isfile(yamlFile):
+                if os.path.isfile(inputsFileName):
                     # Execute workflow
                     stdoutFilename = os.path.join(outputMetaDir, WORKDIR_STDOUT_FILE)
                     stderrFilename = os.path.join(outputMetaDir, WORKDIR_STDERR_FILE)
@@ -1141,7 +1145,7 @@ STDERR
                             cmd_arr.extend(
                                 [
                                     localWorkflowFile,
-                                    yamlFile,
+                                    inputsFileName,
                                 ]
                             )
                             self.logger.debug("Command => {}".format(" ".join(cmd_arr)))
@@ -1193,13 +1197,14 @@ STDERR
                     retVal = -1
                     matOutputs = []
 
-                # FIXME: create augmentedInputs properly
+                # Create augmentedInputs properly
+                augmentedInputs = self.augmentCWLInputs(matInputs, cwl_dict_inputs)
                 relOutputsDir = cast(
                     "RelPath", os.path.relpath(outputsDir, self.workDir)
                 )
                 stagedExec = StagedExecution(
                     exitVal=cast("ExitVal", retVal),
-                    augmentedInputs=matInputs,
+                    augmentedInputs=augmentedInputs,
                     matCheckOutputs=matOutputs,
                     outputsDir=relOutputsDir,
                     started=started,
@@ -1225,7 +1230,7 @@ STDERR
     def createYAMLFile(
         self,
         matInputs: "Sequence[MaterializedInput]",
-        cwlInputs: "Mapping[str, Any]",
+        cwlInputs: "Mapping[SymbolicParamName, Any]",
         filename: "AnyPath",
     ) -> "Mapping[SymbolicParamName, ExecInputVal]":
         """
@@ -1253,8 +1258,43 @@ STDERR
                 "ERROR: cannot create YAML file {}, {}".format(filename, error)
             )
 
+    def augmentCWLInputs(
+        self,
+        matInputs: "Sequence[MaterializedInput]",
+        cwlInputs: "Mapping[SymbolicParamName, Any]",
+    ) -> "Sequence[MaterializedInput]":
+        """
+        Generate additional MaterializedInput for the implicit params.
+        """
+        matHash: "Mapping[SymbolicParamName, MaterializedInput]" = {
+            mat_input.name: mat_input for mat_input in matInputs
+        }
+        augmented_inputs = cast("MutableSequence[MaterializedInput]", [])
+        for input_name, cwl_input in cwlInputs.items():
+            aug_input = matHash.get(input_name)
+            if aug_input is None:
+                if "default" in cwl_input:
+                    val = cwl_input["default"]
+
+                    # TODO: handle complex default values, like file paths
+                    # TODO: can default values have secondary inputs?
+                    aug_values = val if isinstance(val, list) else [val]
+                    aug_input = MaterializedInput(
+                        name=input_name,
+                        values=aug_values,
+                        autoFilled=False,
+                        implicit=True,
+                    )
+
+            if aug_input is not None:
+                augmented_inputs.append(aug_input)
+
+        return augmented_inputs
+
     def executionInputs(
-        self, matInputs: "Sequence[MaterializedInput]", cwlInputs: "Mapping[str, Any]"
+        self,
+        matInputs: "Sequence[MaterializedInput]",
+        cwlInputs: "Mapping[SymbolicParamName, Any]",
     ) -> "Mapping[SymbolicParamName, ExecInputVal]":
         """
         Setting execution inputs needed to execute the workflow

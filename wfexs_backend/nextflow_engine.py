@@ -1544,7 +1544,9 @@ STDERR
                     # Time to create a new materialized input
                     theValues = val if isinstance(val, list) else [val]
                     augmentedInput = MaterializedInput(
-                        name=cast("SymbolicParamName", key), values=theValues
+                        name=cast("SymbolicParamName", key),
+                        values=theValues,
+                        implicit=True,
                     )
                 elif augmentedInput.autoFilled:
                     # Time to update an existing materialized input
