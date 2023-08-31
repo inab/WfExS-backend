@@ -2024,6 +2024,8 @@ class WfExSBackend:
                 self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION
             )
             if not os.path.exists(roCrateFile):
+                if os.path.lexists(roCrateFile):
+                    os.unlink(roCrateFile)
                 os.symlink(os.path.basename(cached_content.path), roCrateFile)
 
             return (
