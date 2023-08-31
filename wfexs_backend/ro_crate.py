@@ -846,8 +846,20 @@ class WorkflowRunROCrate:
                         "Sequence[Union[bool,str,float,int]]", in_item.values
                     ):
                         if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                            # This case happens when an input is telling
+                            # some kind of output file or directory.
+                            # So, its value should be fixed, to avoid
+                            # containing absolute paths
+                            fixedAtomicValue: "Union[bool,str,float,int]"
+                            if in_item.autoFilled:
+                                fixedAtomicValue = os.path.relpath(
+                                    cast("str", itemInAtomicValues),
+                                    self.staged_setup.work_dir,
+                                )
+                            else:
+                                fixedAtomicValue = itemInAtomicValues
                             parameter_value = PropertyValue(
-                                self.crate, in_item.name, itemInAtomicValues
+                                self.crate, in_item.name, fixedAtomicValue
                             )
                             crate_pv = self.crate.add(parameter_value)
                             if isinstance(crate_coll, Collection):
