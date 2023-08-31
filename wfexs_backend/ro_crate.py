@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import copy
+import datetime
 import inspect
 import logging
 import os
@@ -587,6 +588,7 @@ class WorkflowRunROCrate:
                 "version": langVersion,
             },
         )
+        self.description = f"RO-Crate from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname}) at {datetime.datetime.now().astimezone().isoformat()}"
         # This should not be needed, as it is added later
         self.crate.add(self.compLang)
 
