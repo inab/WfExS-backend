@@ -1,0 +1,36 @@
+workflow_id: git+https://github.com/wombat-p/WOMBAT-Pipelines.git@51d0be8aa1b22142b1ba09edb5ee4465618e8e05
+workflow_config:
+  secure: false
+  containerType: docker
+  nextflow:
+    profile:
+      - docker
+      - test
+# All the inputs must be URLs or CURIEs from identifiers.org
+placeholders:
+  test_data_prefix: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/51d0be8aa1b22142b1ba09edb5ee4465618e8e05/test_data
+params:
+  fasta:
+    c-l-a-s-s: File
+    url: "{test_data_prefix}/ABRF_iPRG_2012_target.fasta"
+  raws:
+    c-l-a-s-s: File
+    url:
+      - "{test_data_prefix}/OVEMB150205_12.raw"
+      - "{test_data_prefix}/OVEMB150205_14.raw"
+  exp_design:
+    c-l-a-s-s: File
+    url: "{test_data_prefix}/exp_design.txt"
+  parameters:
+    c-l-a-s-s: File
+    url: "{test_data_prefix}/test_params.yml"
+  sdrfmapping:
+    c-l-a-s-s: File
+    url: "https://raw.githubusercontent.com/bigbio/proteomics-metadata-standard/34ad4ed605b100ef72ec8fe31adc8af33f207717/sdrf-proteomics/assets/param2sdrf.yml"
+  run_statistics: true
+  workflow: "all"
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false
