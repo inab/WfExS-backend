@@ -163,7 +163,7 @@ import urllib.parse
 from .ro_crate import (
     WorkflowRunROCrate,
 )
-import bagit  # type: ignore[import]
+import bagit
 
 from . import common as common_defs_module
 
@@ -2481,6 +2481,7 @@ class WF:
         """
         BEWARE: This is a destructive step! So, once run, there is no back!
         """
+        assert self.workDir is not None
         return bagit.make_bag(self.workDir)
 
     DefaultCardinality = "1"
