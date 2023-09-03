@@ -78,20 +78,20 @@ if TYPE_CHECKING:
 import urllib.parse
 import uuid
 
-import magic  # type: ignore[import]
+import magic
 from rfc6920.methods import extract_digest
-import rocrate.model.entity  # type: ignore[import]
-import rocrate.model.dataset  # type: ignore[import]
-import rocrate.model.computationalworkflow  # type: ignore[import]
-import rocrate.model.computerlanguage  # type: ignore[import]
-import rocrate.model.file  # type: ignore[import]
-import rocrate.model.file_or_dir  # type: ignore[import]
-import rocrate.model.metadata  # type: ignore[import]
-import rocrate.model.softwareapplication  # type: ignore[import]
-import rocrate.model.creativework  # type: ignore[import]
-import rocrate.rocrate  # type: ignore[import]
+import rocrate.model.entity
+import rocrate.model.dataset
+import rocrate.model.computationalworkflow
+import rocrate.model.computerlanguage
+import rocrate.model.file
+import rocrate.model.file_or_dir
+import rocrate.model.metadata
+import rocrate.model.softwareapplication
+import rocrate.model.creativework
+import rocrate.rocrate
 
-from rocrate.utils import (  # type: ignore[import]
+from rocrate.utils import (
     get_norm_value,
     is_url,
 )
@@ -229,7 +229,7 @@ class Collection(rocrate.model.creativework.CreativeWork):  # type: ignore[misc]
     def __init__(
         self,
         crate: "rocrate.rocrate.ROCrate",
-        main_entity: "Union[FixedFile, FixedDataset, None]",
+        main_entity: "Union[FixedFile, FixedDataset, Collection, None]",
         identifier: "Optional[str]" = None,
         properties: "Optional[Mapping[str, Any]]" = None,
     ):
@@ -320,6 +320,22 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         self,
         source: "Optional[Union[str, pathlib.Path]]" = None,
         dest_path: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ) -> "FixedFile":
+        return self.add_file_ext(
+            source=source,
+            dest_path=dest_path,
+            fetch_remote=fetch_remote,
+            validate_url=validate_url,
+            properties=properties,
+        )
+
+    def add_file_ext(
+        self,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[str]" = None,
         identifier: "Optional[str]" = None,
         fetch_remote: "bool" = False,
         validate_url: "bool" = False,
@@ -331,22 +347,35 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         dest_path: The relative path inside the RO-Crate for the file copy.
         identifier: The forced value for the @id of the File declaration.
         """
-        return cast(
-            "FixedFile",
-            self.add(
-                clazz(
-                    self,
-                    source=source,
-                    dest_path=dest_path,
-                    identifier=identifier,
-                    fetch_remote=fetch_remote,
-                    validate_url=validate_url,
-                    properties=properties,
-                )
-            ),
+        return self.add(
+            clazz(
+                self,
+                source=source,
+                dest_path=dest_path,
+                identifier=identifier,
+                fetch_remote=fetch_remote,
+                validate_url=validate_url,
+                properties=properties,
+            )
         )
 
     def add_dataset(
+        self,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ) -> "FixedDataset":
+        return self.add_dataset_ext(
+            source=source,
+            dest_path=dest_path,
+            fetch_remote=fetch_remote,
+            validate_url=validate_url,
+            properties=properties,
+        )
+
+    def add_dataset_ext(
         self,
         source: "Optional[Union[str, pathlib.Path]]" = None,
         dest_path: "Optional[str]" = None,
@@ -360,39 +389,8 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         dest_path: The relative path inside the RO-Crate for the file copy.
         identifier: The forced value for the @id of the File declaration.
         """
-        return cast(
-            "FixedDataset",
-            self.add(
-                FixedDataset(
-                    self,
-                    source=source,
-                    dest_path=dest_path,
-                    identifier=identifier,
-                    fetch_remote=fetch_remote,
-                    validate_url=validate_url,
-                    properties=properties,
-                )
-            ),
-        )
-
-    add_directory = add_dataset
-
-    def add_workflow(
-        self,
-        source: "Optional[Union[str, pathlib.Path]]" = None,
-        dest_path: "Optional[str]" = None,
-        identifier: "Optional[str]" = None,
-        fetch_remote: "bool" = False,
-        validate_url: "bool" = False,
-        properties: "Optional[Mapping[str, Any]]" = None,
-        main: "bool" = False,
-        lang: "str" = "cwl",
-        lang_version: "Optional[str]" = None,
-        gen_cwl: "bool" = False,
-        cls: "rocrate.model.computationalworkflow.ComputationalWorkflow" = FixedWorkflow,
-    ) -> "FixedWorkflow":
-        workflow = self.add(
-            cls(
+        return self.add(
+            FixedDataset(
                 self,
                 source=source,
                 dest_path=dest_path,
@@ -402,6 +400,73 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
                 properties=properties,
             )
         )
+
+    add_directory = add_dataset
+
+    def add_workflow(
+        self,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+        main: "bool" = False,
+        lang: "Union[str, rocrate.model.computerlanguage.ComputerLanguage]" = "cwl",
+        lang_version: "Optional[str]" = None,
+        gen_cwl: "bool" = False,
+        cls: "Type[rocrate.model.computationalworkflow.ComputationalWorkflow]" = FixedWorkflow,
+    ) -> "FixedWorkflow":
+        return self.add_workflow_ext(
+            source=source,
+            dest_path=dest_path,
+            fetch_remote=fetch_remote,
+            validate_url=validate_url,
+            properties=properties,
+            main=main,
+            lang=lang,
+            lang_version=lang_version,
+            gen_cwl=gen_cwl,
+            cls=cls,
+        )
+
+    def add_workflow_ext(
+        self,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        fetch_remote: "bool" = False,
+        validate_url: "bool" = False,
+        properties: "Optional[Mapping[str, Any]]" = None,
+        main: "bool" = False,
+        lang: "Union[str, rocrate.model.computerlanguage.ComputerLanguage]" = "cwl",
+        lang_version: "Optional[str]" = None,
+        gen_cwl: "bool" = False,
+        cls: "Type[rocrate.model.computationalworkflow.ComputationalWorkflow]" = FixedWorkflow,
+    ) -> "FixedWorkflow":
+        workflow: "rocrate.model.computationalworkflow.ComputationalWorkflow"
+        if issubclass(cls, FixedWorkflow):
+            workflow = self.add(
+                cls(
+                    self,
+                    source=source,
+                    dest_path=dest_path,
+                    identifier=identifier,
+                    fetch_remote=fetch_remote,
+                    validate_url=validate_url,
+                    properties=properties,
+                )
+            )
+        else:
+            workflow = self.add(
+                cls(
+                    self,
+                    source=source,
+                    dest_path=dest_path,
+                    fetch_remote=fetch_remote,
+                    validate_url=validate_url,
+                    properties=properties,
+                )
+            )
         if isinstance(lang, rocrate.model.computerlanguage.ComputerLanguage):
             assert lang.crate is self
         else:
@@ -428,7 +493,7 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
                 source
             )
             cwl_dest_path = pathlib.Path(source).with_suffix(".cwl").name
-            cwl_workflow = self.add_workflow(
+            cwl_workflow = self.add_workflow_ext(
                 source=cwl_source,
                 dest_path=cwl_dest_path,
                 fetch_remote=fetch_remote,
@@ -629,7 +694,12 @@ class WorkflowRunROCrate:
         wf_wfexs = self.crate.add(wf_wfexs)
         wf_wfexs["name"] = wfexs_backend_name
         wf_wfexs.url = wfexs_backend_url
-        wf_wfexs.version = get_WfExS_version()
+        wfexs_version = get_WfExS_version()
+        if wfexs_version[1] is None:
+            verstr = wfexs_version[0]
+        else:
+            verstr = "{0[0]} ({0[1]})".format(wfexs_version)
+        wf_wfexs.version = verstr
 
         return wf_wfexs
 
@@ -665,6 +735,7 @@ class WorkflowRunROCrate:
                     )
                     self.cached_cts[container.type] = crate_cont_type
 
+                software_container: "Union[rocrate.model.softwareapplication.SoftwareApplication, SoftwareContainer]"
                 if do_attach and container.localPath is not None:
                     the_size = os.stat(container.localPath).st_size
                     assert container.signature is not None
@@ -717,8 +788,17 @@ class WorkflowRunROCrate:
                 # TODO: Optimize this
                 do_append = True
                 if "softwareRequirements" in sa_crate:
-                    for req in sa_crate["softwareRequirements"]:
-                        if req.id == crate_cont.id:
+                    softwareRequirements = sa_crate["softwareRequirements"]
+                    if isinstance(softwareRequirements, list):
+                        softwareRequirements_l = softwareRequirements
+                    else:
+                        softwareRequirements_l = [softwareRequirements]
+                    for req in softwareRequirements_l:
+                        if isinstance(req, rocrate.model.entity.Entity):
+                            req_id = req.id
+                        else:
+                            req_id = req
+                        if req_id == crate_cont.id:
                             do_append = False
                             break
 
@@ -814,7 +894,7 @@ class WorkflowRunROCrate:
                             ),
                             do_attach=do_attach,
                         )
-                        # crate_dataset = self.crate.add_dataset(
+                        # crate_dataset = self.crate.add_dataset_ext(
                         #    source=itemInURISource,
                         #    fetch_remote=False,
                         #    validate_url=False,
@@ -866,18 +946,20 @@ class WorkflowRunROCrate:
                                 crate_coll.append_to("hasPart", crate_pv)
                             else:
                                 crate_coll = crate_pv
-                else:
-                    # Let's suppose it is an str
-                    parameter_no_value = Intangible(
-                        self.crate,
-                        in_item.name,
-                        additionalType="String",
-                    )
-                    crate_pnv = self.crate.add(parameter_no_value)
-                    if isinstance(crate_coll, Collection):
-                        crate_coll.append_to("hasPart", crate_pnv)
-                    else:
-                        crate_coll = crate_pnv
+                # Null values are right now represented as no values
+                # At this moment there is no satisfactory way to represent it
+                # else:
+                #     # Let's suppose it is an str
+                #     parameter_no_value = Intangible(
+                #         self.crate,
+                #         in_item.name,
+                #         additionalType="String",
+                #     )
+                #     crate_pnv = self.crate.add(parameter_no_value)
+                #     if isinstance(crate_coll, Collection):
+                #         crate_coll.append_to("hasPart", crate_pnv)
+                #     else:
+                #         crate_coll = crate_pnv
 
             # Avoiding corner cases
             if crate_coll is not None:
@@ -886,8 +968,17 @@ class WorkflowRunROCrate:
                     isinstance(in_item.secondaryInputs, list)
                     and len(in_item.secondaryInputs) > 0
                 ):
+                    # TODO: Can a value have secondary values in workflow
+                    # paradigms like CWL???
+                    if isinstance(crate_coll, PropertyValue):
+                        self.logger.warning(
+                            "Unexpected case: PropertyValue as main entity of a Collection. Please open an issue on WfExS-backend repo providing the workflow which raised this corner case."
+                        )
+
                     sec_crate_coll = self._add_collection_to_crate(
-                        main_entity=crate_coll
+                        main_entity=cast(
+                            "Union[Collection, FixedDataset, FixedFile]", crate_coll
+                        )
                     )
 
                     for secInput in in_item.secondaryInputs:
@@ -913,7 +1004,7 @@ class WorkflowRunROCrate:
                                 secInputURISource,
                                 do_attach=do_attach,
                             )
-                            # crate_dataset = self.crate.add_dataset(
+                            # crate_dataset = self.crate.add_dataset_ext(
                             #    source=secInputURISource,
                             #    fetch_remote=False,
                             #    validate_url=False,
@@ -965,7 +1056,7 @@ class WorkflowRunROCrate:
         if the_id is None:
             the_id = the_name if do_attach or (the_uri is None) else the_uri
 
-        the_file_crate = self.crate.add_file(
+        the_file_crate = self.crate.add_file_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
             dest_path=the_name if do_attach else None,
@@ -1000,7 +1091,7 @@ class WorkflowRunROCrate:
 
     def _add_collection_to_crate(
         self,
-        main_entity: "Union[FixedFile, FixedDataset, None]" = None,
+        main_entity: "Union[FixedFile, FixedDataset, Collection, None]" = None,
     ) -> "Collection":
         wf_coll = Collection(self.crate, main_entity)
         wf_coll = self.crate.add(wf_coll)
@@ -1032,7 +1123,7 @@ class WorkflowRunROCrate:
             the_id = the_name if do_attach or (the_uri is None) else the_uri
 
         the_files_crates: "MutableSequence[FixedFile]" = []
-        crate_dataset = self.crate.add_dataset(
+        crate_dataset = self.crate.add_dataset_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
             dest_path=the_name if do_attach else None,
@@ -1224,7 +1315,7 @@ class WorkflowRunROCrate:
 
         rocrate_file_id_base = the_id if the_uri is None else the_uri
 
-        the_workflow_crate = self.crate.add_workflow(
+        the_workflow_crate = self.crate.add_workflow_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
             dest_path=the_name if do_attach else None,
@@ -1299,7 +1390,9 @@ class WorkflowRunROCrate:
             the_workflow_crate["url"] = wf_url
 
         if the_workflow.relPathFiles:
-            rel_entities = []
+            rel_entities: "MutableSequence[Union[FixedFile, rocrate.model.creativework.CreativeWork]]" = (
+                []
+            )
             for rel_file in the_workflow.relPathFiles:
                 if rel_file == the_workflow.relPath:
                     # Ignore itself, so it is not overwritten
@@ -1307,13 +1400,13 @@ class WorkflowRunROCrate:
 
                 # First, are we dealing with relative files or with URIs?
                 p_rel_file = urllib.parse.urlparse(rel_file)
+                the_entity: "Union[FixedFile, rocrate.model.creativework.CreativeWork]"
                 if p_rel_file.scheme != "":
                     the_entity = rocrate.model.creativework.CreativeWork(
                         self.crate,
                         identifier=rel_file,
                     )
                     self.crate.add(the_entity)
-                    rel_entities.append(the_entity)
                 else:
                     rocrate_file_id = rocrate_file_id_base + "/" + rel_file
                     the_name = cast(
@@ -1329,7 +1422,8 @@ class WorkflowRunROCrate:
                         do_attach=do_attach,
                         is_soft_source=True,
                     )
-                    rel_entities.append(the_entity)
+
+                rel_entities.append(the_entity)
 
             if len(rel_entities) > 0:
                 the_workflow_crate.append_to("hasPart", rel_entities)
@@ -1625,7 +1719,7 @@ class WorkflowRunROCrate:
             crate_coll = self._add_collection_to_crate(main_entity=crate_file)
 
             for secFile in the_content.secondaryFiles:
-                gen_content: "Union[FixedFile, FixedDataset]"
+                gen_content: "Union[FixedFile, Collection, FixedDataset]"
                 if isinstance(secFile, GeneratedContent):
                     gen_content = self._add_GeneratedContent_to_crate(
                         secFile,
@@ -1653,9 +1747,9 @@ class WorkflowRunROCrate:
         the_content: "GeneratedDirectoryContent",
         rel_work_dir: "RelPath",
         do_attach: "bool" = True,
-    ) -> "Union[Tuple[Union[FixedDataset, Collection], Sequence[FixedFile]], Tuple[None, None]]":
+    ) -> "Union[Tuple[Union[FixedDataset, Collection], Sequence[Union[FixedFile, Collection]]], Tuple[None, None]]":
         if os.path.isdir(the_content.local):
-            the_files_crates: "MutableSequence[FixedFile]" = []
+            the_files_crates: "MutableSequence[Union[FixedFile, Collection]]" = []
 
             the_uri = the_content.uri.uri if the_content.uri is not None else None
             dest_path = os.path.relpath(the_content.local, self.work_dir) + "/"
@@ -1672,7 +1766,7 @@ class WorkflowRunROCrate:
             #    # digest, algo = extract_digest(the_content.signature)
             #    # dest_path = hexDigest(algo, digest)
 
-            crate_dataset = self.crate.add_dataset(
+            crate_dataset = self.crate.add_dataset_ext(
                 identifier=the_id,
                 source=the_content.local if do_attach else None,
                 dest_path=dest_path if do_attach else None,
@@ -1731,7 +1825,7 @@ class WorkflowRunROCrate:
                 crate_coll = self._add_collection_to_crate(main_entity=crate_dataset)
 
                 for secFile in the_content.secondaryFiles:
-                    gen_content: "Union[FixedFile, FixedDataset]"
+                    gen_content: "Union[FixedFile, Collection, FixedDataset]"
                     if isinstance(secFile, GeneratedContent):
                         gen_content = self._add_GeneratedContent_to_crate(
                             secFile,
