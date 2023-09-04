@@ -255,8 +255,8 @@ def genParserSub(
             help="This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the working directory",
         )
 
-    if command is not WfExS_Commands.Execute and (
-        crateParams or postStageParams or exportParams
+    if command is not WfExS_Commands.ConfigValidate and (
+        preStageParams or postStageParams or exportParams
     ):
         # When it is a one shot, like Execute,
         # the --private-key-file parameter is not needed
@@ -264,6 +264,12 @@ def genParserSub(
             "--private-key-file",
             dest="private_key_file",
             help="This parameter passes the name of the file containing the private key needed to unlock an encrypted working directory.",
+        )
+        ap_.add_argument(
+            "--private-key-passphrase-envvar",
+            dest="private_key_passphrase_envvar",
+            default="",
+            help="This parameter passes the name of the environment variable containing the passphrase needed to decrypt the private key needed to unlock an encrypted working directory.",
         )
 
     if postStageParams:
@@ -501,6 +507,13 @@ def processStagedWorkdirCommand(
     # This is needed to be sure the encfs instance is unmounted
     # if args.staged_workdir_command != WfExS_Staged_WorkDir_Commands.Mount:
     #    atexit.register(wfInstance.cleanup)
+    if (
+        hasattr(args, "private_key_passphrase_envvar")
+        and args.private_key_passphrase_envvar is not None
+    ):
+        private_key_passphrase = os.environ.get(args.private_key_passphrase_envvar, "")
+    else:
+        private_key_passphrase = ""
 
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
@@ -515,6 +528,7 @@ def processStagedWorkdirCommand(
                 acceptGlob=args.filesAsGlobs,
                 doCleanup=False,
                 private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
             ):
                 if wfSetup is not None:
                     print(f"Mounted {instance_id} ({nickname}) at {wfSetup.work_dir}")
@@ -523,6 +537,7 @@ def processStagedWorkdirCommand(
             wB.listStagedWorkflows(
                 *args.staged_workdir_command_args,
                 private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
                 acceptGlob=args.filesAsGlobs,
             ),
             key=lambda x: x[2],
@@ -550,6 +565,7 @@ def processStagedWorkdirCommand(
                     wB.removeStagedWorkflows(
                         *args.staged_workdir_command_args,
                         private_key_filename=args.private_key_file,
+                        private_key_passphrase=private_key_passphrase,
                         acceptGlob=args.filesAsGlobs,
                     ),
                 )
@@ -560,6 +576,7 @@ def processStagedWorkdirCommand(
         retval = wB.shellFirstStagedWorkflow(
             *args.staged_workdir_command_args,
             private_key_filename=args.private_key_file,
+            private_key_passphrase=private_key_passphrase,
             acceptGlob=args.filesAsGlobs,
         )
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineExecute:
@@ -575,6 +592,7 @@ def processStagedWorkdirCommand(
                 acceptGlob=args.filesAsGlobs,
                 doCleanup=False,
                 private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
@@ -612,6 +630,7 @@ def processStagedWorkdirCommand(
             ) in wB.statusStagedWorkflows(
                 *args.staged_workdir_command_args,
                 private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
                 acceptGlob=args.filesAsGlobs,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
@@ -645,6 +664,7 @@ def processStagedWorkdirCommand(
                 acceptGlob=args.filesAsGlobs,
                 doCleanup=False,
                 private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
@@ -1071,10 +1091,20 @@ def main() -> None:
         WfExS_Commands.ExportResults,
         WfExS_Commands.ExportCrate,
     ):
+        if (
+            hasattr(args, "private_key_passphrase_envvar")
+            and args.private_key_passphrase_envvar is not None
+        ):
+            private_key_passphrase = os.environ.get(
+                args.private_key_passphrase_envvar, ""
+            )
+        else:
+            private_key_passphrase = ""
         if os.path.isdir(args.workflowWorkingDirectory):
             wfInstance = wfBackend.fromWorkDir(
                 args.workflowWorkingDirectory,
                 private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
                 fail_ok=command != WfExS_Commands.MountWorkDir,
             )
         else:
@@ -1087,6 +1117,7 @@ def main() -> None:
             ) in wfBackend.listStagedWorkflows(
                 args.workflowWorkingDirectory,
                 private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
                 acceptGlob=True,
                 doCleanup=False,
             ):

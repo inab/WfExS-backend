@@ -322,6 +322,7 @@ class WF:
         paranoid_mode: "Optional[bool]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
     ):
         """
@@ -527,8 +528,10 @@ class WF:
         self.allowOther = False
 
         if checkSecure:
-            passphraseFile = os.path.join(self.rawWorkDir, WORKDIR_PASSPHRASE_FILE)
-            self.secure = os.path.exists(passphraseFile)
+            workdir_passphrase_file = os.path.join(
+                self.rawWorkDir, WORKDIR_PASSPHRASE_FILE
+            )
+            self.secure = os.path.exists(workdir_passphrase_file)
         else:
             self.secure = (len(public_key_filenames) > 0) or workflow_config.get(
                 "secure", True
@@ -542,6 +545,7 @@ class WF:
             fail_ok=fail_ok,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
         )
 
         self.configMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
@@ -747,6 +751,7 @@ class WF:
         fail_ok: "bool" = False,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "Tuple[bool, AbsPath]":
         uniqueRawWorkDir = self.rawWorkDir
 
@@ -772,29 +777,32 @@ class WF:
             os.makedirs(uniqueWorkDir, exist_ok=True)
 
             # This is the passphrase needed to decrypt the filesystem
-            passphraseFile = cast(
+            workdir_passphrase_file = cast(
                 "AbsPath", os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
             )
 
             used_public_key_filenames: "Sequence[AnyPath]"
-            if os.path.exists(passphraseFile):
+            if os.path.exists(workdir_passphrase_file):
                 (
                     encfs_type,
                     encfs_cmd,
-                    securePassphrase,
-                ) = self.wfexs.readSecuredPassphrase(
-                    passphraseFile,
+                    secureWorkdirPassphrase,
+                ) = self.wfexs.readSecuredWorkdirPassphrase(
+                    workdir_passphrase_file,
                     private_key_filename=private_key_filename,
+                    private_key_passphrase=private_key_passphrase,
                 )
                 used_public_key_filenames = []
             else:
                 (
                     encfs_type,
                     encfs_cmd,
-                    securePassphrase,
+                    secureWorkdirPassphrase,
                     used_public_key_filenames,
-                ) = self.wfexs.generateSecuredPassphrase(
-                    passphraseFile,
+                ) = self.wfexs.generateSecuredWorkdirPassphrase(
+                    workdir_passphrase_file,
+                    private_key_filename=private_key_filename,
+                    private_key_passphrase=private_key_passphrase,
                     public_key_filenames=public_key_filenames,
                 )
 
@@ -839,7 +847,7 @@ class WF:
                         uniqueEncWorkDir,
                         uniqueWorkDir,
                         uniqueRawWorkDir,
-                        securePassphrase,
+                        secureWorkdirPassphrase,
                         allowOther,
                     )
                 except Exception as e:
@@ -887,8 +895,8 @@ class WF:
                         ) as mF:
                             json.dump(manifest, mF, sort_keys=True)
 
-            # self.encfsPassphrase = securePassphrase
-            del securePassphrase
+            # self.encfsPassphrase = secureWorkdirPassphrase
+            del secureWorkdirPassphrase
         else:
             uniqueEncWorkDir = None
             uniqueWorkDir = uniqueRawWorkDir
@@ -978,6 +986,7 @@ class WF:
         wfexs: "WfExSBackend",
         workflowWorkingDirectory: "AnyPath",
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
     ) -> "WF":
         """
@@ -998,6 +1007,7 @@ class WF:
             rawWorkDir=rawWorkDir,
             creation=creation,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
             fail_ok=fail_ok,
         )
 
@@ -1064,6 +1074,7 @@ class WF:
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -1102,6 +1113,7 @@ class WF:
             creds_config=creds_config,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
             paranoid_mode=paranoidMode,
         )
 
@@ -1112,6 +1124,7 @@ class WF:
         workflow_meta: "WorkflowMetaConfigBlock",
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":  # VRE
         """
@@ -1139,6 +1152,7 @@ class WF:
             nickname=workflow_meta.get("nickname"),
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
             paranoid_mode=paranoidMode,
         )
 

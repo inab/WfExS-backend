@@ -47,13 +47,11 @@ from urllib import parse
 # should fallback to default implementations when C ones are not present
 import yaml
 
-import crypt4gh.lib  # type: ignore[import]
-import crypt4gh.keys.kdf  # type: ignore[import]
-import crypt4gh.keys.c4gh  # type: ignore[import]
+import crypt4gh.lib
+import crypt4gh.keys.kdf
+import crypt4gh.keys.c4gh
 
 import magic
-
-from rocrate import rocrate  # type: ignore[import]
 
 from .common import (
     AbstractWfExSException,
@@ -82,6 +80,8 @@ from .cache_handler import (
     CachedContent,
     SchemeHandlerCacheHandler,
 )
+
+from .ro_crate import FixedROCrate
 
 from .utils.marshalling_handling import unmarshall_namedtuple
 from .utils.misc import config_validate
@@ -153,6 +153,8 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import Final
+
+    from crypt4gh.header import CompoundKey
 
     from .common import (
         AbstractWorkflowEngineType,
@@ -364,6 +366,7 @@ class WfExSBackend:
         config_directory: "Optional[AnyPath]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "WF":
         """
 
@@ -398,6 +401,7 @@ class WfExSBackend:
             creds_config=creds_config,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
         )
 
     def __init__(
@@ -757,6 +761,7 @@ class WfExSBackend:
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "WF":
         """
         Init function, which delegates on WF class
@@ -775,6 +780,7 @@ class WfExSBackend:
             creds_config=creds_config,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
         )
 
     def createRawWorkDir(
@@ -896,12 +902,14 @@ class WfExSBackend:
         self,
         workflowWorkingDirectory: "AnyPath",
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
     ) -> "WF":
         return WF.FromWorkDir(
             self,
             workflowWorkingDirectory,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
             fail_ok=fail_ok,
         )
 
@@ -987,6 +995,7 @@ class WfExSBackend:
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -1007,6 +1016,7 @@ class WfExSBackend:
             creds_config,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
         )
 
@@ -1038,10 +1048,11 @@ class WfExSBackend:
     def getFusermountParams(self) -> "Tuple[AnyPath, int]":
         return self.fusermount_cmd, self.encfs_idleMinutes
 
-    def readSecuredPassphrase(
+    def readSecuredWorkdirPassphrase(
         self,
-        passphraseFile: "AbsPath",
+        workdir_passphrase_file: "AbsPath",
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "Tuple[EncryptedFSType, AnyPath, str]":
         """
         This method decrypts a crypt4gh file containing a passphrase
@@ -1051,10 +1062,20 @@ class WfExSBackend:
         """
         clearF = io.BytesIO()
         if private_key_filename is None:
-            private_key_filename = self.privKey
-        with open(passphraseFile, mode="rb") as encF:
+            private_key = self.privKey
+        else:
+            if private_key_passphrase is None:
+                private_key_passphrase_r = ""
+            else:
+                private_key_passphrase_r = private_key_passphrase
+            assert private_key_passphrase is not None
+            private_key = crypt4gh.keys.get_private_key(
+                private_key_filename, lambda: private_key_passphrase_r
+            )
+
+        with open(workdir_passphrase_file, mode="rb") as encF:
             crypt4gh.lib.decrypt(
-                [(0, private_key_filename, None)],
+                [(0, private_key, None)],
                 encF,
                 clearF,
                 offset=0,
@@ -1062,11 +1083,11 @@ class WfExSBackend:
                 sender_pubkey=None,
             )
 
-        encfs_type_str, _, securePassphrase = (
+        encfs_type_str, _, secureWorkdirPassphrase = (
             clearF.getvalue().decode("utf-8").partition("=")
         )
         del clearF
-        self.logger.debug(encfs_type_str + " " + securePassphrase)
+        self.logger.debug(encfs_type_str + " " + secureWorkdirPassphrase)
         try:
             encfs_type = EncryptedFSType(encfs_type_str)
         except:
@@ -1087,16 +1108,18 @@ class WfExSBackend:
         else:
             encfs_cmd = self.encfs_cmd
 
-        if securePassphrase == "":
+        if secureWorkdirPassphrase == "":
             raise WfExSBackendException(
                 "Encryption filesystem key does not follow the right format"
             )
 
-        return encfs_type, encfs_cmd, securePassphrase
+        return encfs_type, encfs_cmd, secureWorkdirPassphrase
 
-    def generateSecuredPassphrase(
+    def generateSecuredWorkdirPassphrase(
         self,
-        passphraseFile: "AbsPath",
+        workdir_passphrase_file: "AbsPath",
+        private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
     ) -> "Tuple[EncryptedFSType, AnyPath, str, Sequence[AnyPath]]":
         """
@@ -1109,18 +1132,47 @@ class WfExSBackend:
         of public keys used to encrypt the passphrase file,
         which can be used later for some additional purposes.
         """
-        securePassphrase = self.generate_passphrase()
+        secureWorkdirPassphrase = self.generate_passphrase()
         clearF = io.BytesIO(
-            (self.encfs_type.value + "=" + securePassphrase).encode("utf-8")
+            (self.encfs_type.value + "=" + secureWorkdirPassphrase).encode("utf-8")
         )
+        if private_key_filename is None:
+            private_key = self.privKey
+        else:
+            if private_key_passphrase is None:
+                private_key_passphrase_r = ""
+            else:
+                private_key_passphrase_r = private_key_passphrase
+            assert private_key_passphrase is not None
+            private_key = crypt4gh.keys.get_private_key(
+                private_key_filename, lambda: private_key_passphrase_r
+            )
+
+        public_keys: "MutableSequence[bytes]" = []
         if len(public_key_filenames) == 0:
-            public_key_filenames = [self.pubKey]
-        encrypt_keys = [(0, self.privKey, pub_key) for pub_key in public_key_filenames]
-        with open(passphraseFile, mode="wb") as encF:
+            if private_key_filename is not None:
+                raise WfExSBackendException(
+                    "When a custom private key is provided, at least the public key paired with it must also be provided"
+                )
+            public_keys = [self.pubKey]
+        else:
+            for pub_key_filename in public_key_filenames:
+                pub_key = crypt4gh.keys.get_public_key(pub_key_filename)
+                public_keys.append(pub_key)
+
+        encrypt_keys: "MutableSequence[CompoundKey]" = []
+        for pub_key in public_keys:
+            encrypt_keys.append((0, private_key, pub_key))
+        with open(workdir_passphrase_file, mode="wb") as encF:
             crypt4gh.lib.encrypt(encrypt_keys, clearF, encF, offset=0, span=None)
         del clearF
 
-        return self.encfs_type, self.encfs_cmd, securePassphrase, public_key_filenames
+        return (
+            self.encfs_type,
+            self.encfs_cmd,
+            secureWorkdirPassphrase,
+            public_key_filenames,
+        )
 
     def listStagedWorkflows(
         self,
@@ -1128,6 +1180,7 @@ class WfExSBackend:
         acceptGlob: "bool" = False,
         doCleanup: "bool" = True,
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]]":
         # Removing duplicates
         entries: "Set[str]" = set(args)
@@ -1175,6 +1228,7 @@ class WfExSBackend:
                         wfInstance = self.fromWorkDir(
                             instanceRawWorkdir,
                             private_key_filename=private_key_filename,
+                            private_key_passphrase=private_key_passphrase,
                             fail_ok=True,
                         )
                         try:
@@ -1202,6 +1256,7 @@ class WfExSBackend:
         *args: "str",
         acceptGlob: "bool" = False,
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[MarshallingStatus]]]":
         if len(args) > 0:
             for (
@@ -1213,6 +1268,7 @@ class WfExSBackend:
             ) in self.listStagedWorkflows(
                 *args,
                 private_key_filename=private_key_filename,
+                private_key_passphrase=private_key_passphrase,
                 acceptGlob=acceptGlob,
                 doCleanup=True,
             ):
@@ -1230,11 +1286,13 @@ class WfExSBackend:
         *args: "str",
         acceptGlob: "bool" = False,
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str]]":
         if len(args) > 0:
             for instance_id, nickname, creation, wfSetup, _ in self.listStagedWorkflows(
                 *args,
                 private_key_filename=private_key_filename,
+                private_key_passphrase=private_key_passphrase,
                 acceptGlob=acceptGlob,
                 doCleanup=True,
             ):
@@ -1252,6 +1310,7 @@ class WfExSBackend:
         acceptGlob: "bool" = False,
         firstMatch: "bool" = True,
         private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
     ) -> "ExitVal":
         arg0 = []
         if len(args) > 0:
@@ -1266,6 +1325,7 @@ class WfExSBackend:
         listIter: "Union[Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]], Sequence[Tuple[WfExSInstanceId, str, datetime.datetime, StagedSetup, WF]]]" = self.listStagedWorkflows(
             *arg0,
             private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
             acceptGlob=acceptGlob,
             doCleanup=False,
         )
@@ -2056,7 +2116,7 @@ class WfExSBackend:
         :param expectedEngineDesc: If defined, an instance of WorkflowType
         :return:
         """
-        roCrateObj = rocrate.ROCrate(roCrateFile)
+        roCrateObj = FixedROCrate(roCrateFile)
 
         # TODO: get roCrateObj mainEntity programming language
         # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
