@@ -20,7 +20,7 @@ from __future__ import absolute_import
 
 import os
 
-import data_url  # type: ignore[import]
+import data_url
 
 from typing import (
     cast,

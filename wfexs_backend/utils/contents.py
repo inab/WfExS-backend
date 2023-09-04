@@ -26,7 +26,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-import data_url  # type: ignore[import]
+import data_url
 import magic
 
 from ..common import (
