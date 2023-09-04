@@ -95,9 +95,11 @@ if TYPE_CHECKING:
         MutableSequence[MutableMapping[str, Any]],
     ]
 
+    from jsonpath_ng.jsonpath import JSONVal
 
-import jsonpath_ng  # type: ignore[import]
-import jsonpath_ng.ext  # type: ignore[import]
+
+import jsonpath_ng
+import jsonpath_ng.ext
 import yaml
 
 from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
@@ -771,16 +773,21 @@ STDERR
                 '$."$graph" .. hints | requirements [?class = "DockerRequirement"][*]'
             )
             for match in dockerExprParser.find(wf_yaml):
-                dockerPullId = match.value.get("dockerPull")
+                match_value = cast("Mapping[str, JSONVal]", match.value)
+                dockerPullId: "Optional[str]" = cast(
+                    "Optional[str]", match_value.get("dockerPull")
+                )
 
                 # Fallback to dockerImageId if dockerPull was not set
                 # https://www.commonwl.org/v1.0/CommandLineTool.html#DockerRequirement
                 if dockerPullId is None:
-                    dockerPullId = match.value.get("dockerImageId")
+                    dockerPullId = cast(
+                        "Optional[str]", match_value.get("dockerImageId")
+                    )
 
                 # TODO: treat other cases like dockerImport or dockerLoad?
-
-                containerTags.add(dockerPullId)
+                if dockerPullId is not None:
+                    containerTags.add(dockerPullId)
 
         newLocalWf = LocalWorkflow(
             dir=consolidatedWorkflowDir,
@@ -927,12 +934,16 @@ STDERR
                 workflows = dict()
                 first_workflow = None
                 for match in io_parser.find(cwl_yaml):
-                    wf = match.value
-                    wfId = wf.get("id")
+                    wf = cast("Mapping[str, JSONVal]", match.value)
+                    wfId = cast("Optional[str]", wf.get("id"))
                     wfIdPrefix = "" if wfId is None else wfId + "/"
 
-                    wf_cwl_yaml_inputs = wf.get("inputs", [])
-                    wf_cwl_yaml_outputs = wf.get("outputs", [])
+                    wf_cwl_yaml_inputs = cast(
+                        "Sequence[Mapping[str, JSONVal]]", wf.get("inputs", [])
+                    )
+                    wf_cwl_yaml_outputs = cast(
+                        "Sequence[Mapping[str, JSONVal]]", wf.get("outputs", [])
+                    )
 
                     workflow = (
                         wfId,
