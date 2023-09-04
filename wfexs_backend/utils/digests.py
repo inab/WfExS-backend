@@ -104,7 +104,7 @@ def nullProcessDigest(digestAlgorithm: "str", digest: "bytes") -> "bytes":
     return digest
 
 
-from rfc6920.methods import generate_nih_from_digest  # type: ignore[import]
+from rfc6920.methods import generate_nih_from_digest
 
 # As of https://datatracker.ietf.org/doc/html/rfc6920#page-17
 # rewrite the names of the algorithms
