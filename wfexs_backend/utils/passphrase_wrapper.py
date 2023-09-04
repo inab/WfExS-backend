@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 from funny_passphrase.generator import FunnyPassphraseGenerator
 from funny_passphrase.indexer import CompressedIndexedText
 
-import xdg.BaseDirectory  # type: ignore[import]
+import xdg.BaseDirectory
 
 from ..cache_handler import (
     CacheOfflineException,
