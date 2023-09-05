@@ -1,4 +1,4 @@
-workflow_id: git+https://github.com/wombat-p/WOMBAT-Pipelines.git@3d7d20bce3b2e89d2c48892b27a0b05862f87615
+workflow_id: git+https://github.com/wombat-p/WOMBAT-Pipelines.git@51d0be8aa1b22142b1ba09edb5ee4465618e8e05
 workflow_config:
   secure: false
   nextflow:
@@ -7,7 +7,7 @@ workflow_config:
       - test_full
 # All the inputs must be URLs or CURIEs from identifiers.org
 placeholders:
-  test_data_prefix: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/3d7d20bce3b2e89d2c48892b27a0b05862f87615/test_data
+  test_data_prefix: https://raw.githubusercontent.com/wombat-p/WOMBAT-Pipelines/51d0be8aa1b22142b1ba09edb5ee4465618e8e05/test_data
 params:
   fasta:
     c-l-a-s-s: File

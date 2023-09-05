@@ -1,6 +1,7 @@
 workflow_id: git+https://github.com/wombat-p/WOMBAT-Pipelines.git@51d0be8aa1b22142b1ba09edb5ee4465618e8e05
 workflow_config:
   secure: false
+  containerType: singularity
   nextflow:
     profile:
       - singularity
@@ -25,9 +26,9 @@ params:
     url: "{test_data_prefix}/test_params.yml"
   sdrfmapping:
     c-l-a-s-s: File
-    url: "https://raw.githubusercontent.com/bigbio/proteomics-metadata-standard/master/sdrf-proteomics/assets/param2sdrf.yml"
+    url: "https://raw.githubusercontent.com/bigbio/proteomics-metadata-standard/34ad4ed605b100ef72ec8fe31adc8af33f207717/sdrf-proteomics/assets/param2sdrf.yml"
   run_statistics: true
-  workflow: "all"
+  workflow: "proline"
   outdir:
     c-l-a-s-s: Directory
     # This hint tells that this parameter is the output directory
