@@ -246,7 +246,7 @@ def genParserSub(
             help="Nickname prefix to be used on staged workdir creation",
         )
 
-    if preStageParams or exportParams:
+    if command in (WfExS_Commands.Stage, WfExS_Commands.Execute) or exportParams:
         ap_.add_argument(
             "--public-key-file",
             dest="public_key_files",
@@ -255,17 +255,27 @@ def genParserSub(
             help="This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the working directory",
         )
 
-    if command is not WfExS_Commands.ConfigValidate and (
-        preStageParams or postStageParams or exportParams
+    if (
+        command
+        in (WfExS_Commands.Stage, WfExS_Commands.StagedWorkDir, WfExS_Commands.Execute)
+        or postStageParams
+        or exportParams
     ):
+        # if command is not WfExS_Commands.ConfigValidate and (
+        #    preStageParams or postStageParams or exportParams
+        # ):
         # When it is a one shot, like Execute,
         # the --private-key-file parameter is not needed
-        ap_.add_argument(
+        priv_opts = ap_.add_argument_group(
+            "secure workdir arguments",
+            "Private key and passphrase to access secured working directories",
+        )
+        priv_opts.add_argument(
             "--private-key-file",
             dest="private_key_file",
             help="This parameter passes the name of the file containing the private key needed to unlock an encrypted working directory.",
         )
-        ap_.add_argument(
+        priv_opts.add_argument(
             "--private-key-passphrase-envvar",
             dest="private_key_passphrase_envvar",
             default="",
@@ -1082,6 +1092,15 @@ def main() -> None:
     if command == WfExS_Commands.StagedWorkDir:
         sys.exit(processStagedWorkdirCommand(wfBackend, args, logLevel))
 
+    # This can be needed in more than one place
+    if (
+        hasattr(args, "private_key_passphrase_envvar")
+        and args.private_key_passphrase_envvar is not None
+    ):
+        private_key_passphrase = os.environ.get(args.private_key_passphrase_envvar, "")
+    else:
+        private_key_passphrase = ""
+
     wfInstance = None
     if command in (
         WfExS_Commands.MountWorkDir,
@@ -1091,15 +1110,6 @@ def main() -> None:
         WfExS_Commands.ExportResults,
         WfExS_Commands.ExportCrate,
     ):
-        if (
-            hasattr(args, "private_key_passphrase_envvar")
-            and args.private_key_passphrase_envvar is not None
-        ):
-            private_key_passphrase = os.environ.get(
-                args.private_key_passphrase_envvar, ""
-            )
-        else:
-            private_key_passphrase = ""
         if os.path.isdir(args.workflowWorkingDirectory):
             wfInstance = wfBackend.fromWorkDir(
                 args.workflowWorkingDirectory,
@@ -1149,6 +1159,8 @@ def main() -> None:
             args.securityContextsConfigFilename,
             nickname_prefix=args.nickname_prefix,
             public_key_filenames=args.public_key_files,
+            private_key_filename=args.private_key_file,
+            private_key_passphrase=private_key_passphrase,
         )
 
     # This is needed to be sure the encfs instance is unmounted
