@@ -18,16 +18,11 @@
 from __future__ import absolute_import
 
 import json
-import lzma
 import os
-import shutil
-import subprocess
-import tempfile
 from typing import (
     cast,
     TYPE_CHECKING,
 )
-import uuid
 
 if TYPE_CHECKING:
     from typing import (
@@ -50,7 +45,6 @@ if TYPE_CHECKING:
         ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
-        ExitVal,
         Fingerprint,
         ProcessorArchitecture,
         RelPath,
@@ -68,9 +62,11 @@ from .common import (
 )
 
 from .container import (
-    AbstractDockerContainerFactory,
     ContainerEngineException,
     ContainerFactoryException,
+)
+from .abstract_docker_container import (
+    AbstractDockerContainerFactory,
 )
 from .utils.contents import (
     link_or_copy,
@@ -112,166 +108,9 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
     def ContainerType(cls) -> "ContainerType":
         return ContainerType.Docker
 
-    def _inspect(
-        self, dockerTag: "str", matEnv: "Mapping[str, str]"
-    ) -> "Tuple[ExitVal, str, str]":
-        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
-            self.logger.debug(f"querying docker container {dockerTag}")
-            d_retval = subprocess.Popen(
-                [self.runtime_cmd, "inspect", dockerTag],
-                env=matEnv,
-                stdout=d_out,
-                stderr=d_err,
-            ).wait()
-
-            self.logger.debug(f"docker inspect {dockerTag} retval: {d_retval}")
-
-            with open(d_out.name, mode="rb") as c_stF:
-                d_out_v = c_stF.read().decode("utf-8", errors="continue")
-            with open(d_err.name, mode="rb") as c_stF:
-                d_err_v = c_stF.read().decode("utf-8", errors="continue")
-
-            self.logger.debug(f"docker inspect stdout: {d_out_v}")
-
-            self.logger.debug(f"docker inspect stderr: {d_err_v}")
-
-            return cast("ExitVal", d_retval), d_out_v, d_err_v
-
-    def _pull(
-        self, dockerTag: "str", matEnv: "Mapping[str, str]"
-    ) -> "Tuple[ExitVal, str, str]":
-        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
-            self.logger.debug(f"pulling docker container {dockerTag}")
-            d_retval = subprocess.Popen(
-                [self.runtime_cmd, "pull", dockerTag],
-                env=matEnv,
-                stdout=d_out,
-                stderr=d_err,
-            ).wait()
-
-            self.logger.debug(f"docker pull {dockerTag} retval: {d_retval}")
-
-            with open(d_out.name, mode="r") as c_stF:
-                d_out_v = c_stF.read()
-            with open(d_err.name, "r") as c_stF:
-                d_err_v = c_stF.read()
-
-            self.logger.debug(f"docker pull stdout: {d_out_v}")
-
-            self.logger.debug(f"docker pull stderr: {d_err_v}")
-
-            return cast("ExitVal", d_retval), d_out_v, d_err_v
-
-    def _rmi(
-        self, dockerTag: "str", matEnv: "Mapping[str, str]"
-    ) -> "Tuple[ExitVal, str, str]":
-        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
-            self.logger.debug(f"removing docker container {dockerTag}")
-            d_retval = subprocess.Popen(
-                [self.runtime_cmd, "rmi", dockerTag],
-                env=matEnv,
-                stdout=d_out,
-                stderr=d_err,
-            ).wait()
-
-            self.logger.debug(f"docker rmi {dockerTag} retval: {d_retval}")
-
-            with open(d_out.name, mode="r") as c_stF:
-                d_out_v = c_stF.read()
-            with open(d_err.name, "r") as c_stF:
-                d_err_v = c_stF.read()
-
-            self.logger.debug(f"docker rmi stdout: {d_out_v}")
-
-            self.logger.debug(f"docker rmi stderr: {d_err_v}")
-
-            return cast("ExitVal", d_retval), d_out_v, d_err_v
-
-    def _load(
-        self,
-        archivefile: "AbsPath",
-        dockerTag: "str",
-        matEnv: "Mapping[str, str]",
-    ) -> "Tuple[ExitVal, str, str]":
-        with lzma.open(
-            archivefile, mode="rb"
-        ) as d_in, tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
-            self.logger.debug(f"loading docker container {dockerTag}")
-            with subprocess.Popen(
-                [self.runtime_cmd, "load"],
-                env=matEnv,
-                stdin=d_in,
-                stdout=d_out,
-                stderr=d_err,
-            ) as sp:
-                d_retval = sp.wait()
-
-            self.logger.debug(f"docker load {dockerTag} retval: {d_retval}")
-
-            with open(d_out.name, "r") as c_stF:
-                d_out_v = c_stF.read()
-
-            self.logger.debug(f"docker load stdout: {d_out_v}")
-
-            with open(d_err.name, "r") as c_stF:
-                d_err_v = c_stF.read()
-
-            self.logger.debug(f"docker load stderr: {d_err_v}")
-
-            return cast("ExitVal", d_retval), d_out_v, d_err_v
-
-    def _save(
-        self,
-        dockerTag: "str",
-        destfile: "AbsPath",
-        matEnv: "Mapping[str, str]",
-    ) -> "Tuple[ExitVal, str]":
-        with lzma.open(
-            destfile, mode="wb"
-        ) as d_out, tempfile.NamedTemporaryFile() as d_err:
-            self.logger.debug(f"saving docker container {dockerTag}")
-            with subprocess.Popen(
-                [self.runtime_cmd, "save", dockerTag],
-                env=matEnv,
-                stdout=subprocess.PIPE,
-                stderr=d_err,
-            ) as sp:
-                if sp.stdout is not None:
-                    shutil.copyfileobj(sp.stdout, d_out, 1024 * 1024)
-                d_retval = sp.wait()
-
-            self.logger.debug(f"docker save {dockerTag} retval: {d_retval}")
-
-            with open(d_err.name, "r") as c_stF:
-                d_err_v = c_stF.read()
-
-            self.logger.debug(f"docker save stderr: {d_err_v}")
-
-            return cast("ExitVal", d_retval), d_err_v
-
-    def _version(
-        self,
-    ) -> "Tuple[ExitVal, str, str]":
-        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
-            self.logger.debug(f"querying docker version and details")
-            d_retval = subprocess.Popen(
-                [self.runtime_cmd, "version", "--format", "{{json .}}"],
-                stdout=d_out,
-                stderr=d_err,
-            ).wait()
-
-            self.logger.debug(f"docker version retval: {d_retval}")
-
-            with open(d_out.name, mode="r") as c_stF:
-                d_out_v = c_stF.read()
-            with open(d_err.name, "r") as c_stF:
-                d_err_v = c_stF.read()
-
-            self.logger.debug(f"docker version stdout: {d_out_v}")
-
-            self.logger.debug(f"docker version stderr: {d_err_v}")
-
-            return cast("ExitVal", d_retval), d_out_v, d_err_v
+    @classmethod
+    def variant_name(self) -> "str":
+        return "docker"
 
     @property
     def architecture(self) -> "Tuple[ContainerOperatingSystem, ProcessorArchitecture]":

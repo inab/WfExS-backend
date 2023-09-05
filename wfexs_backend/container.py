@@ -81,7 +81,6 @@ if TYPE_CHECKING:
 
 
 from . import common
-from .utils.digests import ComputeDigestFromObject
 
 
 class ContainerFactoryException(AbstractWfExSException):
@@ -428,44 +427,3 @@ class NoContainerFactory(ContainerFactory):
         This is a no-op
         """
         return False
-
-
-class AbstractDockerContainerFactory(ContainerFactory):
-    ACCEPTED_CONTAINER_TYPES = set(
-        (
-            common.ContainerType.Docker,
-            common.ContainerType.UDocker,
-            common.ContainerType.Podman,
-        )
-    )
-
-    @classmethod
-    def AcceptsContainerType(
-        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
-    ) -> "bool":
-        return not cls.ACCEPTED_CONTAINER_TYPES.isdisjoint(
-            container_type if isinstance(container_type, set) else (container_type,)
-        )
-
-    @classmethod
-    @abc.abstractmethod
-    def trimmable_manifest_keys(cls) -> "Sequence[str]":
-        pass
-
-    def _gen_trimmed_manifests_signature(
-        self, manifests: "Sequence[DockerLikeManifest]"
-    ) -> "Fingerprint":
-        trimmed_manifests: "MutableSequence[DockerLikeManifest]" = []
-        some_trimmed = False
-        for manifest in manifests:
-            # Copy the manifest
-            trimmed_manifest = cast("MutableDockerLikeManifest", copy.copy(manifest))
-            # And trim the keys
-            for key in self.trimmable_manifest_keys():
-                if key in trimmed_manifest:
-                    del trimmed_manifest[key]
-                    some_trimmed = True
-
-            trimmed_manifests.append(trimmed_manifest)
-
-        return ComputeDigestFromObject(trimmed_manifests if some_trimmed else manifests)
