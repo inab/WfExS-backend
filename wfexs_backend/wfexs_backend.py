@@ -2126,7 +2126,7 @@ class WfExSBackend:
         # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
         mainEntityProgrammingLanguageId = None
         mainEntityProgrammingLanguageUrl = None
-        mainEntityIdHolder = None
+        mainEntityIdHolder: "Optional[str]" = None
         mainEntityId = None
         workflowPID = None
         workflowUploadURL = None
@@ -2155,8 +2155,8 @@ class WfExSBackend:
                 mainEntityProgrammingLanguageUrl = eAsLD.get("url", {}).get("@id")
 
         # Now, it is time to match the language id
-        engineDescById = None
-        engineDescByUrl = None
+        engineDescById: "Optional[WorkflowType]" = None
+        engineDescByUrl: "Optional[WorkflowType]" = None
         for possibleEngineDesc in WF.WORKFLOW_ENGINES:
             if (engineDescById is None) and (
                 mainEntityProgrammingLanguageId is not None
@@ -2310,7 +2310,7 @@ class WfExSBackend:
         ), "The list of remote URIs to download should have at least one element"
 
         firstURI: "Optional[Union[URIType, LicensedURI]]" = None
-        firstParsedURI = None
+        firstParsedURI: "Optional[parse.ParseResult]" = None
         remote_uris: "MutableSequence[URIType]" = []
         # Brief validation of correct uris
         for remote_uri_e in remote_uris_e:

@@ -244,7 +244,7 @@ if TYPE_CHECKING:
 # CWL detection is before, as Nextflow one is
 # a bit lax (only detects a couple of too common
 # keywords)
-WORKFLOW_ENGINE_CLASSES: "Sequence[Type[WorkflowEngine]]" = [
+WORKFLOW_ENGINE_CLASSES: "Final[Sequence[Type[WorkflowEngine]]]" = [
     CWLWorkflowEngine,
     NextflowWorkflowEngine,
 ]
@@ -1687,7 +1687,7 @@ class WF:
         self, params: "Optional[ParamsBlock]", prefix: "str" = ""
     ) -> "Optional[ParamsBlock]":
         if params is None:
-            return params
+            return None
 
         formatted_params: "MutableParamsBlock" = dict()
         some_formatted = False
