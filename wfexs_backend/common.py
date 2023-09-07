@@ -733,17 +733,30 @@ class StagedSetup(NamedTuple):
 
 
 class MarshallingStatus(NamedTuple):
+    pid: "Optional[str]"
+    workflow_type: "Optional[str]"
+    container_type: "Optional[ContainerType]"
     config: "Optional[Union[bool, datetime.datetime]]"
     stage: "Optional[Union[bool, datetime.datetime]]"
     execution: "Optional[Union[bool, datetime.datetime]]"
     export: "Optional[Union[bool, datetime.datetime]]"
+    execution_stats: "Optional[Sequence[Tuple[datetime.datetime, datetime.datetime, ExitVal]]]"
+    export_stamps: "Optional[Sequence[datetime.datetime]]"
 
     def __repr__(self) -> "str":
-        return f"""Marshalling date status:
-- config: {"(never done)" if self.config is None  else  self.config.isoformat()  if isinstance(self.config, datetime.datetime)  else  "(failed/not done yet)"}
-- stage: {"(never done)" if self.stage is None  else  self.stage.isoformat()  if isinstance(self.stage, datetime.datetime)  else  "(failed/not done yet)"}
-- execution: {"(never done)" if self.execution is None  else  self.execution.isoformat()  if isinstance(self.execution, datetime.datetime)  else  "(failed/not done yet)"}
-- export: {"(never done)" if self.export is None  else  self.export.isoformat()  if isinstance(self.export, datetime.datetime)  else  "(failed/not done yet)"}
+        return f"""\
+* Workflow PID: {self.pid}
+* Workflow type: {self.workflow_type}
+* Container type: {'none' if self.container_type is None else self.container_type.value}
+* Marshalling date status:
+  - config: {"(never done)" if self.config is None  else  self.config.isoformat()  if isinstance(self.config, datetime.datetime)  else  "(failed/not done yet)"}
+  - stage: {"(never done)" if self.stage is None  else  self.stage.isoformat()  if isinstance(self.stage, datetime.datetime)  else  "(failed/not done yet)"}
+  - execution: {"(never done)" if self.execution is None  else  self.execution.isoformat()  if isinstance(self.execution, datetime.datetime)  else  "(failed/not done yet)"}
+  - export: {"(never done)" if self.export is None  else  self.export.isoformat()  if isinstance(self.export, datetime.datetime)  else  "(failed/not done yet)"}
+* Execution stats:
+{'  (none)' if self.execution_stats is None or len(self.execution_stats) == 0 else chr(10).join(map(lambda ss: '  - Started ' + ss[0].isoformat() + ' , ended ' + ss[1].isoformat() + ' (exit ' + str(ss[2]) + ')', self.execution_stats))}
+* Exported at:
+{'  (none)' if self.export_stamps is None or len(self.export_stamps) == 0 else chr(10).join(map(lambda ea: '  - ' + ea.isoformat(), self.export_stamps))}\
 """
 
 

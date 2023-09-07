@@ -971,10 +971,25 @@ class WF:
             self.unmarshallExport(offline=True, fail_ok=True)
 
         return MarshallingStatus(
+            pid=self.getPID(),
+            workflow_type=self.engineDesc.engineName
+            if self.engineDesc is not None
+            else None,
+            container_type=self.engine.getConfiguredContainerType()
+            if self.engine is not None
+            else None,
             config=self.configMarshalled,
             stage=self.stageMarshalled,
             execution=self.executionMarshalled,
             export=self.exportMarshalled,
+            execution_stats=list(
+                map(lambda r: (r.started, r.ended, r.exitVal), self.stagedExecutions)
+            )
+            if self.stagedExecutions is not None
+            else [],
+            export_stamps=list(map(lambda ea: ea.when, self.runExportActions))
+            if self.runExportActions is not None
+            else [],
         )
 
     def enableParanoidMode(self) -> None:

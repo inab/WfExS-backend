@@ -686,12 +686,15 @@ def processStagedWorkdirCommand(
                 else:
                     is_damaged = wfSetup.is_damaged
                     is_encrypted = wfSetup.is_encrypted
+
                 print(
                     f"""=> Instance {instance_id} ({nickname})
-* Is damaged? {is_damaged}
+* Id: {instance_id}
+* Nickname: {nickname}
 * Created: {creation.isoformat()}
 * Secure (encrypted)? {is_encrypted}
-* {repr(mStatus)}
+{repr(mStatus)}
+* Is damaged? {is_damaged}
 """
                 )
     elif args.staged_workdir_command in (
