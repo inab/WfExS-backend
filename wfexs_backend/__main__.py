@@ -552,19 +552,55 @@ def processStagedWorkdirCommand(
             ),
             key=lambda x: x[2],
         )
+        print(
+            "\t".join(
+                (
+                    "# Instance id",
+                    "nickname",
+                    "creation date",
+                    "Workflow type",
+                    "Container type",
+                    "Workflow PID",
+                    "Encrypted?",
+                    "Staged (not damaged)?",
+                )
+            )
+        )
         for instance_id, nickname, creation, wfSetup, wfInstance in contents:
             is_encrypted: "Union[bool, str]"
             wfPID = None
+            engineName = None
+            containerType = None
             if wfSetup is None:
                 is_damaged = True
                 is_encrypted = "(unknown)"
             else:
                 is_damaged = wfSetup.is_damaged
                 is_encrypted = wfSetup.is_encrypted
-                if wfInstance is not None:
-                    wfPID = wfInstance.getPID()
+            if wfInstance is not None:
+                # As we can need additional data, let's ask it
+                wfInstance.unmarshallStage(
+                    offline=True, fail_ok=True, do_full_setup=False
+                )
+
+                wfPID = wfInstance.getPID()
+                if wfInstance.engineDesc is not None:
+                    engineName = wfInstance.engineDesc.engineName
+                if wfInstance.engine is not None:
+                    containerType = wfInstance.engine.getConfiguredContainerType()
             print(
-                f"{instance_id}\t{nickname}\t{creation.isoformat()}\t{'(unknown)' if wfPID is None else wfPID}\t{is_encrypted}\t{not is_damaged}"
+                "\t".join(
+                    (
+                        instance_id,
+                        nickname,
+                        creation.isoformat(),
+                        "(unknown)" if engineName is None else engineName,
+                        "(unknown)" if containerType is None else containerType.value,
+                        "(unknown)" if wfPID is None else wfPID,
+                        str(is_encrypted),
+                        str(not is_damaged),
+                    )
+                )
             )
 
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Remove:

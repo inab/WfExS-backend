@@ -3072,7 +3072,10 @@ class WF:
         return self.stageMarshalled
 
     def unmarshallStage(
-        self, offline: "bool" = False, fail_ok: "bool" = False
+        self,
+        offline: "bool" = False,
+        fail_ok: "bool" = False,
+        do_full_setup: "bool" = True,
     ) -> "Optional[Union[bool, datetime.datetime]]":
         if self.stageMarshalled is None:
             # If basic state does not work, even do not try
@@ -3142,7 +3145,12 @@ class WF:
                     self.workflowEngineVersion = stage.get("workflowEngineVersion")
 
                     # This is needed to properly set up the materializedEngine
-                    self.setupEngine(offline=True)
+                    if do_full_setup:
+                        self.setupEngine(offline=True)
+                    elif self.engineDesc is not None:
+                        self.engine = self.wfexs.instantiateEngine(
+                            self.engineDesc, self.stagedSetup
+                        )
             except Exception as e:
                 errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(
                     marshalled_stage_file, e

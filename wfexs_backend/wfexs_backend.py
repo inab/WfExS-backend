@@ -81,6 +81,11 @@ from .cache_handler import (
     SchemeHandlerCacheHandler,
 )
 
+from .engine import (
+    WORKDIR_META_RELDIR,
+    WORKDIR_PASSPHRASE_FILE,
+    WORKDIR_WORKFLOW_META_FILE,
+)
 from .ro_crate import FixedROCrate
 
 from .utils.marshalling_handling import unmarshall_namedtuple
@@ -866,8 +871,25 @@ class WfExSBackend:
             creation = None
 
         if creation is None:
+            # Just guessing
+            w_m_path = os.path.join(
+                uniqueRawWorkDir, WORKDIR_META_RELDIR, WORKDIR_WORKFLOW_META_FILE
+            )
+            workdir_passphrase_file = os.path.join(
+                uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE
+            )
+            if os.path.exists(w_m_path):
+                # This is valid for unencrypted working directories
+                reference_path = w_m_path
+            elif os.path.exists(workdir_passphrase_file):
+                # This is valid for encrypted working directories
+                reference_path = workdir_passphrase_file
+            else:
+                # This is the poor default
+                reference_path = uniqueRawWorkDir
+
             creation = datetime.datetime.fromtimestamp(
-                os.path.getctime(uniqueRawWorkDir), tz=datetime.timezone.utc
+                os.path.getctime(reference_path), tz=datetime.timezone.utc
             )
 
         return instanceId, nickname, creation, uniqueRawWorkDir
