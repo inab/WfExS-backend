@@ -133,8 +133,8 @@ def nihDigester(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
 def ComputeDigestFromObject(
     obj: "Any",
     digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
-    repMethod: "FingerprintMethod" = stringifyDigest,
-) -> "Fingerprint":
+    repMethod: "Union[FingerprintMethod, RawFingerprintMethod]" = stringifyDigest,
+) -> "Union[Fingerprint, bytes]":
     """
     Accessory method used to compute the digest of an input file-like object
     """

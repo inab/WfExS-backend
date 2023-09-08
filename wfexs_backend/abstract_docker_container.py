@@ -136,7 +136,10 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
             trimmed_manifests.append(trimmed_manifest)
 
-        return ComputeDigestFromObject(trimmed_manifests if some_trimmed else manifests)
+        return cast(
+            "Fingerprint",
+            ComputeDigestFromObject(trimmed_manifests if some_trimmed else manifests),
+        )
 
     @classmethod
     @abc.abstractmethod
