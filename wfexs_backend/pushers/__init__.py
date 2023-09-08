@@ -24,13 +24,16 @@ from typing import (
     cast,
     TYPE_CHECKING,
 )
+import urllib.parse
 
 if TYPE_CHECKING:
     from typing import (
         Any,
         Mapping,
+        MutableSequence,
         Optional,
         Sequence,
+        Tuple,
         Union,
     )
 
@@ -45,10 +48,17 @@ if TYPE_CHECKING:
         RelPath,
         SecurityContextConfig,
         SymbolicName,
+        URIType,
         URIWithMetadata,
     )
 
     from ..workflow import WF
+
+from ..common import (
+    AcceptableLicenceSchemes,
+    NoLicence,
+    ROCrateShortLicences,
+)
 
 
 class ExportPluginException(Exception):
@@ -63,7 +73,10 @@ class AbstractExportPlugin(abc.ABC):
     PLUGIN_NAME = cast("SymbolicName", "")
 
     def __init__(
-        self, wfInstance: "WF", setup_block: "Optional[SecurityContextConfig]" = None
+        self,
+        wfInstance: "WF",
+        setup_block: "Optional[SecurityContextConfig]" = None,
+        licences: "Sequence[str]" = [],
     ):
         import inspect
 
@@ -76,6 +89,32 @@ class AbstractExportPlugin(abc.ABC):
         self.wfInstance = wfInstance
         self.refdir = wfInstance.getStagedSetup().work_dir
         self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+
+        # As these licences can be in short format, resolve them to URIs
+        expanded_licences: "MutableSequence[URIType]" = []
+        if len(licences) == 0:
+            expanded_licences.append(NoLicence)
+        else:
+            rejected_licences: "MutableSequence[str]" = []
+            for lic in licences:
+                expanded_licence = ROCrateShortLicences.get(lic)
+                if expanded_licence is None:
+                    if (
+                        urllib.parse.urlparse(lic).scheme
+                        not in AcceptableLicenceSchemes
+                    ):
+                        rejected_licences.append(lic)
+
+                    expanded_licence = lic
+
+                expanded_licences.append(cast("URIType", expanded_licence))
+
+            if len(rejected_licences) > 0:
+                raise ExportPluginException(
+                    f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
+                )
+
+        self.licences: "Tuple[URIType, ...]" = tuple(expanded_licences)
 
     @abc.abstractmethod
     def push(

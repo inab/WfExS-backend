@@ -34,6 +34,7 @@ from extended_nc_client.extended_nc_client import (
 )
 
 from ..common import (
+    LicensedURI,
     MaterializedContent,
     URIWithMetadata,
 )
@@ -276,8 +277,12 @@ class NextcloudContentExporter:
         return retvals, retval_reldir, retval_relreldir
 
     def create_share_links(
-        self, relpath: "str", emails: "Sequence[str]", expire_in: "Optional[int]" = None
-    ) -> "Sequence[Optional[URIType]]":
+        self,
+        relpath: "str",
+        emails: "Sequence[str]",
+        expire_in: "Optional[int]" = None,
+        licences: "Tuple[URIType, ...]" = tuple(),
+    ) -> "Sequence[Optional[LicensedURI]]":
         retvals = []
         permissions = ExtendedNextcloudClient.OCS_PERMISSION_READ
         the_path = urllib.parse.quote(self.base_directory + "/" + relpath)
@@ -296,7 +301,12 @@ class NextcloudContentExporter:
                 expire_date=expire_at,
             )
             if not isinstance(share_info, bool):
-                retvals.append(cast("URIType", share_info.get_link()))
+                retvals.append(
+                    LicensedURI(
+                        uri=cast("URIType", share_info.get_link()),
+                        licences=licences,
+                    )
+                )
         else:
             for email in emails:
                 share_info = self.enc.share_file(
@@ -314,7 +324,12 @@ class NextcloudContentExporter:
                             self.enc._webdav_url + "/", "index.php/s/" + share_token
                         )
 
-                    retvals.append(cast("URIType", share_link))
+                    retvals.append(
+                        LicensedURI(
+                            uri=cast("URIType", share_link),
+                            licences=licences,
+                        )
+                    )
 
         return retvals
 
@@ -327,9 +342,12 @@ class NextcloudExportPlugin(AbstractExportPlugin):
     PLUGIN_NAME = cast("SymbolicName", "nextcloud")
 
     def __init__(
-        self, wfInstance: "WF", setup_block: "Optional[SecurityContextConfig]" = None
+        self,
+        wfInstance: "WF",
+        setup_block: "Optional[SecurityContextConfig]" = None,
+        licences: "Sequence[str]" = [],
     ):
-        super().__init__(wfInstance, setup_block)
+        super().__init__(wfInstance, setup_block=setup_block, licences=licences)
 
         for conf_key in ("server", "base-directory"):
             if conf_key not in self.setup_block:
@@ -349,7 +367,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         preferred_id: "Optional[str]" = None,
     ) -> "Sequence[URIWithMetadata]":
         """
-        These contents will be included in the nextflow share
+        These contents will be included in the Nextcloud share
         """
         if len(items) == 0:
             raise ValueError(
@@ -434,7 +452,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
 
         expire_in = self.setup_block.get("expires-in")
         shared_links = ce.create_share_links(
-            remote_relpath, email_addresses, expire_in=expire_in
+            remote_relpath, email_addresses, expire_in=expire_in, licences=self.licences
         )
 
         shared_uris = []
@@ -443,7 +461,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
             if shared_link is not None:
                 shared_uris.append(
                     URIWithMetadata(
-                        uri=shared_link,
+                        uri=shared_link.uri,
                         # TODO: Add meaninful metadata
                         metadata={
                             "shared-with": email_addresses[i_share]

@@ -29,6 +29,7 @@ import urllib.parse
 
 from ..common import (
     CacheType,
+    LicensedURI,
     MaterializedContent,
 )
 
@@ -63,9 +64,12 @@ class CacheExportPlugin(AbstractExportPlugin):
     PLUGIN_NAME = cast("SymbolicName", "cache")
 
     def __init__(
-        self, wfInstance: "WF", setup_block: "Optional[SecurityContextConfig]" = None
+        self,
+        wfInstance: "WF",
+        setup_block: "Optional[SecurityContextConfig]" = None,
+        licences: "Sequence[str]" = [],
     ):
-        super().__init__(wfInstance, setup_block)
+        super().__init__(wfInstance, setup_block=setup_block, licences=licences)
 
     def push(
         self,
@@ -120,21 +124,24 @@ class CacheExportPlugin(AbstractExportPlugin):
                 source = items[0].local
 
             # Generated file URI injecting the preferred id an scheme
-            uri_to_fetch = cast(
-                "URIType",
-                urllib.parse.urlunparse(
-                    urllib.parse.ParseResult(
-                        scheme="file",
-                        netloc="",
-                        path=source,
-                        params="",
-                        query=urllib.parse.urlencode(
-                            {"inject_as": f"{preferred_scheme}:{preferred_id}"},
-                            doseq=True,
-                        ),
-                        fragment="",
-                    )
+            uri_to_fetch = LicensedURI(
+                uri=cast(
+                    "URIType",
+                    urllib.parse.urlunparse(
+                        urllib.parse.ParseResult(
+                            scheme="file",
+                            netloc="",
+                            path=source,
+                            params="",
+                            query=urllib.parse.urlencode(
+                                {"inject_as": f"{preferred_scheme}:{preferred_id}"},
+                                doseq=True,
+                            ),
+                            fragment="",
+                        )
+                    ),
                 ),
+                licences=self.licences,
             )
 
             cached_uri = self.wfInstance.wfexs.cacheFetch(
