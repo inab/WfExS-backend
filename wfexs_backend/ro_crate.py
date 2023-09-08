@@ -99,8 +99,13 @@ from rocrate.utils import (
 from .utils.digests import (
     ComputeDigestFromDirectory,
     ComputeDigestFromFile,
+    ComputeDigestFromObject,
     hexDigest,
+    nullProcessDigest,
     unstringifyDigest,
+)
+from .utils.marshalling_handling import (
+    marshall_namedtuple,
 )
 from .common import (
     AbstractWfExSException,
@@ -542,6 +547,10 @@ class WorkflowRunROCrate:
             {}
         )
 
+        # This is used to avoid including twice the very same value
+        # in the RO-Crate
+        self._item_hash: "MutableMapping[bytes, rocrate.model.entity.Entity]" = {}
+
         if localWorkflow.relPath is not None:
             wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
         else:
@@ -824,6 +833,7 @@ class WorkflowRunROCrate:
                 f"{self.wf_file.id}#{input_sep}:"
                 + urllib.parse.quote(in_item.name, safe="")
             )
+
             itemInValue0 = in_item.values[0]
             additional_type: "Optional[str]" = None
             if isinstance(itemInValue0, int):
@@ -842,191 +852,218 @@ class WorkflowRunROCrate:
                 elif itemInValue0.kind == ContentKind.Directory:
                     additional_type = "Dataset"
 
-            formal_parameter = FormalParameter(
-                self.crate,
-                name=in_item.name,
-                identifier=formal_parameter_id,
-                additional_type=additional_type,
+            formal_parameter = cast(
+                "Optional[FormalParameter]", self.crate.dereference(formal_parameter_id)
             )
-            self.crate.add(formal_parameter)
-            # TODO: fix this at the standard level in some way
-            # so it is possible in the future to distinguish among
-            # inputs and environment variables in an standardized way
-            self.wf_file.append_to("input", formal_parameter)
 
-            crate_coll: "Union[Collection, FixedDataset, FixedFile, PropertyValue, None]"
-            if len(in_item.values) > 1:
-                crate_coll = self._add_collection_to_crate()
-            else:
-                crate_coll = None
-            if additional_type in ("File", "Dataset", "Collection"):
-                for itemInValues in cast(
-                    "Sequence[MaterializedContent]", in_item.values
-                ):
-                    # TODO: embed metadata_array in some way
-                    assert isinstance(itemInValues, MaterializedContent)
-                    itemInLocalSource = itemInValues.local  # local source
-                    itemInURISource = itemInValues.licensed_uri.uri  # uri source
-                    if os.path.isfile(itemInLocalSource):
-                        # This is needed to avoid including the input
-                        crate_file = self._add_file_to_crate(
-                            the_path=itemInLocalSource,
-                            the_uri=itemInURISource,
-                            the_name=cast(
-                                "RelPath",
-                                os.path.relpath(itemInLocalSource, self.work_dir),
-                            ),
-                            do_attach=do_attach,
-                        )
+            if formal_parameter is None:
+                formal_parameter = FormalParameter(
+                    self.crate,
+                    name=in_item.name,
+                    identifier=formal_parameter_id,
+                    additional_type=additional_type,
+                )
+                self.crate.add(formal_parameter)
+                # TODO: fix this at the standard level in some way
+                # so it is possible in the future to distinguish among
+                # inputs and environment variables in an standardized way
+                self.wf_file.append_to("input", formal_parameter)
 
-                        if isinstance(crate_coll, Collection):
-                            crate_coll.append_to("hasPart", crate_file)
-                        else:
-                            crate_coll = crate_file
+            item_signature = cast(
+                "bytes",
+                ComputeDigestFromObject(
+                    marshall_namedtuple(in_item.values), repMethod=nullProcessDigest
+                ),
+            ) + formal_parameter_id.encode("utf-8")
+            # Do we already have the value in cache?
+            crate_coll = cast(
+                "Union[Collection, FixedDataset, FixedFile, PropertyValue, None]",
+                self._item_hash.get(item_signature),
+            )
+            # We don't, so let's populate it
+            if crate_coll is None:
+                if len(in_item.values) > 1:
+                    crate_coll = self._add_collection_to_crate()
 
-                    elif os.path.isdir(itemInLocalSource):
-                        crate_dataset, _ = self._add_directory_as_dataset(
-                            itemInLocalSource,
-                            itemInURISource,
-                            the_name=cast(
-                                "RelPath",
-                                os.path.relpath(itemInLocalSource, self.work_dir) + "/",
-                            ),
-                            do_attach=do_attach,
-                        )
-                        # crate_dataset = self.crate.add_dataset_ext(
-                        #    source=itemInURISource,
-                        #    fetch_remote=False,
-                        #    validate_url=False,
-                        #    do_attach=do_attach,
-                        #    # properties=file_properties,
-                        # )
-
-                        if crate_dataset is not None:
-                            if isinstance(crate_coll, Collection):
-                                crate_coll.append_to("hasPart", crate_dataset)
-                            else:
-                                crate_coll = crate_dataset
-
-                    else:
-                        pass  # TODO: raise exception
-
-            else:
-                # Detecting nullified values
-                some_not_null = False
-                for itemInAtomicValues in cast(
-                    "Sequence[Union[bool,str,float,int]]", in_item.values
-                ):
-                    if isinstance(itemInAtomicValues, (bool, str, float, int)):
-                        some_not_null = True
-                        break
-
-                if some_not_null:
-                    for itemInAtomicValues in cast(
-                        "Sequence[Union[bool,str,float,int]]", in_item.values
+                if additional_type in ("File", "Dataset", "Collection"):
+                    for itemInValues in cast(
+                        "Sequence[MaterializedContent]", in_item.values
                     ):
-                        if isinstance(itemInAtomicValues, (bool, str, float, int)):
-                            # This case happens when an input is telling
-                            # some kind of output file or directory.
-                            # So, its value should be fixed, to avoid
-                            # containing absolute paths
-                            fixedAtomicValue: "Union[bool,str,float,int]"
-                            if in_item.autoFilled:
-                                fixedAtomicValue = os.path.relpath(
-                                    cast("str", itemInAtomicValues),
-                                    self.staged_setup.work_dir,
-                                )
-                            else:
-                                fixedAtomicValue = itemInAtomicValues
-                            parameter_value = PropertyValue(
-                                self.crate, in_item.name, fixedAtomicValue
-                            )
-                            crate_pv = self.crate.add(parameter_value)
-                            if isinstance(crate_coll, Collection):
-                                crate_coll.append_to("hasPart", crate_pv)
-                            else:
-                                crate_coll = crate_pv
-                # Null values are right now represented as no values
-                # At this moment there is no satisfactory way to represent it
-                # else:
-                #     # Let's suppose it is an str
-                #     parameter_no_value = Intangible(
-                #         self.crate,
-                #         in_item.name,
-                #         additionalType="String",
-                #     )
-                #     crate_pnv = self.crate.add(parameter_no_value)
-                #     if isinstance(crate_coll, Collection):
-                #         crate_coll.append_to("hasPart", crate_pnv)
-                #     else:
-                #         crate_coll = crate_pnv
-
-            # Avoiding corner cases
-            if crate_coll is not None:
-                # And now, let's process the secondary inputs
-                if (
-                    isinstance(in_item.secondaryInputs, list)
-                    and len(in_item.secondaryInputs) > 0
-                ):
-                    # TODO: Can a value have secondary values in workflow
-                    # paradigms like CWL???
-                    if isinstance(crate_coll, PropertyValue):
-                        self.logger.warning(
-                            "Unexpected case: PropertyValue as main entity of a Collection. Please open an issue on WfExS-backend repo providing the workflow which raised this corner case."
-                        )
-
-                    sec_crate_coll = self._add_collection_to_crate(
-                        main_entity=cast(
-                            "Union[Collection, FixedDataset, FixedFile]", crate_coll
-                        )
-                    )
-
-                    for secInput in in_item.secondaryInputs:
-                        sec_crate_elem: "Union[FixedFile, FixedDataset, Collection, None]"
-
-                        secInputLocalSource = secInput.local  # local source
-                        secInputURISource = secInput.licensed_uri.uri  # uri source
-                        if os.path.isfile(secInputLocalSource):
+                        # TODO: embed metadata_array in some way
+                        assert isinstance(itemInValues, MaterializedContent)
+                        itemInLocalSource = itemInValues.local  # local source
+                        itemInURISource = itemInValues.licensed_uri.uri  # uri source
+                        if os.path.isfile(itemInLocalSource):
                             # This is needed to avoid including the input
-                            sec_crate_elem = self._add_file_to_crate(
-                                the_path=secInputLocalSource,
-                                the_uri=secInputURISource,
+                            crate_file = self._add_file_to_crate(
+                                the_path=itemInLocalSource,
+                                the_uri=itemInURISource,
                                 the_name=cast(
                                     "RelPath",
-                                    os.path.relpath(secInputLocalSource, self.work_dir),
+                                    os.path.relpath(itemInLocalSource, self.work_dir),
                                 ),
                                 do_attach=do_attach,
                             )
 
-                        elif os.path.isdir(secInputLocalSource):
-                            sec_crate_elem, _ = self._add_directory_as_dataset(
-                                secInputLocalSource,
-                                secInputURISource,
+                            if isinstance(crate_coll, Collection):
+                                crate_coll.append_to("hasPart", crate_file)
+                            else:
+                                crate_coll = crate_file
+
+                        elif os.path.isdir(itemInLocalSource):
+                            crate_dataset, _ = self._add_directory_as_dataset(
+                                itemInLocalSource,
+                                itemInURISource,
+                                the_name=cast(
+                                    "RelPath",
+                                    os.path.relpath(itemInLocalSource, self.work_dir)
+                                    + "/",
+                                ),
                                 do_attach=do_attach,
                             )
                             # crate_dataset = self.crate.add_dataset_ext(
-                            #    source=secInputURISource,
+                            #    source=itemInURISource,
                             #    fetch_remote=False,
                             #    validate_url=False,
+                            #    do_attach=do_attach,
                             #    # properties=file_properties,
                             # )
-                            the_sec_name = os.path.relpath(
-                                secInputLocalSource, self.work_dir
+
+                            if crate_dataset is not None:
+                                if isinstance(crate_coll, Collection):
+                                    crate_coll.append_to("hasPart", crate_dataset)
+                                else:
+                                    crate_coll = crate_dataset
+
+                        else:
+                            pass  # TODO: raise exception
+
+                else:
+                    # Detecting nullified values
+                    some_not_null = False
+                    for itemInAtomicValues in cast(
+                        "Sequence[Union[bool,str,float,int]]", in_item.values
+                    ):
+                        if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                            some_not_null = True
+                            break
+
+                    if some_not_null:
+                        for itemInAtomicValues in cast(
+                            "Sequence[Union[bool,str,float,int]]", in_item.values
+                        ):
+                            if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                                # This case happens when an input is telling
+                                # some kind of output file or directory.
+                                # So, its value should be fixed, to avoid
+                                # containing absolute paths
+                                fixedAtomicValue: "Union[bool,str,float,int]"
+                                if in_item.autoFilled:
+                                    fixedAtomicValue = os.path.relpath(
+                                        cast("str", itemInAtomicValues),
+                                        self.staged_setup.work_dir,
+                                    )
+                                else:
+                                    fixedAtomicValue = itemInAtomicValues
+                                parameter_value = PropertyValue(
+                                    self.crate, in_item.name, fixedAtomicValue
+                                )
+                                crate_pv = self.crate.add(parameter_value)
+                                if isinstance(crate_coll, Collection):
+                                    crate_coll.append_to("hasPart", crate_pv)
+                                else:
+                                    crate_coll = crate_pv
+                    # Null values are right now represented as no values
+                    # At this moment there is no satisfactory way to represent it
+                    # else:
+                    #     # Let's suppose it is an str
+                    #     parameter_no_value = Intangible(
+                    #         self.crate,
+                    #         in_item.name,
+                    #         additionalType="String",
+                    #     )
+                    #     crate_pnv = self.crate.add(parameter_no_value)
+                    #     if isinstance(crate_coll, Collection):
+                    #         crate_coll.append_to("hasPart", crate_pnv)
+                    #     else:
+                    #         crate_coll = crate_pnv
+
+                # Avoiding corner cases
+                if crate_coll is not None:
+                    # And now, let's process the secondary inputs
+                    if (
+                        isinstance(in_item.secondaryInputs, list)
+                        and len(in_item.secondaryInputs) > 0
+                    ):
+                        # TODO: Can a value have secondary values in workflow
+                        # paradigms like CWL???
+                        if isinstance(crate_coll, PropertyValue):
+                            self.logger.warning(
+                                "Unexpected case: PropertyValue as main entity of a Collection. Please open an issue on WfExS-backend repo providing the workflow which raised this corner case."
                             )
 
+                        sec_crate_coll = self._add_collection_to_crate(
+                            main_entity=cast(
+                                "Union[Collection, FixedDataset, FixedFile]", crate_coll
+                            )
+                        )
+
+                        for secInput in in_item.secondaryInputs:
+                            sec_crate_elem: "Union[FixedFile, FixedDataset, Collection, None]"
+
+                            secInputLocalSource = secInput.local  # local source
+                            secInputURISource = secInput.licensed_uri.uri  # uri source
+                            if os.path.isfile(secInputLocalSource):
+                                # This is needed to avoid including the input
+                                sec_crate_elem = self._add_file_to_crate(
+                                    the_path=secInputLocalSource,
+                                    the_uri=secInputURISource,
+                                    the_name=cast(
+                                        "RelPath",
+                                        os.path.relpath(
+                                            secInputLocalSource, self.work_dir
+                                        ),
+                                    ),
+                                    do_attach=do_attach,
+                                )
+
+                            elif os.path.isdir(secInputLocalSource):
+                                sec_crate_elem, _ = self._add_directory_as_dataset(
+                                    secInputLocalSource,
+                                    secInputURISource,
+                                    do_attach=do_attach,
+                                )
+                                # crate_dataset = self.crate.add_dataset_ext(
+                                #    source=secInputURISource,
+                                #    fetch_remote=False,
+                                #    validate_url=False,
+                                #    # properties=file_properties,
+                                # )
+                                the_sec_name = os.path.relpath(
+                                    secInputLocalSource, self.work_dir
+                                )
+
+                                if sec_crate_elem is not None:
+                                    sec_crate_elem["alternateName"] = the_sec_name + "/"
+                            else:
+                                sec_crate_elem = None
+
                             if sec_crate_elem is not None:
-                                sec_crate_elem["alternateName"] = the_sec_name + "/"
-                        else:
-                            sec_crate_elem = None
+                                sec_crate_coll.append_to("hasPart", sec_crate_elem)
 
-                        if sec_crate_elem is not None:
-                            sec_crate_coll.append_to("hasPart", sec_crate_elem)
+                        # Last, put it in place
+                        crate_coll = sec_crate_coll
 
-                    # Last, put it in place
-                    crate_coll = sec_crate_coll
+            # Now, let's interrelate formal parameters with the input values
+            if crate_coll is not None:
+                # Updating the cache is the first
+                if item_signature not in self._item_hash:
+                    self._item_hash[item_signature] = crate_coll
 
-                crate_coll.append_to("exampleOfWork", formal_parameter)
-                formal_parameter.append_to("workExample", crate_coll)
+                if formal_parameter not in crate_coll.get("exampleOfWork", []):
+                    crate_coll.append_to("exampleOfWork", formal_parameter)
+                if crate_coll not in formal_parameter.get("workExample", []):
+                    formal_parameter.append_to("workExample", crate_coll)
                 crate_inputs.append(crate_coll)
 
             # TODO digest other types of inputs
@@ -1440,6 +1477,11 @@ class WorkflowRunROCrate:
                 + "#output:"
                 + urllib.parse.quote(out_item.name, safe="")
             )
+
+            formal_parameter = cast(
+                "Optional[FormalParameter]", self.crate.dereference(formal_parameter_id)
+            )
+
             if out_item.kind == ContentKind.File:
                 additional_type = "File"
             elif out_item.kind == ContentKind.Directory:
@@ -1447,14 +1489,23 @@ class WorkflowRunROCrate:
             else:
                 additional_type = None
 
-            formal_parameter = FormalParameter(
-                self.crate,
-                name=out_item.name,
-                identifier=formal_parameter_id,
-                additional_type=additional_type,
-            )
-            self.crate.add(formal_parameter)
-            self.wf_file.append_to("output", formal_parameter)
+            # Create a new one only when it is needed
+            if formal_parameter is None:
+                formal_parameter = FormalParameter(
+                    self.crate,
+                    name=out_item.name,
+                    identifier=formal_parameter_id,
+                    additional_type=additional_type,
+                )
+                self.crate.add(formal_parameter)
+
+            # Add to the list only when it is needed
+            wf_file_outputs = self.wf_file.get("output", [])
+            if (
+                formal_parameter not in wf_file_outputs
+                and {"@id": formal_parameter_id} not in wf_file_outputs
+            ):
+                self.wf_file.append_to("output", formal_parameter)
 
     def writeWRROC(self, filename: "AnyPath") -> None:
         with warnings.catch_warnings():
@@ -1561,6 +1612,12 @@ class WorkflowRunROCrate:
                 + "#output:"
                 + urllib.parse.quote(out_item.name, safe="")
             )
+
+            formal_parameter = cast(
+                "Optional[FormalParameter]", self.crate.dereference(formal_parameter_id)
+            )
+
+            additional_type: "Optional[str]" = None
             if out_item.kind == ContentKind.File:
                 additional_type = "Collection" if len(out_item.values) > 1 else "File"
             elif out_item.kind == ContentKind.Directory:
@@ -1577,17 +1634,16 @@ class WorkflowRunROCrate:
                     additional_type = "Boolean"
                 elif isinstance(itemOutValue0, float):
                     additional_type = "Float"
-            else:
-                additional_type = None
 
-            formal_parameter = FormalParameter(
-                self.crate,
-                name=out_item.name,
-                identifier=formal_parameter_id,
-                additional_type=additional_type,
-            )
-            self.crate.add(formal_parameter)
-            self.wf_file.append_to("output", formal_parameter)
+            if formal_parameter is None:
+                formal_parameter = FormalParameter(
+                    self.crate,
+                    name=out_item.name,
+                    identifier=formal_parameter_id,
+                    additional_type=additional_type,
+                )
+                self.crate.add(formal_parameter)
+                self.wf_file.append_to("output", formal_parameter)
 
             # This can happen when there is no output, like when a workflow has failed
             if len(out_item.values) == 0:
