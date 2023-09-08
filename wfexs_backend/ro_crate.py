@@ -113,6 +113,7 @@ from .utils.marshalling_handling import (
 )
 from .common import (
     AbstractWfExSException,
+    AcceptableLicenceSchemes,
     ContainerType,
     ContentKind,
     CratableItem,
@@ -120,6 +121,8 @@ from .common import (
     GeneratedDirectoryContent,
     MaterializedContent,
     NoCratableItem,
+    NoLicenceShort,
+    ROCrateShortLicences,
 )
 
 from . import __url__ as wfexs_backend_url
@@ -539,6 +542,7 @@ class WorkflowRunROCrate:
         arch: "Optional[ProcessorArchitecture]",
         staged_setup: "StagedSetup",
         payloads: "CratableItem" = NoCratableItem,
+        licences: "Sequence[str]" = [],
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -554,6 +558,9 @@ class WorkflowRunROCrate:
         # This is used to avoid including twice the very same value
         # in the RO-Crate
         self._item_hash: "MutableMapping[bytes, rocrate.model.entity.Entity]" = {}
+
+        if len(licences) == 0:
+            licences = [NoLicenceShort]
 
         if localWorkflow.relPath is not None:
             wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
@@ -573,7 +580,9 @@ class WorkflowRunROCrate:
         self.crate: "FixedROCrate"
         self.compLang: "rocrate.model.computerlanguage.ComputerLanguage"
         self._init_empty_crate_and_ComputerLanguage(
-            materializedEngine.instance.workflowType, localWorkflow.langVersion
+            materializedEngine.instance.workflowType,
+            localWorkflow.langVersion,
+            licences,
         )
 
         self.wf_wfexs = self._add_wfexs_to_crate()
@@ -646,12 +655,28 @@ class WorkflowRunROCrate:
         self,
         wf_type: "WorkflowType",
         langVersion: "Optional[Union[EngineVersion, WFLangVersion]]",
+        licences: "Sequence[str]",
     ) -> "None":
         """
         Due the internal synergies between an instance of ComputerLanguage
         and the RO-Crate it is attached to, both of them should be created
         here, just at the same time
         """
+
+        # Let's check the licences
+        rejected_lics: "MutableSequence[str]" = []
+        for lic in licences:
+            if lic in ROCrateShortLicences:
+                continue
+            if urllib.parse.urlparse(lic).scheme in AcceptableLicenceSchemes:
+                continue
+
+            rejected_lics.append(lic)
+
+        if len(rejected_lics) > 0:
+            raise ROCrateGenerationException(
+                f"Unsupported Workflow RO-Crate short license(s) or license URI scheme(s): {', '.join(rejected_lics)}"
+            )
 
         self.crate = FixedROCrate(gen_preview=False)
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
@@ -666,6 +691,7 @@ class WorkflowRunROCrate:
             },
         )
         self.crate.description = f"RO-Crate from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname})"
+        self.crate.license = licences
         # This should not be needed, as it is added later
         self.crate.add(self.compLang)
 
