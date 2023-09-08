@@ -888,7 +888,7 @@ class WorkflowRunROCrate:
             if isinstance(itemInValue0, int):
                 additional_type = "Integer"
             elif isinstance(itemInValue0, str):
-                additional_type = "String"
+                additional_type = "Text"
             elif isinstance(itemInValue0, bool):
                 additional_type = "Boolean"
             elif isinstance(itemInValue0, float):
@@ -1029,7 +1029,7 @@ class WorkflowRunROCrate:
                     #     parameter_no_value = Intangible(
                     #         self.crate,
                     #         in_item.name,
-                    #         additionalType="String",
+                    #         additionalType="Text",
                     #     )
                     #     crate_pnv = self.crate.add(parameter_no_value)
                     #     if isinstance(crate_coll, Collection):
@@ -1682,7 +1682,7 @@ class WorkflowRunROCrate:
                 if isinstance(itemOutValue0, int):
                     additional_type = "Integer"
                 elif isinstance(itemOutValue0, str):
-                    additional_type = "String"
+                    additional_type = "Text"
                 elif isinstance(itemOutValue0, bool):
                     additional_type = "Boolean"
                 elif isinstance(itemOutValue0, float):
