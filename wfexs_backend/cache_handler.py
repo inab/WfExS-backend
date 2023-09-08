@@ -998,7 +998,12 @@ class SchemeHandlerCacheHandler:
                         usableSecContext.update(attachedSecContext)
 
                     uncachedInputs.append(
-                        (the_remote_file, parsedInputURL, usableSecContext)
+                        (
+                            the_remote_file,
+                            parsedInputURL,
+                            usableSecContext,
+                            the_licences,
+                        )
                     )
 
             if metaStructure is not None:
@@ -1014,6 +1019,10 @@ class SchemeHandlerCacheHandler:
                 )
                 # Getting the recorded licence
                 the_licences = metaStructure.get("licences", tuple())
+
+                # Store the metadata
+                metadata_array.extend(fetched_metadata_array)
+                licences.extend(the_licences)
             elif offline:
                 # As this is a handler for online resources, comply with offline mode
                 raise CacheOfflineException(
@@ -1024,7 +1033,12 @@ class SchemeHandlerCacheHandler:
                 # As this is a handler for online resources, comply with offline mode
                 nested_exception: "Optional[BaseException]" = None
                 failed = True
-                for the_remote_file, parsedInputURL, usableSecContext in uncachedInputs:
+                for (
+                    the_remote_file,
+                    parsedInputURL,
+                    usableSecContext,
+                    the_licences,
+                ) in uncachedInputs:
                     # Content is fetched here
                     # As of RFC3986, schemes are case insensitive
                     theScheme = parsedInputURL.scheme.lower()
@@ -1079,6 +1093,10 @@ class SchemeHandlerCacheHandler:
                                 os.unlink(absUriCachedFilename)
 
                             os.symlink(next_input_file, absUriCachedFilename)
+
+                            # Store the metadata
+                            metadata_array.extend(fetched_metadata_array)
+                            licences.extend(the_licences)
                         except FetcherException as che:
                             if nested_exception is not None:
                                 raise che from nested_exception
@@ -1121,10 +1139,6 @@ class SchemeHandlerCacheHandler:
                             )
                     elif nested_exception is not None:
                         raise nested_exception
-
-            # Store the metadata
-            metadata_array.extend(fetched_metadata_array)
-            licences.extend(the_licences)
 
         assert finalCachedFilename is not None
 
