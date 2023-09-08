@@ -67,7 +67,7 @@ usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCO
                         {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.9.3-117-g69322b8 (69322b80ab3d794003c60b4ca951a84c4ead8844)
+WfExS (workflow execution service) backend 0.9.3-131-gcb4803d (cb4803d833ccaf7370a96e559bb997a8426936f0)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -141,7 +141,7 @@ optional arguments:
 Subparser 'staged-workdir'
 usage: WfExS-backend.py staged-workdir [-h] [--private-key-file PRIVATE_KEY_FILE]
                                        [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] [--inputs] [--outputs]
-                                       [--workflow] [--containers] [--prospective] [--full] [-g]
+                                       [--workflow] [--containers] [--prospective] [--full] [--licences LICENCES] [-g]
                                        {offline-exec,ls,mount,rm,shell,status,create-staged-crate,create-prov-crate}
                                        [staged_workdir_command_args [staged_workdir_command_args ...]]
 
@@ -189,11 +189,13 @@ ro-crate-payload:
   --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
   --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
   --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
+  --licences LICENCES   Licence(s) to attach to the generated RO-Crate (default: [])
 
 Subparser 'export'
 usage: WfExS-backend.py export [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME]
                                [--public-key-file PUBLIC_KEY_FILES] [--private-key-file PRIVATE_KEY_FILE]
                                [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J WORKFLOWWORKINGDIRECTORY
+                               [--licences LICENCES]
                                {ls,run} [export_contents_command_args [export_contents_command_args ...]]
 
 positional arguments:
@@ -215,6 +217,7 @@ optional arguments:
                         working directory (default: [])
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
+  --licences LICENCES   Licence(s) to attach to the exported contents (default: [])
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
@@ -301,6 +304,7 @@ Subparser 'export-stage'
 usage: WfExS-backend.py export-stage [-h] [--private-key-file PRIVATE_KEY_FILE]
                                      [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J WORKFLOWWORKINGDIRECTORY
                                      [--inputs] [--outputs] [--workflow] [--containers] [--prospective] [--full]
+                                     [--licences LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -326,6 +330,7 @@ ro-crate-payload:
   --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
   --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
   --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
+  --licences LICENCES   Licence(s) to attach to the generated RO-Crate (default: [])
 
 Subparser 'offline-execute'
 usage: WfExS-backend.py offline-execute [-h] [--private-key-file PRIVATE_KEY_FILE]
@@ -351,7 +356,7 @@ Subparser 'execute'
 usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME]
                                 [-n NICKNAME_PREFIX] [--public-key-file PUBLIC_KEY_FILES] [--private-key-file PRIVATE_KEY_FILE]
                                 [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] [--inputs] [--outputs]
-                                [--workflow] [--containers] [--prospective] [--full]
+                                [--workflow] [--containers] [--prospective] [--full] [--licences LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -386,16 +391,18 @@ ro-crate-payload:
   --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
   --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
   --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
+  --licences LICENCES   Licence(s) to attach to the generated RO-Crate (default: [])
 
 Subparser 'export-results'
 usage: WfExS-backend.py export-results [-h] [--private-key-file PRIVATE_KEY_FILE]
                                        [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J
-                                       WORKFLOWWORKINGDIRECTORY
+                                       WORKFLOWWORKINGDIRECTORY [--licences LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
+  --licences LICENCES   Licence(s) to attach to the exported contents (default: [])
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
@@ -411,6 +418,7 @@ Subparser 'export-crate'
 usage: WfExS-backend.py export-crate [-h] [--private-key-file PRIVATE_KEY_FILE]
                                      [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J WORKFLOWWORKINGDIRECTORY
                                      [--inputs] [--outputs] [--workflow] [--containers] [--prospective] [--full]
+                                     [--licences LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -436,6 +444,7 @@ ro-crate-payload:
   --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
   --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
   --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
+  --licences LICENCES   Licence(s) to attach to the generated RO-Crate (default: [])
 ```
 
 WfExS commands are:

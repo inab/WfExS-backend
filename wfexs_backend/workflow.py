@@ -2637,6 +2637,7 @@ class WF:
                 setup=actionDesc.get("setup"),
                 preferred_scheme=actionDesc.get("preferred-scheme"),
                 preferred_id=actionDesc.get("preferred-pid"),
+                licences=actionDesc.get("licences", []),
             )
             actions.append(action)
 
@@ -2719,6 +2720,7 @@ class WF:
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
         action_ids: "Sequence[SymbolicName]" = [],
         fail_ok: "bool" = False,
+        op_licences: "Sequence[str]" = [],
     ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
         # The precondition
         if self.unmarshallExport(offline=True, fail_ok=True) is None:
@@ -2750,7 +2752,10 @@ class WF:
         for action in filtered_actions:
             try:
                 # check the export items are available
-                elems = self.locateExportItems(action.what)
+                the_licences = (
+                    action.licences if len(action.licences) > 0 else op_licences
+                )
+                elems = self.locateExportItems(action.what, licences=the_licences)
 
                 # check the security context is available
                 a_setup_block: "Optional[WritableSecurityContextConfig]"
@@ -2784,7 +2789,10 @@ class WF:
 
                 # check whether plugin is available
                 export_p = self.wfexs.instantiateExportPlugin(
-                    self, action.plugin_id, a_setup_block
+                    self,
+                    action.plugin_id,
+                    sec_context=a_setup_block,
+                    licences=the_licences,
                 )
 
                 # Export the contents and obtain a PID
@@ -3426,7 +3434,9 @@ class WF:
     }
 
     def locateExportItems(
-        self, items: "Sequence[ExportItem]"
+        self,
+        items: "Sequence[ExportItem]",
+        licences: "Sequence[str]" = [],
     ) -> "Sequence[AnyContent]":
         """
         The located paths in the contents should be relative to the working directory
@@ -3651,6 +3661,7 @@ class WF:
                 create_rocrate(
                     filename=cast("AbsPath", temp_rocrate_file),
                     payloads=self.ExportROCrate2Payloads[item.block],
+                    licences=licences,
                 )
                 retval.append(
                     MaterializedContent(
@@ -3679,6 +3690,7 @@ class WF:
         self,
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
+        licences: "Sequence[str]" = [],
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -3707,6 +3719,7 @@ class WF:
             self.arch,
             staged_setup=self.stagedSetup,
             payloads=payloads,
+            licences=licences,
         )
 
         wrroc.addWorkflowInputs(
@@ -3736,6 +3749,7 @@ class WF:
         self,
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
+        licences: "Sequence[str]" = [],
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -3763,6 +3777,7 @@ class WF:
             self.arch,
             staged_setup=self.stagedSetup,
             payloads=payloads,
+            licences=licences,
         )
 
         for stagedExec in self.stagedExecutions:

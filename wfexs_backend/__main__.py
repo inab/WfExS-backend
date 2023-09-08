@@ -305,6 +305,22 @@ def genParserSub(
                     const=val_mat,
                     help=f"Should the RO-Crate contain a {key_mat} copy (of everything)?",
                 )
+        mat_opts.add_argument(
+            "--licences",
+            dest="licences",
+            action="append",
+            default=[],
+            help="Licence(s) to attach to the generated RO-Crate",
+        )
+
+    if (exportParams or command == WfExS_Commands.ExportResults) and not crateParams:
+        ap_.add_argument(
+            "--licences",
+            dest="licences",
+            action="append",
+            default=[],
+            help="Licence(s) to attach to the exported contents",
+        )
 
     return ap_
 
@@ -525,6 +541,12 @@ def processStagedWorkdirCommand(
     else:
         private_key_passphrase = ""
 
+    # Getting the list of licences (in case they are needed)
+    if hasattr(args, "licences") and args.licences is not None:
+        op_licences = args.licences
+    else:
+        op_licences = []
+
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
             for (
@@ -739,6 +761,7 @@ def processStagedWorkdirCommand(
                             wfInstance.createStageResearchObject(
                                 filename=args.staged_workdir_command_args[1],
                                 payloads=doMaterializedROCrate,
+                                licences=op_licences,
                             )
                         else:
                             mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
@@ -752,6 +775,7 @@ def processStagedWorkdirCommand(
                                 wfInstance.createResultsResearchObject(
                                     filename=args.staged_workdir_command_args[1],
                                     payloads=doMaterializedROCrate,
+                                    licences=op_licences,
                                 )
                             else:
                                 print(
@@ -1131,7 +1155,7 @@ def main() -> None:
     if command == WfExS_Commands.StagedWorkDir:
         sys.exit(processStagedWorkdirCommand(wfBackend, args, logLevel))
 
-    # This can be needed in more than one place
+    # These can be needed in more than one place
     if (
         hasattr(args, "private_key_passphrase_envvar")
         and args.private_key_passphrase_envvar is not None
@@ -1139,6 +1163,11 @@ def main() -> None:
         private_key_passphrase = os.environ.get(args.private_key_passphrase_envvar, "")
     else:
         private_key_passphrase = ""
+
+    if hasattr(args, "licences") and args.licences is not None:
+        op_licences = args.licences
+    else:
+        op_licences = []
 
     wfInstance = None
     if command in (
@@ -1239,7 +1268,10 @@ def main() -> None:
         doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
 
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
-        wfInstance.createStageResearchObject(payloads=doMaterializedROCrate)
+        wfInstance.createStageResearchObject(
+            payloads=doMaterializedROCrate,
+            licences=op_licences,
+        )
 
     if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
         print(
@@ -1261,10 +1293,13 @@ def main() -> None:
         )
 
     if command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
-        wfInstance.exportResults()
+        wfInstance.exportResults(op_licences=op_licences)
 
     if command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
-        wfInstance.createResultsResearchObject(payloads=doMaterializedROCrate)
+        wfInstance.createResultsResearchObject(
+            payloads=doMaterializedROCrate,
+            licences=op_licences,
+        )
 
 
 if __name__ == "__main__":

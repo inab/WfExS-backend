@@ -662,6 +662,7 @@ class WfExSBackend:
         wfInstance: "WF",
         plugin_id: "SymbolicName",
         sec_context: "Optional[SecurityContextConfig]",
+        licences: "Sequence[str]",
     ) -> "AbstractExportPlugin":
         """
         This method instantiates an stateful export plugin
@@ -680,7 +681,9 @@ class WfExSBackend:
         if stagedSetup.is_damaged:
             raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
 
-        return self._export_plugins[plugin_id](wfInstance, setup_block=sec_context)
+        return self._export_plugins[plugin_id](
+            wfInstance, setup_block=sec_context, licences=licences
+        )
 
     def addStatefulSchemeHandlers(
         self,
