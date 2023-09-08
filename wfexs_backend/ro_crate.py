@@ -766,7 +766,7 @@ class WorkflowRunROCrate:
                             "sha256": the_signature,
                             "encodingFormat": magic.from_file(
                                 container.localPath, mime=True
-                            ),  # type: ignore[no-untyped-call]
+                            ),
                         },
                     )
 
@@ -1120,7 +1120,11 @@ class WorkflowRunROCrate:
         the_file_crate.append_to("sha256", the_signature, compact=True)
         the_file_crate.append_to(
             "encodingFormat",
-            magic.from_file(the_path, mime=True),  # type: ignore[no-untyped-call]
+            # Real path is needed because libmagic is able to provide
+            # a mime type for symbolic links, and some engines and
+            # workflows provide their outputs symbolically linked to
+            # the file in the intermediate working directory
+            magic.from_file(os.path.realpath(the_path), mime=True),
             compact=True,
         )
 
@@ -1408,7 +1412,7 @@ class WorkflowRunROCrate:
             the_workflow_crate.append_to("sha256", the_signature, compact=True)
             the_workflow_crate.append_to(
                 "encodingFormat",
-                magic.from_file(the_path, mime=True),  # type: ignore[no-untyped-call]
+                magic.from_file(os.path.realpath(the_path), mime=True),
                 compact=True,
             )
 
