@@ -238,12 +238,26 @@ def genParserSub(
             help="Configuration file, describing exports which can be done",
         )
 
-    if preStageParams:
+    if preStageParams and command not in (WfExS_Commands.ConfigValidate,):
         ap_.add_argument(
             "-n",
             "--nickname-prefix",
             dest="nickname_prefix",
             help="Nickname prefix to be used on staged workdir creation",
+        )
+
+    if (
+        (preStageParams and command not in (WfExS_Commands.ConfigValidate,))
+        or crateParams
+        or exportParams
+        or command == WfExS_Commands.ExportResults
+    ):
+        ap_.add_argument(
+            "--orcid",
+            dest="orcids",
+            action="append",
+            default=[],
+            help="ORCID(s) of the person(s) staging, running or exporting the workflow scenario",
         )
 
     if command in (WfExS_Commands.Stage, WfExS_Commands.Execute) or exportParams:
@@ -306,7 +320,7 @@ def genParserSub(
                     help=f"Should the RO-Crate contain a {key_mat} copy (of everything)?",
                 )
         mat_opts.add_argument(
-            "--licences",
+            "--licence",
             dest="licences",
             action="append",
             default=[],
@@ -315,7 +329,7 @@ def genParserSub(
 
     if (exportParams or command == WfExS_Commands.ExportResults) and not crateParams:
         ap_.add_argument(
-            "--licences",
+            "--licence",
             dest="licences",
             action="append",
             default=[],
@@ -547,6 +561,12 @@ def processStagedWorkdirCommand(
     else:
         op_licences = []
 
+    # Getting the list of ORCIDs (in case they are needed)
+    if hasattr(args, "orcids") and args.orcids is not None:
+        op_orcids = args.orcids
+    else:
+        op_orcids = []
+
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
             for (
@@ -762,6 +782,7 @@ def processStagedWorkdirCommand(
                                 filename=args.staged_workdir_command_args[1],
                                 payloads=doMaterializedROCrate,
                                 licences=op_licences,
+                                orcids=op_orcids,
                             )
                         else:
                             mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
@@ -776,6 +797,7 @@ def processStagedWorkdirCommand(
                                     filename=args.staged_workdir_command_args[1],
                                     payloads=doMaterializedROCrate,
                                     licences=op_licences,
+                                    orcids=op_orcids,
                                 )
                             else:
                                 print(
@@ -1169,6 +1191,11 @@ def main() -> None:
     else:
         op_licences = []
 
+    if hasattr(args, "orcids") and args.orcids is not None:
+        op_orcids = args.orcids
+    else:
+        op_orcids = []
+
     wfInstance = None
     if command in (
         WfExS_Commands.MountWorkDir,
@@ -1229,6 +1256,7 @@ def main() -> None:
             public_key_filenames=args.public_key_files,
             private_key_filename=args.private_key_file,
             private_key_passphrase=private_key_passphrase,
+            orcids=op_orcids,
         )
 
     # This is needed to be sure the encfs instance is unmounted
@@ -1271,6 +1299,7 @@ def main() -> None:
         wfInstance.createStageResearchObject(
             payloads=doMaterializedROCrate,
             licences=op_licences,
+            orcids=op_orcids,
         )
 
     if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
@@ -1293,7 +1322,7 @@ def main() -> None:
         )
 
     if command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
-        wfInstance.exportResults(op_licences=op_licences)
+        wfInstance.exportResults(op_licences=op_licences, op_orcids=op_orcids)
 
     if command in (WfExS_Commands.ExportCrate, WfExS_Commands.Execute):
         wfInstance.createResultsResearchObject(

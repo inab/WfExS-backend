@@ -549,6 +549,7 @@ class WorkflowRunROCrate:
         staged_setup: "StagedSetup",
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = [],
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -573,9 +574,6 @@ class WorkflowRunROCrate:
         self._wf_to_container_sa: "MutableMapping[str, rocrate.model.softwareapplication.SoftwareApplication]" = (
             {}
         )
-
-        # TODO: add agents
-        self._agents: "MutableSequence[rocrate.model.person.Person]" = []
 
         if len(licences) == 0:
             licences = [NoLicenceShort]
@@ -602,6 +600,15 @@ class WorkflowRunROCrate:
             localWorkflow.langVersion,
             licences,
         )
+
+        # add agents
+        self._agents: "MutableSequence[rocrate.model.person.Person]" = []
+        for orcid in orcids:
+            # FIXME: validate ORCID asking for its public metadata
+            agent = rocrate.model.person.Person(self.crate, identifier=orcid)
+            # FIXME: enrich agent entry from the metadata obtained from the ORCID
+            self.crate.add(agent)
+            self._agents.append(agent)
 
         self.wf_wfexs = self._add_wfexs_to_crate()
 
@@ -1620,6 +1627,8 @@ class WorkflowRunROCrate:
             stagedExec.ended,
         )
         self.crate.add(crate_action)
+        if len(self._agents) > 0:
+            crate_action.append_to("agent", self._agents)
         self.crate.root_dataset.append_to("mentions", crate_action)
         instruments: "MutableSequence[rocrate.model.entity.Entity]" = [
             self.wf_wfexs,

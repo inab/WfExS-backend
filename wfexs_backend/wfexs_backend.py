@@ -663,6 +663,7 @@ class WfExSBackend:
         plugin_id: "SymbolicName",
         sec_context: "Optional[SecurityContextConfig]",
         licences: "Sequence[str]",
+        orcids: "Sequence[str]",
     ) -> "AbstractExportPlugin":
         """
         This method instantiates an stateful export plugin
@@ -682,7 +683,7 @@ class WfExSBackend:
             raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
 
         return self._export_plugins[plugin_id](
-            wfInstance, setup_block=sec_context, licences=licences
+            wfInstance, setup_block=sec_context, licences=licences, orcids=orcids
         )
 
     def addStatefulSchemeHandlers(
@@ -792,8 +793,10 @@ class WfExSBackend:
         )
 
     def createRawWorkDir(
-        self, nickname_prefix: "Optional[str]" = None
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]":
+        self,
+        nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
+    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], AbsPath]":
         """
         This method creates a new, empty, raw working directory
         """
@@ -804,15 +807,16 @@ class WfExSBackend:
             nickname = nickname_prefix + self.GetPassGen().generate_nickname()
 
         return self.getOrCreateRawWorkDirFromInstanceId(
-            instanceId, nickname=nickname, create_ok=True
+            instanceId, nickname=nickname, orcids=orcids, create_ok=True
         )
 
     def getOrCreateRawWorkDirFromInstanceId(
         self,
         instanceId: "WfExSInstanceId",
         nickname: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
         create_ok: "bool" = False,
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]":
+    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], AbsPath]":
         """
         This method returns the absolute path to the raw working directory
         """
@@ -820,7 +824,7 @@ class WfExSBackend:
         uniqueRawWorkDir = cast("AbsPath", os.path.join(self.baseWorkDir, instanceId))
 
         return self.parseOrCreateRawWorkDir(
-            uniqueRawWorkDir, instanceId, nickname, create_ok=create_ok
+            uniqueRawWorkDir, instanceId, nickname, orcids=orcids, create_ok=create_ok
         )
 
     def parseOrCreateRawWorkDir(
@@ -828,8 +832,9 @@ class WfExSBackend:
         uniqueRawWorkDir: "AbsPath",
         instanceId: "Optional[WfExSInstanceId]" = None,
         nickname: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
         create_ok: "bool" = False,
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]":
+    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], AbsPath]":
         """
         This method returns the absolute path to the raw working directory
         """
@@ -853,6 +858,7 @@ class WfExSBackend:
                     "instance_id": instanceId,
                     "nickname": nickname,
                     "creation": creation,
+                    "orcids": orcids,
                 }
                 json.dump(idNick, idF, cls=DatetimeEncoder)
             os.chmod(id_json_path, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
@@ -862,6 +868,7 @@ class WfExSBackend:
                 instanceId = cast("WfExSInstanceId", idNick["instance_id"])
                 nickname = cast("str", idNick.get("nickname", instanceId))
                 creation = cast("Optional[datetime.datetime]", idNick.get("creation"))
+                orcids = cast("Sequence[str]", idNick.get("orcids", []))
 
             # This file should not change
             if creation is None:
@@ -872,6 +879,7 @@ class WfExSBackend:
             instanceId = cast("WfExSInstanceId", os.path.basename(uniqueRawWorkDir))
             nickname = instanceId
             creation = None
+            orcids = []
 
         if creation is None:
             # Just guessing
@@ -895,11 +903,11 @@ class WfExSBackend:
                 os.path.getctime(reference_path), tz=datetime.timezone.utc
             )
 
-        return instanceId, nickname, creation, uniqueRawWorkDir
+        return instanceId, nickname, creation, orcids, uniqueRawWorkDir
 
     def normalizeRawWorkingDirectory(
         self, uniqueRawWorkDir: "AnyPath"
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, AbsPath]":
+    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], AbsPath]":
         """
         This method returns the id of a working directory,
         as well as the nickname
@@ -949,6 +957,7 @@ class WfExSBackend:
         workflowMetaFilename: "AnyPath",
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
@@ -959,6 +968,7 @@ class WfExSBackend:
             workflowMetaFilename,
             securityContextsConfigFilename=securityContextsConfigFilename,
             nickname_prefix=nickname_prefix,
+            orcids=orcids,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
@@ -1022,6 +1032,7 @@ class WfExSBackend:
         self,
         workflow_meta: "WorkflowMetaConfigBlock",
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
@@ -1043,6 +1054,7 @@ class WfExSBackend:
             self,
             workflow_meta,
             creds_config,
+            orcids=orcids,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
@@ -1052,6 +1064,7 @@ class WfExSBackend:
     def fromForm(
         self,
         workflow_meta: "WorkflowMetaConfigBlock",
+        orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         paranoidMode: "bool" = False,
@@ -1069,6 +1082,7 @@ class WfExSBackend:
         return WF.FromForm(
             self,
             workflow_meta,
+            orcids=orcids,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             paranoidMode=paranoidMode,
@@ -1229,6 +1243,7 @@ class WfExSBackend:
                             instanceId,
                             nickname,
                             creation,
+                            orcids,  # TODO: give some use to this
                             instanceRawWorkdir,
                         ) = self.parseOrCreateRawWorkDir(entry.path, create_ok=False)
                     except:

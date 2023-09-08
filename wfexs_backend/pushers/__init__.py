@@ -77,6 +77,7 @@ class AbstractExportPlugin(abc.ABC):
         wfInstance: "WF",
         setup_block: "Optional[SecurityContextConfig]" = None,
         licences: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = [],
     ):
         import inspect
 
@@ -114,7 +115,11 @@ class AbstractExportPlugin(abc.ABC):
                     f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
                 )
 
+        # FIXME: ORCIDs are bypassed (for now)
+        expanded_orcids = orcids
+
         self.licences: "Tuple[URIType, ...]" = tuple(expanded_licences)
+        self.orcids: "Tuple[str, ...]" = tuple(expanded_orcids)
 
     @abc.abstractmethod
     def push(

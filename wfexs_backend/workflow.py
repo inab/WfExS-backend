@@ -317,6 +317,7 @@ class WF:
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
         instanceId: "Optional[WfExSInstanceId]" = None,
         nickname: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
         creation: "Optional[datetime.datetime]" = None,
         rawWorkDir: "Optional[AnyPath]" = None,
         paranoid_mode: "Optional[bool]" = None,
@@ -498,14 +499,16 @@ class WF:
                     self.instanceId,
                     self.nickname,
                     self.workdir_creation,
+                    self.orcids,
                     self.rawWorkDir,
-                ) = self.wfexs.createRawWorkDir(nickname_prefix=nickname)
+                ) = self.wfexs.createRawWorkDir(nickname_prefix=nickname, orcids=orcids)
                 checkSecure = False
             else:
                 (
                     self.instanceId,
                     self.nickname,
                     self.workdir_creation,
+                    self.orcids,
                     self.rawWorkDir,
                 ) = self.wfexs.getOrCreateRawWorkDirFromInstanceId(
                     instanceId, nickname=nickname, create_ok=False
@@ -517,12 +520,15 @@ class WF:
                     self.instanceId,
                     self.nickname,
                     self.workdir_creation,
+                    self.orcids,
                     _,
                 ) = self.wfexs.parseOrCreateRawWorkDir(
                     self.rawWorkDir, nickname=nickname, create_ok=False
                 )
             else:
                 self.nickname = nickname if nickname is not None else instanceId
+                # FIXME: This is not correct
+                self.orcids = orcids
 
         # TODO: enforce restrictive permissions on each raw working directory
         self.allowOther = False
@@ -1011,9 +1017,13 @@ class WF:
         if wfexs is None:
             raise WFException("Unable to initialize, no WfExSBackend instance provided")
 
-        instanceId, nickname, creation, rawWorkDir = wfexs.normalizeRawWorkingDirectory(
-            workflowWorkingDirectory
-        )
+        (
+            instanceId,
+            nickname,
+            creation,
+            orcids,
+            rawWorkDir,
+        ) = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
 
         return cls(
             wfexs,
@@ -1021,6 +1031,7 @@ class WF:
             nickname=nickname,
             rawWorkDir=rawWorkDir,
             creation=creation,
+            # orcids=orcids,  # Do we need to propagate this here?
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             fail_ok=fail_ok,
@@ -1042,6 +1053,7 @@ class WF:
         workflowMetaFilename: "AnyPath",
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
@@ -1078,6 +1090,7 @@ class WF:
             workflow_meta,
             creds_config,
             paranoidMode=paranoidMode,
+            orcids=orcids,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
@@ -1089,6 +1102,7 @@ class WF:
         wfexs: "WfExSBackend",
         workflow_meta: "WorkflowMetaConfigBlock",
         creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
@@ -1127,6 +1141,7 @@ class WF:
             default_actions=workflow_meta.get("default_actions"),
             workflow_config=workflow_meta.get("workflow_config"),
             nickname=workflow_meta.get("nickname"),
+            orcids=orcids,
             creds_config=creds_config,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
@@ -1139,6 +1154,7 @@ class WF:
         cls,
         wfexs: "WfExSBackend",
         workflow_meta: "WorkflowMetaConfigBlock",
+        orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
@@ -1167,6 +1183,7 @@ class WF:
             default_actions=workflow_meta.get("default_actions"),
             workflow_config=workflow_meta.get("workflow_config"),
             nickname=workflow_meta.get("nickname"),
+            orcids=orcids,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
@@ -2721,6 +2738,7 @@ class WF:
         action_ids: "Sequence[SymbolicName]" = [],
         fail_ok: "bool" = False,
         op_licences: "Sequence[str]" = [],
+        op_orcids: "Sequence[str]" = [],
     ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
         # The precondition
         if self.unmarshallExport(offline=True, fail_ok=True) is None:
@@ -2755,7 +2773,13 @@ class WF:
                 the_licences = (
                     action.licences if len(action.licences) > 0 else op_licences
                 )
-                elems = self.locateExportItems(action.what, licences=the_licences)
+                the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
+                for op_orcid in op_orcids:
+                    if op_orcid not in the_orcids:
+                        the_orcids.append(op_orcid)
+                elems = self.locateExportItems(
+                    action.what, licences=the_licences, orcids=the_orcids
+                )
 
                 # check the security context is available
                 a_setup_block: "Optional[WritableSecurityContextConfig]"
@@ -2793,6 +2817,7 @@ class WF:
                     action.plugin_id,
                     sec_context=a_setup_block,
                     licences=the_licences,
+                    orcids=the_orcids,
                 )
 
                 # Export the contents and obtain a PID
@@ -3437,6 +3462,7 @@ class WF:
         self,
         items: "Sequence[ExportItem]",
         licences: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Sequence[AnyContent]":
         """
         The located paths in the contents should be relative to the working directory
@@ -3662,6 +3688,7 @@ class WF:
                     filename=cast("AbsPath", temp_rocrate_file),
                     payloads=self.ExportROCrate2Payloads[item.block],
                     licences=licences,
+                    orcids=orcids,
                 )
                 retval.append(
                     MaterializedContent(
@@ -3691,6 +3718,7 @@ class WF:
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -3708,6 +3736,10 @@ class WF:
         assert self.stagedSetup.inputs_dir is not None
         assert self.stagedSetup.outputs_dir is not None
 
+        the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
+        for orcid in orcids:
+            if orcid not in the_orcids:
+                the_orcids.append(orcid)
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
             self.getPID(),
@@ -3720,6 +3752,7 @@ class WF:
             staged_setup=self.stagedSetup,
             payloads=payloads,
             licences=licences,
+            orcids=the_orcids,
         )
 
         wrroc.addWorkflowInputs(
@@ -3750,6 +3783,7 @@ class WF:
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -3766,6 +3800,10 @@ class WF:
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
 
+        the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
+        for orcid in orcids:
+            if orcid not in the_orcids:
+                the_orcids.append(orcid)
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
             self.getPID(),
@@ -3778,6 +3816,7 @@ class WF:
             staged_setup=self.stagedSetup,
             payloads=payloads,
             licences=licences,
+            orcids=the_orcids,
         )
 
         for stagedExec in self.stagedExecutions:
