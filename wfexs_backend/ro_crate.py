@@ -708,7 +708,7 @@ class WorkflowRunROCrate:
             verstr = wfexs_version[0]
         else:
             verstr = "{0[0]} ({0[1]})".format(wfexs_version)
-        wf_wfexs.version = verstr
+        wf_wfexs["softwareVersion"] = verstr
 
         return wf_wfexs
 
