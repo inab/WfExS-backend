@@ -96,6 +96,10 @@ from rocrate.utils import (
     is_url,
 )
 
+from .cache_handler import (
+    META_JSON_POSTFIX,
+)
+
 from .utils.digests import (
     ComputeDigestFromDirectory,
     ComputeDigestFromFile,
@@ -777,6 +781,25 @@ class WorkflowRunROCrate:
                             self.crate, identifier=container_pid
                         )
                     )
+
+                # Now, add container metadata, which is going to be
+                # consumed by WfExS or third parties
+                metadataLocalPath: "Optional[str]" = None
+                if container.metadataLocalPath is not None:
+                    metadataLocalPath = container.metadataLocalPath
+                # This code is needed for old working directories
+                if metadataLocalPath is None and container.localPath is not None:
+                    metadataLocalPath = container.localPath + META_JSON_POSTFIX
+
+                if metadataLocalPath is not None and os.path.exists(metadataLocalPath):
+                    meta_file = self._add_file_to_crate(
+                        the_path=metadataLocalPath,
+                        the_uri=None,
+                        the_name=cast(
+                            "RelPath", os.path.relpath(metadataLocalPath, self.work_dir)
+                        ),
+                    )
+                    software_container.append_to("hasPart", meta_file)
 
                 software_container["softwareVersion"] = container.fingerprint
                 container_os = container.operatingSystem

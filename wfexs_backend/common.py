@@ -776,6 +776,7 @@ class Container(ContainerTaggedName):
         (sha256 or similar). It could be None outside Singularity solutions.
     fingerprint: Server fingerprint of the container.
         Mainly from docker registries.
+    metadataLocalPath: The full local path to the container metadata file (it can be None)
     """
 
     taggedName: "URIType" = cast("URIType", "")
@@ -784,6 +785,7 @@ class Container(ContainerTaggedName):
     localPath: "Optional[AbsPath]" = None
     signature: "Optional[Fingerprint]" = None
     fingerprint: "Optional[Fingerprint]" = None
+    metadataLocalPath: "Optional[AbsPath]" = None
 
 
 class MaterializedWorkflowEngine(NamedTuple):

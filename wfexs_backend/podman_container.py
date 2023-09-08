@@ -522,6 +522,7 @@ STDERR
             type=self.containerType,
             localPath=containerPath,
             registries=tag.registries,
+            metadataLocalPath=containerPathMeta,
         )
 
     def deploySingleContainer(
