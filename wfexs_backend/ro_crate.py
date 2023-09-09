@@ -715,6 +715,12 @@ class WorkflowRunROCrate:
             )
 
         self.crate = FixedROCrate(gen_preview=False)
+
+        # Add extra terms
+        self.crate.metadata.extra_terms.update(
+            {"sha256": "https://w3id.org/ro/terms/workflow-run#sha256"}
+        )
+
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
             identifier=wf_type.rocrate_programming_language,
