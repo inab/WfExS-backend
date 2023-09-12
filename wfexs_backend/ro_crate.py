@@ -75,6 +75,10 @@ if TYPE_CHECKING:
         WorkflowType,
     )
 
+    from .fetchers.internal.orcid import (
+        ORCIDPublicRecord,
+    )
+
 import urllib.parse
 import uuid
 
@@ -99,6 +103,14 @@ from rocrate.utils import (
 
 from .cache_handler import (
     META_JSON_POSTFIX,
+)
+
+from .fetchers import (
+    FetcherException,
+)
+
+from .fetchers.internal.orcid import (
+    validate_orcid,
 )
 
 from .utils.digests import (
@@ -201,6 +213,23 @@ class Intangible(rocrate.model.entity.Entity):  # type: ignore[misc]
         if properties is not None:
             pv_properties.update(properties)
         super().__init__(crate, identifier=identifier, properties=pv_properties)
+
+
+class ContactPoint(rocrate.model.entity.Entity):
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        contactType: "str",
+        identifier: "str",
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        cp_properties = {
+            "contactType": contactType,
+        }
+
+        if properties is not None:
+            cp_properties.update(properties)
+        super().__init__(crate, identifier=identifier, properties=cp_properties)
 
 
 class Action(rocrate.model.entity.Entity):  # type: ignore[misc]
@@ -603,12 +632,50 @@ class WorkflowRunROCrate:
 
         # add agents
         self._agents: "MutableSequence[rocrate.model.person.Person]" = []
+        failed_orcids: "MutableSequence[str]" = []
         for orcid in orcids:
-            # FIXME: validate ORCID asking for its public metadata
-            agent = rocrate.model.person.Person(self.crate, identifier=orcid)
-            # FIXME: enrich agent entry from the metadata obtained from the ORCID
-            self.crate.add(agent)
-            self._agents.append(agent)
+            # validate ORCID asking for its public metadata
+            try:
+                val_res = validate_orcid(orcid)
+                if val_res is not None:
+                    agent = rocrate.model.person.Person(
+                        self.crate, identifier=val_res[1]
+                    )
+
+                    # enrich agent entry from the metadata obtained from the ORCID
+                    agent_name = val_res[2].get("displayName")
+                    if agent_name is not None:
+                        agent["name"] = agent_name
+
+                    emails_dict = val_res[2].get("emails", {})
+                    if isinstance(emails_dict, dict):
+                        emails = emails_dict.get("emails", [])
+                        if isinstance(emails, list):
+                            for email_entry in emails:
+                                if isinstance(email_entry, dict):
+                                    the_email = email_entry.get("value")
+                                    if the_email is not None:
+                                        contact_point = ContactPoint(
+                                            self.crate,
+                                            identifier="mailto:" + the_email,
+                                            contactType="Author",
+                                        )
+                                        contact_point["email"] = the_email
+                                        contact_point["identifier"] = the_email
+                                        contact_point["url"] = val_res[1]
+
+                                        self.crate.add(contact_point)
+                                        agent.append_to("contactPoint", contact_point)
+
+                    self.crate.add(agent)
+                    self._agents.append(agent)
+            except FetcherException as fe:
+                self.logger.exception(f"Error validating ORCID {orcid}")
+
+        if len(failed_orcids) > 0:
+            raise ROCrateGenerationException(
+                f"{len(failed_orcids)} of {len(orcids)} ORCIDs were not valid: {', '.join(failed_orcids)}"
+            )
 
         self.wf_wfexs = self._add_wfexs_to_crate()
 
