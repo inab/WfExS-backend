@@ -29,7 +29,6 @@ from typing import (
 )
 
 from urllib import parse
-import urllib.error
 
 from . import FetcherException
 from .http import fetchClassicURL
@@ -80,10 +79,10 @@ def fetchZenodo(
     # Dealing with an odd behaviour from urlparse
     for det in ("/", "?", "#"):
         if det in remote_file:
-            parsedInputURL = urllib.parse.urlparse(remote_file)
+            parsedInputURL = parse.urlparse(remote_file)
             break
     else:
-        parsedInputURL = urllib.parse.urlparse(remote_file + "#")
+        parsedInputURL = parse.urlparse(remote_file + "#")
     parsed_steps = parsedInputURL.path.split("/")
 
     if len(parsed_steps) < 1 or parsed_steps[0] == "":
@@ -103,10 +102,10 @@ def fetchZenodo(
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching Zenodo metadata for {zenodo_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching Zenodo metadata for {zenodo_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     if not isinstance(metadata, dict) or (metadata.get("conceptdoi") is None):
         raise FetcherException(
@@ -132,10 +131,10 @@ def fetchZenodo(
         l_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_l_meta["payload"] = l_metadata
         metadata_array.extend(metametalicio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching Zenodo licence metadata {zenodo_lic_id} for {zenodo_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching Zenodo licence metadata {zenodo_lic_id} for {zenodo_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     licence_url = l_metadata.get("metadata", {}).get("url")
     if licence_url is None:
@@ -210,10 +209,10 @@ def fetchZenodo(
                 the_files[0]["links"]["self"], cachedFilename
             )
             metadata_array.extend(metacont)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching Zenodo entry contents for {zenodo_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching Zenodo entry contents for {zenodo_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     return ProtocolFetcherReturn(
         kind_or_resolved=kind,

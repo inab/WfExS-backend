@@ -193,7 +193,9 @@ def fetchClassicURL(
         raise FetcherException(
             "Error fetching {} : {} {}\n{}".format(
                 orig_remote_file, he.code, he.reason, he.read().decode()
-            )
+            ),
+            code=he.code,
+            reason=he.reason,
         ) from he
     finally:
         # Closing files opened by this code

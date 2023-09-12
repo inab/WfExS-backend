@@ -29,7 +29,6 @@ from typing import (
 )
 
 from urllib import parse
-import urllib.error
 
 from . import FetcherException
 from .http import fetchClassicURL
@@ -76,10 +75,10 @@ def fetchOSFIO(
     # Dealing with an odd behaviour from urlparse
     for det in ("/", "?", "#"):
         if det in remote_file:
-            parsedInputURL = urllib.parse.urlparse(remote_file)
+            parsedInputURL = parse.urlparse(remote_file)
             break
     else:
-        parsedInputURL = urllib.parse.urlparse(remote_file + "#")
+        parsedInputURL = parse.urlparse(remote_file + "#")
     parsed_steps = parsedInputURL.path.split("/")
 
     if len(parsed_steps) < 1 or parsed_steps[0] == "":
@@ -99,10 +98,10 @@ def fetchOSFIO(
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching osf.io metadata for {osf_io_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching osf.io metadata for {osf_io_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     if not isinstance(metadata, dict) or (metadata.get("data") is None):
         raise FetcherException(
@@ -133,10 +132,10 @@ def fetchOSFIO(
         l_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_l_meta["payload"] = l_metadata
         metadata_array.extend(metametalicio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching osf.io licence metadata {osf_io_lic_link} for {osf_io_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching osf.io licence metadata {osf_io_lic_link} for {osf_io_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     licence_url = l_metadata.get("data", {}).get("attributes", {}).get("url")
     # When no URL, then the name should suffice
@@ -168,10 +167,10 @@ def fetchOSFIO(
         fm_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_fm_meta["payload"] = fm_metadata
         metadata_array.extend(metametafmio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching osf.io files metadata {osf_io_files_meta_link} for {osf_io_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching osf.io files metadata {osf_io_files_meta_link} for {osf_io_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     # Let's fetch the list of the contents
     prov_block = fm_metadata.get("data", [])
@@ -201,10 +200,10 @@ def fetchOSFIO(
         s_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_s_meta["payload"] = s_metadata
         metadata_array.extend(metametasio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching osf.io stored files metadata {osf_io_store_link} for {osf_io_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching osf.io stored files metadata {osf_io_store_link} for {osf_io_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     # Let's select the contents
     kind: "Optional[ContentKind]" = None
@@ -276,10 +275,10 @@ def fetchOSFIO(
             raise FetcherException(
                 f"{remote_file} does not match contents from osf.io entry {osf_io_id} (or entry has no associated file)"
             )
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching Zenodo entry contents for {osf_io_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching Zenodo entry contents for {osf_io_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     return ProtocolFetcherReturn(
         kind_or_resolved=kind,

@@ -28,7 +28,6 @@ from typing import (
 )
 
 from urllib import parse
-import urllib.error
 
 from . import FetcherException
 from .http import fetchClassicURL
@@ -98,10 +97,10 @@ def fetchDOI(
         metadata_ra = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_ra_meta["payload"] = metadata_ra
         metadata_array.extend(metametaraio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching DOI RA metadata for {doi_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching DOI RA metadata for {doi_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     if (
         not isinstance(metadata_ra, list)
@@ -121,9 +120,9 @@ def fetchDOI(
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching DOI metadata for {doi_id} : {he.code} {he.reason}"
+            f"Error fetching DOI metadata for {doi_id} : {fe.code} {fe.reason}"
         )
 
     doi_resolved_url: "Optional[str]" = None

@@ -78,7 +78,18 @@ from ..common import (
 
 
 class FetcherException(AbstractWfExSException):
-    pass
+    code: "Optional[Union[str, int]]"
+    reason: "Optional[str]"
+
+    def __init__(
+        self,
+        msg: "str",
+        code: "Optional[Union[str, int]]" = None,
+        reason: "Optional[str]" = None,
+    ):
+        super().__init__(msg)
+        self.code = code
+        self.reason = reason
 
 
 class InvalidFetcherException(FetcherException):

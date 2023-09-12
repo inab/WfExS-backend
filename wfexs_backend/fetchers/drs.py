@@ -42,7 +42,6 @@ if TYPE_CHECKING:
     )
 
 from urllib import parse
-import urllib.error
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
@@ -211,12 +210,12 @@ def downloadContentFromDRS(
                 URIWithMetadata(remote_file, gathered_meta, preferredName)
             )
             metadata_array.extend(metametaio)
-        except urllib.error.HTTPError as he:
+        except FetcherException as fe:
             raise FetcherException(
                 "Error fetching DRS metadata for {} : {} {}".format(
-                    remote_file, he.code, he.reason
+                    remote_file, fe.code, fe.reason
                 )
-            ) from he
+            ) from fe
 
         # With the metadata, let's compose the URL to be returned
         # (which could not be cached)
@@ -240,12 +239,12 @@ def downloadContentFromDRS(
                     object_access_metadata = json.loads(
                         metaaccio.getvalue().decode("utf-8")
                     )
-                except urllib.error.HTTPError as he:
+                except FetcherException as fe:
                     raise FetcherException(
                         "Error fetching DRS access link {} for {} : {} {}".format(
-                            access_id, remote_file, he.code, he.reason
+                            access_id, remote_file, fe.code, fe.reason
                         )
-                    ) from he
+                    ) from fe
 
                 object_url = object_access_metadata.get("url")
                 object_headers = object_access_metadata.get("headers")

@@ -45,7 +45,6 @@ if TYPE_CHECKING:
     )
 
 from urllib import parse
-import urllib.error
 
 from . import FetcherException
 from .http import fetchClassicURL
@@ -71,10 +70,10 @@ def fetchPRIDEProject(
     # Dealing with an odd behaviour from urlparse
     for det in ("/", "?", "#"):
         if det in remote_file:
-            parsedInputURL = urllib.parse.urlparse(remote_file)
+            parsedInputURL = parse.urlparse(remote_file)
             break
     else:
-        parsedInputURL = urllib.parse.urlparse(remote_file + "#")
+        parsedInputURL = parse.urlparse(remote_file + "#")
     parsed_steps = parsedInputURL.path.split("/")
 
     if len(parsed_steps) < 1 or parsed_steps[0] == "":
@@ -94,12 +93,12 @@ def fetchPRIDEProject(
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
             "Error fetching PRIDE metadata for {} : {} {}".format(
-                projectId, he.code, he.reason
+                projectId, fe.code, fe.reason
             )
-        )
+        ) from fe
 
     try:
         for addAtt in metadata["additionalAttributes"]:

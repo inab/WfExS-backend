@@ -28,7 +28,6 @@ from typing import (
 )
 
 from urllib import parse
-import urllib.error
 
 from . import FetcherException
 from .http import fetchClassicURL
@@ -128,10 +127,10 @@ def fetchTRSFiles(
             version_meta["payload"] = version_metadata
             metadata_array.extend(metametaio)
 
-        except urllib.error.HTTPError as he:
+        except FetcherException as fe:
             raise FetcherException(
-                f"Error fetching or processing TRS version metadata for {remote_file} : {he.code} {he.reason}"
-            ) from he
+                f"Error fetching or processing TRS version metadata for {remote_file} : {fe.code} {fe.reason}"
+            ) from fe
 
         # At last, we can finish building the URL
         new_path_steps = [
@@ -183,12 +182,12 @@ def fetchTRSFiles(
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         topMeta["payload"] = metadata
         metadata_array.extend(metametaio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
             "Error fetching or processing TRS files metadata for {} : {} {}".format(
-                remote_file, he.code, he.reason
+                remote_file, fe.code, fe.reason
             )
-        ) from he
+        ) from fe
 
     os.makedirs(cachedFilename, exist_ok=True)
     absdirs = set()

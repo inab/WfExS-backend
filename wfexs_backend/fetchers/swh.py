@@ -30,7 +30,6 @@ from typing import (
     TYPE_CHECKING,
 )
 from urllib import parse
-import urllib.error
 
 if TYPE_CHECKING:
     import logging

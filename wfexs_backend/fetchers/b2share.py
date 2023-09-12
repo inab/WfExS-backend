@@ -29,7 +29,6 @@ from typing import (
 )
 
 from urllib import parse
-import urllib.error
 
 from . import FetcherException
 from .http import fetchClassicURL
@@ -77,10 +76,10 @@ def fetchB2SHARE(
     # Dealing with an odd behaviour from urlparse
     for det in ("/", "?", "#"):
         if det in remote_file:
-            parsedInputURL = urllib.parse.urlparse(remote_file)
+            parsedInputURL = parse.urlparse(remote_file)
             break
     else:
-        parsedInputURL = urllib.parse.urlparse(remote_file + "#")
+        parsedInputURL = parse.urlparse(remote_file + "#")
     parsed_steps = parsedInputURL.path.split("/")
 
     if len(parsed_steps) < 1 or parsed_steps[0] == "":
@@ -100,10 +99,10 @@ def fetchB2SHARE(
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching B2SHARE metadata for {b2share_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching B2SHARE metadata for {b2share_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     if not isinstance(metadata, dict) or (metadata.get("created") is None):
         raise FetcherException(
@@ -183,10 +182,10 @@ def fetchB2SHARE(
         else:
             _, metacont, _ = fetchClassicURL(the_files[0]["ePIC_PID"], cachedFilename)
             metadata_array.extend(metacont)
-    except urllib.error.HTTPError as he:
+    except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching B2SHARE entry contents for {b2share_id} : {he.code} {he.reason}"
-        )
+            f"Error fetching B2SHARE entry contents for {b2share_id} : {fe.code} {fe.reason}"
+        ) from fe
 
     return ProtocolFetcherReturn(
         kind_or_resolved=kind,
