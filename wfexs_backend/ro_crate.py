@@ -993,7 +993,10 @@ class WorkflowRunROCrate:
             elif isinstance(itemInValue0, MaterializedContent):
                 if len(in_item.values) > 1:
                     additional_type = "Collection"
-                elif itemInValue0.kind == ContentKind.File:
+                elif itemInValue0.kind in (
+                    ContentKind.File,
+                    ContentKind.ContentWithURIs,
+                ):
                     additional_type = "File"
                 elif itemInValue0.kind == ContentKind.Directory:
                     additional_type = "Dataset"
@@ -1053,10 +1056,57 @@ class WorkflowRunROCrate:
                                 do_attach=do_attach,
                             )
 
-                            if isinstance(crate_coll, Collection):
-                                crate_coll.append_to("hasPart", crate_file)
+                            # An extrapolated input, which needs special handling
+                            if itemInValues.extrapolated_local is not None:
+                                crate_extrapolated_file = self._add_file_to_crate(
+                                    the_path=itemInValues.extrapolated_local,
+                                    the_uri=None,
+                                    the_name=cast(
+                                        "RelPath",
+                                        os.path.relpath(
+                                            itemInValues.extrapolated_local,
+                                            self.work_dir,
+                                        ),
+                                    ),
+                                    do_attach=True,
+                                )
+                                crate_extrapolated_file[
+                                    "description"
+                                ] = "This file is an extrapolation of other. The original file contained URIs which were fetched, and this file, where URIs where substituted by the local paths, was generated and used for workflow execution"
+
+                                # Now, related the file with the extrapolated
+                                # contents to the original file
+                                crate_extrapolated_file.append_to(
+                                    "exampleOfWork", crate_file
+                                )
+
+                                crate_file.append_to(
+                                    "workExample", crate_extrapolated_file
+                                )
+
+                                # and describe the transformation
+                                extrap_action = CreateAction(
+                                    self.crate,
+                                    "File content with embedded URIs extrapolation process",
+                                )
+                                extrap_action = self.crate.add(extrap_action)
+                                extrap_action["object"] = crate_file
+                                extrap_action["result"] = crate_extrapolated_file
+                                extrap_action.append_to("instrument", self.wf_wfexs)
+                                extrap_action.append_to(
+                                    "actionStatus",
+                                    {"@id": "http://schema.org/CompletedActionStatus"},
+                                )
+                                if len(self._agents) > 0:
+                                    extrap_action.append_to("agent", self._agents)
+
                             else:
-                                crate_coll = crate_file
+                                crate_extrapolated_file = crate_file
+
+                            if isinstance(crate_coll, Collection):
+                                crate_coll.append_to("hasPart", crate_extrapolated_file)
+                            else:
+                                crate_coll = crate_extrapolated_file
 
                         elif os.path.isdir(itemInLocalSource):
                             crate_dataset, _ = self._add_directory_as_dataset(
