@@ -71,7 +71,7 @@ from ..common import (
     URIWithMetadata,
 )
 
-from ..utils.ftp_downloader import FTPDownloader
+from .internal.ftp_downloader import FTPDownloader
 
 
 def fetchFTPURL(
