@@ -1046,6 +1046,7 @@ class StagedExecution(NamedTuple):
     outputsDir: "RelPath"
     started: "datetime.datetime"
     ended: "datetime.datetime"
+    environment: "Sequence[MaterializedInput]" = []
 
 
 # Next method has been borrowed from FlowMaps

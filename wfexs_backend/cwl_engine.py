@@ -1216,6 +1216,7 @@ STDERR
                 stagedExec = StagedExecution(
                     exitVal=cast("ExitVal", retVal),
                     augmentedInputs=augmentedInputs,
+                    environment=matEnvironment,
                     matCheckOutputs=matOutputs,
                     outputsDir=relOutputsDir,
                     started=started,

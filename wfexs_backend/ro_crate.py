@@ -904,7 +904,7 @@ class WorkflowRunROCrate:
                         fetch_remote=False,
                         validate_url=False,
                         properties={
-                            "contentSize": the_size,
+                            "contentSize": str(the_size),
                             "identifier": container.taggedName,
                             "sha256": the_signature,
                             "encodingFormat": magic.from_file(
@@ -973,6 +973,7 @@ class WorkflowRunROCrate:
         crate_inputs = []
         do_attach = CratableItem.Inputs in self.payloads
         input_sep = "envvar" if are_envvars else "param"
+        fp_dest = "environment" if are_envvars else "input"
         for in_item in inputs:
             formal_parameter_id = (
                 f"{self.wf_file.id}#{input_sep}:"
@@ -1012,7 +1013,9 @@ class WorkflowRunROCrate:
                 # TODO: fix this at the standard level in some way
                 # so it is possible in the future to distinguish among
                 # inputs and environment variables in an standardized way
-                self.wf_file.append_to("input", formal_parameter)
+                self.wf_file.append_to(fp_dest, formal_parameter)
+                value_required = not in_item.implicit
+                formal_parameter["valueRequired"] = str(value_required)
 
             item_signature = cast(
                 "bytes",
@@ -1094,6 +1097,9 @@ class WorkflowRunROCrate:
                             break
 
                     if some_not_null:
+                        if in_item.implicit and len(in_item.values) == 1:
+                            formal_parameter["defaultValue"] = str(in_item.values[0])
+
                         for itemInAtomicValues in cast(
                             "Sequence[Union[bool,str,float,int]]", in_item.values
                         ):
@@ -1111,7 +1117,7 @@ class WorkflowRunROCrate:
                                 else:
                                     fixedAtomicValue = itemInAtomicValues
                                 parameter_value = PropertyValue(
-                                    self.crate, in_item.name, fixedAtomicValue
+                                    self.crate, in_item.name, str(fixedAtomicValue)
                                 )
                                 crate_pv = self.crate.add(parameter_value)
                                 if isinstance(crate_coll, Collection):
@@ -1261,7 +1267,7 @@ class WorkflowRunROCrate:
             the_signature = cast(
                 "Fingerprint", ComputeDigestFromFile(the_path, repMethod=hexDigest)
             )
-        the_file_crate.append_to("contentSize", the_size, compact=True)
+        the_file_crate.append_to("contentSize", str(the_size), compact=True)
         the_file_crate.append_to("sha256", the_signature, compact=True)
         the_file_crate.append_to(
             "encodingFormat",
@@ -1567,7 +1573,7 @@ class WorkflowRunROCrate:
             the_signature = cast(
                 "Fingerprint", ComputeDigestFromFile(the_path, repMethod=hexDigest)
             )
-            the_workflow_crate.append_to("contentSize", the_size, compact=True)
+            the_workflow_crate.append_to("contentSize", str(the_size), compact=True)
             the_workflow_crate.append_to("sha256", the_signature, compact=True)
             the_workflow_crate.append_to(
                 "encodingFormat",
@@ -1732,8 +1738,13 @@ class WorkflowRunROCrate:
 
         crate_inputs = self.addWorkflowInputs(
             stagedExec.augmentedInputs,
+            are_envvars=False,
         )
-        crate_action["object"] = crate_inputs
+        crate_envvars = self.addWorkflowInputs(
+            stagedExec.environment,
+            are_envvars=True,
+        )
+        crate_action["object"] = [*crate_inputs, *crate_envvars]
 
         # TODO: Add engine specific traces
         # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces
