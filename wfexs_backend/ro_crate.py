@@ -1925,6 +1925,10 @@ class WorkflowRunROCrate:
                     crate_coll.append_to("exampleOfWork", formal_parameter)
                     formal_parameter.append_to("workExample", crate_coll)
                     crate_outputs.append(crate_coll)
+            else:
+                self.logger.error(
+                    f"FIXME: output parameter {formal_parameter_id} is of type {additional_type}, but no output mechanism was implemented"
+                )
 
         return crate_outputs
 
