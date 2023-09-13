@@ -24,6 +24,7 @@ import os
 import pathlib
 from typing import (
     cast,
+    NamedTuple,
     TYPE_CHECKING,
 )
 import warnings
@@ -554,15 +555,38 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         return cast("FixedWorkflow", workflow)
 
 
+class ContainerTypeMetadata(NamedTuple):
+    sa_id: "str"
+    applicationCategory: "str"
+    ct_applicationCategory: "str"
+
+
 class WorkflowRunROCrate:
     """
     This class rules the generation of an RO-Crate
     """
 
-    ContainerTypeIds: "Final[Mapping[ContainerType, str]]" = {
-        ContainerType.Singularity: "https://apptainer.org/",
-        ContainerType.Docker: "https://www.docker.com/",
-        ContainerType.Podman: "https://podman.io/",
+    ContainerTypeMetadataDetails: "Final[Mapping[ContainerType, ContainerTypeMetadata]]" = {
+        ContainerType.Singularity: ContainerTypeMetadata(
+            sa_id="https://apptainer.org/",
+            applicationCategory="https://www.wikidata.org/wiki/Q51294208",
+            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
+        ),
+        ContainerType.Docker: ContainerTypeMetadata(
+            sa_id="https://www.docker.com/",
+            applicationCategory="https://www.wikidata.org/wiki/Q15206305",
+            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
+        ),
+        ContainerType.Podman: ContainerTypeMetadata(
+            sa_id="https://podman.io/",
+            applicationCategory="https://www.wikidata.org/wiki/Q70876440",
+            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
+        ),
+        ContainerType.Conda: ContainerTypeMetadata(
+            sa_id="https://conda.io/",
+            applicationCategory="https://www.wikidata.org/wiki/Q22907431",
+            ct_applicationCategory="https://www.wikidata.org/wiki/Q98400282",
+        ),
     }
 
     def __init__(
@@ -665,7 +689,9 @@ class WorkflowRunROCrate:
                                         contact_point["url"] = val_res[1]
 
                                         self.crate.add(contact_point)
-                                        agent.append_to("contactPoint", contact_point)
+                                        agent.append_to(
+                                            "contactPoint", contact_point, compact=True
+                                        )
 
                     self.crate.add(agent)
                     self._agents.append(agent)
@@ -736,12 +762,14 @@ class WorkflowRunROCrate:
                 instruments.extend(
                     self._wf_to_operational_containers[ran_workflow_crate.id]
                 )
-            wf_consolidate_action.append_to("instrument", instruments)
+            wf_consolidate_action.append_to("instrument", instruments, compact=True)
             wf_consolidate_action.append_to(
-                "actionStatus", {"@id": "http://schema.org/CompletedActionStatus"}
+                "actionStatus",
+                {"@id": "http://schema.org/CompletedActionStatus"},
+                compact=True,
             )
             if len(self._agents) > 0:
-                wf_consolidate_action.append_to("agent", self._agents)
+                wf_consolidate_action.append_to("agent", self._agents, compact=True)
         else:
             ran_workflow_crate = original_workflow_crate
 
@@ -833,7 +861,7 @@ class WorkflowRunROCrate:
             ),
         ]
         self.crate.add(*wrroc_profiles)
-        self.crate.root_dataset.append_to("conformsTo", wrroc_profiles)
+        self.crate.root_dataset.append_to("conformsTo", wrroc_profiles, compact=True)
 
         # Now, WfExS reference as such
         wf_wfexs = rocrate.model.softwareapplication.SoftwareApplication(
@@ -869,13 +897,19 @@ class WorkflowRunROCrate:
             else:
                 sa_crate = the_workflow_crate
             for container in containers:
+                container_type_metadata = self.ContainerTypeMetadataDetails[
+                    container.type
+                ]
                 crate_cont_type = self.cached_cts.get(container.type)
                 if crate_cont_type is None:
                     container_type = (
                         rocrate.model.softwareapplication.SoftwareApplication(
-                            self.crate, identifier=self.ContainerTypeIds[container.type]
+                            self.crate, identifier=container_type_metadata.sa_id
                         )
                     )
+                    container_type[
+                        "applicationCategory"
+                    ] = container_type_metadata.ct_applicationCategory
                     container_type["name"] = container.type.value
                     if self.containerEngineVersion is not None:
                         container_type["softwareVersion"] = self.containerEngineVersion
@@ -938,7 +972,8 @@ class WorkflowRunROCrate:
                             "RelPath", os.path.relpath(metadataLocalPath, self.work_dir)
                         ),
                     )
-                    software_container.append_to("hasPart", meta_file)
+                    software_container.append_to("hasPart", meta_file, compact=True)
+                    meta_file.append_to("about", software_container, compact=True)
 
                 software_container["softwareVersion"] = container.fingerprint
                 container_os = container.operatingSystem
@@ -953,6 +988,11 @@ class WorkflowRunROCrate:
                 if container_arch is not None:
                     software_container["processorRequirements"] = container_arch
                 software_container["softwareRequirements"] = crate_cont_type
+
+                # Describing the the kind of container
+                software_container[
+                    "applicationCategory"
+                ] = container_type_metadata.applicationCategory
 
                 crate_cont = self.crate.add(software_container)
                 added_containers.append(crate_cont)
@@ -1016,7 +1056,7 @@ class WorkflowRunROCrate:
                 # TODO: fix this at the standard level in some way
                 # so it is possible in the future to distinguish among
                 # inputs and environment variables in an standardized way
-                self.wf_file.append_to(fp_dest, formal_parameter)
+                self.wf_file.append_to(fp_dest, formal_parameter, compact=True)
                 value_required = not in_item.implicit
                 formal_parameter["valueRequired"] = str(value_required)
 
@@ -1077,11 +1117,11 @@ class WorkflowRunROCrate:
                                 # Now, related the file with the extrapolated
                                 # contents to the original file
                                 crate_extrapolated_file.append_to(
-                                    "exampleOfWork", crate_file
+                                    "exampleOfWork", crate_file, compact=True
                                 )
 
                                 crate_file.append_to(
-                                    "workExample", crate_extrapolated_file
+                                    "workExample", crate_extrapolated_file, compact=True
                                 )
 
                                 # and describe the transformation
@@ -1092,19 +1132,26 @@ class WorkflowRunROCrate:
                                 extrap_action = self.crate.add(extrap_action)
                                 extrap_action["object"] = crate_file
                                 extrap_action["result"] = crate_extrapolated_file
-                                extrap_action.append_to("instrument", self.wf_wfexs)
+                                extrap_action.append_to(
+                                    "instrument", self.wf_wfexs, compact=True
+                                )
                                 extrap_action.append_to(
                                     "actionStatus",
                                     {"@id": "http://schema.org/CompletedActionStatus"},
+                                    compact=True,
                                 )
                                 if len(self._agents) > 0:
-                                    extrap_action.append_to("agent", self._agents)
+                                    extrap_action.append_to(
+                                        "agent", self._agents, compact=True
+                                    )
 
                             else:
                                 crate_extrapolated_file = crate_file
 
                             if isinstance(crate_coll, Collection):
-                                crate_coll.append_to("hasPart", crate_extrapolated_file)
+                                crate_coll.append_to(
+                                    "hasPart", crate_extrapolated_file, compact=True
+                                )
                             else:
                                 crate_coll = crate_extrapolated_file
 
@@ -1129,7 +1176,9 @@ class WorkflowRunROCrate:
 
                             if crate_dataset is not None:
                                 if isinstance(crate_coll, Collection):
-                                    crate_coll.append_to("hasPart", crate_dataset)
+                                    crate_coll.append_to(
+                                        "hasPart", crate_dataset, compact=True
+                                    )
                                 else:
                                     crate_coll = crate_dataset
 
@@ -1171,7 +1220,9 @@ class WorkflowRunROCrate:
                                 )
                                 crate_pv = self.crate.add(parameter_value)
                                 if isinstance(crate_coll, Collection):
-                                    crate_coll.append_to("hasPart", crate_pv)
+                                    crate_coll.append_to(
+                                        "hasPart", crate_pv, compact=True
+                                    )
                                 else:
                                     crate_coll = crate_pv
                     # Null values are right now represented as no values
@@ -1185,7 +1236,7 @@ class WorkflowRunROCrate:
                     #     )
                     #     crate_pnv = self.crate.add(parameter_no_value)
                     #     if isinstance(crate_coll, Collection):
-                    #         crate_coll.append_to("hasPart", crate_pnv)
+                    #         crate_coll.append_to("hasPart", crate_pnv, compact=True)
                     #     else:
                     #         crate_coll = crate_pnv
 
@@ -1250,7 +1301,9 @@ class WorkflowRunROCrate:
                                 sec_crate_elem = None
 
                             if sec_crate_elem is not None:
-                                sec_crate_coll.append_to("hasPart", sec_crate_elem)
+                                sec_crate_coll.append_to(
+                                    "hasPart", sec_crate_elem, compact=True
+                                )
 
                         # Last, put it in place
                         crate_coll = sec_crate_coll
@@ -1262,9 +1315,11 @@ class WorkflowRunROCrate:
                     self._item_hash[item_signature] = crate_coll
 
                 if formal_parameter not in crate_coll.get("exampleOfWork", []):
-                    crate_coll.append_to("exampleOfWork", formal_parameter)
+                    crate_coll.append_to(
+                        "exampleOfWork", formal_parameter, compact=True
+                    )
                 if crate_coll not in formal_parameter.get("workExample", []):
-                    formal_parameter.append_to("workExample", crate_coll)
+                    formal_parameter.append_to("workExample", crate_coll, compact=True)
                 crate_inputs.append(crate_coll)
 
             # TODO digest other types of inputs
@@ -1401,7 +1456,7 @@ class WorkflowRunROCrate:
                         do_attach=do_attach,
                     )
 
-                    crate_dataset.append_to("hasPart", the_file_crate)
+                    crate_dataset.append_to("hasPart", the_file_crate, compact=True)
 
                     the_files_crates.append(the_file_crate)
                 elif the_file.is_dir():
@@ -1416,8 +1471,10 @@ class WorkflowRunROCrate:
                     )
                     if the_dir_crate is not None:
                         assert the_subfiles_crates is not None
-                        crate_dataset.append_to("hasPart", the_dir_crate)
-                        crate_dataset.append_to("hasPart", the_subfiles_crates)
+                        crate_dataset.append_to("hasPart", the_dir_crate, compact=True)
+                        crate_dataset.append_to(
+                            "hasPart", the_subfiles_crates, compact=True
+                        )
 
                         the_files_crates.extend(the_subfiles_crates)
 
@@ -1573,8 +1630,11 @@ class WorkflowRunROCrate:
             {
                 "@id": "https://bioschemas.org/profiles/ComputationalWorkflow/1.0-RELEASE"
             },
+            compact=True,
         )
-        the_workflow_crate.append_to("softwareRequirements", the_weng_crate)
+        the_workflow_crate.append_to(
+            "softwareRequirements", the_weng_crate, compact=True
+        )
         workflow_engine_version = the_weng_crate.get("softwareVersion")
         if workflow_engine_version is not None:
             the_workflow_crate["runtimePlatform"] = workflow_engine_version
@@ -1682,7 +1742,7 @@ class WorkflowRunROCrate:
                 rel_entities.append(the_entity)
 
             if len(rel_entities) > 0:
-                the_workflow_crate.append_to("hasPart", rel_entities)
+                the_workflow_crate.append_to("hasPart", rel_entities, compact=True)
 
         return the_workflow_crate
 
@@ -1724,7 +1784,7 @@ class WorkflowRunROCrate:
                 formal_parameter not in wf_file_outputs
                 and {"@id": formal_parameter_id} not in wf_file_outputs
             ):
-                self.wf_file.append_to("output", formal_parameter)
+                self.wf_file.append_to("output", formal_parameter, compact=True)
 
     def writeWRROC(self, filename: "AnyPath") -> None:
         with warnings.catch_warnings():
@@ -1757,8 +1817,8 @@ class WorkflowRunROCrate:
         )
         self.crate.add(crate_action)
         if len(self._agents) > 0:
-            crate_action.append_to("agent", self._agents)
-        self.crate.root_dataset.append_to("mentions", crate_action)
+            crate_action.append_to("agent", self._agents, compact=True)
+        self.crate.root_dataset.append_to("mentions", crate_action, compact=True)
         instruments: "MutableSequence[rocrate.model.entity.Entity]" = [
             self.wf_wfexs,
             self.wf_file,
@@ -1777,14 +1837,14 @@ class WorkflowRunROCrate:
             ):
                 instruments.append(self._wf_to_container_sa[self.wf_file.id])
             instruments.extend(self._wf_to_containers[self.wf_file.id])
-        crate_action.append_to("instrument", instruments)
+        crate_action.append_to("instrument", instruments, compact=True)
         # subjectOf is not fulfilled as this execution has not public page
         if stagedExec.exitVal == 0:
             action_status = "http://schema.org/CompletedActionStatus"
         else:
             action_status = "http://schema.org/FailedActionStatus"
 
-        crate_action.append_to("actionStatus", {"@id": action_status})
+        crate_action.append_to("actionStatus", {"@id": action_status}, compact=True)
 
         crate_inputs = self.addWorkflowInputs(
             stagedExec.augmentedInputs,
@@ -1833,7 +1893,7 @@ class WorkflowRunROCrate:
         # # The used workflow engine
         # org_action["instrument"] = self.weng_crate
         #
-        # org_action.append_to("object", control_action)
+        # org_action.append_to("object", control_action, compact=True)
         # # TODO: add configuration files (if available) to object
         # org_action["result"] = crate_action
 
@@ -1887,7 +1947,7 @@ class WorkflowRunROCrate:
                     additional_type=additional_type,
                 )
                 self.crate.add(formal_parameter)
-                self.wf_file.append_to("output", formal_parameter)
+                self.wf_file.append_to("output", formal_parameter, compact=True)
 
             # This can happen when there is no output, like when a workflow has failed
             if len(out_item.values) == 0:
@@ -1929,7 +1989,9 @@ class WorkflowRunROCrate:
 
                             if crate_dataset is not None:
                                 if isinstance(crate_coll, Collection):
-                                    crate_coll.append_to("hasPart", crate_dataset)
+                                    crate_coll.append_to(
+                                        "hasPart", crate_dataset, compact=True
+                                    )
                                 else:
                                     crate_coll = crate_dataset
 
@@ -1949,7 +2011,9 @@ class WorkflowRunROCrate:
                             )
 
                             if isinstance(crate_coll, Collection):
-                                crate_coll.append_to("hasPart", crate_file)
+                                crate_coll.append_to(
+                                    "hasPart", crate_file, compact=True
+                                )
                             else:
                                 crate_coll = crate_file
 
@@ -1972,8 +2036,10 @@ class WorkflowRunROCrate:
                     ):
                         formal_parameter["additionalType"] = "Collection"
 
-                    crate_coll.append_to("exampleOfWork", formal_parameter)
-                    formal_parameter.append_to("workExample", crate_coll)
+                    crate_coll.append_to(
+                        "exampleOfWork", formal_parameter, compact=True
+                    )
+                    formal_parameter.append_to("workExample", crate_coll, compact=True)
                     crate_outputs.append(crate_coll)
             else:
                 self.logger.error(
@@ -2040,7 +2106,7 @@ class WorkflowRunROCrate:
                     assert gen_dir_content is not None
                     gen_content = gen_dir_content
 
-                crate_coll.append_to("hasPart", gen_content)
+                crate_coll.append_to("hasPart", gen_content, compact=True)
 
             return crate_coll
         else:
@@ -2103,7 +2169,7 @@ class WorkflowRunROCrate:
                             rel_work_dir=rel_work_dir,
                             do_attach=do_attach,
                         )
-                        crate_dataset.append_to("hasPart", the_val_file)
+                        crate_dataset.append_to("hasPart", the_val_file, compact=True)
                         the_files_crates.append(the_val_file)
                     elif isinstance(the_val, GeneratedDirectoryContent):
                         (
@@ -2116,8 +2182,12 @@ class WorkflowRunROCrate:
                         )
                         if the_val_dataset is not None:
                             assert the_subfiles_crates is not None
-                            crate_dataset.append_to("hasPart", the_val_dataset)
-                            crate_dataset.append_to("hasPart", the_subfiles_crates)
+                            crate_dataset.append_to(
+                                "hasPart", the_val_dataset, compact=True
+                            )
+                            crate_dataset.append_to(
+                                "hasPart", the_subfiles_crates, compact=True
+                            )
 
                             the_files_crates.extend(the_subfiles_crates)
 
@@ -2149,7 +2219,7 @@ class WorkflowRunROCrate:
                         assert gen_dir_content is not None
                         gen_content = gen_dir_content
 
-                    crate_coll.append_to("hasPart", gen_content)
+                    crate_coll.append_to("hasPart", gen_content, compact=True)
 
                 return crate_coll, the_files_crates
             else:
