@@ -63,6 +63,7 @@ if TYPE_CHECKING:
         MaterializedOutput,
         MaterializedWorkflowEngine,
         ProcessorArchitecture,
+        ProgsMapping,
         RelPath,
         RemoteRepo,
         RepoTag,
@@ -131,6 +132,7 @@ from .common import (
     ContainerType,
     ContentKind,
     CratableItem,
+    DEFAULT_DOT_CMD,
     GeneratedContent,
     GeneratedDirectoryContent,
     MaterializedContent,
@@ -603,6 +605,7 @@ class WorkflowRunROCrate:
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
         orcids: "Sequence[str]" = [],
+        progs: "ProgsMapping" = {},
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -610,6 +613,10 @@ class WorkflowRunROCrate:
             + "::"
             + self.__class__.__name__
         )
+
+        # Saving the path to needed programs
+        # (right now "dot" to translate the diagram)
+        self.dot_path = progs.get(DEFAULT_DOT_CMD, DEFAULT_DOT_CMD)
 
         self.cached_cts: "MutableMapping[ContainerType, rocrate.model.softwareapplication.SoftwareApplication]" = (
             {}

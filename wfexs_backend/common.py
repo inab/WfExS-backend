@@ -97,6 +97,7 @@ DEFAULT_APPTAINER_CMD = cast("SymbolicName", "apptainer")
 DEFAULT_PODMAN_CMD = cast("SymbolicName", "podman")
 DEFAULT_JAVA_CMD = cast("SymbolicName", "java")
 DEFAULT_FUSERMOUNT_CMD = cast("SymbolicName", "fusermount")
+DEFAULT_DOT_CMD = cast("SymbolicName", "dot")
 
 if TYPE_CHECKING:
     ProgsMapping: TypeAlias = MutableMapping[SymbolicName, AnyPath]
@@ -108,6 +109,7 @@ DEFAULT_PROGS: "ProgsMapping" = {
     DEFAULT_PODMAN_CMD: cast("RelPath", DEFAULT_PODMAN_CMD),
     DEFAULT_JAVA_CMD: cast("RelPath", DEFAULT_JAVA_CMD),
     DEFAULT_FUSERMOUNT_CMD: cast("RelPath", DEFAULT_FUSERMOUNT_CMD),
+    DEFAULT_DOT_CMD: cast("RelPath", DEFAULT_DOT_CMD),
 }
 
 

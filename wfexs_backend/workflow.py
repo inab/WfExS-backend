@@ -205,6 +205,7 @@ from .common import (
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
 from .engine import (
+    STATS_DAG_DOT_FILE,
     WorkflowEngine,
     WorkflowEngineException,
     WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR,
@@ -219,6 +220,9 @@ from .engine import (
     WORKDIR_META_RELDIR,
     WORKDIR_OUTPUTS_RELDIR,
     WORKDIR_PASSPHRASE_FILE,
+    WORKDIR_STATS_RELDIR,
+    WORKDIR_STDERR_FILE,
+    WORKDIR_STDOUT_FILE,
     WORKDIR_WORKFLOW_META_FILE,
     WORKDIR_WORKFLOW_RELDIR,
 )
@@ -3320,15 +3324,93 @@ class WF:
 
                     self.stagedExecutions = []
                     for execution in executions:
+                        # We might need to learn where the metadata of this
+                        # specific execution is living
+                        outputsDir = execution.get("outputsDir", WORKDIR_OUTPUTS_RELDIR)
+                        absOutputMetaDir = os.path.join(
+                            self.metaDir, WORKDIR_OUTPUTS_RELDIR
+                        )
+                        if absOutputMetaDir != WORKDIR_OUTPUTS_RELDIR:
+                            jobOutputMetaDir = os.path.join(
+                                absOutputMetaDir, os.path.basename(outputsDir)
+                            )
+                        else:
+                            jobOutputMetaDir = absOutputMetaDir
+
+                        # For backward compatibility, let's find the
+                        # logfiles and generated charts
+                        logfile: "Optional[MutableSequence[RelPath]]" = execution.get(
+                            "logfile"
+                        )
+                        if not isinstance(logfile, list) or len(logfile) == 0:
+                            logfile = []
+                            for logfname in (
+                                WORKDIR_STDOUT_FILE,
+                                WORKDIR_STDERR_FILE,
+                                "log.txt",
+                            ):
+                                putative_fname = os.path.join(
+                                    jobOutputMetaDir, logfname
+                                )
+                                if os.path.exists(putative_fname):
+                                    logfile.append(
+                                        cast(
+                                            "RelPath",
+                                            os.path.relpath(
+                                                putative_fname, self.workDir
+                                            ),
+                                        )
+                                    )
+                                    continue
+
+                                if jobOutputMetaDir != absOutputMetaDir:
+                                    putative_fname = os.path.join(
+                                        absOutputMetaDir, logfname
+                                    )
+                                    if os.path.exists(putative_fname):
+                                        logfile.append(
+                                            cast(
+                                                "RelPath",
+                                                os.path.relpath(
+                                                    putative_fname, self.workDir
+                                                ),
+                                            )
+                                        )
+
+                        diagram: "Optional[RelPath]" = execution.get("diagram")
+                        if diagram is None:
+                            putative_diagram = os.path.join(
+                                jobOutputMetaDir,
+                                WORKDIR_STATS_RELDIR,
+                                STATS_DAG_DOT_FILE,
+                            )
+
+                            if os.path.exists(putative_diagram):
+                                diagram = cast(
+                                    "RelPath",
+                                    os.path.relpath(putative_diagram, self.workDir),
+                                )
+                            elif jobOutputMetaDir != absOutputMetaDir:
+                                putative_diagram = os.path.join(
+                                    absOutputMetaDir,
+                                    WORKDIR_STATS_RELDIR,
+                                    STATS_DAG_DOT_FILE,
+                                )
+                                if os.path.exists(putative_diagram):
+                                    diagram = cast(
+                                        "RelPath",
+                                        os.path.relpath(putative_diagram, self.workDir),
+                                    )
+
                         stagedExec = StagedExecution(
                             exitVal=execution["exitVal"],
                             augmentedInputs=execution["augmentedInputs"],
                             matCheckOutputs=execution["matCheckOutputs"],
-                            outputsDir=execution.get(
-                                "outputsDir", WORKDIR_OUTPUTS_RELDIR
-                            ),
+                            outputsDir=outputsDir,
                             started=execution.get("started", executionMarshalled),
                             ended=execution.get("ended", executionMarshalled),
+                            logfile=logfile,
+                            diagram=diagram,
                         )
                         self.stagedExecutions.append(stagedExec)
             except Exception as e:
@@ -3753,6 +3835,7 @@ class WF:
             payloads=payloads,
             licences=licences,
             orcids=the_orcids,
+            progs=self.wfexs.progs,
         )
 
         wrroc.addWorkflowInputs(
@@ -3788,7 +3871,6 @@ class WF:
         """
         Create RO-crate from stage provenance.
         """
-        # TODO: implement deserialization
         self.unmarshallExecute(offline=True, fail_ok=True)
 
         assert self.localWorkflow is not None
@@ -3817,6 +3899,7 @@ class WF:
             payloads=payloads,
             licences=licences,
             orcids=the_orcids,
+            progs=self.wfexs.progs,
         )
 
         for stagedExec in self.stagedExecutions:

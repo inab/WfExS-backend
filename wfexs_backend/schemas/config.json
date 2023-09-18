@@ -133,6 +133,12 @@
 					"type": "string",
 					"default": "podman"
 				},
+				"dotCommand": {
+					"title": "'dot' client path",
+					"description": "'dot' is used when the workflow engine generated diagram is in DOT format, to translate it to either PNG or SVG when the diagram is going to be embedded in an RO-Crate",
+					"type": "string",
+					"default": "dot"
+				},
 				"staticBashCommand": {
 					"title": "Static bash command (used in singularity based Nextflow engine executions)",
 					"description": "There is a bug in some bash versions which make them unsuitable to run the trace machinery from Nextflow, as the trace machinery enters in a live lock. As the images containing these faulty bash versions cannot be changed, a 'monkey patch' solution where an external, static bash version is injected on workflow execution is used. The injected static bash is found through this key, which is searched on PATH variable when it is not a full path.",
