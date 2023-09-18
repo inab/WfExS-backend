@@ -1047,6 +1047,9 @@ class StagedExecution(NamedTuple):
     started: "datetime.datetime"
     ended: "datetime.datetime"
     environment: "Sequence[MaterializedInput]" = []
+    outputMetaDir: "Optional[RelPath]" = None
+    diagram: "Optional[RelPath]" = None
+    logfile: "Sequence[RelPath]" = []
 
 
 # Next method has been borrowed from FlowMaps

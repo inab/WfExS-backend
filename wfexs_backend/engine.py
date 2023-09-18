@@ -22,6 +22,7 @@ import sys
 import tempfile
 import atexit
 import shutil
+import time
 import abc
 import glob
 import logging
@@ -585,6 +586,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @property
     def staged_containers_dir(self) -> "AnyPath":
         return self.stagedContainersDir
+
+    def create_job_directories(self) -> "Tuple[str, AbsPath, AbsPath]":
+        outputDirPostfix = "_" + str(int(time.time())) + "_" + str(os.getpid())
+        outputsDir = cast("AbsPath", os.path.join(self.outputsDir, outputDirPostfix))
+        os.makedirs(outputsDir, exist_ok=True)
+        outputMetaDir = cast(
+            "AbsPath", os.path.join(self.outputMetaDir, outputDirPostfix)
+        )
+        os.makedirs(outputMetaDir, exist_ok=True)
+
+        return outputDirPostfix, outputsDir, outputMetaDir
 
     @abc.abstractmethod
     def launchWorkflow(

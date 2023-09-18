@@ -28,7 +28,6 @@ import stat
 import subprocess
 import sys
 import tempfile
-import time
 import venv
 
 from typing import (
@@ -102,8 +101,14 @@ import jsonpath_ng
 import jsonpath_ng.ext
 import yaml
 
-from .engine import WORKDIR_STDOUT_FILE, WORKDIR_STDERR_FILE, STATS_DAG_DOT_FILE
-from .engine import WorkflowEngine, WorkflowEngineException
+from .engine import (
+    STATS_DAG_DOT_FILE,
+    WORKDIR_STATS_RELDIR,
+    WORKDIR_STDOUT_FILE,
+    WORKDIR_STDERR_FILE,
+    WorkflowEngine,
+    WorkflowEngineException,
+)
 
 from .utils.contents import (
     CWLClass2WfExS,
@@ -914,7 +919,12 @@ STDERR
                 "AbsPath", os.path.join(localWf.dir, localWf.relPath)
             )
         engineVersion = matWfEng.version
-        dagFile = cast("AbsPath", os.path.join(self.outputStatsDir, STATS_DAG_DOT_FILE))
+
+        outputDirPostfix, outputsDir, outputMetaDir = self.create_job_directories()
+        outputStatsDir = os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
+        os.makedirs(outputStatsDir, exist_ok=True)
+
+        dagFile = cast("AbsPath", os.path.join(outputStatsDir, STATS_DAG_DOT_FILE))
 
         if os.path.exists(localWorkflowFile):
             # CWLWorkflowEngine directory is needed
@@ -987,13 +997,6 @@ STDERR
                             cast("SymbolicParamName", inputId)
                         ] = cwl_yaml_input
 
-            outputDirPostfix = "_" + str(int(time.time()))
-            outputsDir = cast(
-                "AbsPath", os.path.join(self.outputsDir, outputDirPostfix)
-            )
-            os.makedirs(outputsDir, exist_ok=True)
-            outputMetaDir = os.path.join(self.outputMetaDir, outputDirPostfix)
-            os.makedirs(outputMetaDir, exist_ok=True)
             inputsFileName = cast(
                 "AbsPath", os.path.join(outputMetaDir, self.INPUT_DECLARATIONS_FILENAME)
             )
@@ -1216,11 +1219,17 @@ STDERR
                 stagedExec = StagedExecution(
                     exitVal=cast("ExitVal", retVal),
                     augmentedInputs=augmentedInputs,
+                    # TODO: store the augmentedEnvironment instead
+                    # of the materialized one
                     environment=matEnvironment,
                     matCheckOutputs=matOutputs,
                     outputsDir=relOutputsDir,
                     started=started,
                     ended=ended,
+                    diagram=cast("RelPath", os.path.relpath(dagFile, self.workDir)),
+                    logfile=[
+                        cast("RelPath", os.path.relpath(stderrFilename, self.workDir))
+                    ],
                 )
                 return stagedExec
 

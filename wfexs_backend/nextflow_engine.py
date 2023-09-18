@@ -30,7 +30,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import yaml
 
 from typing import (
@@ -1575,14 +1574,9 @@ STDERR
         assert localWf.relPath is not None
         assert isinstance(localWf.relPathFiles, list) and len(localWf.relPathFiles) > 0
 
-        outputDirPostfix = "_" + str(int(time.time()))
-        outputsDir = cast("AbsPath", os.path.join(self.outputsDir, outputDirPostfix))
-        os.makedirs(outputsDir, exist_ok=True)
-
         # These declarations provide a separate metadata directory for
         # each one of the executions of Nextflow
-        outputMetaDir = os.path.join(self.outputMetaDir, outputDirPostfix)
-        os.makedirs(outputMetaDir, exist_ok=True)
+        outputDirPostfix, outputsDir, outputMetaDir = self.create_job_directories()
         outputStatsDir = os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
         os.makedirs(outputStatsDir, exist_ok=True)
 
@@ -1891,4 +1885,12 @@ wfexs_allParams()
             outputsDir=relOutputsDir,
             started=started,
             ended=ended,
+            # TODO: store the augmentedEnvironment instead
+            # of the materialized one
+            environment=matEnvironment,
+            diagram=cast("RelPath", os.path.relpath(dagFile, self.workDir)),
+            logfile=[
+                cast("RelPath", os.path.relpath(stdoutFilename, self.workDir)),
+                cast("RelPath", os.path.relpath(stderrFilename, self.workDir)),
+            ],
         )
