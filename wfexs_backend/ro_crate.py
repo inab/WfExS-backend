@@ -17,11 +17,14 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import atexit
 import copy
 import inspect
 import logging
 import os
 import pathlib
+import subprocess
+import tempfile
 from typing import (
     cast,
     NamedTuple,
@@ -338,6 +341,16 @@ class SoftwareContainer(FixedFile):  # type: ignore[misc]
         }
 
 
+class WorkflowDiagram(FixedFile):  # type: ignore[misc]
+    TYPES = ["File", "ImageObject"]
+
+    def _empty(self) -> "Mapping[str, Any]":
+        return {
+            "@id": self.id,
+            "@type": self.TYPES[:],
+        }
+
+
 class SourceCodeFile(FixedFile):  # type: ignore[misc]
     TYPES = ["File", "SoftwareSourceCode"]
 
@@ -606,6 +619,7 @@ class WorkflowRunROCrate:
         licences: "Sequence[str]" = [],
         orcids: "Sequence[str]" = [],
         progs: "ProgsMapping" = {},
+        tempdir: "Optional[str]" = None,
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -616,7 +630,10 @@ class WorkflowRunROCrate:
 
         # Saving the path to needed programs
         # (right now "dot" to translate the diagram)
-        self.dot_path = progs.get(DEFAULT_DOT_CMD, DEFAULT_DOT_CMD)
+        self.dot_binary = progs.get(DEFAULT_DOT_CMD, DEFAULT_DOT_CMD)
+
+        # Where should be place generated temporary files?
+        self.tempdir = tempdir
 
         self.cached_cts: "MutableMapping[ContainerType, rocrate.model.softwareapplication.SoftwareApplication]" = (
             {}
@@ -1871,7 +1888,127 @@ class WorkflowRunROCrate:
             stagedExec.matCheckOutputs,
             rel_work_dir=stagedExec.outputsDir,
         )
-        crate_action["result"] = crate_outputs
+
+        # Now, the logfiles and diagram
+        crate_meta_outputs: "MutableSequence[rocrate.model.entity.Entity]" = []
+        if stagedExec.diagram is not None:
+            # This is the original diagram, in DOT format (for now)
+            abs_diagram = os.path.join(self.work_dir, stagedExec.diagram)
+            dot_file = WorkflowDiagram(
+                self.crate,
+                source=os.path.join(self.work_dir, stagedExec.diagram),
+                dest_path=stagedExec.diagram,
+                fetch_remote=False,
+                validate_url=False,
+                properties={
+                    "contentSize": str(os.stat(abs_diagram).st_size),
+                    "sha256": ComputeDigestFromFile(abs_diagram, repMethod=hexDigest),
+                    "encodingFormat": magic.from_file(abs_diagram, mime=True),
+                },
+            )
+            self.crate.add(dot_file)
+
+            the_diagram = dot_file
+
+            # Declaring the provenance of the diagram
+            dot_file["isBasedOn"] = self.wf_file
+            crate_meta_outputs.append(dot_file)
+
+            png_dot_handle, png_dot_path = tempfile.mkstemp(
+                prefix="WfExS", suffix="diagram", dir=self.tempdir
+            )
+            # Registering for removal the temporary file
+            atexit.register(os.unlink, png_dot_path)
+            # We are not using the handle, so close it
+            os.close(png_dot_handle)
+
+            with tempfile.NamedTemporaryFile() as d_err:
+                dot_cmd = [self.dot_binary, "-Tpng", "-o" + png_dot_path, abs_diagram]
+                dot_cmd_for_rocrate = [
+                    DEFAULT_DOT_CMD,
+                    "-Tpng",
+                    "-o" + stagedExec.diagram + ".png",
+                    stagedExec.diagram,
+                ]
+                d_retval = subprocess.Popen(
+                    dot_cmd,
+                    stdout=d_err,
+                    stderr=d_err,
+                ).wait()
+
+                self.logger.debug(f"'{' '.join(dot_cmd)}' retval: {d_retval}")
+
+                if d_retval == 0:
+                    png_dot_file = WorkflowDiagram(
+                        self.crate,
+                        source=png_dot_path,
+                        dest_path=stagedExec.diagram + ".png",
+                        fetch_remote=False,
+                        validate_url=False,
+                        properties={
+                            "contentSize": str(os.stat(png_dot_path).st_size),
+                            "sha256": ComputeDigestFromFile(
+                                png_dot_path, repMethod=hexDigest
+                            ),
+                            "encodingFormat": magic.from_file(png_dot_path, mime=True),
+                        },
+                    )
+                    self.crate.add(png_dot_file)
+                    the_diagram = png_dot_file
+
+                    # Declaring the provenance
+                    png_dot_file["isBasedOn"] = dot_file
+                    crate_meta_outputs.append(png_dot_file)
+
+                    # Now describe the transformation
+                    dot_action = CreateAction(
+                        self.crate,
+                        "Generate diagram PNG image from DOT",
+                    )
+                    dot_action = self.crate.add(dot_action)
+                    dot_action["object"] = dot_file
+                    dot_action["description"] = " ".join(dot_cmd_for_rocrate)
+                    dot_action["result"] = png_dot_file
+                    dot_action.append_to("instrument", self.wf_wfexs, compact=True)
+                    dot_action.append_to(
+                        "actionStatus",
+                        {"@id": "http://schema.org/CompletedActionStatus"},
+                        compact=True,
+                    )
+                    if len(self._agents) > 0:
+                        dot_action.append_to("agent", self._agents, compact=True)
+                else:
+                    with open(d_err.name, mode="rb") as c_stF:
+                        d_err_v = c_stF.read().decode("utf-8", errors="continue")
+
+                    self.logger.error(f"'{' '.join(dot_cmd)}' stderr: {d_err_v}")
+
+            # Associating the diagram to the main workflow
+            self.wf_file.append_to("image", the_diagram, compact=True)
+
+        # Processing the log files
+        if len(stagedExec.logfile) > 0:
+            crate_coll: "Union[Collection, FixedFile, None]"
+            if len(stagedExec.logfile) > 1:
+                crate_coll = self._add_collection_to_crate()
+            else:
+                crate_coll = None
+
+            for logfile in stagedExec.logfile:
+                the_log_file = self._add_file_to_crate(
+                    os.path.join(self.work_dir, logfile), the_uri=None, the_name=logfile
+                )
+                if crate_coll is None:
+                    crate_coll = the_log_file
+                else:
+                    crate_coll.append_to("hasPart", the_log_file, compact=True)
+
+            if crate_coll is not None:
+                crate_meta_outputs.append(crate_coll)
+                if stagedExec.exitVal != 0:
+                    crate_action["error"] = crate_coll
+
+        crate_action["result"] = [*crate_outputs, *crate_meta_outputs]
 
         # TODO: Uncomment this when we are able to describe
         # the internal workflow execution. Each workflow step

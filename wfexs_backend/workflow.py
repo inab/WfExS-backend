@@ -3836,6 +3836,7 @@ class WF:
             licences=licences,
             orcids=the_orcids,
             progs=self.wfexs.progs,
+            tempdir=self.tempDir,
         )
 
         wrroc.addWorkflowInputs(
@@ -3900,6 +3901,7 @@ class WF:
             licences=licences,
             orcids=the_orcids,
             progs=self.wfexs.progs,
+            tempdir=self.tempDir,
         )
 
         for stagedExec in self.stagedExecutions:
