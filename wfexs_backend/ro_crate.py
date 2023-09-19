@@ -165,7 +165,9 @@ class FormalParameter(rocrate.model.entity.Entity):  # type: ignore[misc]
         fp_properties = {
             "name": name,
             # As of https://www.researchobject.org/ro-crate/1.1/workflows.html#describing-inputs-and-outputs
-            "conformsTo": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE/",
+            "conformsTo": {
+                "@id": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE/",
+            },
         }
 
         if additional_type is not None:
@@ -1152,6 +1154,7 @@ you can find here an almost complete list of the possible ones:
                                     "RelPath",
                                     os.path.relpath(itemInLocalSource, self.work_dir),
                                 ),
+                                the_signature=itemInValues.fingerprint,
                                 do_attach=do_attach,
                             )
 
@@ -1335,6 +1338,7 @@ you can find here an almost complete list of the possible ones:
                                             secInputLocalSource, self.work_dir
                                         ),
                                     ),
+                                    the_signature=secInput.fingerprint,
                                     do_attach=do_attach,
                                 )
 
