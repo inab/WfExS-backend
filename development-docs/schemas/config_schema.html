@@ -20,12 +20,12 @@
     <div class="breadcrumbs"></div><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>WfExS-backend configuration file (EOSC-Life Demonstrator 7 JSON Schemas)</p>
 </span> <span class="badge badge-info no-additional">No Additional Properties</span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
 <div class="accordion" id="accordioncacheDir">
     <div class="card">
         <div class="card-header" id="headingcacheDir">
@@ -52,12 +52,12 @@
 This directory can be removed, as its contents should be available outside.<br />
 When it is not set, a temporary directory is created for the session, being destroyed when the program finishes.</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction min-length-restriction" id="cacheDir_minLength">Must be at least <code>1</code> characters long</span></p>
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="cacheDir_minLength">Must be at least <code>1</code> characters long</span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -86,12 +86,12 @@ When it is not set, a temporary directory is created for the session, being dest
     <a href="#crypt4gh" onclick="anchorLink('crypt4gh')">crypt4gh</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>WfExS-backend needs an encryption key for several tasks, like encrypting and decrypting random keys of encrypted working directories. When this block does not exist, WfExS-backend.py creates the installation's keys, and updates the configuration file</p>
 </span> <span class="badge badge-info no-additional">No Additional Properties</span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
 <div class="accordion" id="accordioncrypt4gh_key">
     <div class="card">
         <div class="card-header" id="headingcrypt4gh_key">
@@ -123,12 +123,12 @@ When it is not set, a temporary directory is created for the session, being dest
     <a href="#crypt4gh_key" onclick="anchorLink('crypt4gh_key')">key</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>The path to the Crypt4GH secret key file used by this installation. If the path is relative, the directory where the configuration file resides is used for the resolution</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction min-length-restriction" id="crypt4gh_key_minLength">Must be at least <code>1</code> characters long</span></p>
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="crypt4gh_key_minLength">Must be at least <code>1</code> characters long</span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -164,12 +164,12 @@ When it is not set, a temporary directory is created for the session, being dest
     <a href="#crypt4gh_passphrase" onclick="anchorLink('crypt4gh_passphrase')">passphrase</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>Passphrase which has to be used to work with the secret key</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction min-length-restriction" id="crypt4gh_passphrase_minLength">Must be at least <code>0</code> characters long</span></p>
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="crypt4gh_passphrase_minLength">Must be at least <code>0</code> characters long</span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -205,12 +205,12 @@ When it is not set, a temporary directory is created for the session, being dest
     <a href="#crypt4gh_pub" onclick="anchorLink('crypt4gh_pub')">pub</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>The path to the Crypt4GH public key file used by this installation. If the path is relative, the directory where the configuration file resides is used for the resolution</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction min-length-restriction" id="crypt4gh_pub_minLength">Must be at least <code>1</code> characters long</span></p>
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="crypt4gh_pub_minLength">Must be at least <code>1</code> characters long</span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -243,12 +243,12 @@ When it is not set, a temporary directory is created for the session, being dest
     <a href="#tools" onclick="anchorLink('tools')">tools</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>External tools configuration block</p>
 </span> <span class="badge badge-info no-additional">No Additional Properties</span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
 <div class="accordion" id="accordiontools_containerType">
     <div class="card">
         <div class="card-header" id="headingtools_containerType">
@@ -285,15 +285,15 @@ When it is not set, a temporary directory is created for the session, being dest
 - No containerisation technology (discouraged)<br />
 Encrypted working directories are unsupported when Docker or Podman are used due technological limitations</p>
 </span><div class="enum-value" id="tools_containerType_enum">
-                <h4>Must be one of:</h4>
-                <ul class="list-group"><li class="list-group-item enum-item">"singularity"</li><li class="list-group-item enum-item">"docker"</li><li class="list-group-item enum-item">"podman"</li><li class="list-group-item enum-item">"none"</li></ul>
-                </div>
-            
+            <h4>Must be one of:</h4>
+            <ul class="list-group"><li class="list-group-item enum-item">"singularity"</li><li class="list-group-item enum-item">"docker"</li><li class="list-group-item enum-item">"podman"</li><li class="list-group-item enum-item">"none"</li></ul>
+            </div>
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -329,15 +329,15 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_engineMode" onclick="anchorLink('tools_engineMode')">engineMode</a></div><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "local"</span><br/>
 <span class="description"><p>Most of workflow engines are usually available both as installable executables and as containers, but when they are used inside a container usually do not support running containerised jobs, unless a very careful setup is done. Currently, WfExS-backend only partially supports Nextflow in its docker-in-docker mode.</p>
 </span><div class="enum-value" id="tools_engineMode_enum">
-                <h4>Must be one of:</h4>
-                <ul class="list-group"><li class="list-group-item enum-item">"local"</li><li class="list-group-item enum-item">"docker"</li></ul>
-                </div>
-            
+            <h4>Must be one of:</h4>
+            <ul class="list-group"><li class="list-group-item enum-item">"local"</li><li class="list-group-item enum-item">"docker"</li></ul>
+            </div>
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -372,12 +372,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
         </svg>
     <a href="#tools_encrypted_fs" onclick="anchorLink('tools_encrypted_fs')">encrypted_fs</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
  <span class="badge badge-info no-additional">No Additional Properties</span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
 <div class="accordion" id="accordiontools_encrypted_fs_type">
     <div class="card">
         <div class="card-header" id="headingtools_encrypted_fs_type">
@@ -416,15 +416,15 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_encrypted_fs_type" onclick="anchorLink('tools_encrypted_fs_type')">type</a></div><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "encfs"</span><br/>
 <span class="description"><p>When an encrypted working directory is needed, the type of encrypted FS to be used is set up through this key. Currently, both encfs (default) and gocryptfs (recommended) are supported</p>
 </span><div class="enum-value" id="tools_encrypted_fs_type_enum">
-                <h4>Must be one of:</h4>
-                <ul class="list-group"><li class="list-group-item enum-item">"encfs"</li><li class="list-group-item enum-item">"gocryptfs"</li></ul>
-                </div>
-            
+            <h4>Must be one of:</h4>
+            <ul class="list-group"><li class="list-group-item enum-item">"encfs"</li><li class="list-group-item enum-item">"gocryptfs"</li></ul>
+            </div>
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -467,12 +467,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_encrypted_fs_command" onclick="anchorLink('tools_encrypted_fs_command')">command</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>When this key is set, it overrides the default command to be used when an encrypted directory has to be created or mounted</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -515,12 +515,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_encrypted_fs_fusermount_command" onclick="anchorLink('tools_encrypted_fs_fusermount_command')">fusermount_command</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "fusermount"</span><br/>
 <span class="description"><p>Path to unmounting command to be used, being 'fusermount' by default</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -563,12 +563,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_encrypted_fs_idle" onclick="anchorLink('tools_encrypted_fs_idle')">idle</a></div><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 5</span><br/>
 <span class="description"><p>Number of minutes before an idle, mounted encrypted directory will automatically unmount</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -608,12 +608,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_gitCommand" onclick="anchorLink('tools_gitCommand')">gitCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "git"</span><br/>
 <span class="description"><p>Git is used to materialize workflows being hosted at git repositories, like GitHub. This key sets up custom paths to git command</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -649,12 +649,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_javaCommand" onclick="anchorLink('tools_javaCommand')">javaCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "java"</span><br/>
 <span class="description"><p>Java is needed to run Nextflow and future workflow engines. This key sets up custom paths to java installations</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -690,12 +690,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_singularityCommand" onclick="anchorLink('tools_singularityCommand')">singularityCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "singularity"</span><br/>
 <span class="description"><p>Singularity is used when containerType is 'singularity'. This key sets up custom paths to singularity command</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -731,12 +731,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_dockerCommand" onclick="anchorLink('tools_dockerCommand')">dockerCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "docker"</span><br/>
 <span class="description"><p>Docker is used when containerType is 'docker'. This key sets up custom paths to docker command</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -772,12 +772,53 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_podmanCommand" onclick="anchorLink('tools_podmanCommand')">podmanCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "podman"</span><br/>
 <span class="description"><p>Podman is used when containerType is 'podman'. This key sets up custom paths to podman command</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
+            </div>
+        </div>
+    </div>
+</div>
+<div class="accordion" id="accordiontools_dotCommand">
+    <div class="card">
+        <div class="card-header" id="headingtools_dotCommand">
+            <h2 class="mb-0">
+                <button class="btn btn-link property-name-button" type="button" data-toggle="collapse" data-target="#tools_dotCommand"
+                        aria-expanded="" aria-controls="tools_dotCommand" onclick="setAnchor('#tools_dotCommand')"><span class="property-name">dotCommand</span></button>
+            </h2>
+        </div>
+
+        <div id="tools_dotCommand"
+             class="collapse property-definition-div" aria-labelledby="headingtools_dotCommand"
+             data-parent="#accordiontools_dotCommand">
+            <div class="card-body pl-5">
+
+    <div class="breadcrumbs">root
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools" onclick="anchorLink('tools')">tools</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_dotCommand" onclick="anchorLink('tools_dotCommand')">dotCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "dot"</span><br/>
+<span class="description"><p>'dot' is used when the workflow engine generated diagram is in DOT format, to translate it to either PNG or SVG when the diagram is going to be embedded in an RO-Crate</p>
+</span>
+        
+
+        
+        
+
+        
             </div>
         </div>
     </div>
@@ -813,12 +854,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_staticBashCommand" onclick="anchorLink('tools_staticBashCommand')">staticBashCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "bash.static"</span><br/>
 <span class="description"><p>There is a bug in some bash versions which make them unsuitable to run the trace machinery from Nextflow, as the trace machinery enters in a live lock. As the images containing these faulty bash versions cannot be changed, a 'monkey patch' solution where an external, static bash version is injected on workflow execution is used. The injected static bash is found through this key, which is searched on PATH variable when it is not a full path.</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -854,12 +895,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_staticPsCommand" onclick="anchorLink('tools_staticPsCommand')">staticPsCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "ps.static"</span><br/>
 <span class="description"><p>Nextflow uses a bash wrapper to gather process execution statistics. One of the binaries used by the wrapper is <code>ps</code>. Some containers (for instance, r-base:latest) do not contain such binary. As the images which do not contain <code>ps</code> cannot be changed, a 'monkey patch' solution where an external, static ps version is injected on workflow execution is used. The injected static ps is found through this key, which is searched on PATH variable when it is not a full path.</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -894,12 +935,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
         </svg>
     <a href="#tools_nextflow" onclick="anchorLink('tools_nextflow')">nextflow</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
 
-            
+        
 
-            
-            
+        
+        
 
-            
+        
 <div class="accordion" id="accordiontools_nextflow_dockerImage">
     <div class="card">
         <div class="card-header" id="headingtools_nextflow_dockerImage">
@@ -938,12 +979,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_nextflow_dockerImage" onclick="anchorLink('tools_nextflow_dockerImage')">dockerImage</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "nextflow/nextflow"</span><br/>
 <span class="description"><p>(unfinished) When <code>engineMode</code> is <code>docker</code>, the name of the image to be fetched and used. The used tag will depend on the workflow's metadata, being by default the <code>version</code></p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -986,12 +1027,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
     <a href="#tools_nextflow_version" onclick="anchorLink('tools_nextflow_version')">version</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "19.04.1"</span><br/>
 <span class="description"><p>Version of Nextflow engine to be used when workflow's metadata does not provide hints about minimal version needed.</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -1036,12 +1077,12 @@ Encrypted working directories are unsupported when Docker or Podman are used due
 Retries system was introduced when using docker-in-docker pattern because an insidious<br />
 bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-symlinks-on-bind-mounts/32138</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction numeric-restriction" id="tools_nextflow_maxRetries_number">Value must be greater or equal to <code>0</code></span></p>
+        
+        <p><span class="badge badge-light restriction numeric-restriction" id="tools_nextflow_maxRetries_number">Value must be greater or equal to <code>0</code></span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -1137,12 +1178,12 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
         </svg>
     <a href="#tools_nextflow_maxProcesses_oneOf_i0" onclick="anchorLink('tools_nextflow_maxProcesses_oneOf_i0')">item 0</a></div><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 4</span><br/>
 
-            
+        
 
-            
-            <p><span class="badge badge-light restriction numeric-restriction" id="tools_nextflow_maxProcesses_oneOf_i0_number">Value must be greater or equal to <code>1</code></span></p>
+        
+        <p><span class="badge badge-light restriction numeric-restriction" id="tools_nextflow_maxProcesses_oneOf_i0_number">Value must be greater or equal to <code>1</code></span></p>
 
-            
+        
         </div><div class="tab-pane fade card-body "
              id="tab-pane_tools_nextflow_maxProcesses_oneOf_i1" role="tabpanel">
             
@@ -1184,19 +1225,19 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
         </svg>
     <a href="#tools_nextflow_maxProcesses_oneOf_i1" onclick="anchorLink('tools_nextflow_maxProcesses_oneOf_i1')">item 1</a></div><span class="badge badge-dark value-type">Type: null</span><br/>
 
-            
+        
 
-            
-            
+        
+        
 
-            
+        
         </div></div></div>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -1235,12 +1276,12 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
         </svg>
     <a href="#tools_cwl" onclick="anchorLink('tools_cwl')">cwl</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
 
-            
+        
 
-            
-            
+        
+        
 
-            
+        
 <div class="accordion" id="accordiontools_cwl_version">
     <div class="card">
         <div class="card-header" id="headingtools_cwl_version">
@@ -1279,12 +1320,12 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
     <a href="#tools_cwl_version" onclick="anchorLink('tools_cwl_version')">version</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "3.1.20210628163208"</span><br/>
 <span class="description"><p>Version of cwltool engine to be used. WfExS is not currently guessing the minimal needed version, so it is either the value set up in this key or the default one</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction min-length-restriction" id="tools_cwl_version_minLength">Must be at least <code>1</code> characters long</span></p>
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="tools_cwl_version_minLength">Must be at least <code>1</code> characters long</span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -1308,7 +1349,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
             <div class="card-body pl-5"><h2 class="handle">
                         <label>Pattern Property</label>
                     </h2>
-                    <p>All property whose name matches the following regular expression must respect the following conditions</p>
+                    <p>All properties whose name matches the following regular expression must respect the following conditions</p>
                     <span class="pattern-value">Property name regular expression: <code>^.+Command$</code></span>
                     <br/>
 
@@ -1329,12 +1370,12 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
     <a href="#tools_pattern1" onclick="anchorLink('tools_pattern1')">Path to a command</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>This is a wildcard declaration to allow setting up custom paths to commands needed by several parts of the code</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction min-length-restriction" id="tools_pattern1_minLength">Must be at least <code>1</code> characters long</span></p>
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="tools_pattern1_pattern4">Must be at least <code>1</code> characters long</span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -1368,12 +1409,12 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 <span class="description"><p>Directory where all the working directories are going to be created.<br />
 When it is not set, a temporary directory is created, which will be removed when the program finishes (which avoids inspecting the working directory after the program has finished).</p>
 </span>
-            
+        
 
-            
-            <p><span class="badge badge-light restriction min-length-restriction" id="workDir_minLength">Must be at least <code>1</code> characters long</span></p>
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="workDir_minLength">Must be at least <code>1</code> characters long</span></p>
 
-            
+        
             </div>
         </div>
     </div>
@@ -1402,12 +1443,12 @@ When it is not set, a temporary directory is created, which will be removed when
     <a href="#fetchers-setup" onclick="anchorLink('fetchers-setup')">fetchers-setup</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>Some fetchers could need customizations at the configuration level, like limiting throughput or setting up some proxy</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
 <div class="accordion" id="accordionfetchers-setup_pattern1">
     <div class="card">
         <div class="card-header" id="headingfetchers-setup_pattern1">
@@ -1423,7 +1464,7 @@ When it is not set, a temporary directory is created, which will be removed when
             <div class="card-body pl-5"><h2 class="handle">
                         <label>Pattern Property</label>
                     </h2>
-                    <p>All property whose name matches the following regular expression must respect the following conditions</p>
+                    <p>All properties whose name matches the following regular expression must respect the following conditions</p>
                     <span class="pattern-value">Property name regular expression: <code>^[a-z][a-z0-9+.-]*$</code></span>
                     <br/>
 
@@ -1444,12 +1485,12 @@ When it is not set, a temporary directory is created, which will be removed when
     <a href="#fetchers-setup_pattern1" onclick="anchorLink('fetchers-setup_pattern1')">Scheme fetcher setup</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>Some scheme fetchers could need customizations which depend on local WfExS installation environment. This is the place where to pass that</p>
 </span>
-            
+        
 
-            
-            
+        
+        
 
-            
+        
             </div>
         </div>
     </div>
@@ -1460,6 +1501,6 @@ When it is not set, a temporary directory is created, which will be removed when
 </div>
 
     <footer>
-        <p class="generated-by-footer">Generated using <a href="https://github.com/coveooss/json-schema-for-humans">json-schema-for-humans</a> on 2022-05-10 at 18:07:35 +0200</p>
+        <p class="generated-by-footer">Generated using <a href="https://github.com/coveooss/json-schema-for-humans">json-schema-for-humans</a> on 2023-09-19 at 01:51:39 +0000</p>
     </footer></body>
 </html>
