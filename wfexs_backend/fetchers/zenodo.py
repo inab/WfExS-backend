@@ -30,7 +30,11 @@ from typing import (
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 from .http import fetchClassicURL
 
 from ..common import (
@@ -46,14 +50,9 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
-
-from ..common import (
-    ProtocolFetcherReturn,
-)
 
 # See https://developers.zenodo.org/#retrieve37
 ZENODO_SCHEME = "zenodo"
@@ -222,6 +221,9 @@ def fetchZenodo(
 
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    ZENODO_SCHEME: fetchZenodo,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    ZENODO_SCHEME: DocumentedProtocolFetcher(
+        fetcher=fetchZenodo,
+        description="CURIEs following this scheme can be translated to a downloadable dataset, using APIs described at https://developers.zenodo.org/",
+    ),
 }

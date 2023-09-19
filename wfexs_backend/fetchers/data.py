@@ -46,7 +46,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProgsMapping,
-        ProtocolFetcher,
         RelPath,
         RepoURL,
         RepoTag,
@@ -57,11 +56,14 @@ if TYPE_CHECKING:
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -105,6 +107,9 @@ def deserializeDataURI(
     )
 
 
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    DATA_SCHEME: deserializeDataURI,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    DATA_SCHEME: DocumentedProtocolFetcher(
+        fetcher=deserializeDataURI,
+        description="'data' scheme is used to embed very small payloads, as it is described at https://datatracker.ietf.org/doc/html/rfc2397",
+    ),
 }

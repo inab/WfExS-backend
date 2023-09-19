@@ -30,12 +30,15 @@ from typing import (
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 from .http import fetchClassicURL
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -47,7 +50,6 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
@@ -288,6 +290,9 @@ def fetchOSFIO(
 
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    OSF_IO_SCHEME: fetchOSFIO,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    OSF_IO_SCHEME: DocumentedProtocolFetcher(
+        fetcher=fetchOSFIO,
+        description="CURIEs following this scheme can be translated to a downloadable dataset, using APIs described at https://developer.osf.io/",
+    ),
 }

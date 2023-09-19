@@ -29,7 +29,12 @@ from typing import (
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    AbstractStatefulFetcher,
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 from .http import fetchClassicURL
 
 from ..common import (
@@ -47,14 +52,9 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
-
-from ..common import (
-    ProtocolFetcherReturn,
-)
 
 INTERNAL_TRS_SCHEME_PREFIX = "wfexs.trs.files"
 TRS_SCHEME_PREFIX = "trs"
@@ -300,7 +300,13 @@ def fetchTRSFiles(
 
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    INTERNAL_TRS_SCHEME_PREFIX: fetchTRSFiles,
-    TRS_SCHEME_PREFIX: fetchTRSFiles,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    INTERNAL_TRS_SCHEME_PREFIX: DocumentedProtocolFetcher(
+        fetcher=fetchTRSFiles,
+        description="WfExS internal pseudo-scheme used to materialize files from pure TRS servers",
+    ),
+    TRS_SCHEME_PREFIX: DocumentedProtocolFetcher(
+        fetcher=fetchTRSFiles,
+        description="GA4GH TRS metadata is fetched using the APIs described at https://ga4gh.github.io/tool-registry-service-schemas/. Contents are downloaded delegating their associated URIs to other fetchers",
+    ),
 }

@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProgsMapping,
-        ProtocolFetcher,
         RelPath,
         RepoURL,
         RepoTag,
@@ -55,11 +54,14 @@ if TYPE_CHECKING:
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -123,6 +125,9 @@ def fetchFile(
     )
 
 
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    "file": fetchFile,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    "file": DocumentedProtocolFetcher(
+        fetcher=fetchFile,
+        description="'file' scheme is used to represent local files and directories. It should be only used either for development or for very isolated environments where paths are stable.",
+    ),
 }

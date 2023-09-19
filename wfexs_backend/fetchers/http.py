@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProgsMapping,
-        ProtocolFetcher,
         RelPath,
         RepoURL,
         RepoTag,
@@ -63,12 +62,13 @@ import urllib.error
 
 from . import (
     AbstractStatefulFetcher,
+    DocumentedProtocolFetcher,
     FetcherException,
+    ProtocolFetcherReturn,
 )
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -208,7 +208,13 @@ def fetchClassicURL(
     )
 
 
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    "http": fetchClassicURL,
-    "https": fetchClassicURL,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    "http": DocumentedProtocolFetcher(
+        fetcher=fetchClassicURL,
+        description="HTTP download URLs",
+    ),
+    "https": DocumentedProtocolFetcher(
+        fetcher=fetchClassicURL,
+        description="HTTPS download URLs",
+    ),
 }

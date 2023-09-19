@@ -44,11 +44,14 @@ if TYPE_CHECKING:
         URIType,
     )
 
-from . import AbstractStatefulFetcher, FetcherException
+from . import (
+    AbstractStatefulFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -80,6 +83,10 @@ class FASPFetcher(AbstractStatefulFetcher):
     @classmethod
     def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return (cls.DEFAULT_ASPERA_CMD,)
+
+    @property
+    def description(self) -> "str":
+        return "This pseudo-scheme, which mimics ssh scheme, represents datasets behind IBM Aspera servers (quite common in life sciences infrastructures), which follow FASP protocol. Materialization of these datasets are delegated to ascp command line"
 
     def fetch(
         self,

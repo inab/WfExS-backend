@@ -27,7 +27,6 @@ from typing import (
 )
 
 from ..common import (
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -39,14 +38,17 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 from .http import fetchClassicURL
 
 
@@ -134,6 +136,9 @@ def fetchPRIDEProject(
 
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    PRIDE_PROJECT_SCHEME: fetchPRIDEProject,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    PRIDE_PROJECT_SCHEME: DocumentedProtocolFetcher(
+        fetcher=fetchPRIDEProject,
+        description="'pride' datasets metadata is fetched using the APIs described at https://www.ebi.ac.uk/pride/ws/archive/v2/swagger-ui.html#/projects . Contents are downloaded delegating their associated URIs to other fetchers",
+    ),
 }

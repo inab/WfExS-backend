@@ -431,24 +431,7 @@ class MaterializedContent(NamedTuple):
         return {"uri": "licensed_uri"}
 
 
-class ProtocolFetcherReturn(NamedTuple):
-    kind_or_resolved: "Union[AnyURI, ContentKind, Sequence[AnyURI]]"
-    metadata_array: "Sequence[URIWithMetadata]"
-    licences: "Optional[Tuple[URIType, ...]]" = None
-
-
 if TYPE_CHECKING:
-    from mypy_extensions import DefaultNamedArg
-
-    ProtocolFetcher: TypeAlias = Callable[
-        [
-            URIType,
-            AbsPath,
-            DefaultNamedArg(Optional[SecurityContextConfig], "secContext"),
-        ],
-        ProtocolFetcherReturn,
-    ]
-
     MaterializedInputValues: TypeAlias = Union[
         Sequence[bool],
         Sequence[str],

@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProgsMapping,
-        ProtocolFetcher,
         RelPath,
         RepoURL,
         RepoTag,
@@ -64,10 +63,13 @@ if TYPE_CHECKING:
         PASSWORD: "NotRequired[str]"
 
 
-from . import AbstractStatefulFetcher
+from . import (
+    AbstractStatefulFetcher,
+    DocumentedProtocolFetcher,
+    ProtocolFetcherReturn,
+)
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -131,6 +133,9 @@ def fetchFTPURL(
     )
 
 
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    "ftp": fetchFTPURL,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    "ftp": DocumentedProtocolFetcher(
+        fetcher=fetchFTPURL,
+        description="File Transfer Protocol (see https://www.iana.org/assignments/ftp-commands-extensions/ftp-commands-extensions.xhtml)",
+    ),
 }

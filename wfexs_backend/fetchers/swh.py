@@ -69,6 +69,7 @@ if TYPE_CHECKING:
 from . import (
     AbstractRepoFetcher,
     FetcherException,
+    ProtocolFetcherReturn,
     RepoGuessException,
 )
 
@@ -76,7 +77,6 @@ from .http import fetchClassicURL
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     RemoteRepo,
     RepoType,
     URIWithMetadata,
@@ -102,10 +102,15 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
 
     @classmethod
     def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractRepoFetcher]]":
-        # These are de-facto schemes supported by pip and git client
+        # These are de-facto schemes supported by Software Heritage
+        # libraries and other implementations
         return {
             cls.SOFTWARE_HERITAGE_SCHEME: cls,
         }
+
+    @property
+    def description(self) -> "str":
+        return "Permanent identifiers of files, directories and repos at SoftwareHeritage. These URIs follow what it is described at https://docs.softwareheritage.org/devel/swh-model/persistent-identifiers.html"
 
     @classmethod
     def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":

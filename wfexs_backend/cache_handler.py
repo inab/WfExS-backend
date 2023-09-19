@@ -63,7 +63,6 @@ if TYPE_CHECKING:
         AnyURI,
         Fingerprint,
         ProgsMapping,
-        ProtocolFetcher,
         RelPath,
         SecurityContextConfig,
         WritableSecurityContextConfig,
@@ -113,6 +112,7 @@ from .common import (
 
 from .fetchers import (
     AbstractStatefulFetcher,
+    DocumentedProtocolFetcher,
     FetcherException,
     FetcherInstanceException,
     InvalidFetcherException,
@@ -160,7 +160,7 @@ class SchemeHandlerCacheHandler:
     def __init__(
         self,
         cacheDir: "AbsPath",
-        schemeHandlers: "Mapping[str, ProtocolFetcher]" = dict(),
+        schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]" = dict(),
     ):
         # Getting a logger focused on specific classes
         import inspect
@@ -173,12 +173,12 @@ class SchemeHandlerCacheHandler:
 
         # TODO: create caching database
         self.cacheDir = cacheDir
-        self.schemeHandlers: "MutableMapping[str, ProtocolFetcher]" = dict()
+        self.schemeHandlers: "MutableMapping[str, DocumentedProtocolFetcher]" = dict()
 
         self.addRawSchemeHandlers(schemeHandlers)
 
     def addRawSchemeHandlers(
-        self, schemeHandlers: "Mapping[str, ProtocolFetcher]"
+        self, schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]"
     ) -> None:
         # No validation is done here about validness of schemes
         if isinstance(schemeHandlers, dict):
@@ -189,7 +189,7 @@ class SchemeHandlerCacheHandler:
     def addSchemeHandler(
         self,
         scheme: "str",
-        handler: "Union[Type[StatefulFetcher], ProtocolFetcher]",
+        handler: "Union[Type[StatefulFetcher], DocumentedProtocolFetcher]",
         progs: "ProgsMapping" = dict(),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ) -> None:
@@ -198,14 +198,17 @@ class SchemeHandlerCacheHandler:
         :param scheme:
         :param handler:
         """
-        the_handler: "ProtocolFetcher"
+        the_handler: "DocumentedProtocolFetcher"
         if inspect.isclass(handler):
             inst_handler = self.instantiateStatefulFetcher(
                 handler, progs=progs, setup_block=setup_block
             )
-            the_handler = inst_handler.fetch
-        elif isinstance(
-            handler,
+            the_handler = DocumentedProtocolFetcher(
+                fetcher=inst_handler.fetch,
+                description=inst_handler.description,
+            )
+        elif isinstance(handler, DocumentedProtocolFetcher) and isinstance(
+            handler.fetcher,
             (
                 types.FunctionType,
                 types.LambdaType,
@@ -223,7 +226,8 @@ class SchemeHandlerCacheHandler:
         self.schemeHandlers[scheme.lower()] = the_handler
 
     def addSchemeHandlers(
-        self, schemeHandlers: "Mapping[str, ProtocolFetcher]"
+        self,
+        schemeHandlers: "Mapping[str, Union[Type[StatefulFetcher], DocumentedProtocolFetcher]]",
     ) -> None:
         # No validation is done here about validness of schemes
         if isinstance(schemeHandlers, dict):
@@ -262,8 +266,11 @@ class SchemeHandlerCacheHandler:
 
         return cast("StatefulFetcher", instStatefulFetcher)
 
-    def getRegisteredSchemes(self) -> "Sequence[str]":
-        return list(self.schemeHandlers.keys())
+    def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str]]":
+        return [
+            (scheme, desc_fetcher.description)
+            for scheme, desc_fetcher in self.schemeHandlers.items()
+        ]
 
     def _genUriMetaCachedFilename(
         self, hashDir: "AbsPath", the_remote_file: "URIType"
@@ -1056,7 +1063,7 @@ class SchemeHandlerCacheHandler:
 
                         try:
                             # Content is fetched here
-                            inputKind, fetched_metadata_array, fetched_licences = schemeHandler(the_remote_file, tempCachedFilename, secContext=usableSecContext if usableSecContext else None)  # type: ignore
+                            inputKind, fetched_metadata_array, fetched_licences = schemeHandler.fetcher(the_remote_file, tempCachedFilename, secContext=usableSecContext if usableSecContext else None)  # type: ignore
 
                             # Overwrite the licence if it is explicitly returned
                             if fetched_licences is not None:

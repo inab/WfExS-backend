@@ -30,12 +30,15 @@ from typing import (
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 from .http import fetchClassicURL
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -47,7 +50,6 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
@@ -195,6 +197,9 @@ def fetchB2SHARE(
 
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    B2SHARE_SCHEME: fetchB2SHARE,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    B2SHARE_SCHEME: DocumentedProtocolFetcher(
+        fetcher=fetchB2SHARE,
+        description="CURIEs following this scheme can be translated to a downloadable dataset, using APIs described at https://eudat.eu/services/userdoc/b2share-http-rest-api#get-specific-record",
+    ),
 }

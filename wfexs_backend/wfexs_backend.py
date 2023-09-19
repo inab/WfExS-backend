@@ -99,6 +99,9 @@ from .utils.passphrase_wrapper import (
     WfExSPassGenSingleton,
 )
 
+from .fetchers import (
+    DocumentedProtocolFetcher,
+)
 from .fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
 from .fetchers.ftp import SCHEME_HANDLERS as FTP_SCHEME_HANDLERS
 from .fetchers.sftp import SCHEME_HANDLERS as SFTP_SCHEME_HANDLERS
@@ -172,7 +175,6 @@ if TYPE_CHECKING:
         OutputsBlock,
         ParamsBlock,
         ProgsMapping,
-        ProtocolFetcher,
         RelPath,
         RepoTag,
         RepoURL,
@@ -712,7 +714,7 @@ class WfExSBackend:
 
     def addSchemeHandlers(
         self,
-        schemeHandlers: "Mapping[str, Union[ProtocolFetcher, Type[AbstractStatefulFetcher]]]",
+        schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, Type[AbstractStatefulFetcher]]]",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
     ) -> None:
         """
@@ -741,8 +743,13 @@ class WfExSBackend:
                         schemeHandler, setup_block=setup_block
                     )
                     if instSchemeInstance is not None:
-                        instSchemeHandler = instSchemeInstance.fetch
-                elif callable(schemeHandler):
+                        instSchemeHandler = DocumentedProtocolFetcher(
+                            fetcher=instSchemeInstance.fetch,
+                            description=instSchemeInstance.description,
+                        )
+                elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
+                    schemeHandler.fetcher
+                ):
                     instSchemeHandler = schemeHandler
 
                 # Only the ones which have overcome the sanity checks
@@ -753,8 +760,8 @@ class WfExSBackend:
 
             self.cacheHandler.addRawSchemeHandlers(instSchemeHandlers)
 
-    def listFetchableSchemes(self) -> "Sequence[str]":
-        return self.cacheHandler.getRegisteredSchemes()
+    def describeFetchableSchemes(self) -> "Sequence[Tuple[str, str]]":
+        return self.cacheHandler.describeRegisteredSchemes()
 
     def newSetup(
         self,
@@ -1495,7 +1502,9 @@ class WfExSBackend:
             config_directory=self.config_directory,
         )
 
-    def addSchemeHandler(self, scheme: "str", handler: "ProtocolFetcher") -> None:
+    def addSchemeHandler(
+        self, scheme: "str", handler: "DocumentedProtocolFetcher"
+    ) -> None:
         """
 
         :param scheme:

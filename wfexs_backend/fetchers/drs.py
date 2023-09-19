@@ -36,7 +36,6 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
@@ -47,12 +46,15 @@ from urllib import parse
 # should fallback to default implementations when C ones are not present
 import yaml
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 from .http import fetchClassicURL
 
 from ..common import (
     LicensedURI,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -262,6 +264,9 @@ def downloadContentFromDRS(
     )
 
 
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    DRS_SCHEME: downloadContentFromDRS,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    DRS_SCHEME: DocumentedProtocolFetcher(
+        fetcher=downloadContentFromDRS,
+        description="GA4GH DRS datasets metadata is fetched using the APIs described at https://ga4gh.github.io/data-repository-service-schemas/. Contents are downloaded delegating their associated URIs to other fetchers",
+    ),
 }

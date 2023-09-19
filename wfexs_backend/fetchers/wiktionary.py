@@ -49,13 +49,13 @@ from wiktionary_fetcher import store_terms
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
 from . import (
     AbstractStatefulFetcher,
     FetcherException,
+    ProtocolFetcherReturn,
 )
 
 
@@ -73,6 +73,10 @@ class WiktionaryFetcher(AbstractStatefulFetcher):
         return {
             cls.WIKTIONARY_PROTO: cls,
         }
+
+    @property
+    def description(self) -> "str":
+        return "Pseudo-scheme used to materialize lists of words from Wiktionary, used for passphrase generation"
 
     @classmethod
     def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":

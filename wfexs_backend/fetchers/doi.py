@@ -29,11 +29,14 @@ from typing import (
 
 from urllib import parse
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 from .http import fetchClassicURL
 
 from ..common import (
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -45,7 +48,6 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
@@ -223,6 +225,9 @@ def fetchDOI(
 
 
 # These are schemes from identifiers.org
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    DOI_SCHEME: fetchDOI,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    DOI_SCHEME: DocumentedProtocolFetcher(
+        fetcher=fetchDOI,
+        description="DOIs resolve to web sites. A subset of the different DOI providers also point to datasets, like the ones from Zenodo, B2SHARE or osf.io. Fetcher implementing DOI support either delegates on other specialized fetchers or delegates the download of the resolved URL.",
+    ),
 }

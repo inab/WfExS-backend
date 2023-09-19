@@ -340,10 +340,10 @@ def genParserSub(
 
 
 def processListFetchersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
-    fetchable_schemes = wfBackend.listFetchableSchemes()
+    fetchable_schemes = wfBackend.describeFetchableSchemes()
     print(f"{len(fetchable_schemes)} supported fetchers")
-    for fetchable_scheme in fetchable_schemes:
-        print(f"\t{fetchable_scheme}")
+    for fetchable_scheme, description in fetchable_schemes:
+        print(f"\t{fetchable_scheme} => {description}")
 
     return 0
 

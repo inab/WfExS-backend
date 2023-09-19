@@ -34,16 +34,18 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        ProtocolFetcher,
         SecurityContextConfig,
         URIType,
     )
 
-from . import FetcherException
+from . import (
+    DocumentedProtocolFetcher,
+    FetcherException,
+    ProtocolFetcherReturn,
+)
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -145,4 +147,9 @@ def downloadContentFrom_gs(
     )
 
 
-GS_SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {"gs": downloadContentFrom_gs}
+GS_SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    "gs": DocumentedProtocolFetcher(
+        fetcher=downloadContentFrom_gs,
+        description="Google Cloud Storage resource path scheme, whose downloads are delegated on Google Cloud Storage libraries",
+    ),
+}

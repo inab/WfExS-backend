@@ -61,7 +61,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         ProgsMapping,
-        ProtocolFetcher,
         RelPath,
         RepoURL,
         RepoTag,
@@ -78,12 +77,13 @@ if TYPE_CHECKING:
 
 from . import (
     AbstractStatefulFetcher,
+    DocumentedProtocolFetcher,
     FetcherException,
+    ProtocolFetcherReturn,
 )
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     URIWithMetadata,
 )
 
@@ -245,7 +245,13 @@ def fetchSSHURL(
             t.close()
 
 
-SCHEME_HANDLERS: "Mapping[str, ProtocolFetcher]" = {
-    "sftp": fetchSSHURL,
-    "ssh": fetchSSHURL,
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+    "sftp": DocumentedProtocolFetcher(
+        fetcher=fetchSSHURL,
+        description="'sftp' scheme represents contents behind an SSH server",
+    ),
+    "ssh": DocumentedProtocolFetcher(
+        fetcher=fetchSSHURL,
+        description="'ssh' scheme represents contents behind an SSH server",
+    ),
 }

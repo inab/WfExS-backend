@@ -71,12 +71,12 @@ import dulwich.porcelain
 from . import (
     AbstractRepoFetcher,
     FetcherException,
+    ProtocolFetcherReturn,
     RepoGuessException,
 )
 
 from ..common import (
     ContentKind,
-    ProtocolFetcherReturn,
     RemoteRepo,
     RepoGuessFlavor,
     RepoType,
@@ -114,6 +114,10 @@ class GitFetcher(AbstractRepoFetcher):
             cls.GIT_PROTO_PREFIX + "ssh": cls,
             cls.GITHUB_SCHEME: cls,
         }
+
+    @property
+    def description(self) -> "str":
+        return "'git' scheme and pseudo-schemes 'git+file', 'git+https', 'git+ssh' (based on https://pip.pypa.io/en/stable/topics/vcs-support/) and 'github' are managed by using git command line, applying minimal transformations in the URI."
 
     @classmethod
     def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":

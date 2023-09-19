@@ -23,6 +23,7 @@ import logging
 
 from typing import (
     cast,
+    NamedTuple,
     TYPE_CHECKING,
 )
 
@@ -46,14 +47,15 @@ if TYPE_CHECKING:
     from typing_extensions import (
         NotRequired,
         Required,
+        TypeAlias,
         TypedDict,
     )
 
     from ..common import (
         AbsPath,
+        AnyURI,
+        ContentKind,
         ProgsMapping,
-        ProtocolFetcher,
-        ProtocolFetcherReturn,
         RelPath,
         RepoURL,
         RepoTag,
@@ -70,11 +72,34 @@ if TYPE_CHECKING:
         relpath: NotRequired[RelPath]
 
 
+class ProtocolFetcherReturn(NamedTuple):
+    kind_or_resolved: "Union[AnyURI, ContentKind, Sequence[AnyURI]]"
+    metadata_array: "Sequence[URIWithMetadata]"
+    licences: "Optional[Tuple[URIType, ...]]" = None
+
+
+if TYPE_CHECKING:
+    from mypy_extensions import DefaultNamedArg
+
+    ProtocolFetcher: TypeAlias = Callable[
+        [
+            URIType,
+            AbsPath,
+            DefaultNamedArg(Optional[SecurityContextConfig], "secContext"),
+        ],
+        ProtocolFetcherReturn,
+    ]
+
 from urllib import parse
 
 from ..common import (
     AbstractWfExSException,
 )
+
+
+class DocumentedProtocolFetcher(NamedTuple):
+    fetcher: "ProtocolFetcher"
+    description: "str"
 
 
 class FetcherException(AbstractWfExSException):
@@ -130,6 +155,14 @@ class AbstractStatefulFetcher(abc.ABC):
     ) -> "ProtocolFetcherReturn":
         """
         This is the method to be implemented by the stateful fetcher
+        """
+        pass
+
+    @property
+    @abc.abstractmethod
+    def description(self) -> "str":
+        """
+        Description of this URI handler
         """
         pass
 
