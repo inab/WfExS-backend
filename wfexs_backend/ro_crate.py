@@ -1146,6 +1146,13 @@ you can find here an almost complete list of the possible ones:
                         itemInLocalSource = itemInValues.local  # local source
                         itemInURISource = itemInValues.licensed_uri.uri  # uri source
                         if os.path.isfile(itemInLocalSource):
+                            the_signature: "Optional[Fingerprint]" = None
+                            if itemInValues.fingerprint is not None:
+                                digest, algo = extract_digest(itemInValues.fingerprint)
+                                if digest is not None:
+                                    assert algo is not None
+                                    the_signature = hexDigest(algo, digest)
+
                             # This is needed to avoid including the input
                             crate_file = self._add_file_to_crate(
                                 the_path=itemInLocalSource,
@@ -1154,7 +1161,7 @@ you can find here an almost complete list of the possible ones:
                                     "RelPath",
                                     os.path.relpath(itemInLocalSource, self.work_dir),
                                 ),
-                                the_signature=itemInValues.fingerprint,
+                                the_signature=the_signature,
                                 do_attach=do_attach,
                             )
 
@@ -1329,6 +1336,17 @@ you can find here an almost complete list of the possible ones:
                             secInputURISource = secInput.licensed_uri.uri  # uri source
                             if os.path.isfile(secInputLocalSource):
                                 # This is needed to avoid including the input
+                                the_sec_signature: "Optional[Fingerprint]" = None
+                                if secInput.fingerprint is not None:
+                                    sec_digest, sec_algo = extract_digest(
+                                        secInput.fingerprint
+                                    )
+                                    if sec_digest is not None:
+                                        assert sec_algo is not None
+                                        the_sec_signature = hexDigest(
+                                            sec_algo, sec_digest
+                                        )
+
                                 sec_crate_elem = self._add_file_to_crate(
                                     the_path=secInputLocalSource,
                                     the_uri=secInputURISource,
@@ -1338,7 +1356,7 @@ you can find here an almost complete list of the possible ones:
                                             secInputLocalSource, self.work_dir
                                         ),
                                     ),
-                                    the_signature=secInput.fingerprint,
+                                    the_signature=the_sec_signature,
                                     do_attach=do_attach,
                                 )
 
