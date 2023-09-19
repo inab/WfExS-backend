@@ -1757,15 +1757,9 @@ class WfExSBackend:
                     )
                 )
 
-        (
-            metaContentKind,
-            cachedTRSMetaFile,
-            trsMetaMeta,
-            trsMetaLicences,
-        ) = trs_cached_content
         # Giving a friendly name
         if not os.path.exists(trsMetadataCache):
-            os.symlink(os.path.basename(cachedTRSMetaFile), trsMetadataCache)
+            os.symlink(os.path.basename(trs_cached_content.path), trsMetadataCache)
 
         with open(trsMetadataCache, mode="r", encoding="utf-8") as ctmf:
             trs_endpoint_meta = json.load(ctmf)
@@ -2455,4 +2449,5 @@ class WfExSBackend:
             prettyFilename=prettyFilename,
             kind=cached_content.kind,
             metadata_array=cached_content.metadata_array,
+            fingerprint=cached_content.fingerprint,
         )

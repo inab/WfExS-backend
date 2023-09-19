@@ -137,6 +137,7 @@ class CachedContent(NamedTuple):
     path: "AbsPath"
     metadata_array: "Sequence[URIWithMetadata]"
     licences: "Tuple[URIType, ...]"
+    fingerprint: "Optional[Fingerprint]" = None
 
 
 META_JSON_POSTFIX = "_meta.json"
@@ -881,6 +882,7 @@ class SchemeHandlerCacheHandler:
 
         relFinalCachedFilename: "Optional[RelPath]"
         finalCachedFilename: "Optional[AbsPath]"
+        final_fingerprint: "Optional[Fingerprint]"
         while not isinstance(inputKind, ContentKind):
             # These elements are alternative URIs. Any of them should
             # provide the very same content
@@ -938,7 +940,7 @@ class SchemeHandlerCacheHandler:
                     or os.stat(uriMetaCachedFilename).st_size == 0
                 )
 
-                metaStructure = None
+                metaStructure: "Optional[CacheMetadataDict]" = None
                 if not refetch:
                     try:
                         metaStructure = self._parseMetaStructure(uriMetaCachedFilename)
@@ -1030,6 +1032,7 @@ class SchemeHandlerCacheHandler:
                 # Store the metadata
                 metadata_array.extend(fetched_metadata_array)
                 licences.extend(the_licences)
+                final_fingerprint = metaStructure["fingerprint"]
             elif offline:
                 # As this is a handler for online resources, comply with offline mode
                 raise CacheOfflineException(
@@ -1078,6 +1081,7 @@ class SchemeHandlerCacheHandler:
                                 tempCachedFilename=tempCachedFilename,
                                 inputKind=inputKind,
                             )
+                            final_fingerprint = fingerprint
 
                             # Now, creating the symlink
                             # (which should not be needed in the future)
@@ -1154,4 +1158,5 @@ class SchemeHandlerCacheHandler:
             path=finalCachedFilename,
             metadata_array=metadata_array,
             licences=tuple(licences),
+            fingerprint=final_fingerprint,
         )

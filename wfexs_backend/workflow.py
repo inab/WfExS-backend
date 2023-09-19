@@ -1656,6 +1656,8 @@ class WF:
                         kind=ContentKind.Directory
                         if exp.is_dir()
                         else ContentKind.File,
+                        # Lazy evaluation of fingerprint,
+                        # so do not compute it here
                     )
                 )
         else:
@@ -1665,6 +1667,7 @@ class WF:
                 prettyFilename=prettyRelname,
                 kind=matContent.kind,
                 metadata_array=matContent.metadata_array,
+                fingerprint=matContent.fingerprint,
             )
             remote_pairs.append(remote_pair)
 

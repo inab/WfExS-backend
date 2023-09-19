@@ -417,6 +417,8 @@ class MaterializedContent(NamedTuple):
       needed for the provenance
     prettyFilename: The preferred filename to use in the inputs directory
       of the execution environment
+    fingerprint: If it is available, propagate the computed fingerprint
+      from the cache.
     """
 
     local: "AbsPath"
@@ -425,6 +427,7 @@ class MaterializedContent(NamedTuple):
     kind: "ContentKind" = ContentKind.File
     metadata_array: "Optional[Sequence[URIWithMetadata]]" = None
     extrapolated_local: "Optional[AbsPath]" = None
+    fingerprint: "Optional[Fingerprint]" = None
 
     @classmethod
     def _key_fixes(cls) -> "Mapping[str, str]":
