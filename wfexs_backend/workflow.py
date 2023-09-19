@@ -3837,6 +3837,7 @@ class WF:
             orcids=the_orcids,
             progs=self.wfexs.progs,
             tempdir=self.tempDir,
+            scheme_desc=self.wfexs.describeFetchableSchemes(),
         )
 
         wrroc.addWorkflowInputs(
@@ -3902,6 +3903,7 @@ class WF:
             orcids=the_orcids,
             progs=self.wfexs.progs,
             tempdir=self.tempDir,
+            scheme_desc=self.wfexs.describeFetchableSchemes(),
         )
 
         for stagedExec in self.stagedExecutions:
