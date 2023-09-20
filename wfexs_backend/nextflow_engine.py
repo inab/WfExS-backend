@@ -1831,8 +1831,15 @@ wfexs_allParams()
             inputsFileName,
         ]
 
+        profile_input: "Optional[MaterializedInput]" = None
         if self.nxf_profile:
-            nxf_params.extend(["-profile", ",".join(self.nxf_profile)])
+            profile_input = MaterializedInput(
+                name=cast("SymbolicParamName", "-profile"),
+                values=[",".join(self.nxf_profile)],
+            )
+            nxf_params.extend(
+                [profile_input.name, cast("str", profile_input.values[0])]
+            )
 
         # Using the copy of the original workflow
         nxf_params.append(wDir)
@@ -1873,6 +1880,10 @@ wfexs_allParams()
             augmentedInputs = self.augmentNextflowInputs(matHash, allExecutionParams)
         else:
             augmentedInputs = matInputs
+
+        # And it is wise to also preserve the used profiles
+        if profile_input is not None:
+            augmentedInputs = [profile_input, *augmentedInputs]
 
         # Creating the materialized outputs
         matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, outputsDir)
