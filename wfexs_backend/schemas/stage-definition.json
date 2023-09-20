@@ -94,7 +94,8 @@
 			},
 			"required": [
 				"uri"
-			]
+			],
+			"additionalProperties": false
 		},
 		"InputURI": {
 			"oneOf": [

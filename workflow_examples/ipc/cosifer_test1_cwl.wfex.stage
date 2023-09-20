@@ -5,7 +5,10 @@ workflow_config:
 params:
   data_matrix:
     c-l-a-s-s: File
-    url: https://raw.githubusercontent.com/PhosphorylatedRabbits/cosifer/f2e2a259d218b9a56a01d84bc9d6a7cd7c8d9bf1/examples/interactive/data_matrix.csv
+    url:
+      uri: https://raw.githubusercontent.com/PhosphorylatedRabbits/cosifer/f2e2a259d218b9a56a01d84bc9d6a7cd7c8d9bf1/examples/interactive/data_matrix.csv
+      licences:
+      - https://raw.githubusercontent.com/PhosphorylatedRabbits/cosifer/f2e2a259d218b9a56a01d84bc9d6a7cd7c8d9bf1/LICENSE
   separator: ","
   outdir: "output"
 outputs:

@@ -48,9 +48,9 @@
 					"type": "string",
 					"minLength": 1
 				},
-				"licenses": {
-					"name": "Licenses to attach to this export item",
-					"documentation": "The list of licenses attached to this export item",
+				"licences": {
+					"name": "Licences to attach to this export item",
+					"documentation": "The list of licences attached to this export item",
 					"type": "array",
 					"items": {
 						"type": "string",
