@@ -32,6 +32,7 @@ import sys
 import tempfile
 import threading
 import time
+import warnings
 
 from typing import (
     cast,
@@ -1396,6 +1397,7 @@ class WF:
                 offline=offline,
             )
 
+    # DEPRECATED?
     def injectInputs(
         self,
         paths: "Sequence[AnyPath]",
@@ -1403,6 +1405,9 @@ class WF:
         workflowInputs_cacheDir: "Optional[Union[AbsPath, CacheType]]" = None,
         lastInput: "int" = 0,
     ) -> int:
+        warnings.warn(
+            "injectInputs is being deprecated", PendingDeprecationWarning, stacklevel=2
+        )
         if workflowInputs_destdir is None:
             workflowInputs_destdir = self.inputsDir
         if workflowInputs_cacheDir is None:
@@ -1425,7 +1430,9 @@ class WF:
                 ("file", "", os.path.abspath(path), "", "", "")
             )
             matContent = self.wfexs.downloadContent(
-                cast("URIType", fileuri),
+                LicensedURI(
+                    uri=cast("URIType", fileuri),
+                ),
                 dest=storeDir,
                 ignoreCache=not cacheable,
                 registerInCache=cacheable,
@@ -1501,28 +1508,30 @@ class WF:
 
         return secContext
 
-    def buildLicensedURI(
+    def _buildLicensedURI(
         self,
         remote_file_f: "Sch_InputURI_Fetchable",
         contextName: "Optional[str]" = None,
         licences: "Tuple[URIType, ...]" = DefaultNoLicenceTuple,
         attributions: "Sequence[Attribution]" = [],
-    ) -> "Union[LicensedURI, Sequence[LicensedURI]]":
+    ) -> "Tuple[Union[LicensedURI, Sequence[LicensedURI]], bool]":
+        was_simple = False
         if isinstance(remote_file_f, list):
             retvals = []
             for remote_url in remote_file_f:
-                retval = self.buildLicensedURI(
+                retval, this_was_simple = self._buildLicensedURI(
                     remote_url,
                     contextName=contextName,
                     licences=licences,
                     attributions=attributions,
                 )
+                was_simple |= this_was_simple
                 if isinstance(retval, list):
                     retvals.extend(retval)
                 else:
                     retvals.append(retval)
 
-            return retvals
+            return retvals, was_simple
 
         if isinstance(remote_file_f, dict):
             remote_file = remote_file_f
@@ -1542,6 +1551,7 @@ class WF:
             if len(parsed_attributions) > 0:
                 attributions = parsed_attributions
         else:
+            was_simple = True
             remote_url = remote_file_f
 
         secContext = None
@@ -1554,11 +1564,14 @@ class WF:
                     )
                 )
 
-        return LicensedURI(
-            uri=remote_url,
-            licences=licences,
-            attributions=attributions,
-            secContext=secContext,
+        return (
+            LicensedURI(
+                uri=remote_url,
+                licences=licences,
+                attributions=attributions,
+                secContext=secContext,
+            ),
+            was_simple,
         )
 
     def _fetchRemoteFile(
@@ -1576,13 +1589,18 @@ class WF:
         ignoreCache: "bool" = False,
     ) -> "Sequence[MaterializedContent]":
         # Embedding the context
-        alt_remote_file = self.buildLicensedURI(remote_file, contextName=contextName)
+        alt_remote_file, alt_is_plain = self._buildLicensedURI(
+            remote_file, contextName=contextName
+        )
+        # Trying to preserve what it is returned by the cache
+        # unless we are explicitly feeding a licence
         matContent = self.wfexs.downloadContent(
             alt_remote_file,
             dest=storeDir,
             offline=offline,
             ignoreCache=ignoreCache or not cacheable,
             registerInCache=cacheable,
+            keep_cache_licence=alt_is_plain,
         )
 
         # Now, time to create the link

@@ -2321,12 +2321,13 @@ class WfExSBackend:
 
     def downloadContent(
         self,
-        remote_file: "Union[URIType, LicensedURI, Sequence[URIType], Sequence[LicensedURI]]",
+        remote_file: "Union[LicensedURI, Sequence[LicensedURI]]",
         dest: "Union[AbsPath, CacheType]",
         secContext: "Optional[SecurityContextConfig]" = None,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
+        keep_cache_licence: "bool" = True,
     ) -> "MaterializedContent":
         """
         Download remote file or directory / dataset.
@@ -2339,12 +2340,12 @@ class WfExSBackend:
         """
 
         # Preparation of needed structures
-        remote_uris_e: "Union[Sequence[URIType], Sequence[LicensedURI]]"
+        remote_uris_e: "Sequence[LicensedURI]"
         if isinstance(remote_file, list):
             remote_uris_e = remote_file
         else:
             remote_uris_e = cast(
-                "Union[MutableSequence[URIType], MutableSequence[LicensedURI]]",
+                "MutableSequence[LicensedURI]",
                 [remote_file],
             )
 
@@ -2352,15 +2353,12 @@ class WfExSBackend:
             len(remote_uris_e) > 0
         ), "The list of remote URIs to download should have at least one element"
 
-        firstURI: "Optional[Union[URIType, LicensedURI]]" = None
+        firstURI: "Optional[LicensedURI]" = None
         firstParsedURI: "Optional[parse.ParseResult]" = None
         remote_uris: "MutableSequence[URIType]" = []
         # Brief validation of correct uris
         for remote_uri_e in remote_uris_e:
-            if isinstance(remote_uri_e, LicensedURI):
-                remote_uri = remote_uri_e.uri
-            else:
-                remote_uri = remote_uri_e
+            remote_uri = remote_uri_e.uri
 
             parsedURI = parse.urlparse(remote_uri)
             validableComponents = [parsedURI.scheme, parsedURI.path]
@@ -2393,9 +2391,8 @@ class WfExSBackend:
             registerInCache=registerInCache,
             secContext=secContext,
         )
-        downloaded_uri = (
-            remote_file.uri if isinstance(remote_file, LicensedURI) else remote_file
-        )
+        # TODO: Properly test alternatives
+        downloaded_uri = firstURI.uri
         self.logger.info(
             "downloaded workflow input: {} => {}".format(
                 downloaded_uri, cached_content.path
@@ -2411,37 +2408,32 @@ class WfExSBackend:
                 )
             )
 
-            if isinstance(firstURI, LicensedURI):
-                firstLicensedURI = LicensedURI(
-                    uri=cached_content.metadata_array[0].uri,
-                    licences=cached_content.licences,
-                    attributions=firstURI.attributions,
-                )
-            else:
-                firstURI = cached_content.metadata_array[0].uri
+            firstLicensedURI = LicensedURI(
+                uri=cached_content.metadata_array[0].uri,
+                licences=cached_content.licences
+                if keep_cache_licence
+                else firstURI.licences,
+                attributions=firstURI.attributions,
+            )
             # The preferred name is obtained from the metadata
             for m in cached_content.metadata_array:
                 if m.preferredName is not None:
                     prettyFilename = m.preferredName
                     break
+        else:
+            # This alternative could happen,
+            # but it should not.
+            # Anyway, junking the security context
+            firstLicensedURI = firstURI._replace(
+                licences=cached_content.licences
+                if keep_cache_licence
+                else firstURI.licences,
+                secContext=None,
+            )
 
         if prettyFilename is None:
             # Default pretty filename in the worst case
             prettyFilename = cast("RelPath", firstParsedURI.path.split("/")[-1])
-
-        if isinstance(firstURI, LicensedURI):
-            # Junking the security context
-            if firstURI.secContext is None:
-                firstLicensedURI = firstURI
-            else:
-                firstLicensedURI = LicensedURI(
-                    uri=firstURI.uri,
-                    licences=firstURI.licences,
-                    attributions=firstURI.attributions,
-                )
-        else:
-            # No licensing information attached
-            firstLicensedURI = LicensedURI(uri=firstURI)
 
         return MaterializedContent(
             local=cached_content.path,

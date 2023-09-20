@@ -140,6 +140,7 @@ from .common import (
     GeneratedDirectoryContent,
     MaterializedContent,
     NoCratableItem,
+    NoLicence,
     NoLicenceShort,
     ROCrateShortLicences,
 )
@@ -934,7 +935,10 @@ you can find here an almost complete list of the possible ones:
             )
 
         readme_file = self._add_file_to_crate(
-            readme_md_path, the_uri=None, the_name=cast("RelPath", "README.md")
+            readme_md_path,
+            the_uri=None,
+            the_name=cast("RelPath", "README.md"),
+            the_licences=["https://spdx.org/licenses/CC-BY-4.0.html"],
         )
         self.crate.root_dataset.append_to("about", readme_file, compact=True)
 
@@ -1145,6 +1149,7 @@ you can find here an almost complete list of the possible ones:
                         assert isinstance(itemInValues, MaterializedContent)
                         itemInLocalSource = itemInValues.local  # local source
                         itemInURISource = itemInValues.licensed_uri.uri  # uri source
+                        itemInURILicenses = itemInValues.licensed_uri.licences
                         if os.path.isfile(itemInLocalSource):
                             the_signature: "Optional[Fingerprint]" = None
                             if itemInValues.fingerprint is not None:
@@ -1162,6 +1167,7 @@ you can find here an almost complete list of the possible ones:
                                     os.path.relpath(itemInLocalSource, self.work_dir),
                                 ),
                                 the_signature=the_signature,
+                                the_licences=itemInURILicenses,
                                 do_attach=do_attach,
                             )
 
@@ -1334,6 +1340,9 @@ you can find here an almost complete list of the possible ones:
 
                             secInputLocalSource = secInput.local  # local source
                             secInputURISource = secInput.licensed_uri.uri  # uri source
+                            secInputURILicences = (
+                                secInput.licensed_uri.licences
+                            )  # licences
                             if os.path.isfile(secInputLocalSource):
                                 # This is needed to avoid including the input
                                 the_sec_signature: "Optional[Fingerprint]" = None
@@ -1357,6 +1366,7 @@ you can find here an almost complete list of the possible ones:
                                         ),
                                     ),
                                     the_signature=the_sec_signature,
+                                    the_licences=secInputURILicences,
                                     do_attach=do_attach,
                                 )
 
@@ -1415,6 +1425,7 @@ you can find here an almost complete list of the possible ones:
         the_alternate_name: "Optional[RelPath]" = None,
         the_size: "Optional[int]" = None,
         the_signature: "Optional[Fingerprint]" = None,
+        the_licences: "Optional[Sequence[str]]" = None,
         is_soft_source: "bool" = False,
         do_attach: "bool" = True,
     ) -> "FixedFile":
@@ -1464,6 +1475,13 @@ you can find here an almost complete list of the possible ones:
             magic.from_file(os.path.realpath(the_path), mime=True),
             compact=True,
         )
+
+        if the_licences is not None:
+            for the_licence in the_licences:
+                # In order to avoid so prominent "No Permission url"
+                if the_licence == NoLicence:
+                    the_licence = NoLicenceShort
+                the_file_crate.append_to("license", the_licence, compact=True)
 
         return the_file_crate
 
