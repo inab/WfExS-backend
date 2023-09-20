@@ -1016,7 +1016,7 @@ class SchemeHandlerCacheHandler:
                     )
 
             if metaStructure is not None:
-                fetched_metadata_array = list(
+                cached_fetched_metadata_array = list(
                     map(
                         lambda rm: URIWithMetadata(
                             uri=rm["uri"],
@@ -1030,7 +1030,7 @@ class SchemeHandlerCacheHandler:
                 the_licences = metaStructure.get("licences", tuple())
 
                 # Store the metadata
-                metadata_array.extend(fetched_metadata_array)
+                metadata_array.extend(cached_fetched_metadata_array)
                 licences.extend(the_licences)
                 final_fingerprint = metaStructure["fingerprint"]
             elif offline:
@@ -1066,7 +1066,17 @@ class SchemeHandlerCacheHandler:
 
                         try:
                             # Content is fetched here
-                            inputKind, fetched_metadata_array, fetched_licences = schemeHandler.fetcher(the_remote_file, tempCachedFilename, secContext=usableSecContext if usableSecContext else None)  # type: ignore
+                            (
+                                inputKind,
+                                fetched_metadata_array,
+                                fetched_licences,
+                            ) = schemeHandler.fetcher(
+                                the_remote_file,
+                                tempCachedFilename,
+                                secContext=usableSecContext
+                                if usableSecContext
+                                else None,
+                            )
 
                             # Overwrite the licence if it is explicitly returned
                             if fetched_licences is not None:
