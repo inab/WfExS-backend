@@ -1071,6 +1071,35 @@ class WF:
         with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
             workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
 
+        return cls.FromStagedRecipe(
+            wfexs,
+            workflow_meta,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+            orcids=orcids,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
+            paranoidMode=paranoidMode,
+        )
+
+    @classmethod
+    def FromStagedRecipe(
+        cls,
+        wfexs: "WfExSBackend",
+        workflow_meta: "WritableWorkflowMetaConfigBlock",
+        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
+        paranoidMode: "bool" = False,
+    ) -> "WF":
+        """
+        This class method creates a new staged working directory
+        """
+
         # Should we prepend the nickname prefix?
         if nickname_prefix is not None:
             workflow_meta["nickname"] = nickname_prefix + workflow_meta.get(
@@ -1099,6 +1128,48 @@ class WF:
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
+        )
+
+    @classmethod
+    def FromPreviousInstanceDeclaration(
+        cls,
+        wfexs: "WfExSBackend",
+        wfInstance: "WF",
+        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
+        paranoidMode: "bool" = False,
+    ) -> "WF":
+        """
+        This class method creates a new staged working directory
+        based on the declaration of an existing one
+        """
+
+        # The workflow information can be incomplete without this step.
+        # was_staged = wfInstance.unmarshallStage(offline=True, fail_ok=True, do_full_setup=False)
+        # if not isinstance(was_staged, datetime.datetime):
+        #    raise WFException(f"Staged working directory from {wfInstance} was not properly staged")
+        # Now we should be able to get the configuration file
+        workflow_meta = copy.deepcopy(wfInstance.staging_recipe)
+
+        # We have to reset the inherited paranoid mode and nickname
+        for k_name in ("nickname", "paranoid_mode"):
+            if k_name in workflow_meta:
+                del workflow_meta[k_name]
+
+        return cls.FromStagedRecipe(
+            wfexs,
+            workflow_meta,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+            orcids=orcids,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
+            paranoidMode=paranoidMode,
         )
 
     @classmethod
@@ -2885,6 +2956,38 @@ class WF:
 
         return matActions, actionErrors
 
+    @property
+    def staging_recipe(self) -> "WritableWorkflowMetaConfigBlock":
+        workflow_meta: "WritableWorkflowMetaConfigBlock" = {
+            "workflow_id": self.id,
+            "paranoid_mode": self.paranoidMode,
+        }
+        if self.nickname is not None:
+            workflow_meta["nickname"] = self.nickname
+        if self.version_id is not None:
+            workflow_meta["version"] = self.version_id
+        if self.descriptor_type is not None:
+            workflow_meta["workflow_type"] = self.descriptor_type
+        if self.trs_endpoint is not None:
+            workflow_meta["trs_endpoint"] = self.trs_endpoint
+        if self.workflow_config is not None:
+            workflow_meta["workflow_config"] = self.workflow_config
+        if self.params is not None:
+            workflow_meta["params"] = self.params
+        if self.environment is not None:
+            workflow_meta["environment"] = self.environment
+        if self.placeholders is not None:
+            workflow_meta["placeholders"] = self.placeholders
+        if self.outputs is not None:
+            outputs = {output.name: output for output in self.outputs}
+            workflow_meta["outputs"] = outputs
+        if self.default_actions is not None:
+            workflow_meta["default_actions"] = self.default_actions
+
+        return cast(
+            "WritableWorkflowMetaConfigBlock", marshall_namedtuple(workflow_meta)
+        )
+
     def marshallConfig(
         self, overwrite: "bool" = False
     ) -> "Union[bool, datetime.datetime]":
@@ -2904,35 +3007,7 @@ class WF:
                 or os.path.getsize(workflow_meta_filename) == 0
             ):
                 with open(workflow_meta_filename, mode="w", encoding="utf-8") as wmF:
-                    workflow_meta: "MutableMapping[str, Any]" = {
-                        "workflow_id": self.id,
-                        "paranoid_mode": self.paranoidMode,
-                    }
-                    if self.nickname is not None:
-                        workflow_meta["nickname"] = self.nickname
-                    if self.version_id is not None:
-                        workflow_meta["version"] = self.version_id
-                    if self.descriptor_type is not None:
-                        workflow_meta["workflow_type"] = self.descriptor_type
-                    if self.trs_endpoint is not None:
-                        workflow_meta["trs_endpoint"] = self.trs_endpoint
-                    if self.workflow_config is not None:
-                        workflow_meta["workflow_config"] = self.workflow_config
-                    if self.params is not None:
-                        workflow_meta["params"] = self.params
-                    if self.environment is not None:
-                        workflow_meta["environment"] = self.environment
-                    if self.placeholders is not None:
-                        workflow_meta["placeholders"] = self.placeholders
-                    if self.outputs is not None:
-                        outputs = {output.name: output for output in self.outputs}
-                        workflow_meta["outputs"] = outputs
-                    if self.default_actions is not None:
-                        workflow_meta["default_actions"] = self.default_actions
-
-                    yaml.dump(
-                        marshall_namedtuple(workflow_meta), wmF, Dumper=YAMLDumper
-                    )
+                    yaml.dump(self.staging_recipe, wmF, Dumper=YAMLDumper)
 
             # This has been commented-out, as credentials should NEVER be kept!!!
             #

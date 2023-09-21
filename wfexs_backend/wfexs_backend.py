@@ -982,6 +982,29 @@ class WfExSBackend:
             paranoidMode=paranoidMode,
         )
 
+    def fromPreviousInstanceDeclaration(
+        self,
+        wfInstance: "WF",
+        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
+        paranoidMode: "bool" = False,
+    ) -> "WF":
+        return WF.FromPreviousInstanceDeclaration(
+            self,
+            wfInstance,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+            orcids=orcids,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
+            paranoidMode=paranoidMode,
+        )
+
     def parseAndValidateSecurityContextFile(
         self, securityContextsConfigFilename: "AnyPath"
     ) -> "Tuple[ExitVal, SecurityContextConfigBlock]":

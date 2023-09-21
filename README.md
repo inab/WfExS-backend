@@ -62,23 +62,29 @@ EOSC-Life deliverable D8.1, _Zenodo_
 python WfExS-backend.py --full-help
 ```
 ```
-usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d] [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
+usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
+                        [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
                         [--full-help]
-                        {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+                        {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.9.3-138-g41a8163 (41a8163291f9335d0c6e71211cb4561d06295533)
+WfExS (workflow execution service) backend 0.9.3-164-g6ed719c
+(6ed719c92b4db5bd9ad50ad57cb10747c9d9b7f1)
 
 optional arguments:
   -h, --help            show this help message and exit
   --log-file LOGFILENAME
-                        Store messages in a file instead of using standard error and standard output (default: None)
+                        Store messages in a file instead of using standard
+                        error and standard output (default: None)
   -q, --quiet           Only show engine warnings and errors (default: None)
   -v, --verbose         Show verbose (informational) messages (default: None)
-  -d, --debug           Show debug messages (use with care, as it can disclose passphrases and passwords) (default: None)
+  -d, --debug           Show debug messages (use with care, as it can disclose
+                        passphrases and passwords) (default: None)
   -L LOCALCONFIGFILENAME, --local-config LOCALCONFIGFILENAME
-                        Local installation configuration file (can also be set up through WFEXS_CONFIG_FILE environment
-                        variable) (default: /home/jmfernandez/projects/WfExS-backend/wfexs_config.yml)
+                        Local installation configuration file (can also be set
+                        up through WFEXS_CONFIG_FILE environment variable)
+                        (default: /home/jmfernandez/projects/WfExS-
+                        backend/wfexs_config.yml)
   --cache-dir CACHEDIR  Caching directory (default: None)
   -V, --version         show program's version number and exit
   --full-help           It returns full help (default: False)
@@ -86,21 +92,30 @@ optional arguments:
 commands:
   Command to run. It must be one of these
 
-  {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+  {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
     init                Init local setup
     cache               Cache handling subcommands
     staged-workdir      Staged working directories handling subcommands
     export              Staged working directories export subcommands
     list-fetchers       List the supported fetchers / schemes
     list-exporters      List the supported export plugins
-    config-validate     Validate the configuration files to be used for staging and execution
-    stage               Prepare the staging (working) directory for workflow execution, fetching dependencies and contents
-    mount-workdir       Mount the encrypted staging directory on secure staging scenarios
+    config-validate     Validate the configuration files to be used for
+                        staging and execution
+    stage               Prepare the staging (working) directory for workflow
+                        execution, fetching dependencies and contents
+    re-stage            Prepare a new staging (working) directory for workflow
+                        execution, repeating the fetch of dependencies and
+                        contents
+    mount-workdir       Mount the encrypted staging directory on secure
+                        staging scenarios
     export-stage        Export the staging directory as an RO-Crate
-    offline-execute     Execute an already prepared workflow in the staging directory
+    offline-execute     Execute an already prepared workflow in the staging
+                        directory
     execute             Execute the stage + offline-execute + export steps
-    export-results      Export the results to a remote location, gathering their public ids
-    export-crate        Export an already executed workflow in the staging directory as an RO-Crate
+    export-results      Export the results to a remote location, gathering
+                        their public ids
+    export-crate        Export an already executed workflow in the staging
+                        directory as an RO-Crate
 
 Subparser 'init'
 usage: WfExS-backend.py init [-h]
@@ -110,7 +125,8 @@ optional arguments:
 
 Subparser 'cache'
 usage: WfExS-backend.py cache [-h] [-r] [--cascade] [-g]
-                              {ls,status,inject,fetch,rm,validate} {input,ro-crate,ga4gh-trs,workflow}
+                              {ls,status,inject,fetch,rm,validate}
+                              {input,ro-crate,ga4gh-trs,workflow}
                               [cache_command_args [cache_command_args ...]]
 
 positional arguments:
@@ -134,14 +150,19 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  -r                    Try doing the operation recursively (i.e. both metadata and data) (default: False)
-  --cascade             Try doing the operation in cascade (including the URIs which resolve to other URIs) (default: False)
+  -r                    Try doing the operation recursively (i.e. both
+                        metadata and data) (default: False)
+  --cascade             Try doing the operation in cascade (including the URIs
+                        which resolve to other URIs) (default: False)
   -g, --glob            Given cache element names are globs (default: False)
 
 Subparser 'staged-workdir'
-usage: WfExS-backend.py staged-workdir [-h] [--orcid ORCIDS] [--private-key-file PRIVATE_KEY_FILE]
-                                       [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] [--inputs] [--outputs]
-                                       [--workflow] [--containers] [--prospective] [--full] [--licence LICENCES] [-g]
+usage: WfExS-backend.py staged-workdir [-h] [--orcid ORCIDS]
+                                       [--private-key-file PRIVATE_KEY_FILE]
+                                       [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                       [--inputs] [--outputs] [--workflow]
+                                       [--containers] [--prospective] [--full]
+                                       [--licence LICENCES] [-g]
                                        {offline-exec,ls,mount,rm,shell,status,create-staged-crate,create-prov-crate}
                                        [staged_workdir_command_args [staged_workdir_command_args ...]]
 
@@ -151,53 +172,69 @@ positional arguments:
                         
                         offline-exec    Offline execute the staged instances which match the input pattern
                         ls              List the staged instances
-                                It shows the instance id, nickname,
-                                encryption and whether they are damaged
+                        	It shows the instance id, nickname,
+                        	encryption and whether they are damaged
                         mount           Mount the staged instances which match the input pattern
                         rm              Removes the staged instances which match the input pattern
                         shell           Launches a command in the workdir
-                                First parameter is either the staged instance id or the nickname.
-                                It launches the command specified after the id.
-                                If there is no additional parameters, it launches a shell
-                                in the mounted working directory of the instance
+                        	First parameter is either the staged instance id or the nickname.
+                        	It launches the command specified after the id.
+                        	If there is no additional parameters, it launches a shell
+                        	in the mounted working directory of the instance
                         status          Shows staged instances status
                         create-staged-crateIt creates an RO-Crate from the prospective provenance
                         create-prov-crateIt creates an RO-Crate from the retrospective provenance (after a workflow execution)
   staged_workdir_command_args
-                        Optional staged working directory element names (default: None)
+                        Optional staged working directory element names
+                        (default: None)
 
 optional arguments:
   -h, --help            show this help message and exit
-  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or exporting the workflow scenario (default: [])
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
   -g, --glob            Given staged workflow names are globs (default: False)
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 ro-crate-payload:
   What to include in the RO-Crate
 
-  --inputs              Should the RO-Crate contain a inputs copy (of everything)? (default: [])
-  --outputs             Should the RO-Crate contain a outputs copy (of everything)? (default: [])
-  --workflow            Should the RO-Crate contain a workflow copy (of everything)? (default: [])
-  --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
-  --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
-  --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
-  --licence LICENCES    Licence(s) to attach to the generated RO-Crate (default: [])
+  --inputs              Should the RO-Crate contain a inputs copy (of
+                        everything)? (default: [])
+  --outputs             Should the RO-Crate contain a outputs copy (of
+                        everything)? (default: [])
+  --workflow            Should the RO-Crate contain a workflow copy (of
+                        everything)? (default: [])
+  --containers          Should the RO-Crate contain a containers copy (of
+                        everything)? (default: [])
+  --prospective         Should the RO-Crate contain a prospective copy (of
+                        everything)? (default: [])
+  --full                Should the RO-Crate contain a full copy (of
+                        everything)? (default: [])
+  --licence LICENCES    Licence(s) to attach to the generated RO-Crate
+                        (default: [])
 
 Subparser 'export'
-usage: WfExS-backend.py export [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME] [--orcid ORCIDS]
-                               [--public-key-file PUBLIC_KEY_FILES] [--private-key-file PRIVATE_KEY_FILE]
-                               [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J WORKFLOWWORKINGDIRECTORY
+usage: WfExS-backend.py export [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME]
+                               [-E EXPORTSCONFIGFILENAME] [--orcid ORCIDS]
+                               [--public-key-file PUBLIC_KEY_FILES]
+                               [--private-key-file PRIVATE_KEY_FILE]
+                               [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                               -J WORKFLOWWORKINGDIRECTORY
                                [--licence LICENCES]
-                               {ls,run} [export_contents_command_args [export_contents_command_args ...]]
+                               {ls,run}
+                               [export_contents_command_args [export_contents_command_args ...]]
 
 positional arguments:
   {ls,run}              Export operations from staged working directory to perform
@@ -210,26 +247,34 @@ positional arguments:
 optional arguments:
   -h, --help            show this help message and exit
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar (default: None)
   -E EXPORTSCONFIGFILENAME, --exports-config EXPORTSCONFIGFILENAME
-                        Configuration file, describing exports which can be done (default: None)
-  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or exporting the workflow scenario (default: [])
+                        Configuration file, describing exports which can be
+                        done (default: None)
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
   --public-key-file PUBLIC_KEY_FILES
-                        This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the
-                        working directory (default: [])
+                        This parameter switches on secure processing. Path to
+                        the public key(s) to be used to encrypt the working
+                        directory (default: [])
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
-  --licence LICENCES    Licence(s) to attach to the exported contents (default: [])
+  --licence LICENCES    Licence(s) to attach to the exported contents
+                        (default: [])
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 Subparser 'list-fetchers'
 usage: WfExS-backend.py list-fetchers [-h]
@@ -244,47 +289,100 @@ optional arguments:
   -h, --help  show this help message and exit
 
 Subparser 'config-validate'
-usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME]
+usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME
+                                        [-Z SECURITYCONTEXTSCONFIGFILENAME]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
-                        Configuration file, describing workflow and inputs (default: None)
+                        Configuration file, describing workflow and inputs
+                        (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar (default: None)
 
 Subparser 'stage'
-usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-n NICKNAME_PREFIX]
-                              [--orcid ORCIDS] [--public-key-file PUBLIC_KEY_FILES] [--private-key-file PRIVATE_KEY_FILE]
+usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME
+                              [-Z SECURITYCONTEXTSCONFIGFILENAME]
+                              [-n NICKNAME_PREFIX] [--orcid ORCIDS]
+                              [--public-key-file PUBLIC_KEY_FILES]
+                              [--private-key-file PRIVATE_KEY_FILE]
                               [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
-                        Configuration file, describing workflow and inputs (default: None)
+                        Configuration file, describing workflow and inputs
+                        (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar (default: None)
   -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
-                        Nickname prefix to be used on staged workdir creation (default: None)
-  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or exporting the workflow scenario (default: [])
+                        Nickname prefix to be used on staged workdir creation
+                        (default: None)
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
   --public-key-file PUBLIC_KEY_FILES
-                        This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the
-                        working directory (default: [])
+                        This parameter switches on secure processing. Path to
+                        the public key(s) to be used to encrypt the working
+                        directory (default: [])
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
+
+Subparser 're-stage'
+usage: WfExS-backend.py re-stage [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME]
+                                 [-n NICKNAME_PREFIX] [--orcid ORCIDS]
+                                 [--public-key-file PUBLIC_KEY_FILES]
+                                 [--private-key-file PRIVATE_KEY_FILE]
+                                 [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                 -J WORKFLOWWORKINGDIRECTORY
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar (default: None)
+  -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
+                        Nickname prefix to be used on staged workdir creation
+                        (default: None)
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
+  --public-key-file PUBLIC_KEY_FILES
+                        This parameter switches on secure processing. Path to
+                        the public key(s) to be used to encrypt the working
+                        directory (default: [])
+  -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
+                        Already staged job directory (default: None)
+
+secure workdir arguments:
+  Private key and passphrase to access secured working directories
+
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
+  --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 Subparser 'mount-workdir'
-usage: WfExS-backend.py mount-workdir [-h] [--private-key-file PRIVATE_KEY_FILE]
-                                      [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J
-                                      WORKFLOWWORKINGDIRECTORY
+usage: WfExS-backend.py mount-workdir [-h]
+                                      [--private-key-file PRIVATE_KEY_FILE]
+                                      [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                      -J WORKFLOWWORKINGDIRECTORY
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -295,21 +393,28 @@ secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 Subparser 'export-stage'
-usage: WfExS-backend.py export-stage [-h] [--orcid ORCIDS] [--private-key-file PRIVATE_KEY_FILE]
-                                     [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J WORKFLOWWORKINGDIRECTORY
-                                     [--inputs] [--outputs] [--workflow] [--containers] [--prospective] [--full]
+usage: WfExS-backend.py export-stage [-h] [--orcid ORCIDS]
+                                     [--private-key-file PRIVATE_KEY_FILE]
+                                     [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                     -J WORKFLOWWORKINGDIRECTORY [--inputs]
+                                     [--outputs] [--workflow] [--containers]
+                                     [--prospective] [--full]
                                      [--licence LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or exporting the workflow scenario (default: [])
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
 
@@ -317,27 +422,38 @@ secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 ro-crate-payload:
   What to include in the RO-Crate
 
-  --inputs              Should the RO-Crate contain a inputs copy (of everything)? (default: [])
-  --outputs             Should the RO-Crate contain a outputs copy (of everything)? (default: [])
-  --workflow            Should the RO-Crate contain a workflow copy (of everything)? (default: [])
-  --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
-  --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
-  --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
-  --licence LICENCES    Licence(s) to attach to the generated RO-Crate (default: [])
+  --inputs              Should the RO-Crate contain a inputs copy (of
+                        everything)? (default: [])
+  --outputs             Should the RO-Crate contain a outputs copy (of
+                        everything)? (default: [])
+  --workflow            Should the RO-Crate contain a workflow copy (of
+                        everything)? (default: [])
+  --containers          Should the RO-Crate contain a containers copy (of
+                        everything)? (default: [])
+  --prospective         Should the RO-Crate contain a prospective copy (of
+                        everything)? (default: [])
+  --full                Should the RO-Crate contain a full copy (of
+                        everything)? (default: [])
+  --licence LICENCES    Licence(s) to attach to the generated RO-Crate
+                        (default: [])
 
 Subparser 'offline-execute'
-usage: WfExS-backend.py offline-execute [-h] [--private-key-file PRIVATE_KEY_FILE]
-                                        [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J
-                                        WORKFLOWWORKINGDIRECTORY
+usage: WfExS-backend.py offline-execute [-h]
+                                        [--private-key-file PRIVATE_KEY_FILE]
+                                        [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                        -J WORKFLOWWORKINGDIRECTORY
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -348,86 +464,121 @@ secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 Subparser 'execute'
-usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME [-Z SECURITYCONTEXTSCONFIGFILENAME] [-E EXPORTSCONFIGFILENAME]
-                                [-n NICKNAME_PREFIX] [--orcid ORCIDS] [--public-key-file PUBLIC_KEY_FILES]
+usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME
+                                [-Z SECURITYCONTEXTSCONFIGFILENAME]
+                                [-E EXPORTSCONFIGFILENAME]
+                                [-n NICKNAME_PREFIX] [--orcid ORCIDS]
+                                [--public-key-file PUBLIC_KEY_FILES]
                                 [--private-key-file PRIVATE_KEY_FILE]
-                                [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] [--inputs] [--outputs]
-                                [--workflow] [--containers] [--prospective] [--full] [--licence LICENCES]
+                                [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                [--inputs] [--outputs] [--workflow]
+                                [--containers] [--prospective] [--full]
+                                [--licence LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
   -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
-                        Configuration file, describing workflow and inputs (default: None)
+                        Configuration file, describing workflow and inputs
+                        (default: None)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
-                        Configuration file, describing security contexts, which hold credentials and similar (default: None)
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar (default: None)
   -E EXPORTSCONFIGFILENAME, --exports-config EXPORTSCONFIGFILENAME
-                        Configuration file, describing exports which can be done (default: None)
+                        Configuration file, describing exports which can be
+                        done (default: None)
   -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
-                        Nickname prefix to be used on staged workdir creation (default: None)
-  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or exporting the workflow scenario (default: [])
+                        Nickname prefix to be used on staged workdir creation
+                        (default: None)
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
   --public-key-file PUBLIC_KEY_FILES
-                        This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the
-                        working directory (default: [])
+                        This parameter switches on secure processing. Path to
+                        the public key(s) to be used to encrypt the working
+                        directory (default: [])
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 ro-crate-payload:
   What to include in the RO-Crate
 
-  --inputs              Should the RO-Crate contain a inputs copy (of everything)? (default: [])
-  --outputs             Should the RO-Crate contain a outputs copy (of everything)? (default: [])
-  --workflow            Should the RO-Crate contain a workflow copy (of everything)? (default: [])
-  --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
-  --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
-  --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
-  --licence LICENCES    Licence(s) to attach to the generated RO-Crate (default: [])
+  --inputs              Should the RO-Crate contain a inputs copy (of
+                        everything)? (default: [])
+  --outputs             Should the RO-Crate contain a outputs copy (of
+                        everything)? (default: [])
+  --workflow            Should the RO-Crate contain a workflow copy (of
+                        everything)? (default: [])
+  --containers          Should the RO-Crate contain a containers copy (of
+                        everything)? (default: [])
+  --prospective         Should the RO-Crate contain a prospective copy (of
+                        everything)? (default: [])
+  --full                Should the RO-Crate contain a full copy (of
+                        everything)? (default: [])
+  --licence LICENCES    Licence(s) to attach to the generated RO-Crate
+                        (default: [])
 
 Subparser 'export-results'
-usage: WfExS-backend.py export-results [-h] [--orcid ORCIDS] [--private-key-file PRIVATE_KEY_FILE]
-                                       [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J
-                                       WORKFLOWWORKINGDIRECTORY [--licence LICENCES]
+usage: WfExS-backend.py export-results [-h] [--orcid ORCIDS]
+                                       [--private-key-file PRIVATE_KEY_FILE]
+                                       [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                       -J WORKFLOWWORKINGDIRECTORY
+                                       [--licence LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or exporting the workflow scenario (default: [])
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
-  --licence LICENCES    Licence(s) to attach to the exported contents (default: [])
+  --licence LICENCES    Licence(s) to attach to the exported contents
+                        (default: [])
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 Subparser 'export-crate'
-usage: WfExS-backend.py export-crate [-h] [--orcid ORCIDS] [--private-key-file PRIVATE_KEY_FILE]
-                                     [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR] -J WORKFLOWWORKINGDIRECTORY
-                                     [--inputs] [--outputs] [--workflow] [--containers] [--prospective] [--full]
+usage: WfExS-backend.py export-crate [-h] [--orcid ORCIDS]
+                                     [--private-key-file PRIVATE_KEY_FILE]
+                                     [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+                                     -J WORKFLOWWORKINGDIRECTORY [--inputs]
+                                     [--outputs] [--workflow] [--containers]
+                                     [--prospective] [--full]
                                      [--licence LICENCES]
 
 optional arguments:
   -h, --help            show this help message and exit
-  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or exporting the workflow scenario (default: [])
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
 
@@ -435,22 +586,32 @@ secure workdir arguments:
   Private key and passphrase to access secured working directories
 
   --private-key-file PRIVATE_KEY_FILE
-                        This parameter passes the name of the file containing the private key needed to unlock an encrypted
-                        working directory. (default: None)
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
   --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
-                        This parameter passes the name of the environment variable containing the passphrase needed to decrypt
-                        the private key needed to unlock an encrypted working directory. (default: )
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
 
 ro-crate-payload:
   What to include in the RO-Crate
 
-  --inputs              Should the RO-Crate contain a inputs copy (of everything)? (default: [])
-  --outputs             Should the RO-Crate contain a outputs copy (of everything)? (default: [])
-  --workflow            Should the RO-Crate contain a workflow copy (of everything)? (default: [])
-  --containers          Should the RO-Crate contain a containers copy (of everything)? (default: [])
-  --prospective         Should the RO-Crate contain a prospective copy (of everything)? (default: [])
-  --full                Should the RO-Crate contain a full copy (of everything)? (default: [])
-  --licence LICENCES    Licence(s) to attach to the generated RO-Crate (default: [])
+  --inputs              Should the RO-Crate contain a inputs copy (of
+                        everything)? (default: [])
+  --outputs             Should the RO-Crate contain a outputs copy (of
+                        everything)? (default: [])
+  --workflow            Should the RO-Crate contain a workflow copy (of
+                        everything)? (default: [])
+  --containers          Should the RO-Crate contain a containers copy (of
+                        everything)? (default: [])
+  --prospective         Should the RO-Crate contain a prospective copy (of
+                        everything)? (default: [])
+  --full                Should the RO-Crate contain a full copy (of
+                        everything)? (default: [])
+  --licence LICENCES    Licence(s) to attach to the generated RO-Crate
+                        (default: [])
 ```
 
 WfExS commands are:

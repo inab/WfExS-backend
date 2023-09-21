@@ -102,6 +102,10 @@ class WfExS_Commands(StrDocEnum):
         "stage",
         "Prepare the staging (working) directory for workflow execution, fetching dependencies and contents",
     )
+    ReStage = (
+        "re-stage",
+        "Prepare a new staging (working) directory for workflow execution, repeating the fetch of dependencies and contents",
+    )
     MountWorkDir = (
         "mount-workdir",
         "Mount the encrypted staging directory on secure staging scenarios",
@@ -222,7 +226,7 @@ def genParserSub(
             help="Configuration file, describing workflow and inputs",
         )
 
-    if preStageParams or exportParams:
+    if preStageParams or exportParams or command == WfExS_Commands.ReStage:
         ap_.add_argument(
             "-Z",
             "--creds-config",
@@ -238,7 +242,9 @@ def genParserSub(
             help="Configuration file, describing exports which can be done",
         )
 
-    if preStageParams and command not in (WfExS_Commands.ConfigValidate,):
+    if (
+        preStageParams and command not in (WfExS_Commands.ConfigValidate,)
+    ) or command == WfExS_Commands.ReStage:
         ap_.add_argument(
             "-n",
             "--nickname-prefix",
@@ -250,7 +256,7 @@ def genParserSub(
         (preStageParams and command not in (WfExS_Commands.ConfigValidate,))
         or crateParams
         or exportParams
-        or command == WfExS_Commands.ExportResults
+        or command in (WfExS_Commands.ReStage, WfExS_Commands.ExportResults)
     ):
         ap_.add_argument(
             "--orcid",
@@ -260,7 +266,11 @@ def genParserSub(
             help="ORCID(s) of the person(s) staging, running or exporting the workflow scenario",
         )
 
-    if command in (WfExS_Commands.Stage, WfExS_Commands.Execute) or exportParams:
+    if (
+        command
+        in (WfExS_Commands.Stage, WfExS_Commands.ReStage, WfExS_Commands.Execute)
+        or exportParams
+    ):
         ap_.add_argument(
             "--public-key-file",
             dest="public_key_files",
@@ -1025,6 +1035,8 @@ def main() -> None:
 
     ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)
 
+    ap_r_s = genParserSub(sp, WfExS_Commands.ReStage, postStageParams=True)
+
     ap_m = genParserSub(sp, WfExS_Commands.MountWorkDir, postStageParams=True)
 
     ap_es = genParserSub(
@@ -1143,6 +1155,7 @@ def main() -> None:
         WfExS_Commands.ListFetchers,
         WfExS_Commands.ListPushers,
         WfExS_Commands.Stage,
+        WfExS_Commands.ReStage,
         WfExS_Commands.Execute,
     ):
         updated_config, local_config = WfExSBackend.bootstrap(
@@ -1199,6 +1212,7 @@ def main() -> None:
     wfInstance = None
     if command in (
         WfExS_Commands.MountWorkDir,
+        WfExS_Commands.ReStage,
         WfExS_Commands.Export,
         WfExS_Commands.ExportStage,
         WfExS_Commands.OfflineExecute,
@@ -1263,6 +1277,30 @@ def main() -> None:
     if command != WfExS_Commands.MountWorkDir:
         atexit.register(wfInstance.cleanup)
 
+    # The special case of re-staging
+    if command == WfExS_Commands.ReStage:
+        source_wfInstance = wfInstance
+        source_wfSetup = source_wfInstance.getStagedSetup()
+        print(
+            f"\t- Source working directory is {source_wfSetup.work_dir}",
+            file=sys.stderr,
+        )
+        print(
+            "\t  Source instance {} (nickname '{}')".format(
+                source_wfSetup.instance_id, source_wfSetup.nickname
+            )
+        )
+        sys.stderr.flush()
+        wfInstance = wfBackend.fromPreviousInstanceDeclaration(
+            source_wfInstance,
+            args.securityContextsConfigFilename,
+            nickname_prefix=args.nickname_prefix,
+            public_key_filenames=args.public_key_files,
+            private_key_filename=args.private_key_file,
+            private_key_passphrase=private_key_passphrase,
+            orcids=op_orcids,
+        )
+
     wfSetup = wfInstance.getStagedSetup()
     print("\t- Working directory will be {}".format(wfSetup.work_dir), file=sys.stderr)
     sys.stderr.flush()
@@ -1271,20 +1309,30 @@ def main() -> None:
     if command == WfExS_Commands.Export:
         sys.exit(processExportCommand(wfInstance, args, logLevel))
 
-    if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
+    if command in (
+        WfExS_Commands.Stage,
+        WfExS_Commands.ReStage,
+        WfExS_Commands.Execute,
+    ):
         print(
-            "\t- Instance {} (nickname '{}') (to be used with -J)".format(
+            "\t  Instance {} (nickname '{}') (to be used with -J)".format(
                 wfSetup.instance_id, wfSetup.nickname
             )
         )
         stagedSetup = wfInstance.stageWorkDir()
-        if command == WfExS_Commands.Stage:
+        if command != WfExS_Commands.Execute:
             print(
                 "\t- Instance {} (nickname '{}') is {} ready".format(
                     wfSetup.instance_id,
                     wfSetup.nickname,
                     "NOT" if stagedSetup.is_damaged else "now",
                 )
+            )
+            sys.exit(
+                1
+                if stagedSetup.is_damaged
+                or not isinstance(wfInstance.stageMarshalled, datetime.datetime)
+                else 0
             )
 
     # Depending on the parameters, it might not exist
