@@ -18,6 +18,7 @@
 # These are the software versions being installed
 # in the virtual environment
 APPTAINER_VER=1.2.2
+FUSE2FS_VER=1.47.0
 GO_VER=1.20.7
 
 # These are placeholders
@@ -37,7 +38,7 @@ case "${wfexsDir}" in
 	;;
 esac
 
-downloadDir="$(mktemp -d --tmpdir wfexs_apptainer_installer.XXXXXXXXXXX)"
+downloadDir="$(mktemp -d --tmpdir wfexs_fuse2fs_installer.XXXXXXXXXXX)"
 echo "$0: ${downloadDir} will be used to download third party dependencies, and later removed"
 
 cleanup() {
@@ -57,18 +58,15 @@ if [ $# -gt 0 ]; then
 	if [ "$1" == "force" ] ; then
 		doForce=1
 		if [ $# -gt 1 ] ; then
-			APPTAINER_VER="$2"
-			if [ $# -gt 2 ] ; then
-				GO_VER="$3"
-			fi
+			SQUASHFUSE_VER="$2"
 		fi
 	fi
 fi
 
 # Before installing, check whether apptainer is already available
 if [ -z "$doForce" ] ; then
-	if type -a apptainer >& /dev/null ; then
-		echo "Apptainer $(apptainer version) is already available in the system. Skipping install"
+	if type -a fuse2fs >& /dev/null ; then
+		echo "fuse2fs $(fuse2fs -V 2>&1|head -n 1) is already available in the system. Skipping install"
 		exit 0
 	fi
 fi
@@ -82,7 +80,7 @@ fi
 source "$wfexsDir"/basic-installer.bash
 
 failed=
-for cmd in mksquashfs squashfuse fuse2fs ; do
+for cmd in make cc ; do
 	type -a "$cmd" 2> /dev/null
 	retval=$?
 	if [ "$retval" -ne 0 ] ; then
@@ -96,32 +94,27 @@ if [ -n "$failed" ] ; then
 fi
 
 
-# Now, it is time to check apptainer binaries availability
+# Now, it is time to check fuse2fs binaries availability
 if [ -z "$doForce" ] ; then
-	if [ -x "${envDir}/bin/apptainer" ] ; then
-		echo "Apptainer $(apptainer version) is already available in the environment. Skipping install"
+	if [ -x "${envDir}/bin/fuse2fs" ] ; then
+		echo "fuse2fs $("${envDir}/bin/fuse2fs" -V 2>&1|head -n 1) is already available in the environment. Skipping install"
 		exit 0
 	fi
 fi
 
-# Compilation artifacts should go to the temporary download directory
-checkInstallGO "${GO_VER}" "${platformOS}" "${platformArchGO}" "${downloadDir}"
-
 # Fetch and compile apptainer
-apptainerBundlePrefix=apptainer-"${APPTAINER_VER}"
-apptainerBundle="${apptainerBundlePrefix}".tar.gz
+fuse2fsPrj=e2fsprogs
+fuse2fsBundlePrefix="${fuse2fsPrj}"-"${FUSE2FS_VER}"
+fuse2fsBundle="${fuse2fsBundlePrefix}".tar.gz
 
-( cd "${downloadDir}" && curl -L -O https://github.com/apptainer/apptainer/releases/download/v"${APPTAINER_VER}"/"${apptainerBundle}" )
-tar -x -z -C "${downloadDir}" -f "${downloadDir}/${apptainerBundle}"
-# Removing apptainer bundle
-rm "${downloadDir}/${apptainerBundle}"
-cd "${downloadDir}"/"${apptainerBundlePrefix}"
+( cd "${downloadDir}" && curl -L -O https://downloads.sourceforge.net/project/"${fuse2fsPrj}"/"${fuse2fsPrj}"/v"${FUSE2FS_VER}"/"${fuse2fsBundle}" )
+tar -x -z -C "${downloadDir}" -f "${downloadDir}/${fuse2fsBundle}"
+# Removing fuse2fs bundle
+rm "${downloadDir}/${fuse2fsBundle}"
+cd "${downloadDir}"/"${fuse2fsBundlePrefix}"
 
-# Now, the right moment to compile and install rootless apptainer
-./mconfig -b ./builddir --without-suid --prefix="${envDir}"
-make -C ./builddir
-make -C ./builddir install
+# Now, the right moment to compile and install rootless fuse2fs
+mkdir build && cd build
+../configure --prefix="${envDir}"
+make && cp -p misc/fuse2fs "${envDir}/bin"
 
-# Last, in order to keep compatibility, there should be a symlink called
-# singularity pointing to apptainer
-ln -sf apptainer "${envDir}"/bin/singularity
