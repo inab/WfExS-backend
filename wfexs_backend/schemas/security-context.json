@@ -4,9 +4,8 @@
 	"title": "WfExS-backend security context",
 	"description": "WfExS-backend security context file (EOSC-Life Demonstrator 7 JSON Schemas)",
 	"type": "object",
-	"patternProperties": {
-		"^[^:;]+$": {
-			"title": "Security context",
+	"definitions": {
+		"SecContext": {
 			"type": "object",
 			"oneOf": [
 				{
@@ -76,6 +75,16 @@
 				}
 			},
 			"minProperties": 1
+		}
+	},
+	"patternProperties": {
+		"^[^:;]+$": {
+			"title": "Security context by name",
+			"$ref": "#/definitions/SecContext"
+		},
+		"^[a-z][a-z0-9+.-]*:.*$": {
+			"title": "Security context by prefix",
+			"$ref": "#/definitions/SecContext"
 		}
 	},
 	"additionalProperties": false
