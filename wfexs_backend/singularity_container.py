@@ -76,6 +76,7 @@ if TYPE_CHECKING:
         alias: Required[Optional[str]]
         dcd: NotRequired[str]
         manifest: NotRequired[Mapping[str, Any]]
+        image_signature: NotRequired[Fingerprint]
 
 
 from .container import (
@@ -620,6 +621,7 @@ STDERR
                         repo = metadata["repo"]
                         alias = metadata.get("alias")
                         partial_fingerprint = metadata.get("dcd")
+                        imageSignature_in_metadata = metadata.get("image_signature")
                         manifest = metadata.get("manifest")
                         if partial_fingerprint is not None:
                             fingerprint = cast(
@@ -628,12 +630,19 @@ STDERR
                         else:
                             # TODO: is there a better alternative?
                             fingerprint = cast("Fingerprint", tag_name)
+
+                        if imageSignature_in_metadata is not None:
+                            # Do the signatures match?
+                            fetch_metadata = (
+                                imageSignature != imageSignature_in_metadata
+                            )
                     else:
                         registryServer = ""
                         registryType = None
                         repo = ""
                         alias = ""
                         partial_fingerprint = ""
+                        imageSignature_in_metadata = None
                         manifest = None
                         fingerprint = cast("Fingerprint", tag_name)
             except Exception as e:
@@ -673,6 +682,7 @@ STDERR
                 tmp_meta: "SingularityManifest"
                 if tag_details is not None:
                     tmp_meta = {
+                        "image_signature": imageSignature,
                         "registryServer": tag_details.registryServer,
                         "registryType": "docker",
                         "repo": tag_details.repo,
@@ -687,6 +697,7 @@ STDERR
                 else:
                     # TODO: Which metadata could we add for other schemes?
                     tmp_meta = {
+                        "image_signature": imageSignature,
                         "registryServer": parsedTag.netloc,
                         "registryType": parsedTag.scheme,
                         "repo": singTag,
