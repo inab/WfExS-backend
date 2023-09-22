@@ -77,6 +77,7 @@ try:
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
+from .security_context import SecurityContextVault
 from .wfexs_backend import WfExSBackend
 from .workflow import WF
 from . import get_WfExS_version
@@ -493,22 +494,17 @@ def processCacheCommand(
     elif args.cache_command == WfExS_Cache_Commands.Fetch:
         if len(args.cache_command_args) == 1 or len(args.cache_command_args) == 3:
             uri_to_fetch = args.cache_command_args[0]
-            secContext = None
+            vault = SecurityContextVault()
             if len(args.cache_command_args) == 3:
                 secContextFilename = args.cache_command_args[1]
                 secContextName = args.cache_command_args[2]
 
                 if os.path.exists(secContextFilename):
-                    (
-                        numErrors,
-                        secContextBlock,
-                    ) = wfBackend.parseAndValidateSecurityContextFile(
-                        secContextFilename
-                    )
-                    if numErrors > 0:
-                        print(
-                            f"ERROR: security context file {secContextFilename} has {numErrors} errors",
-                            file=sys.stderr,
+                    try:
+                        vault = SecurityContextVault(secContextFilename)
+                    except:
+                        logging.exception(
+                            f"ERROR: security context file {secContextFilename} is corrupted"
                         )
                         retval = 1
                 else:
@@ -519,7 +515,8 @@ def processCacheCommand(
                     retval = 1
 
                 if retval == 0:
-                    secContext = secContextBlock.get(secContextName)
+                    # TODO: Revise and Fix this
+                    secContext = vault.getContext(uri_to_fetch, secContextName)
                     if secContext is None:
                         print(
                             f"ERROR: security context file {secContextFilename} does not contain the security context {secContextName}",
@@ -529,7 +526,11 @@ def processCacheCommand(
 
             if retval == 0:
                 cached_content = wfBackend.cacheFetch(
-                    uri_to_fetch, args.cache_type, offline=False, secContext=secContext
+                    uri_to_fetch,
+                    args.cache_type,
+                    offline=False,
+                    vault=vault,
+                    sec_context_name=secContextName,
                 )
                 print(
                     f"{cached_content.kind}\t{cached_content.path}\t{cached_content.licences}\t{cached_content.metadata_array}"

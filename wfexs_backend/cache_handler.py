@@ -73,6 +73,10 @@ if TYPE_CHECKING:
         StatefulFetcher,
     )
 
+    from .security_context import (
+        SecurityContextVault,
+    )
+
     class RelAbsDict(TypedDict):
         relative: RelPath
         absolute: AbsPath
@@ -823,7 +827,8 @@ class SchemeHandlerCacheHandler:
         destdir: "Optional[AbsPath]" = None,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
-        secContext: "Optional[SecurityContextConfig]" = None,
+        vault: "Optional[SecurityContextVault]" = None,
+        sec_context_name: "Optional[str]" = None,
     ) -> "CachedContent":
         if destdir is None:
             destdir = self.cacheDir
@@ -878,7 +883,12 @@ class SchemeHandlerCacheHandler:
         metadata_array = []
         licences: "MutableSequence[URIType]" = []
         # The security context could be augmented, so avoid side effects
-        currentSecContext = dict() if secContext is None else copy.copy(secContext)
+        if vault is not None and sec_context_name is not None:
+            # TODO: revise this
+            secContext = vault.getContext("", sec_context_name)
+            currentSecContext = copy.copy(secContext)
+        else:
+            currentSecContext = dict()
 
         relFinalCachedFilename: "Optional[RelPath]"
         finalCachedFilename: "Optional[AbsPath]"
@@ -1005,6 +1015,11 @@ class SchemeHandlerCacheHandler:
                     )
                     if attachedSecContext is not None:
                         usableSecContext.update(attachedSecContext)
+                    elif vault is not None:
+                        # Getting context by URI prefix
+                        prefixSecContext = vault.getContext(the_remote_file)
+                        if prefixSecContext is not None:
+                            usableSecContext.update(prefixSecContext)
 
                     uncachedInputs.append(
                         (

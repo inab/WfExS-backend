@@ -35,6 +35,7 @@ import tempfile
 import types
 import urllib.parse
 import uuid
+import warnings
 
 from typing import (
     cast,
@@ -87,6 +88,8 @@ from .engine import (
     WORKDIR_WORKFLOW_META_FILE,
 )
 from .ro_crate import FixedROCrate
+
+from .security_context import SecurityContextVault
 
 from .utils.marshalling_handling import unmarshall_namedtuple
 from .utils.misc import config_validate
@@ -369,7 +372,7 @@ class WfExSBackend:
         cls,
         workflow_meta: "WorkflowMetaConfigBlock",
         local_config: "WfExSConfigBlock",
-        creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        vault: "Optional[SecurityContextVault]" = None,
         config_directory: "Optional[AnyPath]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
@@ -380,16 +383,17 @@ class WfExSBackend:
         :param workflow_meta: The configuration describing both the workflow
         and the inputs to use when it is being instantiated.
         :param local_config: Relevant local configuration, like the cache directory.
-        :param creds_config: Dictionary with the different credential contexts (to be implemented)
         :param config_directory:
         :type workflow_meta: dict
         :type local_config: dict
-        :type creds_config: dict
         :type config_directory:
         :return: Workflow configuration
         """
-        if creds_config is None:
-            creds_config = {}
+        warnings.warn(
+            "fromDescription is being deprecated",
+            PendingDeprecationWarning,
+            stacklevel=2,
+        )
 
         _, updated_local_config = cls.bootstrap(
             local_config, config_directory=config_directory
@@ -405,7 +409,7 @@ class WfExSBackend:
             outputs=workflow_meta.get("outputs", {}),
             default_actions=workflow_meta.get("default_actions", []),
             workflow_config=workflow_meta.get("workflow_config"),
-            creds_config=creds_config,
+            vault=vault,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
@@ -774,7 +778,7 @@ class WfExSBackend:
         outputs: "Optional[OutputsBlock]" = None,
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
         workflow_config: "Optional[WorkflowConfigBlock]" = None,
-        creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        vault: "Optional[SecurityContextVault]" = None,
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
@@ -793,7 +797,7 @@ class WfExSBackend:
             outputs=outputs,
             default_actions=default_actions,
             workflow_config=workflow_config,
-            creds_config=creds_config,
+            vault=vault,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
@@ -1011,9 +1015,10 @@ class WfExSBackend:
         numErrors = 0
         self.logger.info(f"Validating {securityContextsConfigFilename}")
 
-        creds_config = WF.ReadSecurityContextFile(securityContextsConfigFilename)
+        creds_config, valErrors = SecurityContextVault.ReadSecurityContextFile(
+            securityContextsConfigFilename
+        )
 
-        valErrors = config_validate(creds_config, WF.SECURITY_CONTEXT_SCHEMA)
         if len(valErrors) == 0:
             self.logger.info("No validation errors in security block")
         else:
@@ -1061,7 +1066,7 @@ class WfExSBackend:
     def fromDescription(
         self,
         workflow_meta: "WorkflowMetaConfigBlock",
-        creds_config: "Optional[SecurityContextConfigBlock]" = None,
+        vault: "Optional[SecurityContextVault]" = None,
         orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
@@ -1079,11 +1084,16 @@ class WfExSBackend:
         :type paranoidMode:
         :return: Workflow configuration
         """
+        warnings.warn(
+            "fromDescription is being deprecated",
+            PendingDeprecationWarning,
+            stacklevel=2,
+        )
 
         return WF.FromDescription(
             self,
             workflow_meta,
-            creds_config,
+            SecurityContextVault() if vault is None else vault,
             orcids=orcids,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
@@ -1473,7 +1483,8 @@ class WfExSBackend:
         offline: "bool",
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
-        secContext: "Optional[SecurityContextConfig]" = None,
+        vault: "Optional[SecurityContextVault]" = None,
+        sec_context_name: "Optional[str]" = None,
     ) -> "CachedContent":
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
@@ -1485,7 +1496,7 @@ class WfExSBackend:
         :param ignoreCache: Even if the content is cache, discard and re-fetch it
         :param registerInCache: Should the fetched content be registered
         in the cache?
-        :param secContext: The security context which has to be passed to
+        :param vault: The security context which has to be passed to
         the fetchers, in case they have to be used
         """
         if cacheType != CacheType.Workflow:
@@ -1495,7 +1506,8 @@ class WfExSBackend:
                 offline=offline,
                 ignoreCache=ignoreCache,
                 registerInCache=registerInCache,
-                secContext=secContext,
+                vault=vault,
+                sec_context_name=sec_context_name,
             )
         else:
             workflow_dir, repo, _, effective_checkout = self.cacheWorkflow(
@@ -2346,7 +2358,7 @@ class WfExSBackend:
         self,
         remote_file: "Union[LicensedURI, Sequence[LicensedURI]]",
         dest: "Union[AbsPath, CacheType]",
-        secContext: "Optional[SecurityContextConfig]" = None,
+        vault: "Optional[SecurityContextVault]" = None,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
@@ -2412,7 +2424,7 @@ class WfExSBackend:
             offline=offline,
             ignoreCache=ignoreCache,
             registerInCache=registerInCache,
-            secContext=secContext,
+            vault=vault,
         )
         # TODO: Properly test alternatives
         downloaded_uri = firstURI.uri
