@@ -801,6 +801,7 @@ class IdentifiedWorkflow(NamedTuple):
 
 class StagedSetup(NamedTuple):
     instance_id: "WfExSInstanceId"
+    container_type: "ContainerType"
     nickname: "Optional[str]"
     creation: "datetime.datetime"
     workflow_config: "Optional[Mapping[str, Any]]"

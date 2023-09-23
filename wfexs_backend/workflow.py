@@ -42,6 +42,7 @@ from typing import (
 )
 
 from .common import (
+    ContainerType,
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
@@ -393,10 +394,19 @@ class WF:
         if not isinstance(workflow_config, dict):
             workflow_config = dict()
 
-        if workflow_config.get("containerType") is None:
-            workflow_config["containerType"] = self.wfexs.local_config.get(
-                "tools", dict()
-            ).get("containerType", DEFAULT_CONTAINER_TYPE.value)
+        # The container type first is looked up at the workflow configuration
+        # and later at the local configuration
+        container_type_str = workflow_config.get("containerType")
+        if container_type_str is None:
+            self.explicit_container_type = False
+            container_type_str = self.wfexs.local_config.get("tools", dict()).get(
+                "containerType", DEFAULT_CONTAINER_TYPE.value
+            )
+            workflow_config["containerType"] = container_type_str
+        else:
+            self.explicit_container_type = True
+        # This property should mutate after unmarshalling the config
+        self.container_type_str = container_type_str
 
         self.outputs: "Optional[Sequence[ExpectedOutput]]"
         self.default_actions: "Optional[Sequence[ExportAction]]"
@@ -645,6 +655,18 @@ class WF:
                         self.workflow_config = None
                         # self.marshallConfig(overwrite=False)
             else:
+                # This check has to be done before the marshalling of the config
+                # in order to avoid very ill stage directories
+                try:
+                    container_type = ContainerType(self.container_type_str)
+                except ValueError as ve:
+                    errstr = f"Unable to initialize, {self.container_type_str} (explicitly set: {'yes' if self.explicit_container_type else 'no'}) is not a valid container type"
+                    self.logger.error(errstr)
+                    raise WFException(errstr) from ve
+                # As it is a new deployment, forget the concern about
+                # the container type
+                self.explicit_container_type = True
+
                 os.makedirs(self.metaDir, exist_ok=True)
                 self.marshallConfig(overwrite=True)
                 is_damaged = False
@@ -661,8 +683,19 @@ class WF:
             self.consolidatedWorkflowDir = None
             self.containersDir = None
 
+        # Now it is the moment to check. It could happen that the
+        # working directory comes from a version where a new container
+        # type is supported, but not in this one
+        try:
+            container_type = ContainerType(self.container_type_str)
+        except ValueError as ve:
+            errstr = f"Unable to initialize, {self.container_type_str} (explicitly set: {'yes' if self.explicit_container_type else 'no'}) is not a valid container type"
+            self.logger.error(errstr)
+            raise WFException(errstr) from ve
+
         self.stagedSetup = StagedSetup(
             instance_id=self.instanceId,
+            container_type=container_type,
             nickname=self.nickname,
             creation=self.workdir_creation,
             workflow_config=self.workflow_config,
@@ -1740,8 +1773,6 @@ class WF:
         return remote_pairs
 
     def _formatStringFromPlaceHolders(self, the_string: "str") -> "str":
-        assert self.placeholders is not None
-
         i_l_the_string = the_string.find("{")
         i_r_the_string = the_string.find("}")
         if (
@@ -3014,8 +3045,9 @@ class WF:
                 or not os.path.exists(workflow_meta_filename)
                 or os.path.getsize(workflow_meta_filename) == 0
             ):
+                staging_recipe = self.staging_recipe
                 with open(workflow_meta_filename, mode="w", encoding="utf-8") as wmF:
-                    yaml.dump(self.staging_recipe, wmF, Dumper=YAMLDumper)
+                    yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
 
             self.configMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc
@@ -3036,9 +3068,12 @@ class WF:
                 self.metaDir, WORKDIR_WORKFLOW_META_FILE
             )
             # If the file does not exist, fail fast
-            if not os.path.isfile(workflow_meta_filename):
+            if (
+                not os.path.isfile(workflow_meta_filename)
+                or os.stat(workflow_meta_filename).st_size == 0
+            ):
                 self.logger.debug(
-                    f"Marshalled config file {workflow_meta_filename} does not exist"
+                    f"Marshalled config file {workflow_meta_filename} does not exist or is empty"
                 )
                 return False
 
@@ -3073,6 +3108,13 @@ class WF:
                     self.formatted_params = self.formatParams(self.params)
                     self.formatted_environment = self.formatParams(self.environment)
 
+                    # The right moment to rescue this?
+                    if isinstance(self.workflow_config, dict):
+                        container_type_str = self.workflow_config.get("containerType")
+                        if container_type_str is not None:
+                            self.explicit_container_type = True
+                            self.container_type_str = container_type_str
+
                     outputsM = workflow_meta.get("outputs")
                     if isinstance(outputsM, dict):
                         outputs = list(outputsM.values())
@@ -3098,25 +3140,27 @@ class WF:
                         self.default_actions = None
             except IOError as ioe:
                 config_unmarshalled = False
-                self.logger.debug(
+                self.logger.log(
+                    logging.WARNING if fail_ok else logging.ERROR,
                     "Marshalled config file {} I/O errors".format(
                         workflow_meta_filename
-                    )
+                    ),
                 )
                 if not fail_ok:
                     raise WFException("ERROR opening/reading config file") from ioe
             except TypeError as te:
                 config_unmarshalled = False
-                self.logger.debug(
+                self.logger.log(
+                    logging.WARNING if fail_ok else logging.ERROR,
                     "Marshalled config file {} unmarshalling errors".format(
                         workflow_meta_filename
-                    )
+                    ),
                 )
                 if not fail_ok:
                     raise WFException("ERROR unmarshalling config file") from te
             except Exception as e:
                 config_unmarshalled = False
-                self.logger.debug(
+                self.logger.exception(
                     "Marshalled config file {} misc errors".format(
                         workflow_meta_filename
                     )
@@ -3262,10 +3306,50 @@ class WF:
                     self.engineDesc = stage["engineDesc"]
                     self.engineVer = stage["engineVer"]
                     self.materializedEngine = stage["materializedEngine"]
+                    if (
+                        self.materializedEngine is not None
+                        and stage["containers"] is not None
+                        and self.materializedEngine.containers is None
+                    ):
+                        self.materializedEngine = self.materializedEngine._replace(
+                            containers=stage["containers"]
+                        )
                     self.materializedParams = stage["materializedParams"]
                     self.materializedEnvironment = stage.get(
                         "materializedEnvironment", []
                     )
+
+                    # Trying to identify the right container type
+                    # for old staged directories
+                    if (
+                        not self.explicit_container_type
+                        and self.materializedEngine is not None
+                    ):
+                        guessed_container_type: "ContainerType"
+                        if (
+                            self.materializedEngine.containers is None
+                            or len(self.materializedEngine.containers) == 0
+                        ):
+                            if (
+                                self.materializedEngine.operational_containers is None
+                                or len(self.materializedEngine.operational_containers)
+                                == 0
+                            ):
+                                guessed_container_type = ContainerType.NoContainer
+                            else:
+                                guessed_container_type = (
+                                    self.materializedEngine.operational_containers[
+                                        0
+                                    ].type
+                                )
+                        else:
+                            guessed_container_type = self.materializedEngine.containers[
+                                0
+                            ].type
+
+                        self.container_type_str = guessed_container_type.value
+                        self.stagedSetup._replace(container_type=guessed_container_type)
+
                     self.containerEngineVersion = stage.get("containerEngineVersion")
                     self.containerEngineOs = stage.get("containerEngineOs")
                     if self.containerEngineOs is None:
@@ -3293,6 +3377,12 @@ class WF:
                 if fail_ok:
                     return self.stageMarshalled
                 raise WFException(errmsg) from e
+
+            # Now, time to save the late changes
+            if not self.explicit_container_type and self.materializedEngine is not None:
+                self.explicit_container_type = True
+                self.workflow_config["containerType"] = self.container_type_str
+                self.marshallConfig(overwrite=True)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(marshalled_stage_file), tz=datetime.timezone.utc

@@ -167,6 +167,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     def __init__(
         self,
+        container_type: "ContainerType" = ContainerType.NoContainer,
         cacheDir: "Optional[AnyPath]" = None,
         workflow_config: "Optional[Mapping[str, Any]]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
@@ -184,6 +185,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         config_directory: "Optional[AnyPath]" = None,
     ):
         super().__init__(
+            container_type=container_type,
             cacheDir=cacheDir,
             workflow_config=workflow_config,
             local_config=local_config,

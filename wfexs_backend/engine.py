@@ -144,6 +144,7 @@ CONTAINER_FACTORY_CLASSES: "Sequence[Type[ContainerFactory]]" = [
 class WorkflowEngine(AbstractWorkflowEngineType):
     def __init__(
         self,
+        container_type: "ContainerType" = ContainerType.NoContainer,
         cacheDir: "Optional[AnyPath]" = None,
         workflow_config: "Optional[Mapping[str, Any]]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
@@ -319,17 +320,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             engine_mode = EngineMode(engine_mode)
         self.engine_mode = engine_mode
 
-        # The container type first is looked up at the workflow configuration
-        # and later at the local configuration
-        container_type_str = workflow_config.get("containerType")
-        if container_type_str is None:
-            container_type_str = local_config.get("tools", {}).get("containerType")
-
-        if container_type_str is None:
-            container_type = DEFAULT_CONTAINER_TYPE
-        else:
-            container_type = ContainerType(container_type_str)
-
         if not self.supportsContainerType(container_type):
             raise WorkflowEngineException(
                 f"Current implementation of {self.__class__.__name__} does not support {container_type}"
@@ -415,6 +405,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
 
         return cls(
+            container_type=staged_setup.container_type,
             workflow_config=staged_setup.workflow_config,
             engineTweaksDir=staged_setup.engine_tweaks_dir,
             workDir=staged_setup.work_dir,
