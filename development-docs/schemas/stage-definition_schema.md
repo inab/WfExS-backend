@@ -1152,12 +1152,12 @@ Must be one of:
 
 ##### <a name="params_pattern1_pattern1_i4_url_oneOf_i2"></a>9.1.5.12.3. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > url > oneOf > LicensedURI`
 
-|                           |                                                                           |
-| ------------------------- | ------------------------------------------------------------------------- |
-| **Type**                  | `object`                                                                  |
-| **Required**              | No                                                                        |
-| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
-| **Defined in**            | #/definitions/LicensedURI                                                 |
+|                           |                                                         |
+| ------------------------- | ------------------------------------------------------- |
+| **Type**                  | `object`                                                |
+| **Required**              | No                                                      |
+| **Additional properties** | [[Not allowed]](# "Additional Properties not allowed.") |
+| **Defined in**            | #/definitions/LicensedURI                               |
 
 | Property                                                                          | Pattern | Type            | Deprecated | Definition | Title/Description       |
 | --------------------------------------------------------------------------------- | ------- | --------------- | ---------- | ---------- | ----------------------- |
@@ -1377,7 +1377,7 @@ Must be one of:
 | ------------------------- | ------------------------------------------------------------------------------------- |
 | **Type**                  | `object`                                                                              |
 | **Required**              | No                                                                                    |
-| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.")             |
+| **Additional properties** | [[Not allowed]](# "Additional Properties not allowed.")                               |
 | **Same definition as**    | [params_pattern1_pattern1_i4_url_oneOf_i2](#params_pattern1_pattern1_i4_url_oneOf_i2) |
 
 ##### <a name="params_pattern1_pattern1_i4_url_oneOf_i3_items_oneOf_i1"></a>9.1.5.12.4.1.2. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > url > oneOf > item 3 > item 3 items > oneOf > PlainURI`
@@ -1437,7 +1437,7 @@ Must be one of:
 | ------------------------- | ------------------------------------------------------------------------------------- |
 | **Type**                  | `object`                                                                              |
 | **Required**              | No                                                                                    |
-| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.")             |
+| **Additional properties** | [[Not allowed]](# "Additional Properties not allowed.")                               |
 | **Same definition as**    | [params_pattern1_pattern1_i4_url_oneOf_i2](#params_pattern1_pattern1_i4_url_oneOf_i2) |
 
 ##### <a name="params_pattern1_pattern1_i4_url_oneOf_i3_items_oneOf_i3_items_oneOf_i1"></a>9.1.5.12.4.1.4.1.2. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > url > oneOf > item 3 > item 3 items > oneOf > item 3 > item 3 items > oneOf > PlainURI`
@@ -1771,4 +1771,4 @@ Must be one of:
 | **Tuple validation** | N/A                |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2023-08-10 at 13:15:14 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2023-09-26 at 08:59:05 +0000
