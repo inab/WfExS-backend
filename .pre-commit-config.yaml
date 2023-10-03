@@ -17,7 +17,8 @@ repos:
         types:
           - python
 #        files: \.py$
-        exclude: "^[^/]*env/|development-[^/]*/|docs/"
+#        exclude: "^[^/]*env/|development-[^/]*/|docs/"
+        exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
         require_serial: true
 #        entry: ./basic-installer.bash mypy --strict
         entry: mypy --strict --show-error-codes --no-warn-unused-ignores
