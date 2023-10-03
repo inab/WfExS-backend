@@ -147,7 +147,7 @@ from .common import (
 
 from . import __url__ as wfexs_backend_url
 from . import __official_name__ as wfexs_backend_name
-from . import get_WfExS_version
+from . import get_WfExS_version_str
 
 
 class ROCrateGenerationException(AbstractWfExSException):
@@ -906,11 +906,7 @@ class WorkflowRunROCrate:
         wf_wfexs = self.crate.add(wf_wfexs)
         wf_wfexs["name"] = wfexs_backend_name
         wf_wfexs.url = wfexs_backend_url
-        wfexs_version = get_WfExS_version()
-        if wfexs_version[1] is None:
-            verstr = wfexs_version[0]
-        else:
-            verstr = "{0[0]} ({0[1]})".format(wfexs_version)
+        verstr = get_WfExS_version_str()
         wf_wfexs["softwareVersion"] = verstr
 
         # And the README.md
