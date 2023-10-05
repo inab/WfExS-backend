@@ -42,7 +42,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyContent,
-        ExportItem,
         MaterializedInput,
         MaterializedOutput,
         RelPath,
