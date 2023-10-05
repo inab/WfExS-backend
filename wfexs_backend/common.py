@@ -790,15 +790,6 @@ class RemoteRepo(NamedTuple):
     guess_flavor: "Optional[RepoGuessFlavor]" = None
 
 
-class IdentifiedWorkflow(NamedTuple):
-    """
-    workflow_type: The identified workflow type
-    """
-
-    workflow_type: "WorkflowType"
-    remote_repo: "RemoteRepo"
-
-
 class StagedSetup(NamedTuple):
     instance_id: "WfExSInstanceId"
     container_type: "ContainerType"
