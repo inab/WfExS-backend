@@ -47,7 +47,6 @@ from .common import (
     MaterializedContent,
     MaterializedInput,
     StagedExecution,
-    WorkflowType,
 )
 
 if TYPE_CHECKING:
@@ -78,7 +77,6 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         MaterializedOutput,
-        MaterializedWorkflowEngine,
         RelPath,
         SymbolicParamName,
         URIType,
@@ -95,10 +93,12 @@ if TYPE_CHECKING:
 
 from .engine import WorkflowEngine, WorkflowEngineException
 from .engine import (
+    MaterializedWorkflowEngine,
+    STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
     WORKDIR_STDOUT_FILE,
     WORKDIR_STDERR_FILE,
-    STATS_DAG_DOT_FILE,
+    WorkflowType,
 )
 from .fetchers.http import fetchClassicURL
 from .utils.contents import (

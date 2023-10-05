@@ -37,6 +37,7 @@ import warnings
 
 from typing import (
     cast,
+    NamedTuple,
     Pattern,
     TYPE_CHECKING,
 )
@@ -76,7 +77,6 @@ if TYPE_CHECKING:
 
     from .common import (
         AbsPath,
-        AbstractWorkflowEngineType,
         AnyContent,
         AnyPath,
         ContainerEngineVersionStr,
@@ -104,14 +104,18 @@ if TYPE_CHECKING:
         WorkflowConfigBlock,
         WorkflowEngineVersionStr,
         WorkflowMetaConfigBlock,
-        WorkflowType,
         WritableSecurityContextConfig,
         WritableWorkflowMetaConfigBlock,
         URIType,
+        URIWithMetadata,
     )
 
     from .encrypted_fs import (
         EncryptedFSType,
+    )
+
+    from .engine import (
+        AbstractWorkflowEngineType,
     )
 
     Sch_PlainURI = URIType
@@ -164,6 +168,14 @@ if TYPE_CHECKING:
 
 import urllib.parse
 
+# This is needed to assure yaml.safe_load unmarshalls gives no error
+from .container import (
+    Container,
+)
+from .engine import (
+    WorkflowType,
+)
+
 from .ro_crate import (
     WorkflowRunROCrate,
 )
@@ -186,6 +198,10 @@ try:
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
+# This is needed to keep backward compatibility
+# with ancient working directories
+Container.RegisterYAMLConstructor(YAMLLoader)
+
 from .common import (
     AbstractWfExSException,
     Attribution,
@@ -193,9 +209,7 @@ from .common import (
     ContentKind,
     DefaultNoLicenceTuple,
     ExpectedOutput,
-    ExportItem,
     ExportItemType,
-    ExportAction,
     GeneratedContent,
     GeneratedDirectoryContent,
     LicensedURI,
@@ -203,8 +217,6 @@ from .common import (
     MarshallingStatus,
     MaterializedContent,
     MaterializedInput,
-    MaterializedExportAction,
-    MaterializedWorkflowEngine,
     RemoteRepo,
     StagedSetup,
 )
@@ -212,6 +224,7 @@ from .common import (
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
 from .engine import (
+    MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WorkflowEngine,
     WorkflowEngineException,
@@ -250,6 +263,40 @@ from .cwl_engine import CWLWorkflowEngine
 
 if TYPE_CHECKING:
     from .wfexs_backend import WfExSBackend
+
+
+# Related export namedtuples
+class ExportItem(NamedTuple):
+    type: "ExportItemType"
+    block: "Optional[str]" = None
+    name: "Optional[Union[SymbolicParamName, SymbolicOutputName]]" = None
+
+
+# The description of an export action
+class ExportAction(NamedTuple):
+    action_id: "SymbolicName"
+    plugin_id: "SymbolicName"
+    what: "Sequence[ExportItem]"
+    context_name: "Optional[SymbolicName]"
+    setup: "Optional[SecurityContextConfig]"
+    preferred_scheme: "Optional[str]"
+    preferred_id: "Optional[str]"
+    licences: "Sequence[str]" = []
+
+
+class MaterializedExportAction(NamedTuple):
+    """
+    The description of an export action which was materialized, so
+    a permanent identifier was obtained, along with some metadata
+    """
+
+    action: "ExportAction"
+    elems: "Sequence[AnyContent]"
+    pids: "Sequence[URIWithMetadata]"
+    when: "datetime.datetime" = datetime.datetime.now(
+        tz=datetime.timezone.utc
+    ).astimezone()
+
 
 # The list of classes to be taken into account
 # CWL detection is before, as Nextflow one is
@@ -3372,10 +3419,12 @@ class WF:
                 errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(
                     marshalled_stage_file, e
                 )
-                self.logger.debug(errmsg)
                 self.stageMarshalled = False
+                self.logger.exception(errmsg)
                 if fail_ok:
+                    self.logger.debug(errmsg)
                     return self.stageMarshalled
+                self.logger.exception(errmsg)
                 raise WFException(errmsg) from e
 
             # Now, time to save the late changes
@@ -3588,10 +3637,11 @@ class WF:
                 errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
                     marshalled_execution_file, e
                 )
-                self.logger.debug(errmsg)
                 self.executionMarshalled = False
                 if fail_ok:
+                    self.logger.debug(errmsg)
                     return self.executionMarshalled
+                self.logger.exception(errmsg)
                 raise WFException(errmsg) from e
 
             self.executionMarshalled = datetime.datetime.fromtimestamp(
@@ -3689,10 +3739,12 @@ class WF:
 
             except Exception as e:
                 errmsg = f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}"
-                self.logger.debug(e)
                 self.exportMarshalled = False
                 if fail_ok:
+                    self.logger.debug(errmsg)
                     return self.exportMarshalled
+                else:
+                    self.logger.exception(errmsg)
                 raise WFException(errmsg) from e
 
             self.exportMarshalled = datetime.datetime.fromtimestamp(

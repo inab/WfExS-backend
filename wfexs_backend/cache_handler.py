@@ -111,6 +111,7 @@ from .common import (
     ContentKind,
     DefaultNoLicenceTuple,
     LicensedURI,
+    META_JSON_POSTFIX,
     URIWithMetadata,
 )
 
@@ -142,9 +143,6 @@ class CachedContent(NamedTuple):
     metadata_array: "Sequence[URIWithMetadata]"
     licences: "Tuple[URIType, ...]"
     fingerprint: "Optional[Fingerprint]" = None
-
-
-META_JSON_POSTFIX = "_meta.json"
 
 
 class CacheHandlerException(AbstractWfExSException):

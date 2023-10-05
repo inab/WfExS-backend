@@ -68,7 +68,6 @@ if TYPE_CHECKING:
     from .common import (
         AbsPath,
         AnyPath,
-        Container,
         ContainerEngineVersionStr,
         ContainerFileNamingMethod,
         ContainerLocalConfig,
@@ -78,6 +77,10 @@ if TYPE_CHECKING:
         Fingerprint,
         ProcessorArchitecture,
         RelPath,
+    )
+
+    from .container import (
+        Container,
     )
 
     DockerLikeManifest: TypeAlias = Mapping[str, Any]
@@ -94,8 +97,12 @@ from . import common
 from .container import (
     ContainerFactory,
     ContainerFactoryException,
+    DOCKER_URI_PREFIX,
 )
 from .utils.digests import ComputeDigestFromObject
+
+
+DOCKER_PROTO = DOCKER_URI_PREFIX + "//"
 
 
 class AbstractDockerContainerFactory(ContainerFactory):

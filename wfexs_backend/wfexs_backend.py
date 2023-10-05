@@ -168,7 +168,6 @@ if TYPE_CHECKING:
     from crypt4gh.header import CompoundKey
 
     from .common import (
-        AbstractWorkflowEngineType,
         AbsPath,
         AnyPath,
         EnvironmentBlock,
@@ -191,8 +190,12 @@ if TYPE_CHECKING:
         WfExSInstanceId,
         WorkflowConfigBlock,
         WorkflowMetaConfigBlock,
-        WorkflowType,
         WritableWfExSConfigBlock,
+    )
+
+    from .engine import (
+        AbstractWorkflowEngineType,
+        WorkflowType,
     )
 
     from .fetchers import (
