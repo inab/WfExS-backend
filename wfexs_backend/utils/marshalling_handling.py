@@ -195,6 +195,8 @@ def unmarshall_namedtuple(
         return type(obj)(recurse_u(obj, myglobals))
     else:
         if isinstance(obj, object):
-            if hasattr(obj, "_value_fixes") and callable(getattr(obj, "_value_fixes")):
-                obj._value_fixes()
+            if hasattr(obj, "_value_defaults_fixes") and callable(
+                getattr(obj, "_value_defaults_fixes")
+            ):
+                obj._value_defaults_fixes()
         return obj
