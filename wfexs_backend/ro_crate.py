@@ -385,7 +385,6 @@ class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
         tag: "Optional[str]" = None,
         properties: "Optional[Mapping[str, Any]]" = None,
     ) -> "Mapping[str, Any]":
-        logging.error(f"CACACA {type(container_type)} {container_type}")
         additional_type = ContainerType2AdditionalType.get(container_type)
         if additional_type is None:
             raise ValueError(
@@ -1111,6 +1110,34 @@ you can find here an almost complete list of the possible ones:
                 ):
                     self._wf_to_container_sa[the_workflow_crate.id] = crate_cont_type
 
+                # And the container source type
+                crate_source_cont_type: "Optional[rocrate.model.softwareapplication.SoftwareApplication]"
+                if (
+                    container.source_type is None
+                    or container.source_type == container.type
+                ):
+                    crate_source_cont_type = crate_cont_type
+                    container_source_type_metadata = container_type_metadata
+                else:
+                    container_source_type_metadata = self.ContainerTypeMetadataDetails[
+                        container.source_type
+                    ]
+                    crate_source_cont_type = self.cached_cts.get(container.source_type)
+                    if crate_source_cont_type is None:
+                        container_source_type = (
+                            rocrate.model.softwareapplication.SoftwareApplication(
+                                self.crate,
+                                identifier=container_source_type_metadata.sa_id,
+                            )
+                        )
+                        container_source_type[
+                            "applicationCategory"
+                        ] = container_source_type_metadata.ct_applicationCategory
+                        container_source_type["name"] = container.source_type.value
+
+                        crate_source_cont_type = self.crate.add(container_source_type)
+                        self.cached_cts[container.source_type] = crate_source_cont_type
+
                 software_container: "ContainerImage"
                 registry, tag_name, tag_label = container.decompose_docker_tagged_name
                 original_container_type = (
@@ -1118,8 +1145,13 @@ you can find here an almost complete list of the possible ones:
                     if container.source_type is not None
                     else container.type
                 )
-                self.logger.error(
-                    f"QUACK! {type(original_container_type)} {original_container_type}"
+                software_container = ContainerImage(
+                    self.crate,
+                    identifier=container.taggedName,
+                    registry=registry,
+                    name=tag_name,
+                    tag=tag_label,
+                    container_type=original_container_type,
                 )
                 if do_attach and container.localPath is not None:
                     the_size = os.stat(container.localPath).st_size
@@ -1130,11 +1162,11 @@ you can find here an almost complete list of the possible ones:
                     assert algo is not None
                     the_signature = hexDigest(algo, digest)
 
-                    software_container = MaterializedContainerImage(
+                    materialized_software_container = MaterializedContainerImage(
                         self.crate,
                         source=container.localPath,
                         dest_path=os.path.relpath(container.localPath, self.work_dir),
-                        container_type=original_container_type,
+                        container_type=container.type,
                         registry=registry,
                         name=tag_name,
                         tag=tag_label,
@@ -1147,16 +1179,27 @@ you can find here an almost complete list of the possible ones:
                             ),
                         },
                     )
+                    materialized_software_container = self.crate.add(
+                        materialized_software_container
+                    )
 
-                else:
-                    container_pid = container.taggedName
-                    software_container = ContainerImage(
-                        self.crate,
-                        identifier=container_pid,
-                        registry=registry,
-                        name=tag_name,
-                        tag=tag_label,
-                        container_type=original_container_type,
+                    container_consolidate_action = CreateAction(
+                        self.crate, f"Materialize {container.taggedName}"
+                    )
+                    container_consolidate_action = self.crate.add(
+                        container_consolidate_action
+                    )
+                    container_consolidate_action["object"] = software_container
+                    container_consolidate_action[
+                        "result"
+                    ] = materialized_software_container
+                    container_consolidate_action.append_to(
+                        "instrument", crate_cont_type, compact=True
+                    )
+                    container_consolidate_action.append_to(
+                        "actionStatus",
+                        {"@id": "http://schema.org/CompletedActionStatus"},
+                        compact=True,
                     )
 
                 crate_cont = self.crate.dereference(software_container.id)
