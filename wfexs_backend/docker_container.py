@@ -56,25 +56,25 @@ if TYPE_CHECKING:
     )
 
 from .common import (
-    Container,
     ContainerType,
     DEFAULT_DOCKER_CMD,
+    META_JSON_POSTFIX,
 )
 
 from .container import (
+    Container,
     ContainerEngineException,
     ContainerFactoryException,
 )
 from .abstract_docker_container import (
     AbstractDockerContainerFactory,
+    DOCKER_PROTO,
 )
 from .utils.contents import (
     link_or_copy,
     real_unlink_if_exists,
 )
 from .utils.digests import ComputeDigestFromFile
-
-DOCKER_PROTO = "docker://"
 
 
 class DockerContainerFactory(AbstractDockerContainerFactory):
@@ -183,7 +183,7 @@ STDERR
         self.logger.info(f"downloading docker container: {tag_name} => {dockerTag}")
         # These are the paths to the copy of the saved container
         containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
-        containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
+        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
         localContainerPath = cast(
             "AbsPath",
             os.path.join(self.engineContainersSymlinkDir, containerFilename),
@@ -248,9 +248,9 @@ STDERR
                     # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
                     unlinkedContainerPathMeta = os.readlink(localContainerPathMeta)
                     fsImageSignatureMeta = os.path.basename(unlinkedContainerPathMeta)
-                    if fsImageSignatureMeta.endswith(self.META_JSON_POSTFIX):
+                    if fsImageSignatureMeta.endswith(META_JSON_POSTFIX):
                         fsImageSignatureMeta = fsImageSignatureMeta[
-                            : -len(self.META_JSON_POSTFIX)
+                            : -len(META_JSON_POSTFIX)
                         ]
                     putativeManifestsImageSignature = (
                         fsImageSignatureMeta.replace("~", "=")
@@ -264,7 +264,7 @@ STDERR
                     if trusted_copy:
                         canonicalContainerPathMeta = os.path.join(
                             self.containersCacheDir,
-                            fsImageSignatureMeta + self.META_JSON_POSTFIX,
+                            fsImageSignatureMeta + META_JSON_POSTFIX,
                         )
 
                         trusted_copy = os.path.samefile(
@@ -397,7 +397,7 @@ STDERR
             # Being sure the paths do not exist
             if os.path.exists(canonicalContainerPath):
                 os.unlink(canonicalContainerPath)
-            canonicalContainerPathMeta = canonicalContainerPath + self.META_JSON_POSTFIX
+            canonicalContainerPathMeta = canonicalContainerPath + META_JSON_POSTFIX
             if os.path.exists(canonicalContainerPathMeta):
                 os.unlink(canonicalContainerPathMeta)
 
@@ -496,6 +496,7 @@ STDERR
             localPath=containerPath,
             registries=tag.registries,
             metadataLocalPath=containerPathMeta,
+            source_type=tag.type,
         )
 
     def deploySingleContainer(
@@ -513,7 +514,7 @@ STDERR
 
         # These are the paths to the copy of the saved container
         containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
-        containerFilenameMeta = containerFilename + self.META_JSON_POSTFIX
+        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
 
         # Keep a copy outside the cache directory
         if containers_dir is None:

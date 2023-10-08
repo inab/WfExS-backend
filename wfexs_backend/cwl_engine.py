@@ -43,9 +43,7 @@ from .common import (
     LocalWorkflow,
     MaterializedContent,
     MaterializedInput,
-    MaterializedWorkflowEngine,
     StagedExecution,
-    WorkflowType,
 )
 
 if TYPE_CHECKING:
@@ -102,12 +100,14 @@ import jsonpath_ng.ext
 import yaml
 
 from .engine import (
+    MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
     WORKDIR_STDOUT_FILE,
     WORKDIR_STDERR_FILE,
     WorkflowEngine,
     WorkflowEngineException,
+    WorkflowType,
 )
 
 from .utils.contents import (

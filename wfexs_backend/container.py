@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import copy
+from dataclasses import dataclass
 import os
 import tempfile
 import atexit
@@ -35,6 +36,9 @@ from typing import (
 
 from .common import (
     AbstractWfExSException,
+    ContainerTaggedName,
+    ContainerType,
+    META_JSON_POSTFIX,
 )
 
 if TYPE_CHECKING:
@@ -47,6 +51,7 @@ if TYPE_CHECKING:
         Sequence,
         Set,
         Tuple,
+        Type,
         Union,
     )
 
@@ -59,7 +64,6 @@ if TYPE_CHECKING:
     from .common import (
         AbsPath,
         AnyPath,
-        Container,
         ContainerEngineVersionStr,
         ContainerFileNamingMethod,
         ContainerLocalConfig,
@@ -68,19 +72,123 @@ if TYPE_CHECKING:
         Fingerprint,
         ProcessorArchitecture,
         RelPath,
+        URIType,
     )
 
     DockerLikeManifest: TypeAlias = Mapping[str, Any]
     MutableDockerLikeManifest: TypeAlias = MutableMapping[str, Any]
 
     class DockerManifestMetadata(TypedDict):
-        image_id: "Fingerprint"
-        image_signature: "Fingerprint"
-        manifests_signature: "Fingerprint"
-        manifests: "Sequence[DockerLikeManifest]"
+        image_id: Fingerprint
+        image_signature: Fingerprint
+        manifests_signature: Fingerprint
+        manifests: Sequence[DockerLikeManifest]
 
+    import yaml
+
+    YAMLLoader: TypeAlias = Union[yaml.Loader, yaml.CLoader]
 
 from . import common
+
+# A couple of constants needed for several fixes
+DOCKER_SCHEME: "Final[str]" = "docker"
+DOCKER_URI_PREFIX: "Final[str]" = DOCKER_SCHEME + ":"
+
+
+@dataclass
+class Container(ContainerTaggedName):
+    """
+    origTaggedName: Symbolic name or identifier of the container
+        (including tag) which appears in the workflow.
+    type: Container type
+    registries:
+    taggedName: Symbolic name or identifier of the container (including tag)
+    localPath: The full local path to the container file (it can be None)
+    signature: Signature (aka file fingerprint) of the container
+        (sha256 or similar). It could be None outside Singularity solutions.
+    fingerprint: Server fingerprint of the container.
+        Mainly from docker registries.
+    metadataLocalPath: The full local path to the container metadata file (it can be None)
+    source_type: This one helps to identify transformations. The original source
+    might be a docker registry, but the materialized one is a singularity image.
+    """
+
+    taggedName: "URIType" = cast("URIType", "")
+    architecture: "Optional[ProcessorArchitecture]" = None
+    operatingSystem: "Optional[ContainerOperatingSystem]" = None
+    localPath: "Optional[AbsPath]" = None
+    signature: "Optional[Fingerprint]" = None
+    fingerprint: "Optional[Fingerprint]" = None
+    metadataLocalPath: "Optional[AbsPath]" = None
+    source_type: "Optional[ContainerType]" = None
+
+    def _value_defaults_fixes(self) -> None:
+        # This code is needed for old working directories
+        if self.metadataLocalPath is None and self.localPath is not None:
+            self.metadataLocalPath = cast("AbsPath", self.localPath + META_JSON_POSTFIX)
+
+        # And this is to tell the kind of source container type
+        if self.source_type is None:
+            if self.type == ContainerType.Singularity:
+                if self.taggedName.startswith(DOCKER_URI_PREFIX):
+                    self.source_type = ContainerType.Docker
+            elif self.type == ContainerType.Podman:
+                self.source_type = ContainerType.Docker
+
+            # Fallback
+            if self.source_type is None:
+                self.source_type = self.type
+
+    @property
+    def decompose_docker_tagged_name(
+        self,
+    ) -> "Tuple[Optional[str], str, Optional[str]]":
+        # Preparing the tagged_name to properly separate everything
+        tagged_name: "str" = self.taggedName
+        if tagged_name.startswith(DOCKER_URI_PREFIX):
+            tagged_name = tagged_name[len(DOCKER_URI_PREFIX) :].lstrip("/")
+        if self.source_type == ContainerType.Docker:
+            # Now ...
+            registry: "str"
+            tag_name: "str"
+            tag_label: "str"
+
+            # Is it a fully qualified docker tag?
+            left_slash_pos = tagged_name.find("/")
+            if left_slash_pos > 0 and left_slash_pos != tagged_name.rfind("/"):
+                registry = tagged_name[0:left_slash_pos]
+                tagged_name = tagged_name[left_slash_pos + 1 :]
+            else:
+                registry = "docker.io"
+
+            # Now, the tag label
+            right_colon_pos = tagged_name.rfind(":")
+            if right_colon_pos < 0:
+                tag_name = tagged_name
+                tag_label = "latest"
+            else:
+                tag_name = tagged_name[0:right_colon_pos]
+                tag_label = tagged_name[right_colon_pos + 1 :]
+
+            return registry, tag_name, tag_label
+        else:
+            # Nothing could be done
+            return None, tagged_name, None
+
+    @classmethod
+    def ContainerYAMLConstructor(cls, loader: "YAMLLoader", node: "Any") -> "Container":
+        fields = loader.construct_mapping(node)
+
+        return cls(**fields)  # type: ignore[misc]
+
+    @classmethod
+    def RegisterYAMLConstructor(cls, loader: "Type[YAMLLoader]") -> None:
+        # yaml.add_constructor('!python/object:wfexs_backend.common.Container', container_yaml_constructor)
+        # yaml.constructor.Constructor.add_constructor('tag:yaml.org,2002:python/object:wfexs_backend.common.Container', container_yaml_constructor)
+        loader.add_constructor(
+            "tag:yaml.org,2002:python/object:wfexs_backend.common.Container",
+            cls.ContainerYAMLConstructor,
+        )
 
 
 class ContainerFactoryException(AbstractWfExSException):
@@ -110,9 +218,6 @@ class ContainerNotFoundException(ContainerFactoryException):
 
 
 class ContainerFactory(abc.ABC):
-    # Postfix of metadata files (generated by the instances)
-    META_JSON_POSTFIX: "Final[str]" = "_meta.json"
-
     def __init__(
         self,
         cacheDir: "Optional[AnyPath]" = None,

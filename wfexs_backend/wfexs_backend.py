@@ -39,6 +39,7 @@ import warnings
 
 from typing import (
     cast,
+    NamedTuple,
     Pattern,
     TYPE_CHECKING,
 )
@@ -60,7 +61,6 @@ from .common import (
     ContentKind,
     DEFAULT_FUSERMOUNT_CMD,
     DEFAULT_PROGS,
-    IdentifiedWorkflow,
     LicensedURI,
     MaterializedContent,
     RemoteRepo,
@@ -168,7 +168,6 @@ if TYPE_CHECKING:
     from crypt4gh.header import CompoundKey
 
     from .common import (
-        AbstractWorkflowEngineType,
         AbsPath,
         AnyPath,
         EnvironmentBlock,
@@ -191,8 +190,12 @@ if TYPE_CHECKING:
         WfExSInstanceId,
         WorkflowConfigBlock,
         WorkflowMetaConfigBlock,
-        WorkflowType,
         WritableWfExSConfigBlock,
+    )
+
+    from .engine import (
+        AbstractWorkflowEngineType,
+        WorkflowType,
     )
 
     from .fetchers import (
@@ -210,6 +213,15 @@ if TYPE_CHECKING:
         WFVersionId,
         WorkflowId,
     )
+
+
+class IdentifiedWorkflow(NamedTuple):
+    """
+    workflow_type: The identified workflow type
+    """
+
+    workflow_type: "WorkflowType"
+    remote_repo: "RemoteRepo"
 
 
 class WfExSBackendException(AbstractWfExSException):

@@ -280,10 +280,11 @@ def writeWorkflowConfigVariations(
     workflow_config_template: Mapping[str, Any],
     paramsArray: Sequence[Mapping[str, Any]],
     fnameTemplate: str,
+    destdir: str = ".",
     paramSymbolTemplate: Optional[str] = None,
 ) -> Sequence[str]:
     # Creating the directory, in case it does not exist
-    destdir = os.path.abspath(args.destdir)
+    destdir = os.path.abspath(destdir)
     os.makedirs(destdir, exist_ok=True)
 
     createdConfigurationFiles = []
@@ -383,7 +384,11 @@ if __name__ == "__main__":
 
     if paramsArray:
         createdConfigurationFiles = writeWorkflowConfigVariations(
-            workflow_config_template, paramsArray, fnameTemplate, paramSymbolTemplate
+            workflow_config_template,
+            paramsArray,
+            fnameTemplate,
+            destdir=args.destdir,
+            paramSymbolTemplate=paramSymbolTemplate,
         )
 
         print("These are the created files: {}".format(createdConfigurationFiles))

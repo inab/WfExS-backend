@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import atexit
 import copy
+import enum
 import inspect
 import logging
 import os
@@ -55,7 +56,6 @@ if TYPE_CHECKING:
         AbsPath,
         AbstractGeneratedContent,
         AnyPath,
-        Container,
         ContainerEngineVersionStr,
         ContainerOperatingSystem,
         EngineVersion,
@@ -64,7 +64,6 @@ if TYPE_CHECKING:
         LocalWorkflow,
         MaterializedInput,
         MaterializedOutput,
-        MaterializedWorkflowEngine,
         ProcessorArchitecture,
         ProgsMapping,
         RelPath,
@@ -77,6 +76,14 @@ if TYPE_CHECKING:
         URIType,
         WFLangVersion,
         WorkflowEngineVersionStr,
+    )
+
+    from .container import (
+        Container,
+    )
+
+    from .engine import (
+        MaterializedWorkflowEngine,
         WorkflowType,
     )
 
@@ -104,10 +111,6 @@ import rocrate.rocrate
 from rocrate.utils import (
     get_norm_value,
     is_url,
-)
-
-from .cache_handler import (
-    META_JSON_POSTFIX,
 )
 
 from .fetchers import (
@@ -139,6 +142,7 @@ from .common import (
     GeneratedContent,
     GeneratedDirectoryContent,
     MaterializedContent,
+    META_JSON_POSTFIX,
     NoCratableItem,
     NoLicence,
     NoLicenceShort,
@@ -147,7 +151,7 @@ from .common import (
 
 from . import __url__ as wfexs_backend_url
 from . import __official_name__ as wfexs_backend_name
-from . import get_WfExS_version
+from . import get_WfExS_version_str
 
 
 class ROCrateGenerationException(AbstractWfExSException):
@@ -334,14 +338,105 @@ class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
     pass
 
 
-class SoftwareContainer(FixedFile):  # type: ignore[misc]
-    TYPES = ["File", "SoftwareApplication"]
+class ContainerImageAdditionalType(enum.Enum):
+    Docker = "DockerImage"
+    Singularity = "SIFImage"
+
+
+ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
+    ContainerType.Docker: ContainerImageAdditionalType.Docker,
+    ContainerType.Singularity: ContainerImageAdditionalType.Singularity,
+}
+
+
+class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
+    TYPES = ["ContainerImage", "SoftwareApplication"]
+
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        name: "str",
+        container_type: "ContainerType",
+        registry: "Optional[str]" = None,
+        tag: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        fp_properties = self._prepare_properties(
+            name,
+            container_type,
+            registry=registry,
+            tag=tag,
+            properties=properties,
+        )
+        super().__init__(crate, identifier=identifier, properties=fp_properties)
 
     def _empty(self) -> "Mapping[str, Any]":
         return {
             "@id": self.id,
             "@type": self.TYPES[:],
         }
+
+    @staticmethod
+    def _prepare_properties(
+        name: "str",
+        container_type: "ContainerType",
+        registry: "Optional[str]" = None,
+        tag: "Optional[str]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Mapping[str, Any]":
+        additional_type = ContainerType2AdditionalType.get(container_type)
+        if additional_type is None:
+            raise ValueError(
+                f"Unable to map container type {container_type.value} to an RO-Crate equivalent"
+            )
+        fp_properties = {"name": name, "additionalType": additional_type.value}
+
+        if registry is not None:
+            fp_properties["registry"] = registry
+
+        if tag is not None:
+            fp_properties["tag"] = tag
+
+        if properties is not None:
+            fp_properties.update(properties)
+
+        return fp_properties
+
+
+# Multiple inheritance order does matter when super is called!!!!
+class MaterializedContainerImage(ContainerImage, FixedFile):  # type: ignore[misc]
+    TYPES = ["File", "ContainerImage", "SoftwareApplication"]
+
+    def __init__(
+        self,
+        crate: "rocrate.rocrate.ROCrate",
+        container_type: "ContainerType",
+        registry: "Optional[str]" = None,
+        name: "str" = "",
+        tag: "Optional[str]" = None,
+        identifier: "Optional[str]" = None,
+        source: "Optional[Union[str, pathlib.Path]]" = None,
+        dest_path: "Optional[Union[str, pathlib.Path]]" = None,
+        properties: "Optional[Mapping[str, Any]]" = None,
+    ):
+        fp_properties = self._prepare_properties(
+            name,
+            container_type,
+            registry=registry,
+            tag=tag,
+            properties=properties,
+        )
+
+        super(FixedFile, self).__init__(
+            crate=crate,
+            source=source,
+            dest_path=dest_path,
+            identifier=identifier,
+            fetch_remote=False,
+            validate_url=False,
+            properties=fp_properties,
+        )
 
 
 class WorkflowDiagram(FixedFile):  # type: ignore[misc]
@@ -646,10 +741,10 @@ class WorkflowRunROCrate:
         # This is used to avoid including twice the very same value
         # in the RO-Crate
         self._item_hash: "MutableMapping[bytes, rocrate.model.entity.Entity]" = {}
-        self._wf_to_containers: "MutableMapping[str, MutableSequence[Union[rocrate.model.softwareapplication.SoftwareApplication, SoftwareContainer]]]" = (
+        self._wf_to_containers: "MutableMapping[str, MutableSequence[ContainerImage]]" = (
             {}
         )
-        self._wf_to_operational_containers: "MutableMapping[str, MutableSequence[Union[rocrate.model.softwareapplication.SoftwareApplication, SoftwareContainer]]]" = (
+        self._wf_to_operational_containers: "MutableMapping[str, MutableSequence[ContainerImage]]" = (
             {}
         )
         self._wf_to_container_sa: "MutableMapping[str, rocrate.model.softwareapplication.SoftwareApplication]" = (
@@ -849,7 +944,18 @@ class WorkflowRunROCrate:
 
         # Add extra terms
         self.crate.metadata.extra_terms.update(
-            {"sha256": "https://w3id.org/ro/terms/workflow-run#sha256"}
+            {
+                "sha256": "https://w3id.org/ro/terms/workflow-run#sha256",
+                # Next ones are experimental
+                ContainerImageAdditionalType.Docker.value: "https://w3id.org/ro/terms/workflow-run#"
+                + ContainerImageAdditionalType.Docker.value,
+                ContainerImageAdditionalType.Singularity.value: "https://w3id.org/ro/terms/workflow-run#"
+                + ContainerImageAdditionalType.Singularity.value,
+                "containerImage": "https://w3id.org/ro/terms/workflow-run#containerImage",
+                "ContainerImage": "https://w3id.org/ro/terms/workflow-run#ContainerImage",
+                "registry": "https://w3id.org/ro/terms/workflow-run#registry",
+                "tag": "https://w3id.org/ro/terms/workflow-run#tag",
+            }
         )
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
@@ -906,11 +1012,7 @@ class WorkflowRunROCrate:
         wf_wfexs = self.crate.add(wf_wfexs)
         wf_wfexs["name"] = wfexs_backend_name
         wf_wfexs.url = wfexs_backend_url
-        wfexs_version = get_WfExS_version()
-        if wfexs_version[1] is None:
-            verstr = wfexs_version[0]
-        else:
-            verstr = "{0[0]} ({0[1]})".format(wfexs_version)
+        verstr = get_WfExS_version_str()
         wf_wfexs["softwareVersion"] = verstr
 
         # And the README.md
@@ -975,11 +1077,9 @@ you can find here an almost complete list of the possible ones:
         containers: "Sequence[Container]",
         sa_crate: "Union[rocrate.model.computationalworkflow.ComputationalWorkflow, rocrate.model.softwareapplication.SoftwareApplication]",
         the_workflow_crate: "Optional[FixedWorkflow]" = None,
-    ) -> "MutableSequence[Union[rocrate.model.softwareapplication.SoftwareApplication, SoftwareContainer]]":
+    ) -> "MutableSequence[ContainerImage]":
         # Operational containers are needed by the workflow engine, not by the workflow
-        added_containers: "MutableSequence[Union[rocrate.model.softwareapplication.SoftwareApplication, SoftwareContainer]]" = (
-            []
-        )
+        added_containers: "MutableSequence[ContainerImage]" = []
         if len(containers) > 0:
             do_attach = CratableItem.Containers in self.payloads
             for container in containers:
@@ -1010,7 +1110,49 @@ you can find here an almost complete list of the possible ones:
                 ):
                     self._wf_to_container_sa[the_workflow_crate.id] = crate_cont_type
 
-                software_container: "Union[rocrate.model.softwareapplication.SoftwareApplication, SoftwareContainer]"
+                # And the container source type
+                crate_source_cont_type: "Optional[rocrate.model.softwareapplication.SoftwareApplication]"
+                if (
+                    container.source_type is None
+                    or container.source_type == container.type
+                ):
+                    crate_source_cont_type = crate_cont_type
+                    container_source_type_metadata = container_type_metadata
+                else:
+                    container_source_type_metadata = self.ContainerTypeMetadataDetails[
+                        container.source_type
+                    ]
+                    crate_source_cont_type = self.cached_cts.get(container.source_type)
+                    if crate_source_cont_type is None:
+                        container_source_type = (
+                            rocrate.model.softwareapplication.SoftwareApplication(
+                                self.crate,
+                                identifier=container_source_type_metadata.sa_id,
+                            )
+                        )
+                        container_source_type[
+                            "applicationCategory"
+                        ] = container_source_type_metadata.ct_applicationCategory
+                        container_source_type["name"] = container.source_type.value
+
+                        crate_source_cont_type = self.crate.add(container_source_type)
+                        self.cached_cts[container.source_type] = crate_source_cont_type
+
+                software_container: "ContainerImage"
+                registry, tag_name, tag_label = container.decompose_docker_tagged_name
+                original_container_type = (
+                    container.source_type
+                    if container.source_type is not None
+                    else container.type
+                )
+                software_container = ContainerImage(
+                    self.crate,
+                    identifier=container.taggedName,
+                    registry=registry,
+                    name=tag_name,
+                    tag=tag_label,
+                    container_type=original_container_type,
+                )
                 if do_attach and container.localPath is not None:
                     the_size = os.stat(container.localPath).st_size
                     assert container.signature is not None
@@ -1020,12 +1162,14 @@ you can find here an almost complete list of the possible ones:
                     assert algo is not None
                     the_signature = hexDigest(algo, digest)
 
-                    software_container = SoftwareContainer(
+                    materialized_software_container = MaterializedContainerImage(
                         self.crate,
                         source=container.localPath,
                         dest_path=os.path.relpath(container.localPath, self.work_dir),
-                        fetch_remote=False,
-                        validate_url=False,
+                        container_type=container.type,
+                        registry=registry,
+                        name=tag_name,
+                        tag=tag_label,
                         properties={
                             "contentSize": str(the_size),
                             "identifier": container.taggedName,
@@ -1035,13 +1179,27 @@ you can find here an almost complete list of the possible ones:
                             ),
                         },
                     )
+                    materialized_software_container = self.crate.add(
+                        materialized_software_container
+                    )
 
-                else:
-                    container_pid = container.taggedName
-                    software_container = (
-                        rocrate.model.softwareapplication.SoftwareApplication(
-                            self.crate, identifier=container_pid
-                        )
+                    container_consolidate_action = CreateAction(
+                        self.crate, f"Materialize {container.taggedName}"
+                    )
+                    container_consolidate_action = self.crate.add(
+                        container_consolidate_action
+                    )
+                    container_consolidate_action["object"] = software_container
+                    container_consolidate_action[
+                        "result"
+                    ] = materialized_software_container
+                    container_consolidate_action.append_to(
+                        "instrument", crate_cont_type, compact=True
+                    )
+                    container_consolidate_action.append_to(
+                        "actionStatus",
+                        {"@id": "http://schema.org/CompletedActionStatus"},
+                        compact=True,
                     )
 
                 crate_cont = self.crate.dereference(software_container.id)
@@ -1066,7 +1224,6 @@ you can find here an almost complete list of the possible ones:
                                 os.path.relpath(metadataLocalPath, self.work_dir),
                             ),
                         )
-                        software_container.append_to("hasPart", meta_file, compact=True)
                         meta_file.append_to("about", software_container, compact=True)
 
                     software_container["softwareVersion"] = container.fingerprint
@@ -1098,12 +1255,7 @@ you can find here an almost complete list of the possible ones:
                             "softwareRequirements", crate_cont, compact=True
                         )
 
-                added_containers.append(
-                    cast(
-                        "Union[rocrate.model.softwareapplication.SoftwareApplication, SoftwareContainer]",
-                        crate_cont,
-                    )
-                )
+                added_containers.append(cast("ContainerImage", crate_cont))
 
         return added_containers
 
@@ -1810,7 +1962,9 @@ you can find here an almost complete list of the possible ones:
                 the_workflow_crate.append_to(
                     "softwareAddOn", self._wf_to_container_sa[the_workflow_crate.id]
                 )
-            existing_containers = self._wf_to_containers.get(the_workflow_crate.id, [])
+            existing_containers = self._wf_to_containers.setdefault(
+                the_workflow_crate.id, []
+            )
             for added_container in added_containers:
                 # Add containers as addons which were used
                 if was_workflow_run:
@@ -1819,22 +1973,18 @@ you can find here an almost complete list of the possible ones:
                     )
                 if added_container not in existing_containers:
                     existing_containers.append(added_container)
-            self._wf_to_containers[the_workflow_crate.id] = existing_containers
         if materialized_engine.operational_containers is not None:
             added_operational_containers = self._add_containers(
                 materialized_engine.operational_containers,
                 sa_crate=the_weng_crate,
                 the_workflow_crate=the_workflow_crate,
             )
-            existing_operational_containers = self._wf_to_operational_containers.get(
-                the_workflow_crate.id, []
+            existing_operational_containers = (
+                self._wf_to_operational_containers.setdefault(the_workflow_crate.id, [])
             )
             for added_operational_container in added_operational_containers:
                 if added_operational_container not in existing_operational_containers:
                     existing_operational_containers.append(added_operational_container)
-            self._wf_to_operational_containers[
-                the_workflow_crate.id
-            ] = existing_operational_containers
 
         if do_attach and (the_uri is not None):
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
@@ -1995,24 +2145,16 @@ you can find here an almost complete list of the possible ones:
         if len(self._agents) > 0:
             crate_action.append_to("agent", self._agents, compact=True)
         self.crate.root_dataset.append_to("mentions", crate_action, compact=True)
-        # instruments: "MutableSequence[rocrate.model.entity.Entity]" = [
-        #     self.wf_wfexs,
-        #     self.wf_file,
-        #     self.weng_crate,
-        # ]
-        # # Adding both operational containers
+
+        # Skipping adding operational containers for now
         # if self.wf_file.id in self._wf_to_operational_containers:
-        #     if self.wf_file.id in self._wf_to_container_sa:
-        #         instruments.append(self._wf_to_container_sa[self.wf_file.id])
-        #     instruments.extend(self._wf_to_operational_containers[self.wf_file.id])
-        # # and "normal" containers
-        # if self.wf_file.id in self._wf_to_containers:
-        #     if (
-        #         self.wf_file.id in self._wf_to_container_sa
-        #         and self.wf_file.id not in self._wf_to_operational_containers
-        #     ):
-        #         instruments.append(self._wf_to_container_sa[self.wf_file.id])
-        #     instruments.extend(self._wf_to_containers[self.wf_file.id])
+        #     for container_image in self._wf_to_operational_containers[self.wf_file.id]:
+        #         crate_action.append_to("containerImage", container_image, compact=True)
+        # Adding "normal" containers
+        if self.wf_file.id in self._wf_to_containers:
+            for container_image in self._wf_to_containers[self.wf_file.id]:
+                crate_action.append_to("containerImage", container_image, compact=True)
+
         crate_action.append_to("instrument", self.wf_file, compact=True)
         # subjectOf is not fulfilled as this execution has not public page
         if stagedExec.exitVal == 0:

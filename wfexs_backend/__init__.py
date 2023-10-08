@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     )
 
 
-def describeGitRepo(repo: "str") -> "Tuple[str, str]":
+def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
     """Describe the repository version.
 
     Args:
@@ -57,9 +57,11 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str]":
         import dulwich.repo
         import dulwich.walk
 
+    active_branch = dulwich.porcelain.active_branch(repo)  # type: ignore[no-untyped-call]
+    active_branch_decode = active_branch.decode("utf-8", errors="ignore")
     # Get the repository
     r: "dulwich.repo.Repo"
-    with dulwich.porcelain.open_repo_closing(repo) as r:  # type:ignore
+    with dulwich.porcelain.open_repo_closing(repo) as r:  # type: ignore[no-untyped-call]
         # Get a list of all tags
         refs = r.get_refs()
         tags: "MutableMapping[str, Tuple[datetime.datetime, str]]" = {}
@@ -98,6 +100,7 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str]":
             return (
                 "g{}".format(r[r.head()].id.decode("ascii")[:7]),
                 latest_commit_id_decode,
+                active_branch_decode,
             )
 
         # We're now 0 commits from the top
@@ -115,7 +118,7 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str]":
                 tag_commit = sorted_tag[1][1]
                 if commit_id == tag_commit:
                     if commit_count == 0:
-                        return tag_name, latest_commit_id_decode
+                        return tag_name, latest_commit_id_decode, active_branch_decode
                     else:
                         return (
                             "{}-{}-g{}".format(
@@ -124,22 +127,27 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str]":
                                 latest_commit_id_decode[:7],
                             ),
                             latest_commit_id_decode,
+                            active_branch_decode,
                         )
 
             commit_count += 1
 
         # Return plain commit if no parent tag can be found
-        return "g{}".format(latest_commit_id_decode[:7]), latest_commit_id_decode
+        return (
+            "g{}".format(latest_commit_id_decode[:7]),
+            latest_commit_id_decode,
+            active_branch_decode,
+        )
 
 
 # It returns something similar to 'git describe --tags'
-def get_WfExS_version() -> "Tuple[str, Optional[str]]":
+def get_WfExS_version() -> "Tuple[str, Optional[str], Optional[str]]":
     import os
     import sys
     import dulwich.errors
 
-    vertuple: "Tuple[str, Optional[str]]"
-    vertuple = __version__, None
+    vertuple: "Tuple[str, Optional[str], Optional[str]]"
+    vertuple = __version__, None, None
     executable = os.path.basename(sys.argv[0])
     # try:
 
@@ -153,3 +161,18 @@ def get_WfExS_version() -> "Tuple[str, Optional[str]]":
             pass
 
     return vertuple
+
+
+def get_WfExS_version_str() -> "str":
+    wfexs_version = get_WfExS_version()
+
+    verstr = wfexs_version[0]
+    if wfexs_version[1] is not None:
+        verstr += " (" + wfexs_version[1]
+        if wfexs_version[2] is not None:
+            verstr += ", branch " + wfexs_version[2]
+        verstr += ")"
+    elif wfexs_version[2] is not None:
+        verstr += " (branch " + wfexs_version[2] + ")"
+
+    return verstr

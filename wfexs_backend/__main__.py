@@ -80,7 +80,7 @@ except ImportError:
 from .security_context import SecurityContextVault
 from .wfexs_backend import WfExSBackend
 from .workflow import WF
-from . import get_WfExS_version
+from . import get_WfExS_version_str
 from .utils.misc import DatetimeEncoder
 
 
@@ -866,11 +866,7 @@ def processExportCommand(
 
 
 def main() -> None:
-    wfexs_version = get_WfExS_version()
-    if wfexs_version[1] is None:
-        verstr = wfexs_version[0]
-    else:
-        verstr = "{0[0]} ({0[1]})".format(wfexs_version)
+    verstr = get_WfExS_version_str()
 
     defaultLocalConfigFilename = os.environ.get("WFEXS_CONFIG_FILE")
     if defaultLocalConfigFilename is None:
