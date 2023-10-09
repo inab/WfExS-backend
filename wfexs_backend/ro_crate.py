@@ -346,6 +346,7 @@ class ContainerImageAdditionalType(enum.Enum):
 ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
     ContainerType.Docker: ContainerImageAdditionalType.Docker,
     ContainerType.Singularity: ContainerImageAdditionalType.Singularity,
+    ContainerType.Podman: ContainerImageAdditionalType.Docker,
 }
 
 
@@ -1155,10 +1156,10 @@ you can find here an almost complete list of the possible ones:
                 )
                 if do_attach and container.localPath is not None:
                     the_size = os.stat(container.localPath).st_size
-                    assert container.signature is not None
-                    digest, algo = extract_digest(container.signature)
+                    assert container.image_signature is not None
+                    digest, algo = extract_digest(container.image_signature)
                     if digest is None:
-                        digest, algo = unstringifyDigest(container.signature)
+                        digest, algo = unstringifyDigest(container.image_signature)
                     assert algo is not None
                     the_signature = hexDigest(algo, digest)
 

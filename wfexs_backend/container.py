@@ -111,6 +111,7 @@ class Container(ContainerTaggedName):
     metadataLocalPath: The full local path to the container metadata file (it can be None)
     source_type: This one helps to identify transformations. The original source
     might be a docker registry, but the materialized one is a singularity image.
+    image_signature: The signature of the image
     """
 
     taggedName: "URIType" = cast("URIType", "")
@@ -121,6 +122,7 @@ class Container(ContainerTaggedName):
     fingerprint: "Optional[Fingerprint]" = None
     metadataLocalPath: "Optional[AbsPath]" = None
     source_type: "Optional[ContainerType]" = None
+    image_signature: "Optional[Fingerprint]" = None
 
     def _value_defaults_fixes(self) -> None:
         # This code is needed for old working directories

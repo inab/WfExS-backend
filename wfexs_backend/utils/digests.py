@@ -83,6 +83,8 @@ def stringifyDigest(digestAlgorithm: "str", digest: "bytes") -> "Fingerprint":
 
 
 def unstringifyDigest(digestion: "Fingerprint") -> "Tuple[bytes, str]":
+    if "=" not in digestion:
+        raise ValueError(f"The input string {digestion} is not a stringified digest")
     algo, b64digest = digestion.split("=", 1)
     return base64.b64decode(b64digest), algo
 
