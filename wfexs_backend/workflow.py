@@ -34,6 +34,7 @@ import tempfile
 import threading
 import time
 import warnings
+import zipfile
 
 from typing import (
     cast,
@@ -183,6 +184,7 @@ from .security_context import (
     SecurityContextVault,
 )
 import bagit
+import magic
 
 from . import common as common_defs_module
 
@@ -306,6 +308,8 @@ WORKFLOW_ENGINE_CLASSES: "Final[Sequence[Type[WorkflowEngine]]]" = [
     CWLWorkflowEngine,
     NextflowWorkflowEngine,
 ]
+
+ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
 
 
 def _wakeupEncDir(
@@ -1246,6 +1250,7 @@ class WF:
         cls,
         wfexs: "WfExSBackend",
         workflowROCrateFilename: "AnyPath",
+        public_name: "str",  # Mainly used for provenance and exceptions
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
@@ -1258,6 +1263,52 @@ class WF:
         This class method creates a new staged working directory
         based on the declaration of an existing one
         """
+
+        # Is it a bare file or an archive?
+        jsonld_filename: "Optional[str]" = None
+        if os.path.isdir(workflowROCrateFilename):
+            jsonld_filename = os.path.join(
+                workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
+            )
+            if not os.path.exists(jsonld_filename):
+                raise WFException(
+                    f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME}"
+                )
+        elif os.path.isfile(workflowROCrateFilename):
+            jsonld_filename = workflowROCrateFilename
+        else:
+            raise WFException(f"Input {public_name} is neither a file or a directory")
+
+        jsonld_bin: "Optional[bytes]" = None
+        putative_mime = magic.from_file(jsonld_filename, mime=True)
+        if putative_mime == "application/json":
+            with open(jsonld_filename, mode="rb") as jdf:
+                jsonld_bin = jdf.read()
+        elif putative_mime == "application/zip":
+            with zipfile.ZipFile(workflowROCrateFilename, mode="r") as zf:
+                try:
+                    jsonld_bin = zf.read(ROCRATE_JSONLD_FILENAME)
+                except Exception as e:
+                    raise WFException(
+                        f"Unable to locate {ROCRATE_JSONLD_FILENAME} within {public_name}"
+                    ) from e
+
+                putative_mime_ld = magic.from_buffer(jsonld_bin)
+                if putative_mime_ld != "application/json":
+                    raise WFException(
+                        f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
+                    )
+        else:
+            raise WFException(
+                f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
+            )
+
+        try:
+            jsonld_obj = json.loads(jsonld_bin)
+        except json.JSONDecodeError as jde:
+            raise WFException(
+                f"Content from {public_name} is not a valid JSON"
+            ) from jde
 
         # TODO
         assert False, "The implementation of this method has to be finished"

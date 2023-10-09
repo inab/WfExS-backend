@@ -1052,6 +1052,7 @@ class WfExSBackend:
         return WF.FromPreviousROCrate(
             self,
             workflowROCrateFilename,
+            public_name=workflowROCrateFilenameOrURI,
             securityContextsConfigFilename=securityContextsConfigFilename,
             nickname_prefix=nickname_prefix,
             orcids=orcids,
