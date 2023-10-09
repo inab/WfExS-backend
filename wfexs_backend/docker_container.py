@@ -497,6 +497,7 @@ STDERR
             registries=tag.registries,
             metadataLocalPath=containerPathMeta,
             source_type=tag.type,
+            image_signature=imageSignature,
         )
 
     def deploySingleContainer(
