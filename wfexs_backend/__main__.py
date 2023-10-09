@@ -1285,7 +1285,7 @@ def main() -> None:
             args.workflowConfigFilename, args.securityContextsConfigFilename
         )
         sys.exit(retval)
-    elif command == WfExS_Commands.Stage:
+    elif command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
         wfInstance = wfBackend.fromFiles(
             args.workflowConfigFilename,
             args.securityContextsConfigFilename,
