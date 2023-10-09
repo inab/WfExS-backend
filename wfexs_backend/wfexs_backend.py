@@ -1021,6 +1021,46 @@ class WfExSBackend:
             paranoidMode=paranoidMode,
         )
 
+    def fromPreviousROCrate(
+        self,
+        workflowROCrateFilenameOrURI: "Union[AnyPath, URIType]",
+        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
+        paranoidMode: "bool" = False,
+    ) -> "WF":
+        # Let's check whether it is a local file
+        # or a remote RO-Crate
+        parsedROCrateURI = urllib.parse.urlparse(workflowROCrateFilenameOrURI)
+        if parsedROCrateURI.scheme == "":
+            workflowROCrateFilename = cast("AnyPath", workflowROCrateFilenameOrURI)
+        else:
+            self.logger.info(f"* Fetching RO-Crate {workflowROCrateFilenameOrURI}")
+            local_content = self.cacheFetch(
+                cast("URIType", workflowROCrateFilenameOrURI),
+                cacheType=CacheType.ROCrate,
+                offline=False,
+                ignoreCache=True,
+                registerInCache=False,
+            )
+
+            workflowROCrateFilename = local_content.path
+
+        return WF.FromPreviousROCrate(
+            self,
+            workflowROCrateFilename,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+            orcids=orcids,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
+            paranoidMode=paranoidMode,
+        )
+
     def parseAndValidateSecurityContextFile(
         self, securityContextsConfigFilename: "AnyPath"
     ) -> "Tuple[ExitVal, SecurityContextConfigBlock]":

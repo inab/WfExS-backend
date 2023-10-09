@@ -1242,6 +1242,40 @@ class WF:
         )
 
     @classmethod
+    def FromPreviousROCrate(
+        cls,
+        wfexs: "WfExSBackend",
+        workflowROCrateFilename: "AnyPath",
+        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
+        paranoidMode: "bool" = False,
+    ) -> "WF":
+        """
+        This class method creates a new staged working directory
+        based on the declaration of an existing one
+        """
+
+        # TODO
+        assert False, "The implementation of this method has to be finished"
+        workflow_meta = {}
+
+        return cls.FromStagedRecipe(
+            wfexs,
+            workflow_meta,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+            orcids=orcids,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
+            paranoidMode=paranoidMode,
+        )
+
+    @classmethod
     def FromDescription(
         cls,
         wfexs: "WfExSBackend",

@@ -115,6 +115,10 @@ class WfExS_Commands(StrDocEnum):
         "staged-workdir",
         "Staged working directories handling subcommands",
     )
+    Import = (
+        "import",
+        "Workflow Run RO-Crate import into a new staged working directory",
+    )
     Export = ("export", "Staged working directories export subcommands")
     ExportStage = ("export-stage", "Export the staging directory as an RO-Crate")
     OfflineExecute = (
@@ -219,13 +223,22 @@ def genParserSub(
     )
 
     if preStageParams:
-        ap_.add_argument(
-            "-W",
-            "--workflow-config",
-            dest="workflowConfigFilename",
-            required=True,
-            help="Configuration file, describing workflow and inputs",
-        )
+        if command != WfExS_Commands.Import:
+            ap_.add_argument(
+                "-W",
+                "--workflow-config",
+                dest="workflowConfigFilename",
+                required=True,
+                help="Configuration file, describing workflow and inputs",
+            )
+        else:
+            ap_.add_argument(
+                "-R",
+                "--workflow-rocrate",
+                dest="workflowROCrateFilenameOrURI",
+                required=True,
+                help="Workflow Run RO-Crate describing a previous workflow execution. It can be either a local path or an URI resolvable from WfExS with no authentication",
+            )
 
     if preStageParams or exportParams or command == WfExS_Commands.ReStage:
         ap_.add_argument(
@@ -269,7 +282,12 @@ def genParserSub(
 
     if (
         command
-        in (WfExS_Commands.Stage, WfExS_Commands.ReStage, WfExS_Commands.Execute)
+        in (
+            WfExS_Commands.Stage,
+            WfExS_Commands.ReStage,
+            WfExS_Commands.Import,
+            WfExS_Commands.Execute,
+        )
         or exportParams
     ):
         ap_.add_argument(
@@ -282,7 +300,12 @@ def genParserSub(
 
     if (
         command
-        in (WfExS_Commands.Stage, WfExS_Commands.StagedWorkDir, WfExS_Commands.Execute)
+        in (
+            WfExS_Commands.Stage,
+            WfExS_Commands.StagedWorkDir,
+            WfExS_Commands.Import,
+            WfExS_Commands.Execute,
+        )
         or postStageParams
         or exportParams
     ):
@@ -1034,6 +1057,8 @@ def main() -> None:
 
     ap_r_s = genParserSub(sp, WfExS_Commands.ReStage, postStageParams=True)
 
+    ap_imp = genParserSub(sp, WfExS_Commands.Import, preStageParams=True)
+
     ap_m = genParserSub(sp, WfExS_Commands.MountWorkDir, postStageParams=True)
 
     ap_es = genParserSub(
@@ -1153,6 +1178,7 @@ def main() -> None:
         WfExS_Commands.ListPushers,
         WfExS_Commands.Stage,
         WfExS_Commands.ReStage,
+        WfExS_Commands.Import,
         WfExS_Commands.Execute,
     ):
         updated_config, local_config = WfExSBackend.bootstrap(
@@ -1259,7 +1285,7 @@ def main() -> None:
             args.workflowConfigFilename, args.securityContextsConfigFilename
         )
         sys.exit(retval)
-    else:
+    elif command == WfExS_Commands.Stage:
         wfInstance = wfBackend.fromFiles(
             args.workflowConfigFilename,
             args.securityContextsConfigFilename,
@@ -1269,6 +1295,22 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
         )
+    elif command == WfExS_Commands.Import:
+        wfInstance = wfBackend.fromPreviousROCrate(
+            args.workflowROCrateFilenameOrURI,
+            args.securityContextsConfigFilename,
+            nickname_prefix=args.nickname_prefix,
+            public_key_filenames=args.public_key_files,
+            private_key_filename=args.private_key_file,
+            private_key_passphrase=private_key_passphrase,
+            orcids=op_orcids,
+        )
+    else:
+        print(
+            f"[ERROR] Unimplemented command {command.value}. Stopping.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # This is needed to be sure the encfs instance is unmounted
     if command != WfExS_Commands.MountWorkDir:
