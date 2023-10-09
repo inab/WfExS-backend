@@ -1045,7 +1045,8 @@ class SchemeHandlerCacheHandler:
                 # Store the metadata
                 metadata_array.extend(cached_fetched_metadata_array)
                 licences.extend(the_licences)
-                final_fingerprint = metaStructure["fingerprint"]
+                if "fingerprint" in metaStructure:
+                    final_fingerprint = metaStructure["fingerprint"]
             elif offline:
                 # As this is a handler for online resources, comply with offline mode
                 raise CacheOfflineException(
