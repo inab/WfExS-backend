@@ -944,19 +944,22 @@ class WorkflowRunROCrate:
         self.crate = FixedROCrate(gen_preview=False)
 
         # Add extra terms
-        self.crate.metadata.extra_terms.update(
-            {
-                "sha256": "https://w3id.org/ro/terms/workflow-run#sha256",
-                # Next ones are experimental
-                ContainerImageAdditionalType.Docker.value: "https://w3id.org/ro/terms/workflow-run#"
-                + ContainerImageAdditionalType.Docker.value,
-                ContainerImageAdditionalType.Singularity.value: "https://w3id.org/ro/terms/workflow-run#"
-                + ContainerImageAdditionalType.Singularity.value,
-                "containerImage": "https://w3id.org/ro/terms/workflow-run#containerImage",
-                "ContainerImage": "https://w3id.org/ro/terms/workflow-run#ContainerImage",
-                "registry": "https://w3id.org/ro/terms/workflow-run#registry",
-                "tag": "https://w3id.org/ro/terms/workflow-run#tag",
-            }
+        # self.crate.metadata.extra_terms.update(
+        #     {
+        #         "sha256": "https://w3id.org/ro/terms/workflow-run#sha256",
+        #         # Next ones are experimental
+        #         ContainerImageAdditionalType.Docker.value: "https://w3id.org/ro/terms/workflow-run#"
+        #         + ContainerImageAdditionalType.Docker.value,
+        #         ContainerImageAdditionalType.Singularity.value: "https://w3id.org/ro/terms/workflow-run#"
+        #         + ContainerImageAdditionalType.Singularity.value,
+        #         "containerImage": "https://w3id.org/ro/terms/workflow-run#containerImage",
+        #         "ContainerImage": "https://w3id.org/ro/terms/workflow-run#ContainerImage",
+        #         "registry": "https://w3id.org/ro/terms/workflow-run#registry",
+        #         "tag": "https://w3id.org/ro/terms/workflow-run#tag",
+        #     }
+        # )
+        self.crate.metadata.extra_contexts.append(
+            "https://w3id.org/ro/terms/workflow-run"
         )
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
@@ -982,20 +985,20 @@ class WorkflowRunROCrate:
         wrroc_profiles = [
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/process/0.2",
-                properties={"name": "ProcessRun Crate", "version": "0.2"},
+                identifier="https://w3id.org/ro/wfrun/process/0.3",
+                properties={"name": "ProcessRun Crate", "version": "0.3"},
             ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/workflow/0.2",
-                properties={"name": "Workflow Run Crate", "version": "0.2"},
+                identifier="https://w3id.org/ro/wfrun/workflow/0.3",
+                properties={"name": "Workflow Run Crate", "version": "0.3"},
             ),
             # TODO: This one can be enabled only when proper provenance
             # describing the execution steps is implemented
             # rocrate.model.creativework.CreativeWork(
             #     self.crate,
-            #     identifier="https://w3id.org/ro/wfrun/provenance/0.2",
-            #     properties={"name": "Provenance Run Crate", "version": "0.2"},
+            #     identifier="https://w3id.org/ro/wfrun/provenance/0.3",
+            #     properties={"name": "Provenance Run Crate", "version": "0.3"},
             # ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
