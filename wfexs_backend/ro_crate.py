@@ -338,9 +338,12 @@ class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
     pass
 
 
+WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
+
+
 class ContainerImageAdditionalType(enum.Enum):
-    Docker = "DockerImage"
-    Singularity = "SIFImage"
+    Docker = WORKFLOW_RUN_CONTEXT + "#DockerImage"
+    Singularity = WORKFLOW_RUN_CONTEXT + "#SIFImage"
 
 
 ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
@@ -391,7 +394,12 @@ class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
             raise ValueError(
                 f"Unable to map container type {container_type.value} to an RO-Crate equivalent"
             )
-        fp_properties = {"name": name, "additionalType": additional_type.value}
+        fp_properties = {
+            "name": name,
+            "additionalType": {
+                "@id": additional_type.value,
+            },
+        }
 
         if registry is not None:
             fp_properties["registry"] = registry
@@ -946,21 +954,19 @@ class WorkflowRunROCrate:
         # Add extra terms
         # self.crate.metadata.extra_terms.update(
         #     {
-        #         "sha256": "https://w3id.org/ro/terms/workflow-run#sha256",
+        #         "sha256": WORKFLOW_RUN_CONTEXT + "#sha256",
         #         # Next ones are experimental
-        #         ContainerImageAdditionalType.Docker.value: "https://w3id.org/ro/terms/workflow-run#"
+        #         ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_CONTEXT + "#"
         #         + ContainerImageAdditionalType.Docker.value,
-        #         ContainerImageAdditionalType.Singularity.value: "https://w3id.org/ro/terms/workflow-run#"
+        #         ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_CONTEXT + "#"
         #         + ContainerImageAdditionalType.Singularity.value,
-        #         "containerImage": "https://w3id.org/ro/terms/workflow-run#containerImage",
-        #         "ContainerImage": "https://w3id.org/ro/terms/workflow-run#ContainerImage",
-        #         "registry": "https://w3id.org/ro/terms/workflow-run#registry",
-        #         "tag": "https://w3id.org/ro/terms/workflow-run#tag",
+        #         "containerImage": WORKFLOW_RUN_CONTEXT + "#containerImage",
+        #         "ContainerImage": WORKFLOW_RUN_CONTEXT + "#ContainerImage",
+        #         "registry": WORKFLOW_RUN_CONTEXT + "#registry",
+        #         "tag": WORKFLOW_RUN_CONTEXT + "#tag",
         #     }
         # )
-        self.crate.metadata.extra_contexts.append(
-            "https://w3id.org/ro/terms/workflow-run"
-        )
+        self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
@@ -1149,6 +1155,18 @@ you can find here an almost complete list of the possible ones:
                     if container.source_type is not None
                     else container.type
                 )
+                upper_properties = {}
+                # This is for the cases where we have the docker image fingerprint
+                # This sha256 is about the image, but it is not associated
+                # to the physical image when it is materialized in some way
+                # like docker save or singularity pull
+                if (
+                    container.fingerprint is not None
+                    and "@sha256:" in container.fingerprint
+                ):
+                    _, upper_properties["sha256"] = container.fingerprint.split(
+                        "@sha256:", 1
+                    )
                 software_container = ContainerImage(
                     self.crate,
                     identifier=container.taggedName,
@@ -1156,15 +1174,25 @@ you can find here an almost complete list of the possible ones:
                     name=tag_name,
                     tag=tag_label,
                     container_type=original_container_type,
+                    properties=upper_properties,
                 )
                 if do_attach and container.localPath is not None:
                     the_size = os.stat(container.localPath).st_size
-                    assert container.image_signature is not None
-                    digest, algo = extract_digest(container.image_signature)
-                    if digest is None:
-                        digest, algo = unstringifyDigest(container.image_signature)
-                    assert algo is not None
-                    the_signature = hexDigest(algo, digest)
+                    if container.image_signature is not None:
+                        digest, algo = extract_digest(container.image_signature)
+                        if digest is None:
+                            digest, algo = unstringifyDigest(container.image_signature)
+                        assert algo is not None
+                        the_signature = hexDigest(algo, digest)
+                    else:
+                        the_signature = cast(
+                            "Fingerprint",
+                            ComputeDigestFromFile(
+                                container.localPath,
+                                "sha256",
+                                repMethod=hexDigest,
+                            ),
+                        )
 
                     materialized_software_container = MaterializedContainerImage(
                         self.crate,
@@ -1964,7 +1992,9 @@ you can find here an almost complete list of the possible ones:
             )
             if was_workflow_run and len(added_containers) > 0:
                 the_workflow_crate.append_to(
-                    "softwareAddOn", self._wf_to_container_sa[the_workflow_crate.id]
+                    "softwareRequirements",
+                    self._wf_to_container_sa[the_workflow_crate.id],
+                    compact=True,
                 )
             existing_containers = self._wf_to_containers.setdefault(
                 the_workflow_crate.id, []
@@ -1973,7 +2003,7 @@ you can find here an almost complete list of the possible ones:
                 # Add containers as addons which were used
                 if was_workflow_run:
                     the_workflow_crate.append_to(
-                        "softwareAddOn", added_container, compact=True
+                        "softwareRequirements", added_container, compact=True
                     )
                 if added_container not in existing_containers:
                     existing_containers.append(added_container)
@@ -2200,7 +2230,9 @@ you can find here an almost complete list of the possible ones:
                 validate_url=False,
                 properties={
                     "contentSize": str(os.stat(abs_diagram).st_size),
-                    "sha256": ComputeDigestFromFile(abs_diagram, repMethod=hexDigest),
+                    "sha256": ComputeDigestFromFile(
+                        abs_diagram, "sha256", repMethod=hexDigest
+                    ),
                     "encodingFormat": magic.from_file(abs_diagram, mime=True),
                 },
             )
@@ -2246,7 +2278,7 @@ you can find here an almost complete list of the possible ones:
                         properties={
                             "contentSize": str(os.stat(png_dot_path).st_size),
                             "sha256": ComputeDigestFromFile(
-                                png_dot_path, repMethod=hexDigest
+                                png_dot_path, "sha256", repMethod=hexDigest
                             ),
                             "encodingFormat": magic.from_file(png_dot_path, mime=True),
                         },
