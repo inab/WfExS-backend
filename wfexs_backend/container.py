@@ -180,6 +180,11 @@ class Container(ContainerTaggedName):
     @classmethod
     def ContainerYAMLConstructor(cls, loader: "YAMLLoader", node: "Any") -> "Container":
         fields = loader.construct_mapping(node)
+        # This could be a fix for old cases being parsed
+        # where the concept of image_signature did not exist.
+        # But it could break future cases where no image can be materialized
+        # if "image_signature" not in fields:
+        #     fields["image_signature"] = fields["signature"]
 
         return cls(**fields)  # type: ignore[misc]
 
