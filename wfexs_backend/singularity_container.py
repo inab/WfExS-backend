@@ -626,7 +626,9 @@ STDERR
                         manifest = metadata.get("manifest")
                         if partial_fingerprint is not None:
                             fingerprint = cast(
-                                "Fingerprint", repo + "@" + partial_fingerprint
+                                # Maybe in the future registryServer + '/' + repo + "@" + partial_fingerprint
+                                "Fingerprint",
+                                repo + "@" + partial_fingerprint,
                             )
                         else:
                             # TODO: is there a better alternative?
