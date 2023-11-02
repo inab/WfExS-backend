@@ -791,7 +791,8 @@ STDERR
             )
 
             if isinstance(matched_container, Container):
-                containersList.append(matched_container)
+                if matched_container not in containersList:
+                    containersList.append(matched_container)
             else:
                 notFoundContainersList.append(matched_container)
 

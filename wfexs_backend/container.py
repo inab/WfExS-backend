@@ -417,7 +417,8 @@ STDERR
                     force=force,
                 )
                 if container is not None:
-                    materialized_containers.append(container)
+                    if container not in materialized_containers:
+                        materialized_containers.append(container)
                 else:
                     not_found_containers.append(tag.origTaggedName)
 
