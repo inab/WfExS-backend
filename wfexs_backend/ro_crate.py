@@ -2009,12 +2009,12 @@ you can find here an almost complete list of the possible ones:
             )
             for added_container in added_containers:
                 # Add containers as addons which were used
-                if was_workflow_run:
-                    the_workflow_crate.append_to(
-                        "softwareRequirements", added_container, compact=True
-                    )
                 if added_container not in existing_containers:
                     existing_containers.append(added_container)
+                    if was_workflow_run:
+                        the_workflow_crate.append_to(
+                            "softwareRequirements", added_container, compact=True
+                        )
         if materialized_engine.operational_containers is not None:
             added_operational_containers = self._add_containers(
                 materialized_engine.operational_containers,
