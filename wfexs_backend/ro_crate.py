@@ -750,6 +750,7 @@ class WorkflowRunROCrate:
         # This is used to avoid including twice the very same value
         # in the RO-Crate
         self._item_hash: "MutableMapping[bytes, rocrate.model.entity.Entity]" = {}
+        self._added_containers: "MutableSequence[Container]" = []
         self._wf_to_containers: "MutableMapping[str, MutableSequence[ContainerImage]]" = (
             {}
         )
@@ -1093,6 +1094,10 @@ you can find here an almost complete list of the possible ones:
         if len(containers) > 0:
             do_attach = CratableItem.Containers in self.payloads
             for container in containers:
+                # Skip early what it was already included in the crate
+                if container in self._added_containers:
+                    continue
+
                 container_type_metadata = self.ContainerTypeMetadataDetails[
                     container.type
                 ]
@@ -1236,6 +1241,9 @@ you can find here an almost complete list of the possible ones:
 
                 crate_cont = self.crate.dereference(software_container.id)
                 if crate_cont is None:
+                    # Record the container
+                    self._added_containers.append(container)
+
                     # Now, add container metadata, which is going to be
                     # consumed by WfExS or third parties
                     metadataLocalPath: "Optional[str]" = None
