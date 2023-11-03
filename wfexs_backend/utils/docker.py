@@ -97,7 +97,7 @@ class DXFFat(DXF):
             headersFATV2 = {"Accept": DockerFAT_schema2_mimetype}
             r = self._request(http_method, "manifests/" + alias, headers=headersFATV2)  # type: ignore[no-untyped-call]
         except requests.exceptions.HTTPError as he:
-            if he.response.status_code != 404:
+            if he.response is None or he.response.status_code != 404:
                 raise he
 
             headersV2 = {"Accept": DockerManifestV2MIMEType}
@@ -113,7 +113,7 @@ class DXFFat(DXF):
         try:
             manifest, r = self.get_manifest_and_response(alias)
         except requests.exceptions.HTTPError as he:
-            if he.response.status_code != 404:
+            if he.response is None or he.response.status_code != 404:
                 raise he
 
             return None, None

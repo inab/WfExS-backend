@@ -818,12 +818,13 @@ STDERR
             if containerTag.startswith("http:") or containerTag.startswith("https:"):
                 container_type = ContainerType.Singularity
 
-            list_of_containers.append(
-                ContainerTaggedName(
-                    origTaggedName=containerTag,
-                    type=container_type,
-                )
+            putative_container_tag = ContainerTaggedName(
+                origTaggedName=containerTag,
+                type=container_type,
             )
+
+            if putative_container_tag not in list_of_containers:
+                list_of_containers.append(putative_container_tag)
 
         return newWfEngine, list_of_containers
 
