@@ -134,7 +134,6 @@ from .utils.marshalling_handling import (
 )
 from .common import (
     AbstractWfExSException,
-    AcceptableLicenceSchemes,
     ContainerType,
     ContentKind,
     CratableItem,
@@ -145,7 +144,13 @@ from .common import (
     META_JSON_POSTFIX,
     NoCratableItem,
     NoLicence,
+)
+
+from .utils.licences import (
+    AcceptableLicenceSchemes,
     NoLicenceShort,
+    CC_BY_40_LICENCE,
+    ROCrateLongLicences,
     ROCrateShortLicences,
 )
 
@@ -728,6 +733,7 @@ class WorkflowRunROCrate:
         progs: "ProgsMapping" = {},
         tempdir: "Optional[str]" = None,
         scheme_desc: "Sequence[Tuple[str, str]]" = [],
+        crate_pid: "Optional[str]" = None,
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -785,6 +791,7 @@ class WorkflowRunROCrate:
             materializedEngine.instance.workflowType,
             localWorkflow.langVersion,
             licences,
+            crate_pid=crate_pid,
         )
 
         # add agents
@@ -928,6 +935,7 @@ class WorkflowRunROCrate:
         wf_type: "WorkflowType",
         langVersion: "Optional[Union[EngineVersion, WFLangVersion]]",
         licences: "Sequence[str]",
+        crate_pid: "Optional[str]",
     ) -> "None":
         """
         Due the internal synergies between an instance of ComputerLanguage
@@ -951,6 +959,10 @@ class WorkflowRunROCrate:
             )
 
         self.crate = FixedROCrate(gen_preview=False)
+        if crate_pid is not None:
+            self.crate.root_dataset.append_to("identifier", crate_pid, compact=True)
+
+        RO_licences = self._process_licences(licences)
 
         # Add extra terms
         # self.crate.metadata.extra_terms.update(
@@ -981,9 +993,90 @@ class WorkflowRunROCrate:
             },
         )
         self.crate.description = f"RO-Crate from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname})"
-        self.crate.license = licences
+        self.crate.root_dataset.append_to("license", RO_licences, compact=True)
         # This should not be needed, as it is added later
         self.crate.add(self.compLang)
+
+    def _process_licences(
+        self, licences: "Sequence[str]"
+    ) -> "Sequence[Union[str, rocrate.model.creativework.CreativeWork]]":
+        RO_licences: "MutableSequence[Union[str, rocrate.model.creativework.CreativeWork]]" = (
+            []
+        )
+        for lic in licences:
+            RO_licences.append(self._process_licence(lic))
+
+        return RO_licences
+
+    def _process_licence(
+        self, licence: "str"
+    ) -> "Union[str, rocrate.model.creativework.CreativeWork]":
+        # In order to avoid so prominent "No Permission url"
+        if licence == NoLicence:
+            licence = NoLicenceShort
+
+        parsed_lic: "Union[str, rocrate.model.creativework.CreativeWork]"
+        rec_lic: "bool" = False
+        if licence in ROCrateShortLicences:
+            if licence == NoLicenceShort:
+                parsed_lic = licence
+            else:
+                licdesc = ROCrateShortLicences[licence]
+                cw = cast(
+                    "Optional[rocrate.model.creativework.CreativeWork]",
+                    self.crate.dereference(licdesc.uri),
+                )
+                if cw is None:
+                    rec_lic = True
+                    parsed_lic = rocrate.model.creativework.CreativeWork(
+                        self.crate,
+                        identifier=licdesc.uri,
+                        properties={
+                            "identifier": licdesc.uri,
+                            "name": licdesc.description,
+                        },
+                    )
+                else:
+                    parsed_lic = cw
+        elif licence in ROCrateLongLicences:
+            licdesc = ROCrateLongLicences[licence]
+            cw = cast(
+                "Optional[rocrate.model.creativework.CreativeWork]",
+                self.crate.dereference(licdesc.uri),
+            )
+            if cw is None:
+                rec_lic = True
+                parsed_lic = rocrate.model.creativework.CreativeWork(
+                    self.crate,
+                    identifier=licdesc.uri,
+                    properties={
+                        "identifier": licdesc.uri,
+                        "name": licdesc.description,
+                    },
+                )
+            else:
+                parsed_lic = cw
+        else:
+            cw = cast(
+                "Optional[rocrate.model.creativework.CreativeWork]",
+                self.crate.dereference(licence),
+            )
+            if cw is None:
+                rec_lic = True
+                parsed_lic = rocrate.model.creativework.CreativeWork(
+                    self.crate,
+                    identifier=licence,
+                    properties={
+                        "identifier": licence,
+                    },
+                )
+            else:
+                parsed_lic = cw
+
+        if rec_lic and isinstance(parsed_lic, rocrate.model.creativework.CreativeWork):
+            self.crate.add(parsed_lic)
+
+        return parsed_lic
 
     def _add_wfexs_to_crate(
         self, scheme_desc: "Sequence[Tuple[str, str]]"
@@ -1077,7 +1170,7 @@ you can find here an almost complete list of the possible ones:
             the_uri=None,
             the_name=cast("RelPath", "README.md"),
             the_mime="text/markdown",
-            the_licences=["https://spdx.org/licenses/CC-BY-4.0.html"],
+            the_licences=[CC_BY_40_LICENCE],
         )
         readme_file.append_to("about", self.crate.root_dataset, compact=True)
 
@@ -1384,7 +1477,7 @@ you can find here an almost complete list of the possible ones:
                         assert isinstance(itemInValues, MaterializedContent)
                         itemInLocalSource = itemInValues.local  # local source
                         itemInURISource = itemInValues.licensed_uri.uri  # uri source
-                        itemInURILicenses = itemInValues.licensed_uri.licences
+                        itemInURILicences = itemInValues.licensed_uri.licences
                         if os.path.isfile(itemInLocalSource):
                             the_signature: "Optional[Fingerprint]" = None
                             if itemInValues.fingerprint is not None:
@@ -1402,7 +1495,7 @@ you can find here an almost complete list of the possible ones:
                                     os.path.relpath(itemInLocalSource, self.work_dir),
                                 ),
                                 the_signature=the_signature,
-                                the_licences=itemInURILicenses,
+                                the_licences=itemInURILicences,
                                 do_attach=do_attach,
                             )
 
@@ -1728,10 +1821,9 @@ you can find here an almost complete list of the possible ones:
 
         if the_licences is not None:
             for the_licence in the_licences:
-                # In order to avoid so prominent "No Permission url"
-                if the_licence == NoLicence:
-                    the_licence = NoLicenceShort
-                the_file_crate.append_to("license", the_licence, compact=True)
+                the_file_crate.append_to(
+                    "license", self._process_licence(the_licence), compact=True
+                )
 
         return the_file_crate
 

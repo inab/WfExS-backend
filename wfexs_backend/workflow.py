@@ -2958,9 +2958,6 @@ class WF:
                 for op_orcid in op_orcids:
                     if op_orcid not in the_orcids:
                         the_orcids.append(op_orcid)
-                elems = self.locateExportItems(
-                    action.what, licences=the_licences, orcids=the_orcids
-                )
 
                 # check the security context is available
                 a_setup_block: "Optional[WritableSecurityContextConfig]"
@@ -2994,19 +2991,33 @@ class WF:
                     )
 
                 # check whether plugin is available
+                # TODO: Should we include mechanism to reuse a PID
+                # already used in a previous export?
                 export_p = self.wfexs.instantiateExportPlugin(
                     self,
                     action.plugin_id,
                     sec_context=a_setup_block,
                     licences=the_licences,
                     orcids=the_orcids,
+                    preferred_id=action.preferred_id,
+                )
+
+                # This booked pid could differ from the preferred one
+                # as it could not be reused due some constraints
+                booked_pid = export_p.book_pid()
+
+                elems = self.locateExportItems(
+                    action.what,
+                    licences=the_licences,
+                    orcids=the_orcids,
+                    crate_pid=booked_pid,
                 )
 
                 # Export the contents and obtain a PID
                 new_pids = export_p.push(
                     elems,
                     preferred_scheme=action.preferred_scheme,
-                    preferred_id=action.preferred_id,
+                    preferred_id=booked_pid,
                 )
 
                 # Last, register the PID
@@ -3768,6 +3779,7 @@ class WF:
         items: "Sequence[ExportItem]",
         licences: "Sequence[str]" = [],
         orcids: "Sequence[str]" = [],
+        crate_pid: "Optional[str]" = None,
     ) -> "Sequence[AnyContent]":
         """
         The located paths in the contents should be relative to the working directory
@@ -3994,6 +4006,7 @@ class WF:
                     payloads=self.ExportROCrate2Payloads[item.block],
                     licences=licences,
                     orcids=orcids,
+                    crate_pid=crate_pid,
                 )
                 retval.append(
                     MaterializedContent(
@@ -4024,6 +4037,7 @@ class WF:
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
         orcids: "Sequence[str]" = [],
+        crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -4061,6 +4075,7 @@ class WF:
             progs=self.wfexs.progs,
             tempdir=self.tempDir,
             scheme_desc=self.wfexs.describeFetchableSchemes(),
+            crate_pid=crate_pid,
         )
 
         wrroc.addWorkflowInputs(
@@ -4092,6 +4107,7 @@ class WF:
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
         orcids: "Sequence[str]" = [],
+        crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
         """
         Create RO-crate from stage provenance.
@@ -4127,6 +4143,7 @@ class WF:
             progs=self.wfexs.progs,
             tempdir=self.tempDir,
             scheme_desc=self.wfexs.describeFetchableSchemes(),
+            crate_pid=crate_pid,
         )
 
         for stagedExec in self.stagedExecutions:

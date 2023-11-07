@@ -268,108 +268,10 @@ class Attribution(NamedTuple):
         return attributions
 
 
-# Licences
-AcceptableLicenceSchemes: "Final[Set[str]]" = {
-    "ftp",
-    "http",
-    "https",
-    "data",
-}
 NoLicence: "Final[URIType]" = cast(
     "URIType", "https://choosealicense.com/no-permission/"
 )
 DefaultNoLicenceTuple: "Tuple[URIType, ...]" = (NoLicence,)
-
-# According to Workflow RO-Crate, this is the term for no license (or not specified)
-NoLicenceShort: "Final[str]" = "notspecified"
-
-# The correspondence from short Workflow RO-Crate licences and their URIs
-# taken from https://about.workflowhub.eu/Workflow-RO-Crate/#supported-licenses
-ROCrateShortLicences: "Final[Mapping[str, str]]" = {
-    "AFL-3.0": "https://opensource.org/licenses/AFL-3.0",  # - Academic Free License 3.0
-    "APL-1.0": "https://opensource.org/licenses/APL-1.0",  # - Adaptive Public License 1.0
-    "Apache-1.1": "https://opensource.org/licenses/Apache-1.1",  # - Apache Software License 1.1
-    "Apache-2.0": "https://opensource.org/licenses/Apache-2.0",  # - Apache Software License 2.0
-    "APSL-2.0": "https://opensource.org/licenses/APSL-2.0",  # - Apple Public Source License 2.0
-    "Artistic-2.0": "https://opensource.org/licenses/Artistic-2.0",  # - Artistic License 2.0
-    "AAL": "https://opensource.org/licenses/AAL",  # - Attribution Assurance Licenses
-    "BSD-2-Clause": "https://opensource.org/licenses/BSD-2-Clause",  # - BSD 2-Clause “Simplified” or “FreeBSD” License (BSD-2-Clause)
-    "BSD-3-Clause": "https://opensource.org/licenses/BSD-3-Clause",  # - BSD 3-Clause “New” or “Revised” License (BSD-3-Clause)
-    "BitTorrent-1.1": "https://spdx.org/licenses/BitTorrent-1.1",  # - BitTorrent Open Source License 1.1
-    "BSL-1.0": "https://opensource.org/licenses/BSL-1.0",  # - Boost Software License 1.0
-    "CC0-1.0": "https://creativecommons.org/publicdomain/zero/1.0/",  # - CC0 1.0
-    "CNRI-Python": "https://opensource.org/licenses/CNRI-Python",  # - CNRI Python License
-    "CUA-OPL-1.0": "https://opensource.org/licenses/CUA-OPL-1.0",  # - CUA Office Public License 1.0
-    "CECILL-2.1": "https://opensource.org/licenses/CECILL-2.1",  # - CeCILL License 2.1
-    "CDDL-1.0": "https://opensource.org/licenses/CDDL-1.0",  # - Common Development and Distribution License 1.0
-    "CPAL-1.0": "https://opensource.org/licenses/CPAL-1.0",  # - Common Public Attribution License 1.0
-    "CATOSL-1.1": "https://opensource.org/licenses/CATOSL-1.1",  # - Computer Associates Trusted Open Source License 1.1 (CATOSL-1.1)
-    "EUDatagrid": "https://opensource.org/licenses/EUDatagrid",  # - EU DataGrid Software License
-    "EPL-1.0": "https://opensource.org/licenses/EPL-1.0",  # - Eclipse Public License 1.0
-    "ECL-2.0": "https://opensource.org/licenses/ECL-2.0",  # - Educational Community License 2.0
-    "EFL-2.0": "https://opensource.org/licenses/EFL-2.0",  # - Eiffel Forum License 2.0
-    "Entessa": "https://opensource.org/licenses/Entessa",  # - Entessa Public License
-    "EUPL-1.1": "https://opensource.org/licenses/EUPL-1.1",  # - European Union Public License 1.1
-    "Fair": "https://opensource.org/licenses/Fair",  # - Fair License
-    "Frameworx-1.0": "https://opensource.org/licenses/Frameworx-1.0",  # - Frameworx License 1.0
-    "AGPL-3.0": "https://opensource.org/licenses/AGPL-3.0",  # - GNU Affero General Public License v3
-    "GPL-2.0": "https://opensource.org/licenses/GPL-2.0",  # - GNU General Public License 2.0
-    "GPL-3.0": "https://opensource.org/licenses/GPL-3.0",  # - GNU General Public License 3.0
-    "LGPL-2.1": "https://opensource.org/licenses/LGPL-2.1",  # - GNU Lesser General Public License 2.1
-    "LGPL-3.0": "https://opensource.org/licenses/LGPL-3.0",  # - GNU Lesser General Public License 3.0
-    "HPND": "https://opensource.org/licenses/HPND",  # - Historical Permission Notice and Disclaimer
-    "IPL-1.0": "https://opensource.org/licenses/IPL-1.0",  # - IBM Public License 1.0
-    "IPA": "https://opensource.org/licenses/IPA",  # - IPA Font License
-    "ISC": "https://opensource.org/licenses/ISC",  # - ISC License
-    "Intel": "https://opensource.org/licenses/Intel",  # - Intel Open Source License
-    "LPPL-1.3c": "https://opensource.org/licenses/LPPL-1.3c",  # - LaTeX Project Public License 1.3c
-    "LPL-1.0": "https://opensource.org/licenses/LPL-1.0",  # - Lucent Public License (“Plan9”) 1.0
-    "LPL-1.02": "https://opensource.org/licenses/LPL-1.02",  # - Lucent Public License 1.02
-    "MIT": "https://opensource.org/licenses/MIT",  # - MIT License
-    "mitre": "https://opensource.org/licenses/CVW",  # - MITRE Collaborative Virtual Workspace License (CVW License)
-    "MS-PL": "https://opensource.org/licenses/MS-PL",  # - Microsoft Public License
-    "MS-RL": "https://opensource.org/licenses/MS-RL",  # - Microsoft Reciprocal License
-    "MirOS": "https://opensource.org/licenses/MirOS",  # - MirOS Licence
-    "Motosoto": "https://opensource.org/licenses/Motosoto",  # - Motosoto License
-    "MPL-1.0": "https://opensource.org/licenses/MPL-1.0",  # - Mozilla Public License 1.0
-    "MPL-1.1": "https://opensource.org/licenses/MPL-1.1",  # - Mozilla Public License 1.1
-    "MPL-2.0": "https://opensource.org/licenses/MPL-2.0",  # - Mozilla Public License 2.0
-    "Multics": "https://opensource.org/licenses/Multics",  # - Multics License
-    "NASA-1.3": "https://opensource.org/licenses/NASA-1.3",  # - NASA Open Source Agreement 1.3
-    "NTP": "https://opensource.org/licenses/NTP",  # - NTP License
-    "Naumen": "https://opensource.org/licenses/Naumen",  # - Naumen Public License
-    "NGPL": "https://opensource.org/licenses/NGPL",  # - Nethack General Public License
-    "Nokia": "https://opensource.org/licenses/Nokia",  # - Nokia Open Source License
-    "NPOSL-3.0": "https://opensource.org/licenses/NPOSL-3.0",  # - Non-Profit Open Software License 3.0
-    "OCLC-2.0": "https://opensource.org/licenses/OCLC-2.0",  # - OCLC Research Public License 2.0
-    "OFL-1.1": "https://opensource.org/licenses/OFL-1.1",  # - Open Font License 1.1
-    "OGL-UK-1.0": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/1/",  # - Open Government Licence 1.0 (United Kingdom)
-    "OGL-UK-2.0": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/2/",  # - Open Government Licence 2.0 (United Kingdom)
-    "OGL-UK-3.0": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",  # - Open Government Licence 3.0 (United Kingdom)
-    "OGTSL": "https://opensource.org/licenses/OGTSL",  # - Open Group Test Suite License
-    "OSL-3.0": "https://opensource.org/licenses/OSL-3.0",  # - Open Software License 3.0
-    "PHP-3.0": "https://opensource.org/licenses/PHP-3.0",  # - PHP License 3.0
-    "PostgreSQL": "https://opensource.org/licenses/PostgreSQL",  # - PostgreSQL License
-    "Python-2.0": "https://opensource.org/licenses/Python-2.0",  # - Python License 2.0
-    "QPL-1.0": "https://opensource.org/licenses/QPL-1.0",  # - Q Public License 1.0
-    "RPSL-1.0": "https://opensource.org/licenses/RPSL-1.0",  # - RealNetworks Public Source License 1.0
-    "RPL-1.5": "https://opensource.org/licenses/RPL-1.5",  # - Reciprocal Public License 1.5
-    "RSCPL": "https://opensource.org/licenses/RSCPL",  # - Ricoh Source Code Public License
-    "SimPL-2.0": "https://opensource.org/licenses/SimPL-2.0",  # - Simple Public License 2.0
-    "Sleepycat": "https://opensource.org/licenses/Sleepycat",  # - Sleepycat License
-    "SISSL": "https://opensource.org/licenses/SISSL",  # - Sun Industry Standards Source License 1.1
-    "SPL-1.0": "https://opensource.org/licenses/SPL-1.0",  # - Sun Public License 1.0
-    "Watcom-1.0": "https://opensource.org/licenses/Watcom-1.0",  # - Sybase Open Watcom Public License 1.0
-    "NCSA": "https://opensource.org/licenses/NCSA",  # - University of Illinois/NCSA Open Source License
-    "Unlicense": "https://unlicense.org/",  # - Unlicense
-    "VSL-1.0": "https://opensource.org/licenses/VSL-1.0",  # - Vovida Software License 1.0
-    "W3C": "https://opensource.org/licenses/W3C",  # - W3C License
-    "Xnet": "https://opensource.org/licenses/Xnet",  # - X.Net License
-    "ZPL-2.0": "https://opensource.org/licenses/ZPL-2.0",  # - Zope Public License 2.0
-    "WXwindows": "https://opensource.org/licenses/WXwindows",  # - wxWindows Library License
-    "Zlib": "https://opensource.org/licenses/Zlib",  # - zlib/libpng license
-    NoLicenceShort: NoLicence,  # - No license - no permission to use unless the owner grants a licence
-}
 
 
 class LicensedURI(NamedTuple):

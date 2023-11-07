@@ -338,6 +338,12 @@ def genParserSub(
             help="Licence(s) to attach to the generated RO-Crate",
         )
 
+        mat_opts.add_argument(
+            "--crate-pid",
+            dest="crate_pid",
+            help="Permanent identifier to embed within the generated RO-Crate metadata, like a pre-generated DOI",
+        )
+
     if (exportParams or command == WfExS_Commands.ExportResults) and not crateParams:
         ap_.add_argument(
             "--licence",
@@ -578,6 +584,15 @@ def processStagedWorkdirCommand(
     else:
         op_orcids = []
 
+    if (
+        hasattr(args, "crate_pid")
+        and args.crate_pid is not None
+        and len(args.crate_pid) > 0
+    ):
+        op_crate_pid = args.crate_pid
+    else:
+        op_crate_pid = None
+
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
             for (
@@ -794,6 +809,7 @@ def processStagedWorkdirCommand(
                                 payloads=doMaterializedROCrate,
                                 licences=op_licences,
                                 orcids=op_orcids,
+                                crate_pid=op_crate_pid,
                             )
                         else:
                             mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
@@ -809,6 +825,7 @@ def processStagedWorkdirCommand(
                                     payloads=doMaterializedROCrate,
                                     licences=op_licences,
                                     orcids=op_orcids,
+                                    crate_pid=op_crate_pid,
                                 )
                             else:
                                 print(
@@ -1206,6 +1223,15 @@ def main() -> None:
     else:
         op_orcids = []
 
+    if (
+        hasattr(args, "crate_pid")
+        and args.crate_pid is not None
+        and len(args.crate_pid) > 0
+    ):
+        op_crate_pid = args.crate_pid
+    else:
+        op_crate_pid = None
+
     wfInstance = None
     if command in (
         WfExS_Commands.MountWorkDir,
@@ -1345,6 +1371,7 @@ def main() -> None:
             payloads=doMaterializedROCrate,
             licences=op_licences,
             orcids=op_orcids,
+            crate_pid=op_crate_pid,
         )
 
     if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
@@ -1373,6 +1400,7 @@ def main() -> None:
         wfInstance.createResultsResearchObject(
             payloads=doMaterializedROCrate,
             licences=op_licences,
+            crate_pid=op_crate_pid,
         )
 
 
