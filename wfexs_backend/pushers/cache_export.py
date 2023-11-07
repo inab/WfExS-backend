@@ -68,8 +68,16 @@ class CacheExportPlugin(AbstractExportPlugin):
         wfInstance: "WF",
         setup_block: "Optional[SecurityContextConfig]" = None,
         licences: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = [],
+        preferred_id: "Optional[str]" = None,
     ):
-        super().__init__(wfInstance, setup_block=setup_block, licences=licences)
+        super().__init__(
+            wfInstance,
+            setup_block=setup_block,
+            licences=licences,
+            orcids=orcids,
+            preferred_id=preferred_id,
+        )
 
     def push(
         self,
@@ -89,6 +97,8 @@ class CacheExportPlugin(AbstractExportPlugin):
         if ":" in preferred_scheme:
             raise ValueError(f"Scheme {preferred_scheme} contains a colon")
 
+        # We are starting to learn whether we already have a PID
+        preferred_id = self.preferred_id if preferred_id is None else preferred_id
         if (preferred_id is None) or len(preferred_id) == 0:
             raise ValueError("This plugin needs a preferred_id to generate a PID")
 
