@@ -21,7 +21,7 @@ __copyright__ = "© 2020-2023 Barcelona Supercomputing Center (BSC), ES"
 __license__ = "Apache 2.0"
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = "0.10.1"
+__version__ = "0.10.2"
 __url__ = "https://github.com/inab/WfExS-backend"
 __official_name__ = "WfExS-backend"
 
