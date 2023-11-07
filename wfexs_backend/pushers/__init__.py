@@ -54,8 +54,11 @@ if TYPE_CHECKING:
     from ..workflow import WF
 
 from ..common import (
-    AcceptableLicenceSchemes,
     NoLicence,
+)
+
+from ..utils.licences import (
+    AcceptableLicenceSchemes,
     ROCrateShortLicences,
 )
 
@@ -77,6 +80,7 @@ class AbstractExportPlugin(abc.ABC):
         setup_block: "Optional[SecurityContextConfig]" = None,
         licences: "Sequence[str]" = [],
         orcids: "Sequence[str]" = [],
+        preferred_id: "Optional[str]" = None,
     ):
         import inspect
 
@@ -90,6 +94,10 @@ class AbstractExportPlugin(abc.ABC):
         self.refdir = wfInstance.getStagedSetup().work_dir
         self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
 
+        # This is the default value for the preferred PID
+        # which can be updated through a call to book_pid
+        self.preferred_id = preferred_id
+
         # As these licences can be in short format, resolve them to URIs
         expanded_licences: "MutableSequence[URIType]" = []
         if len(licences) == 0:
@@ -97,8 +105,8 @@ class AbstractExportPlugin(abc.ABC):
         else:
             rejected_licences: "MutableSequence[str]" = []
             for lic in licences:
-                expanded_licence = ROCrateShortLicences.get(lic)
-                if expanded_licence is None:
+                expanded_licence_tuple = ROCrateShortLicences.get(lic)
+                if expanded_licence_tuple is None:
                     if (
                         urllib.parse.urlparse(lic).scheme
                         not in AcceptableLicenceSchemes
@@ -106,6 +114,8 @@ class AbstractExportPlugin(abc.ABC):
                         rejected_licences.append(lic)
 
                     expanded_licence = lic
+                else:
+                    expanded_licence = expanded_licence_tuple.uri
 
                 expanded_licences.append(cast("URIType", expanded_licence))
 
@@ -131,6 +141,18 @@ class AbstractExportPlugin(abc.ABC):
         This is the method to be implemented by the stateful pusher
         """
         pass
+
+    def book_pid(self) -> "Optional[str]":
+        """
+        This method is used to book a new PID,
+        in case the destination allows it.
+
+        When it returns None, it means either
+        the destination does not allow booking
+        pids, either temporary or permanently
+        """
+
+        return self.preferred_id
 
     @classmethod
     def PluginName(cls) -> "SymbolicName":

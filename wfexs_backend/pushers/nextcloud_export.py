@@ -346,8 +346,16 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         wfInstance: "WF",
         setup_block: "Optional[SecurityContextConfig]" = None,
         licences: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = [],
+        preferred_id: "Optional[str]" = None,
     ):
-        super().__init__(wfInstance, setup_block=setup_block, licences=licences)
+        super().__init__(
+            wfInstance,
+            setup_block=setup_block,
+            licences=licences,
+            orcids=orcids,
+            preferred_id=preferred_id,
+        )
 
         for conf_key in ("server", "base-directory"):
             if conf_key not in self.setup_block:
@@ -377,6 +385,8 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         if (preferred_scheme is not None) and len(preferred_scheme) > 0:
             self.logger.debug(f"Ignoring preferred scheme {preferred_scheme}")
 
+        # We are starting to learn whether we already have a PID
+        preferred_id = self.preferred_id if preferred_id is None else preferred_id
         if (preferred_id is not None) and len(preferred_id) > 0:
             self.logger.debug(f"Ignoring preferred PID {preferred_id}")
 
