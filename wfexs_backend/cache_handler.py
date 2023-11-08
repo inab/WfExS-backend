@@ -166,8 +166,6 @@ class SchemeHandlerCacheHandler:
         schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]" = dict(),
     ):
         # Getting a logger focused on specific classes
-        import inspect
-
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
             + "::"
