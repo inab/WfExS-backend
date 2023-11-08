@@ -59,7 +59,6 @@ from ..common import (
 
 from ..utils.licences import (
     AcceptableLicenceSchemes,
-    ROCrateShortLicences,
 )
 
 
@@ -93,6 +92,7 @@ class AbstractExportPlugin(abc.ABC):
         self.wfInstance = wfInstance
         self.refdir = wfInstance.getStagedSetup().work_dir
         self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+        licence_matcher = wfInstance.GetLicenceMatcher()
 
         # This is the default value for the preferred PID
         # which can be updated through a call to book_pid
@@ -105,7 +105,7 @@ class AbstractExportPlugin(abc.ABC):
         else:
             rejected_licences: "MutableSequence[str]" = []
             for lic in licences:
-                expanded_licence_tuple = ROCrateShortLicences.get(lic)
+                expanded_licence_tuple = licence_matcher.match_ShortLicence(lic)
                 if expanded_licence_tuple is None:
                     if (
                         urllib.parse.urlparse(lic).scheme
@@ -115,7 +115,7 @@ class AbstractExportPlugin(abc.ABC):
 
                     expanded_licence = lic
                 else:
-                    expanded_licence = expanded_licence_tuple.uri
+                    expanded_licence = expanded_licence_tuple.uris[0]
 
                 expanded_licences.append(cast("URIType", expanded_licence))
 

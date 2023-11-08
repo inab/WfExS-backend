@@ -91,6 +91,10 @@ if TYPE_CHECKING:
         ORCIDPublicRecord,
     )
 
+    from .utils.licences import (
+        LicenceMatcher,
+    )
+
 import urllib.parse
 import uuid
 
@@ -129,6 +133,9 @@ from .utils.digests import (
     nullProcessDigest,
     unstringifyDigest,
 )
+from .utils.licences import (
+    LicenceMatcherSingleton,
+)
 from .utils.marshalling_handling import (
     marshall_namedtuple,
 )
@@ -150,8 +157,6 @@ from .utils.licences import (
     AcceptableLicenceSchemes,
     NoLicenceShort,
     CC_BY_40_LICENCE,
-    ROCrateLongLicences,
-    ROCrateShortLicences,
 )
 
 from . import __url__ as wfexs_backend_url
@@ -734,6 +739,7 @@ class WorkflowRunROCrate:
         tempdir: "Optional[str]" = None,
         scheme_desc: "Sequence[Tuple[str, str]]" = [],
         crate_pid: "Optional[str]" = None,
+        licence_matcher: "Optional[LicenceMatcher]" = None,
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -769,6 +775,10 @@ class WorkflowRunROCrate:
 
         if len(licences) == 0:
             licences = [NoLicenceShort]
+
+        if licence_matcher is None:
+            licence_matcher = LicenceMatcherSingleton()
+        self.licence_matcher = licence_matcher
 
         if localWorkflow.relPath is not None:
             wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
@@ -946,7 +956,7 @@ class WorkflowRunROCrate:
         # Let's check the licences
         rejected_lics: "MutableSequence[str]" = []
         for lic in licences:
-            if lic in ROCrateShortLicences:
+            if self.licence_matcher.match_ShortLicence(lic) is not None:
                 continue
             if urllib.parse.urlparse(lic).scheme in AcceptableLicenceSchemes:
                 continue
@@ -1017,61 +1027,72 @@ class WorkflowRunROCrate:
 
         parsed_lic: "Union[str, rocrate.model.creativework.CreativeWork]"
         rec_lic: "bool" = False
-        if licence in ROCrateShortLicences:
+        licdesc = self.licence_matcher.match_ShortLicence(licence)
+        if licdesc is not None:
             if licence == NoLicenceShort:
                 parsed_lic = licence
             else:
-                licdesc = ROCrateShortLicences[licence]
+                lic_uri = licdesc.get_uri()
                 cw = cast(
                     "Optional[rocrate.model.creativework.CreativeWork]",
-                    self.crate.dereference(licdesc.uri),
+                    self.crate.dereference(lic_uri),
                 )
                 if cw is None:
                     rec_lic = True
                     parsed_lic = rocrate.model.creativework.CreativeWork(
                         self.crate,
-                        identifier=licdesc.uri,
+                        identifier=lic_uri,
                         properties={
-                            "identifier": licdesc.uri,
+                            "identifier": licdesc.short,
                             "name": licdesc.description,
+                            "url": licdesc.uris[0]
+                            if len(licdesc.uris) == 1
+                            else licdesc.uris,
                         },
                     )
                 else:
                     parsed_lic = cw
-        elif licence in ROCrateLongLicences:
-            licdesc = ROCrateLongLicences[licence]
-            cw = cast(
-                "Optional[rocrate.model.creativework.CreativeWork]",
-                self.crate.dereference(licdesc.uri),
-            )
-            if cw is None:
-                rec_lic = True
-                parsed_lic = rocrate.model.creativework.CreativeWork(
-                    self.crate,
-                    identifier=licdesc.uri,
-                    properties={
-                        "identifier": licdesc.uri,
-                        "name": licdesc.description,
-                    },
-                )
-            else:
-                parsed_lic = cw
         else:
-            cw = cast(
-                "Optional[rocrate.model.creativework.CreativeWork]",
-                self.crate.dereference(licence),
-            )
-            if cw is None:
-                rec_lic = True
-                parsed_lic = rocrate.model.creativework.CreativeWork(
-                    self.crate,
-                    identifier=licence,
-                    properties={
-                        "identifier": licence,
-                    },
+            licdesc = self.licence_matcher.match_LongLicence(licence)
+
+            if licdesc is not None:
+                lic_uri = licdesc.get_uri()
+                cw = cast(
+                    "Optional[rocrate.model.creativework.CreativeWork]",
+                    self.crate.dereference(lic_uri),
                 )
+                if cw is None:
+                    rec_lic = True
+                    parsed_lic = rocrate.model.creativework.CreativeWork(
+                        self.crate,
+                        identifier=lic_uri,
+                        properties={
+                            "identifier": licdesc.short,
+                            "name": licdesc.description,
+                            "url": licdesc.uris[0]
+                            if len(licdesc.uris) == 1
+                            else licdesc.uris,
+                        },
+                    )
+                else:
+                    parsed_lic = cw
             else:
-                parsed_lic = cw
+                cw = cast(
+                    "Optional[rocrate.model.creativework.CreativeWork]",
+                    self.crate.dereference(licence),
+                )
+                if cw is None:
+                    rec_lic = True
+                    parsed_lic = rocrate.model.creativework.CreativeWork(
+                        self.crate,
+                        identifier=licence,
+                        properties={
+                            "identifier": licence,
+                            "url": licence,
+                        },
+                    )
+                else:
+                    parsed_lic = cw
 
         if rec_lic and isinstance(parsed_lic, rocrate.model.creativework.CreativeWork):
             self.crate.add(parsed_lic)

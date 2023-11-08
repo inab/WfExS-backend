@@ -53,6 +53,7 @@ from .common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        ClassVar,
         Iterable,
         Iterator,
         Mapping,
@@ -118,6 +119,10 @@ if TYPE_CHECKING:
         AbstractWorkflowEngineType,
     )
 
+    from .utils.licences import (
+        LicenceMatcher,
+    )
+
     Sch_PlainURI = URIType
 
     Sch_LicensedURI = TypedDict(
@@ -179,6 +184,10 @@ from .engine import (
 from .ro_crate import (
     WorkflowRunROCrate,
 )
+from .utils.licences import (
+    LicenceMatcherSingleton,
+)
+
 from .security_context import (
     SecurityContextVault,
 )
@@ -4076,6 +4085,7 @@ class WF:
             tempdir=self.tempDir,
             scheme_desc=self.wfexs.describeFetchableSchemes(),
             crate_pid=crate_pid,
+            licence_matcher=self.GetLicenceMatcher(),
         )
 
         wrroc.addWorkflowInputs(
@@ -4144,6 +4154,7 @@ class WF:
             tempdir=self.tempDir,
             scheme_desc=self.wfexs.describeFetchableSchemes(),
             crate_pid=crate_pid,
+            licence_matcher=self.GetLicenceMatcher(),
         )
 
         for stagedExec in self.stagedExecutions:
@@ -4163,3 +4174,13 @@ class WF:
         self.logger.info("Execution RO-Crate created: {}".format(filename))
 
         return filename
+
+    _LicenceMatcher: "ClassVar[Optional[LicenceMatcher]]" = None
+
+    @classmethod
+    def GetLicenceMatcher(cls) -> "LicenceMatcher":
+        if cls._LicenceMatcher is None:
+            cls._LicenceMatcher = LicenceMatcherSingleton()
+            assert cls._LicenceMatcher is not None
+
+        return cls._LicenceMatcher
