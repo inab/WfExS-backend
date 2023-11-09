@@ -351,8 +351,8 @@ class WF:
     STAGE_DEFINITION_SCHEMA: "Final[RelPath]" = cast("RelPath", "stage-definition.json")
     EXPORT_ACTIONS_SCHEMA: "Final[RelPath]" = cast("RelPath", "export-actions.json")
 
-    STAGED_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "staged.crate")
-    EXECUTION_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "execution.crate")
+    STAGED_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "staged.ro-crate.zip")
+    EXECUTION_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "execution.ro-crate.zip")
 
     DEFAULT_TRS_ENDPOINT: "Final[str]" = (
         "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
@@ -2823,10 +2823,6 @@ class WF:
                 if colPos == 0:
                     assert rColPos > colPos
 
-                    if encoded_name[-1] != ":":
-                        raise WFException(
-                            f"Unexpected element to export {encoded_name}"
-                        )
                     rawItemType = encoded_name[1:rColPos]
                     blockName = encoded_name[rColPos + 1 :]
                     whatName = None
