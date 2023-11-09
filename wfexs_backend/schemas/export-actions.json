@@ -24,14 +24,15 @@
 						"oneOf": [
 							{
 								"type": "string",
-								"enum": [
-									":working-directory:",
-									":stage-rocrate:",
-									":stage-rocrate:full",
-									":provenance-rocrate:",
-									":provenance-rocrate:output",
-									":provenance-rocrate:full"
-								]
+								"const": ":working-directory:"
+							},
+							{
+								"type": "string",
+								"pattern": "^:stage-rocrate:(full|(inputs|workflow|containers)(,(inputs|workflow|containers))*)?$"
+							},
+							{
+								"type": "string",
+								"pattern": "^:provenance-rocrate:(full|(inputs|outputs|workflow|containers)(,(inputs|outputs|workflow|containers))*)?$"
 							},
 							{
 								"type": "string",

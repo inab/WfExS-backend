@@ -3968,12 +3968,17 @@ class WF:
                 ExportItemType.StageCrate,
                 ExportItemType.ProvenanceCrate,
             ):
-                if item.block not in self.ExportROCrate2Payloads:
-                    raise KeyError(
-                        f"'{item.block}' is not a valid variant for {item.type.value} ('"
-                        + "', '".join(self.ExportROCrate2Payloads.keys())
-                        + "')"
-                    )
+                assert item.block is not None
+                item_blocks = item.block.split(",")
+                payloads_param = NoCratableItem
+                for item_block in item_blocks:
+                    if item_block not in self.ExportROCrate2Payloads:
+                        raise KeyError(
+                            f"'{item_block}' is not a valid variant for {item.type.value} ('"
+                            + "', '".join(self.ExportROCrate2Payloads.keys())
+                            + "')"
+                        )
+                    payloads_param |= self.ExportROCrate2Payloads[item_block]
 
                 if item.type == ExportItemType.StageCrate:
                     if not isinstance(
@@ -4009,10 +4014,9 @@ class WF:
                 os.close(temp_handle)
                 atexit.register(os.unlink, temp_rocrate_file)
 
-                assert item.block is not None
                 create_rocrate(
                     filename=cast("AbsPath", temp_rocrate_file),
-                    payloads=self.ExportROCrate2Payloads[item.block],
+                    payloads=payloads_param,
                     licences=licences,
                     orcids=orcids,
                     crate_pid=crate_pid,
