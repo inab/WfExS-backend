@@ -615,6 +615,9 @@ class LicenceMatcher:
     def match_LongLicence(self, long_licence: "str") -> "Optional[LicenceDescription]":
         return self.dict_long_licences.get(long_licence)
 
+    def describeDocumentedLicences(self) -> "Sequence[LicenceDescription]":
+        return list(self.dict_short_licences.values())
+
 
 class LicenceMatcherSingleton(LicenceMatcher):
     __instance: "ClassVar[Optional[LicenceMatcher]]" = None
