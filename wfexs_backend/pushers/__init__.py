@@ -29,6 +29,7 @@ import urllib.parse
 if TYPE_CHECKING:
     from typing import (
         Any,
+        ClassVar,
         Mapping,
         MutableSequence,
         Optional,
@@ -61,7 +62,9 @@ class AbstractExportPlugin(abc.ABC):
     Abstract class to model stateful export plugins
     """
 
-    PLUGIN_NAME = cast("SymbolicName", "")
+    PLUGIN_NAME: "ClassVar[SymbolicName]" = cast("SymbolicName", "")
+    # Is this implementation enabled?
+    ENABLED: "ClassVar[bool]" = True
 
     def __init__(
         self,

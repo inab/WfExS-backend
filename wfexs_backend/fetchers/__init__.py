@@ -146,6 +146,9 @@ class AbstractStatefulFetcher(abc.ABC):
     # Default priority
     PRIORITY: "ClassVar[int]" = DEFAULT_PRIORITY
 
+    # Is this implementation enabled?
+    ENABLED: "ClassVar[bool]" = True
+
     def __init__(
         self,
         progs: "ProgsMapping" = dict(),

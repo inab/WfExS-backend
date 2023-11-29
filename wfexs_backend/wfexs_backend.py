@@ -124,8 +124,7 @@ from .fetchers.swh import (
     SoftwareHeritageFetcher,
 )
 
-from .pushers.cache_export import CacheExportPlugin
-from .pushers.nextcloud_export import NextcloudExportPlugin
+from .pushers import AbstractExportPlugin
 
 from .workflow import (
     WF,
@@ -195,8 +194,6 @@ if TYPE_CHECKING:
     from .fetchers import (
         StatefulFetcher,
     )
-
-    from .pushers import AbstractExportPlugin
 
     from .utils.passphrase_wrapper import (
         WfExSPassphraseGenerator,
@@ -593,7 +590,7 @@ class WfExSBackend:
 
         fetchers_setup_block = local_config.get("fetchers-setup")
 
-        # All the custom ones should be added here
+        # All the scheme handlers should be added here
         self.findAndAddSchemeHandlersFromModuleName(
             fetchers_setup_block=fetchers_setup_block
         )
@@ -602,8 +599,9 @@ class WfExSBackend:
         self._export_plugins: "MutableMapping[SymbolicName, Type[AbstractExportPlugin]]" = (
             dict()
         )
-        self.addExportPlugin(CacheExportPlugin)
-        self.addExportPlugin(NextcloudExportPlugin)
+
+        # All the export plugins should be added here
+        self.findAndAddExportPluginsFromModuleName()
 
     @property
     def cacheWorkflowDir(self) -> "AbsPath":
@@ -648,6 +646,41 @@ class WfExSBackend:
 
         return cast("StatefulFetcher", instStatefulFetcher)
 
+    def findAndAddExportPluginsFromModuleName(
+        self,
+        the_module_name: "str" = "wfexs_backend.pushers",
+    ) -> None:
+        try:
+            the_module = importlib.import_module(the_module_name)
+            self.findAndAddExportPluginsFromModule(the_module)
+        except Exception as e:
+            errmsg = f"Unable to import module {the_module_name} in order to gather export plugins, due errors:"
+            self.logger.exception(errmsg)
+            raise WfExSBackendException(errmsg) from e
+
+    def findAndAddExportPluginsFromModule(
+        self,
+        the_module: "ModuleType",
+    ) -> None:
+        for finder, module_name, ispkg in iter_namespace(the_module):
+            try:
+                named_module = importlib.import_module(module_name)
+            except:
+                self.logger.exception(
+                    f"Skipping module {module_name} in order to gather export plugins, due errors:"
+                )
+                continue
+
+            for name, obj in inspect.getmembers(named_module):
+                if (
+                    inspect.isclass(obj)
+                    and not inspect.isabstract(obj)
+                    and issubclass(obj, AbstractExportPlugin)
+                ):
+                    # Now, let's learn whether the class is enabled
+                    if getattr(obj, "ENABLED", False):
+                        self.addExportPlugin(obj)
+
     def addExportPlugin(self, exportClazz: "Type[AbstractExportPlugin]") -> None:
         self._export_plugins[exportClazz.PluginName()] = exportClazz
 
@@ -664,10 +697,16 @@ class WfExSBackend:
         the_module_name: "str" = "wfexs_backend.fetchers",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
     ) -> None:
-        self.findAndAddSchemeHandlersFromModule(
-            importlib.import_module(the_module_name),
-            fetchers_setup_block=fetchers_setup_block,
-        )
+        try:
+            the_module = importlib.import_module(the_module_name)
+            self.findAndAddSchemeHandlersFromModule(
+                the_module,
+                fetchers_setup_block=fetchers_setup_block,
+            )
+        except Exception as e:
+            errmsg = f"Unable to import module {the_module_name} in order to gather scheme handlers, due errors:"
+            self.logger.exception(errmsg)
+            raise WfExSBackendException(errmsg) from e
 
     def findAndAddSchemeHandlersFromModule(
         self,
@@ -675,7 +714,13 @@ class WfExSBackend:
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
     ) -> None:
         for finder, module_name, ispkg in iter_namespace(the_module):
-            named_module = importlib.import_module(module_name)
+            try:
+                named_module = importlib.import_module(module_name)
+            except:
+                self.logger.exception(
+                    f"Skipping module {module_name} in order to gather scheme handlers, due errors:"
+                )
+                continue
 
             # First, try locating a variable named SCHEME_HANDLERS
             # then, the different class declarations inheriting
@@ -692,10 +737,12 @@ class WfExSBackend:
                     and not inspect.isabstract(obj)
                     and issubclass(obj, AbstractStatefulFetcher)
                 ):
-                    self.addStatefulSchemeHandlers(
-                        obj,
-                        fetchers_setup_block=fetchers_setup_block,
-                    )
+                    # Now, let's learn whether the class is enabled
+                    if getattr(obj, "ENABLED", False):
+                        self.addStatefulSchemeHandlers(
+                            obj,
+                            fetchers_setup_block=fetchers_setup_block,
+                        )
 
     def addStatefulSchemeHandlers(
         self,
