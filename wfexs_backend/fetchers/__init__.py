@@ -102,6 +102,7 @@ from ..common import (
 # Default priority
 DEFAULT_PRIORITY: "Final[int]" = 0
 
+
 class DocumentedProtocolFetcher(NamedTuple):
     fetcher: "ProtocolFetcher"
     description: "str"

@@ -22,6 +22,7 @@ import datetime
 import fnmatch
 import json
 import os
+import pkgutil
 import re
 
 from typing import (
@@ -29,6 +30,8 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
     from typing import (
         Any,
         Iterator,
@@ -268,3 +271,11 @@ def config_validate(
         raise ConfigValidationException(
             f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}"
         )
+
+
+def iter_namespace(ns_pkg: "ModuleType") -> "Iterator[pkgutil.ModuleInfo]":
+    # Specifying the second argument (prefix) to iter_modules makes the
+    # returned name an absolute name instead of a relative one. This allows
+    # import_module to work without having to do additional modification to
+    # the name.
+    return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")

@@ -21,6 +21,7 @@ import atexit
 import copy
 import datetime
 import hashlib
+import importlib
 import inspect
 import io
 import json
@@ -91,26 +92,27 @@ from .ro_crate import FixedROCrate
 
 from .security_context import SecurityContextVault
 
-from .utils.marshalling_handling import unmarshall_namedtuple
-from .utils.misc import config_validate
+from .utils.marshalling_handling import (
+    unmarshall_namedtuple,
+)
+
 from .utils.misc import (
+    config_validate,
     DatetimeEncoder,
+    iter_namespace,
     jsonFilterDecodeFromStream,
     translate_glob_args,
 )
+
 from .utils.passphrase_wrapper import (
     WfExSPassGenSingleton,
 )
 
 from .fetchers import (
+    AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
 )
-from .fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
-from .fetchers.ftp import SCHEME_HANDLERS as FTP_SCHEME_HANDLERS
-from .fetchers.sftp import SCHEME_HANDLERS as SFTP_SCHEME_HANDLERS
-from .fetchers.file import SCHEME_HANDLERS as FILE_SCHEME_HANDLERS
-from .fetchers.data import SCHEME_HANDLERS as DATA_SCHEME_HANDLERS
 
 from .fetchers.git import (
     GitFetcher,
@@ -121,17 +123,6 @@ from .fetchers.swh import (
     guess_swh_repo_params,
     SoftwareHeritageFetcher,
 )
-
-from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
-from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
-from .fetchers.trs_files import SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
-from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
-from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
-from .fetchers.fasp import FASPFetcher
-from .fetchers.doi import SCHEME_HANDLERS as DOI_SCHEME_HANDLERS
-from .fetchers.zenodo import SCHEME_HANDLERS as ZENODO_SCHEME_HANDLERS
-from .fetchers.b2share import SCHEME_HANDLERS as B2SHARE_SCHEME_HANDLERS
-from .fetchers.osf_io import SCHEME_HANDLERS as OSF_IO_SCHEME_HANDLERS
 
 from .pushers.cache_export import CacheExportPlugin
 from .pushers.nextcloud_export import NextcloudExportPlugin
@@ -148,6 +139,8 @@ from .fetchers.trs_files import (
 
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
     from typing import (
         Any,
         ClassVar,
@@ -200,7 +193,6 @@ if TYPE_CHECKING:
     )
 
     from .fetchers import (
-        AbstractStatefulFetcher,
         StatefulFetcher,
     )
 
@@ -600,28 +592,11 @@ class WfExSBackend:
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir)
 
         fetchers_setup_block = local_config.get("fetchers-setup")
+
         # All the custom ones should be added here
-        self.addSchemeHandlers(PRIDE_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(DRS_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(S3_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(GS_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addStatefulSchemeHandlers(FASPFetcher, fetchers_setup_block)
-
-        self.addSchemeHandlers(DOI_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(ZENODO_SCHEME_HANDLERS, fetchers_setup_block)
-
-        self.addSchemeHandlers(B2SHARE_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(OSF_IO_SCHEME_HANDLERS, fetchers_setup_block)
-
-        # These ones should have prevalence over other custom ones
-        self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
-        self.addStatefulSchemeHandlers(SoftwareHeritageFetcher, fetchers_setup_block)
-        self.addSchemeHandlers(HTTP_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(FTP_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(SFTP_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(FILE_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(DATA_SCHEME_HANDLERS, fetchers_setup_block)
+        self.findAndAddSchemeHandlersFromModuleName(
+            fetchers_setup_block=fetchers_setup_block
+        )
 
         # Registry of export plugins is created here
         self._export_plugins: "MutableMapping[SymbolicName, Type[AbstractExportPlugin]]" = (
@@ -683,6 +658,44 @@ class WfExSBackend:
         self, plugin_id: "SymbolicName"
     ) -> "Optional[Type[AbstractExportPlugin]]":
         return self._export_plugins.get(plugin_id)
+
+    def findAndAddSchemeHandlersFromModuleName(
+        self,
+        the_module_name: "str" = "wfexs_backend.fetchers",
+        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
+    ) -> None:
+        self.findAndAddSchemeHandlersFromModule(
+            importlib.import_module(the_module_name),
+            fetchers_setup_block=fetchers_setup_block,
+        )
+
+    def findAndAddSchemeHandlersFromModule(
+        self,
+        the_module: "ModuleType",
+        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
+    ) -> None:
+        for finder, module_name, ispkg in iter_namespace(the_module):
+            named_module = importlib.import_module(module_name)
+
+            # First, try locating a variable named SCHEME_HANDLERS
+            # then, the different class declarations inheriting
+            # from AbstractStatefulFetcher
+            for name, obj in inspect.getmembers(named_module):
+                if name == "SCHEME_HANDLERS":
+                    if isinstance(obj, dict):
+                        self.addSchemeHandlers(
+                            obj,
+                            fetchers_setup_block=fetchers_setup_block,
+                        )
+                elif (
+                    inspect.isclass(obj)
+                    and not inspect.isabstract(obj)
+                    and issubclass(obj, AbstractStatefulFetcher)
+                ):
+                    self.addStatefulSchemeHandlers(
+                        obj,
+                        fetchers_setup_block=fetchers_setup_block,
+                    )
 
     def addStatefulSchemeHandlers(
         self,
