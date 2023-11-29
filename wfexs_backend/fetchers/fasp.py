@@ -46,6 +46,7 @@ if TYPE_CHECKING:
 
 from . import (
     AbstractStatefulFetcher,
+    DocumentedStatefulProtocolFetcher,
     FetcherException,
     ProtocolFetcherReturn,
 )
@@ -74,10 +75,13 @@ class FASPFetcher(AbstractStatefulFetcher):
         )
 
     @classmethod
-    def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractStatefulFetcher]]":
+    def GetSchemeHandlers(cls) -> "Mapping[str, DocumentedStatefulProtocolFetcher]":
         # These are de-facto schemes supported by pip and git client
         return {
-            cls.FASP_PROTO: cls,
+            cls.FASP_PROTO: DocumentedStatefulProtocolFetcher(
+                fetcher_class=cls,
+                priority=cls.PRIORITY,
+            ),
         }
 
     @classmethod

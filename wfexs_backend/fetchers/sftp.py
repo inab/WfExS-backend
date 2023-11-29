@@ -249,9 +249,11 @@ SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
     "sftp": DocumentedProtocolFetcher(
         fetcher=fetchSSHURL,
         description="'sftp' scheme represents contents behind an SSH server",
+        priority=20,
     ),
     "ssh": DocumentedProtocolFetcher(
         fetcher=fetchSSHURL,
         description="'ssh' scheme represents contents behind an SSH server",
+        priority=20,
     ),
 }

@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Callable,
+        ClassVar,
         Iterable,
         IO,
         Mapping,
@@ -45,6 +46,7 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import (
+        Final,
         NotRequired,
         Required,
         TypeAlias,
@@ -97,9 +99,19 @@ from ..common import (
 )
 
 
+# Default priority
+DEFAULT_PRIORITY: "Final[int]" = 0
+
 class DocumentedProtocolFetcher(NamedTuple):
     fetcher: "ProtocolFetcher"
     description: "str"
+    priority: "int" = DEFAULT_PRIORITY
+
+
+class DocumentedStatefulProtocolFetcher(NamedTuple):
+    fetcher_class: "Type[AbstractStatefulFetcher]"
+    description: "Optional[str]" = None
+    priority: "int" = DEFAULT_PRIORITY
 
 
 class FetcherException(AbstractWfExSException):
@@ -129,6 +141,9 @@ class AbstractStatefulFetcher(abc.ABC):
     """
     Abstract class to model stateful fetchers
     """
+
+    # Default priority
+    PRIORITY: "ClassVar[int]" = DEFAULT_PRIORITY
 
     def __init__(
         self,
@@ -168,7 +183,7 @@ class AbstractStatefulFetcher(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractStatefulFetcher]]":
+    def GetSchemeHandlers(cls) -> "Mapping[str, DocumentedStatefulProtocolFetcher]":
         return dict()
 
     @classmethod
@@ -213,6 +228,8 @@ class RepoGuessException(FetcherException):
 
 
 class AbstractRepoFetcher(AbstractStatefulFetcher):
+    PRIORITY: "ClassVar[int]" = DEFAULT_PRIORITY + 10
+
     @abc.abstractmethod
     def doMaterializeRepo(
         self,

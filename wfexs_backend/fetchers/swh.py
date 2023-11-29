@@ -68,6 +68,7 @@ if TYPE_CHECKING:
 
 from . import (
     AbstractRepoFetcher,
+    DocumentedStatefulProtocolFetcher,
     FetcherException,
     ProtocolFetcherReturn,
     RepoGuessException,
@@ -101,11 +102,14 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
     WAIT_SECS: "Final[int]" = 60
 
     @classmethod
-    def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractRepoFetcher]]":
+    def GetSchemeHandlers(cls) -> "Mapping[str, DocumentedStatefulProtocolFetcher]":
         # These are de-facto schemes supported by Software Heritage
         # libraries and other implementations
         return {
-            cls.SOFTWARE_HERITAGE_SCHEME: cls,
+            cls.SOFTWARE_HERITAGE_SCHEME: DocumentedStatefulProtocolFetcher(
+                fetcher_class=cls,
+                priority=cls.PRIORITY,
+            ),
         }
 
     @property

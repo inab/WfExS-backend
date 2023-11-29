@@ -212,9 +212,11 @@ SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
     "http": DocumentedProtocolFetcher(
         fetcher=fetchClassicURL,
         description="HTTP download URLs",
+        priority=20,
     ),
     "https": DocumentedProtocolFetcher(
         fetcher=fetchClassicURL,
         description="HTTPS download URLs",
+        priority=20,
     ),
 }

@@ -111,5 +111,6 @@ SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
     DATA_SCHEME: DocumentedProtocolFetcher(
         fetcher=deserializeDataURI,
         description="'data' scheme is used to embed very small payloads, as it is described at https://datatracker.ietf.org/doc/html/rfc2397",
+        priority=20,
     ),
 }
