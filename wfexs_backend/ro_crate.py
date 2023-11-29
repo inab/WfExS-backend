@@ -737,7 +737,7 @@ class WorkflowRunROCrate:
         orcids: "Sequence[str]" = [],
         progs: "ProgsMapping" = {},
         tempdir: "Optional[str]" = None,
-        scheme_desc: "Sequence[Tuple[str, str]]" = [],
+        scheme_desc: "Sequence[Tuple[str, str, int]]" = [],
         crate_pid: "Optional[str]" = None,
         licence_matcher: "Optional[LicenceMatcher]" = None,
     ):
@@ -1100,7 +1100,7 @@ class WorkflowRunROCrate:
         return parsed_lic
 
     def _add_wfexs_to_crate(
-        self, scheme_desc: "Sequence[Tuple[str, str]]"
+        self, scheme_desc: "Sequence[Tuple[str, str, int]]"
     ) -> "rocrate.model.softwareapplication.SoftwareApplication":
         # First, the profiles to be attached to the root dataset
         wrroc_profiles = [

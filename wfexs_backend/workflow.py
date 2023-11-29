@@ -47,6 +47,7 @@ from .common import (
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
+    NoLicence,
     StagedExecution,
 )
 
@@ -119,6 +120,10 @@ if TYPE_CHECKING:
         AbstractWorkflowEngineType,
     )
 
+    from .pushers import (
+        AbstractExportPlugin,
+    )
+
     from .utils.licences import (
         LicenceMatcher,
     )
@@ -181,10 +186,19 @@ from .engine import (
     WorkflowType,
 )
 
+from .pushers import (
+    ExportPluginException,
+)
+
+from .pushers.abstract_contexted_export import (
+    AbstractContextedExportPlugin,
+)
+
 from .ro_crate import (
     WorkflowRunROCrate,
 )
 from .utils.licences import (
+    AcceptableLicenceSchemes,
     LicenceMatcherSingleton,
 )
 
@@ -2917,6 +2931,75 @@ class WF:
 
         return self.exportResults(actions, vault, action_ids, fail_ok=fail_ok)
 
+    def _instantiate_export_plugin(
+        self,
+        plugin_id: "SymbolicName",
+        sec_context: "Optional[SecurityContextConfig]",
+        licences: "Sequence[str]",
+        orcids: "Sequence[str]",
+        preferred_id: "Optional[str]",
+    ) -> "AbstractExportPlugin":
+        """
+        This method instantiates an stateful export plugin
+        """
+
+        _export_plugin_clazz = self.wfexs.getExportPluginClass(plugin_id)
+        if _export_plugin_clazz is None:
+            raise KeyError(f"Unavailable plugin {plugin_id}")
+
+        stagedSetup = self.getStagedSetup()
+
+        if stagedSetup.work_dir is None:
+            raise ValueError(
+                f"Staged setup from {stagedSetup.instance_id} is corrupted"
+            )
+
+        if stagedSetup.is_damaged:
+            raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
+
+        # As these licences can be in short format, resolve them to URIs
+        expanded_licences: "MutableSequence[URIType]" = []
+        if len(licences) == 0:
+            expanded_licences.append(NoLicence)
+        else:
+            licence_matcher = self.GetLicenceMatcher()
+            rejected_licences: "MutableSequence[str]" = []
+            for lic in licences:
+                expanded_licence_tuple = licence_matcher.match_ShortLicence(lic)
+                if expanded_licence_tuple is None:
+                    if (
+                        urllib.parse.urlparse(lic).scheme
+                        not in AcceptableLicenceSchemes
+                    ):
+                        rejected_licences.append(lic)
+
+                    expanded_licence = lic
+                else:
+                    expanded_licence = expanded_licence_tuple.uris[0]
+
+                expanded_licences.append(cast("URIType", expanded_licence))
+
+            if len(rejected_licences) > 0:
+                raise ExportPluginException(
+                    f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
+                )
+
+        # FIXME: ORCIDs are bypassed (for now)
+        expanded_orcids = orcids
+
+        export_p = _export_plugin_clazz(
+            refdir=stagedSetup.work_dir,
+            setup_block=sec_context,
+            licences=expanded_licences,
+            orcids=expanded_orcids,
+            preferred_id=preferred_id,
+        )
+
+        if isinstance(export_p, AbstractContextedExportPlugin):
+            export_p.set_workflow_context(self)
+
+        return export_p
+
     def exportResults(
         self,
         actions: "Optional[Sequence[ExportAction]]" = None,
@@ -2998,9 +3081,8 @@ class WF:
                 # check whether plugin is available
                 # TODO: Should we include mechanism to reuse a PID
                 # already used in a previous export?
-                export_p = self.wfexs.instantiateExportPlugin(
-                    self,
-                    action.plugin_id,
+                export_p = self._instantiate_export_plugin(
+                    plugin_id=action.plugin_id,
                     sec_context=a_setup_block,
                     licences=the_licences,
                     orcids=the_orcids,

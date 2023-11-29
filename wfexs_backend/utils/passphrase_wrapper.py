@@ -238,8 +238,7 @@ class WfExSPassGenSingleton(WfExSPassphraseGenerator):
             cacheHandler = SchemeHandlerCacheHandler(
                 cachePath, schemeHandlers=HTTP_SCHEME_HANDLERS
             )
-            for scheme, clazz in WiktionaryFetcher.GetSchemeHandlers().items():
-                cacheHandler.addSchemeHandler(scheme, clazz)
+            cacheHandler.bypassSchemeHandlers(WiktionaryFetcher.GetSchemeHandlers())
             cls.__instance = WfExSPassphraseGenerator(cacheHandler)
 
         return cls.__instance

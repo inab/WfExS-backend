@@ -104,6 +104,7 @@ from .utils.passphrase_wrapper import (
 
 from .fetchers import (
     DocumentedProtocolFetcher,
+    DocumentedStatefulProtocolFetcher,
 )
 from .fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
 from .fetchers.ftp import SCHEME_HANDLERS as FTP_SCHEME_HANDLERS
@@ -660,6 +661,9 @@ class WfExSBackend:
         """
         instStatefulFetcher = self._sngltn.get(statefulFetcher)
         if instStatefulFetcher is None:
+            # Setting the default list of programs
+            for prog in statefulFetcher.GetNeededPrograms():
+                self.progs.setdefault(prog, cast("RelPath", prog))
             # Let's augment the list of needed progs by this
             # stateful fetcher
             instStatefulFetcher = self.cacheHandler.instantiateStatefulFetcher(
@@ -675,39 +679,10 @@ class WfExSBackend:
     def listExportPluginNames(self) -> "Sequence[SymbolicName]":
         return list(self._export_plugins.keys())
 
-    def instantiateExportPlugin(
-        self,
-        wfInstance: "WF",
-        plugin_id: "SymbolicName",
-        sec_context: "Optional[SecurityContextConfig]",
-        licences: "Sequence[str]",
-        orcids: "Sequence[str]",
-        preferred_id: "Optional[str]",
-    ) -> "AbstractExportPlugin":
-        """
-        This method instantiates an stateful export plugin
-        """
-
-        if plugin_id not in self._export_plugins:
-            raise KeyError(f"Unavailable plugin {plugin_id}")
-
-        stagedSetup = wfInstance.getStagedSetup()
-
-        if stagedSetup.work_dir is None:
-            raise ValueError(
-                f"Staged setup from {stagedSetup.instance_id} is corrupted"
-            )
-
-        if stagedSetup.is_damaged:
-            raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
-
-        return self._export_plugins[plugin_id](
-            wfInstance,
-            setup_block=sec_context,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
-        )
+    def getExportPluginClass(
+        self, plugin_id: "SymbolicName"
+    ) -> "Optional[Type[AbstractExportPlugin]]":
+        return self._export_plugins.get(plugin_id)
 
     def addStatefulSchemeHandlers(
         self,
@@ -722,10 +697,6 @@ class WfExSBackend:
         # Get the scheme handlers from this fetcher
         schemeHandlers = statefulSchemeHandler.GetSchemeHandlers()
 
-        # Setting the default list of programs
-        for prog in statefulSchemeHandler.GetNeededPrograms():
-            self.progs.setdefault(prog, cast("RelPath", prog))
-
         self.addSchemeHandlers(
             schemeHandlers, fetchers_setup_block=fetchers_setup_block
         )
@@ -735,7 +706,7 @@ class WfExSBackend:
 
     def addSchemeHandlers(
         self,
-        schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, Type[AbstractStatefulFetcher]]]",
+        schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, DocumentedStatefulProtocolFetcher]]",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
     ) -> None:
         """
@@ -759,14 +730,17 @@ class WfExSBackend:
                 setup_block = fetchers_setup_block.get(lScheme, dict())
 
                 instSchemeHandler = None
-                if inspect.isclass(schemeHandler):
+                if isinstance(schemeHandler, DocumentedStatefulProtocolFetcher):
                     instSchemeInstance = self.instantiateStatefulFetcher(
-                        schemeHandler, setup_block=setup_block
+                        schemeHandler.fetcher_class, setup_block=setup_block
                     )
                     if instSchemeInstance is not None:
                         instSchemeHandler = DocumentedProtocolFetcher(
                             fetcher=instSchemeInstance.fetch,
-                            description=instSchemeInstance.description,
+                            description=instSchemeInstance.description
+                            if schemeHandler.description is None
+                            else schemeHandler.description,
+                            priority=schemeHandler.priority,
                         )
                 elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
                     schemeHandler.fetcher
@@ -781,7 +755,7 @@ class WfExSBackend:
 
             self.cacheHandler.addRawSchemeHandlers(instSchemeHandlers)
 
-    def describeFetchableSchemes(self) -> "Sequence[Tuple[str, str]]":
+    def describeFetchableSchemes(self) -> "Sequence[Tuple[str, str, int]]":
         return self.cacheHandler.describeRegisteredSchemes()
 
     def newSetup(
@@ -1553,30 +1527,6 @@ class WfExSBackend:
             local_config=self.local_config,
             config_directory=self.config_directory,
         )
-
-    def addSchemeHandler(
-        self, scheme: "str", handler: "DocumentedProtocolFetcher"
-    ) -> None:
-        """
-
-        :param scheme:
-        :param handler:
-        """
-        if not isinstance(
-            handler,
-            (
-                types.FunctionType,
-                types.LambdaType,
-                types.MethodType,
-                types.BuiltinFunctionType,
-                types.BuiltinMethodType,
-            ),
-        ):
-            raise WfExSBackendException(
-                "Trying to set for scheme {} a invalid handler".format(scheme)
-            )
-
-        self.cacheHandler.addRawSchemeHandlers({scheme.lower(): handler})
 
     def guess_repo_params(
         self,

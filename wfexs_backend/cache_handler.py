@@ -118,6 +118,7 @@ from .common import (
 from .fetchers import (
     AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
+    DocumentedStatefulProtocolFetcher,
     FetcherException,
     FetcherInstanceException,
     InvalidFetcherException,
@@ -187,26 +188,31 @@ class SchemeHandlerCacheHandler:
         else:
             raise InvalidFetcherException("Unable to add raw scheme handlers")
 
-    def addSchemeHandler(
+    def bypassSchemeHandler(
         self,
         scheme: "str",
-        handler: "Union[Type[StatefulFetcher], DocumentedProtocolFetcher]",
+        handler: "Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]",
         progs: "ProgsMapping" = dict(),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ) -> None:
         """
+        This method adds and overwrites a scheme handler,
+        instantiating it if it is a stateful one.
 
         :param scheme:
         :param handler:
         """
         the_handler: "DocumentedProtocolFetcher"
-        if inspect.isclass(handler):
+        if isinstance(handler, DocumentedStatefulProtocolFetcher):
             inst_handler = self.instantiateStatefulFetcher(
-                handler, progs=progs, setup_block=setup_block
+                handler.fetcher_class, progs=progs, setup_block=setup_block
             )
             the_handler = DocumentedProtocolFetcher(
                 fetcher=inst_handler.fetch,
-                description=inst_handler.description,
+                description=inst_handler.description
+                if handler.description is None
+                else handler.description,
+                priority=handler.priority,
             )
         elif isinstance(handler, DocumentedProtocolFetcher) and isinstance(
             handler.fetcher,
@@ -226,14 +232,14 @@ class SchemeHandlerCacheHandler:
 
         self.schemeHandlers[scheme.lower()] = the_handler
 
-    def addSchemeHandlers(
+    def bypassSchemeHandlers(
         self,
-        schemeHandlers: "Mapping[str, Union[Type[StatefulFetcher], DocumentedProtocolFetcher]]",
+        schemeHandlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]",
     ) -> None:
         # No validation is done here about validness of schemes
         if isinstance(schemeHandlers, dict):
             for scheme, clazz in schemeHandlers.items():
-                self.addSchemeHandler(scheme, clazz)
+                self.bypassSchemeHandler(scheme, clazz)
         else:
             raise InvalidFetcherException(
                 "Unable to instantiate to add scheme handlers"
@@ -267,9 +273,9 @@ class SchemeHandlerCacheHandler:
 
         return cast("StatefulFetcher", instStatefulFetcher)
 
-    def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str]]":
+    def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str, int]]":
         return [
-            (scheme, desc_fetcher.description)
+            (scheme, desc_fetcher.description, desc_fetcher.priority)
             for scheme, desc_fetcher in self.schemeHandlers.items()
         ]
 
