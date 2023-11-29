@@ -51,16 +51,6 @@ if TYPE_CHECKING:
         URIWithMetadata,
     )
 
-    from ..workflow import WF
-
-from ..common import (
-    NoLicence,
-)
-
-from ..utils.licences import (
-    AcceptableLicenceSchemes,
-)
-
 
 class ExportPluginException(Exception):
     pass
@@ -75,9 +65,9 @@ class AbstractExportPlugin(abc.ABC):
 
     def __init__(
         self,
-        wfInstance: "WF",
+        refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[str]" = [],
+        licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
         preferred_id: "Optional[str]" = None,
     ):
@@ -89,46 +79,15 @@ class AbstractExportPlugin(abc.ABC):
             + self.__class__.__name__
         )
         # This is used to resolve paths
-        self.wfInstance = wfInstance
-        self.refdir = wfInstance.getStagedSetup().work_dir
+        self.refdir = refdir
         self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
-        licence_matcher = wfInstance.GetLicenceMatcher()
 
         # This is the default value for the preferred PID
         # which can be updated through a call to book_pid
         self.preferred_id = preferred_id
 
-        # As these licences can be in short format, resolve them to URIs
-        expanded_licences: "MutableSequence[URIType]" = []
-        if len(licences) == 0:
-            expanded_licences.append(NoLicence)
-        else:
-            rejected_licences: "MutableSequence[str]" = []
-            for lic in licences:
-                expanded_licence_tuple = licence_matcher.match_ShortLicence(lic)
-                if expanded_licence_tuple is None:
-                    if (
-                        urllib.parse.urlparse(lic).scheme
-                        not in AcceptableLicenceSchemes
-                    ):
-                        rejected_licences.append(lic)
-
-                    expanded_licence = lic
-                else:
-                    expanded_licence = expanded_licence_tuple.uris[0]
-
-                expanded_licences.append(cast("URIType", expanded_licence))
-
-            if len(rejected_licences) > 0:
-                raise ExportPluginException(
-                    f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
-                )
-
-        # FIXME: ORCIDs are bypassed (for now)
-        expanded_orcids = orcids
-
-        self.licences: "Tuple[URIType, ...]" = tuple(expanded_licences)
-        self.orcids: "Tuple[str, ...]" = tuple(expanded_orcids)
+        self.licences: "Tuple[URIType, ...]" = tuple(licences)
+        self.orcids: "Tuple[str, ...]" = tuple(orcids)
 
     @abc.abstractmethod
     def push(
@@ -142,10 +101,12 @@ class AbstractExportPlugin(abc.ABC):
         """
         pass
 
-    def book_pid(self) -> "Optional[str]":
+    def book_pid(self, preferred_id: "Optional[str]" = None) -> "Optional[str]":
         """
         This method is used to book a new PID,
         in case the destination allows it.
+
+        We can even "suggest" either a new or existing PID.
 
         When it returns None, it means either
         the destination does not allow booking

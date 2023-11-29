@@ -343,14 +343,14 @@ class NextcloudExportPlugin(AbstractExportPlugin):
 
     def __init__(
         self,
-        wfInstance: "WF",
+        refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[str]" = [],
+        licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
         preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
-            wfInstance,
+            refdir=refdir,
             setup_block=setup_block,
             licences=licences,
             orcids=orcids,

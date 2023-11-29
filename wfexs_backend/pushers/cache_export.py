@@ -54,30 +54,15 @@ if TYPE_CHECKING:
 from ..utils.contents import link_or_copy
 
 from . import AbstractExportPlugin
+from .abstract_contexted_export import AbstractContextedExportPlugin
 
 
-class CacheExportPlugin(AbstractExportPlugin):
+class CacheExportPlugin(AbstractContextedExportPlugin):
     """
     Class to model exporting results to WfExS-backend cache
     """
 
     PLUGIN_NAME = cast("SymbolicName", "cache")
-
-    def __init__(
-        self,
-        wfInstance: "WF",
-        setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
-        preferred_id: "Optional[str]" = None,
-    ):
-        super().__init__(
-            wfInstance,
-            setup_block=setup_block,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
-        )
 
     def push(
         self,
@@ -85,6 +70,11 @@ class CacheExportPlugin(AbstractExportPlugin):
         preferred_scheme: "Optional[str]" = None,
         preferred_id: "Optional[str]" = None,
     ) -> "Sequence[URIWithMetadata]":
+        if self.wfInstance is None:
+            raise ValueError(
+                "This plugin needs to be contextualized with the workflow instance"
+            )
+
         """
         These contents will be included in the cache
         """
