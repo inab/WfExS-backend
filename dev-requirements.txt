@@ -4,6 +4,7 @@ pylint >= 2.15.5 ; python_version >= '3.7'
 pytest
 pytest-cov
 pytest-env
+pytest_param_files
 pytest-xdist
 pyflakes >= 2.5.0
 flake8 < 6.0.0 ; python_version < '3.8'
