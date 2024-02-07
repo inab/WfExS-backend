@@ -96,12 +96,12 @@ Main local configuration parameters
 Workflow staging configuration
 -------------------------------
 
-`YAML` formatted file which describes the workflow staging before being executed:
+``YAML`` formatted file which describes the workflow staging before being executed:
 where inputs are located and can be fetched, the security contexts to be used 
 on specific inputs to get those controlled access resources, the parameters, 
 the outputs to capture,...
 
-`JSON` Schema describing the format and valid keys (and used for validation), 
+``JSON`` Schema describing the format and valid keys (and used for validation), 
 is available at `wfexs_backend/schemas/stage-definition.json <https://github.com/inab/WfExS-backend/blob/main/wfexs_backend/schemas/stage-definition.json>`_ 
 and there is also automatically generated documentation (see `stage-definition_schema.md <https://github.com/inab/WfExS-backend/blob/main/development-docs/schemas/stage-definition_schema.md>`_).
 
