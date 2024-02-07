@@ -1,23 +1,25 @@
 Welcome to WfExS-backend's documentation!
-===================================
+==========================================
 
-**WfExS-backend** (/why'fixes/) is a Python application and set of libraries
-which acts as an high-level majordomo in the execution of publically available
-workflows which use containers, feeding the inputs with reachable inputs
-(either public or under controlled access), in a secure way.
+**WfExS-backend** (/why'fex/) is a high-level workflow orchestrator designed for
+reproducible and secure workflow executions in isolated environments, 
+promoting analysis reproducibility and replicability using potentially sensitive data.
+Mainly, WfExS is used to import and execute workflows.
 
-Check out the :doc:`usage` section for further information, including
-how to :doc:`installation` the project.
+
 
 .. note::
 
    This project is under active development.
 
 Contents
---------
+---------
 
 .. toctree::
+   :maxdepth: 3
 
-   installation
+   getting-started
+   configuration
    usage
+   contributing
    api
