@@ -16,6 +16,7 @@ exact manual on what to do here. Configuration files will need to be filled adap
 workflow execution needs.
 
 .. _local_config:
+
 Local configuration
 -------------------
 
@@ -92,7 +93,9 @@ Main local configuration parameters
 
 .. index::
    single: configuration; wf-config
+
 .. _wf_stage_config:
+
 Workflow staging configuration
 -------------------------------
 
@@ -151,6 +154,7 @@ and `CWL_example <https://github.com/inab/WfExS-backend/blob/main/workflow_examp
    single: configuration; security-config
 
 .. _secure_config:
+
 Security contexts file 
 ----------------------
 
