@@ -30,10 +30,10 @@ System requirements
 
 It is recomended to use WfExS on Linux system. 
 WfExS has been tested on the following systems:
-   - Ubuntu
-   - Gentoo
-   - Windows subsystem for Linux 2
-   - OPENSuse 
+- Ubuntu
+- Gentoo
+- Windows subsystem for Linux 2
+- OPENSuse 
 
 .. note:: 
    If you have problems installing it on a different system please write an issue.
@@ -57,14 +57,14 @@ Prerequisites
 
 Before starting the installation process, please check whether your system has all the 
 necessary dependencies. Ensure the following prerequisites are installed: 
-   - ``git``  
-   - ``curl``
-   - ``tar``
-   - ``gzip`` 
-   - ``build-essential`` package in Linux systems.
-   - ``python3`` (Python 3.7 or later)
-   - ``pip``: available in many Linux distributions (Ubuntu packages python3-pip, CentOS EPEL package python-pip), and also as ``pip`` Python package. 
-   - ``venv``: available in many Linux distributions (Ubuntu package python3-venv). In some of them is integrated into the Python 3.5 (or later) installation.
+- ``git``  
+- ``curl``
+- ``tar``
+- ``gzip`` 
+- ``build-essential`` package in Linux systems.
+- ``python3`` (Python 3.7 or later)
+- ``pip``: available in many Linux distributions (Ubuntu packages python3-pip, CentOS EPEL package python-pip), and also as ``pip`` Python package. 
+- ``venv``: available in many Linux distributions (Ubuntu package python3-venv). In some of them is integrated into the Python 3.5 (or later) installation.
 
 .. note:: 
    ``build-essential`` installation in Linux systems `here <https://www.ochobitshacenunbyte.com/2014/12/10/que-es-y-como-se-instala-build-essentials/>`_.
@@ -78,6 +78,7 @@ is missing, install them on your system before proceeding further.
    single: getting-started; installation; easy-setup-wfexs
 
 .. _installation_wfexs:
+
 "Easy" setup WfExS
 ~~~~~~~~~~~~~~~~~~
 The initial step for WfExS installation is cloning the Git repository. 
@@ -186,11 +187,13 @@ create a `singularity` symlink pointing to `apptainer`.
       ./apptainer-local-installer.bash
 
 
-.. list-table:: Workflow engines prerequisites
+Workflow engines prerequisites:
+
+.. list-table::
+
    * - `java`_
-     - Necessary for running Nextflow. Supported Java versions range from 8 to any version
-      below 15 (Nextflow does not support version 15). Both OpenJDK and Sun implementations 
-      should work.
+     - Necessary for running Nextflow. Supported Java versions range from 8 to any version below 15 
+       (Nextflow does not support version 15). Both OpenJDK and Sun implementations should work.
 
 Secure environment:
 
@@ -223,7 +226,9 @@ when no container technology is set up.
 
 .. index::
    single: getting-started; inst-gearshift
+
 .. _installation_gearshift:
+
 Gearshift specific installation instructions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
