@@ -22,4 +22,4 @@ Contents
    configuration
    usage
    contributing
-   api
+   cli
