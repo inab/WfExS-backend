@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,10 +42,12 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        Mapping,
         MutableSet,
         Optional,
         Sequence,
         Tuple,
+        Union,
     )
 
     from extended_nc_client.extended_nc_client import (
@@ -63,7 +65,11 @@ if TYPE_CHECKING:
 
     from ..workflow import WF
 
-from . import AbstractExportPlugin, ExportPluginException
+from . import (
+    AbstractExportPlugin,
+    DraftEntry,
+    ExportPluginException,
+)
 
 
 class ExportMapping(NamedTuple):
@@ -368,10 +374,32 @@ class NextcloudExportPlugin(AbstractExportPlugin):
                     f"Key {conf_key} was not found in security context block"
                 )
 
+    def book_pid(
+        self,
+        preferred_id: "Optional[str]" = None,
+        initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Optional[DraftEntry]":
+        # TODO: implement book_pid, as it is needed for proper RO-Crate generation
+        return None
+
+    def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
+        """
+        This method is used to release a previously booked PID,
+        which has not been published.
+
+        When it returns False, it means that the
+        provided id did exist, but it was not a draft
+        """
+
+        return False
+
+    def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
+        # TODO: implement get_pid_metadata, as it might be useful
+        return None
+
     def push(
         self,
         items: "Sequence[AnyContent]",
-        preferred_scheme: "Optional[str]" = None,
         preferred_id: "Optional[str]" = None,
     ) -> "Sequence[URIWithMetadata]":
         """
@@ -381,9 +409,6 @@ class NextcloudExportPlugin(AbstractExportPlugin):
             raise ValueError(
                 "This plugin requires at least one element to be processed"
             )
-
-        if (preferred_scheme is not None) and len(preferred_scheme) > 0:
-            self.logger.debug(f"Ignoring preferred scheme {preferred_scheme}")
 
         # We are starting to learn whether we already have a PID
         preferred_id = self.preferred_id if preferred_id is None else preferred_id

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import abc
 import logging
 from typing import (
     cast,
+    NamedTuple,
     TYPE_CHECKING,
 )
 import urllib.parse
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         ClassVar,
+        IO,
         Mapping,
         MutableSequence,
         Optional,
@@ -55,6 +57,12 @@ if TYPE_CHECKING:
 
 class ExportPluginException(Exception):
     pass
+
+
+class DraftEntry(NamedTuple):
+    draft_id: "str"
+    pid: "str"
+    metadata: "Optional[Mapping[str, Any]]"
 
 
 class AbstractExportPlugin(abc.ABC):
@@ -96,7 +104,6 @@ class AbstractExportPlugin(abc.ABC):
     def push(
         self,
         items: "Sequence[AnyContent]",
-        preferred_scheme: "Optional[str]" = None,
         preferred_id: "Optional[str]" = None,
     ) -> "Sequence[URIWithMetadata]":
         """
@@ -104,19 +111,134 @@ class AbstractExportPlugin(abc.ABC):
         """
         pass
 
-    def book_pid(self, preferred_id: "Optional[str]" = None) -> "Optional[str]":
+    @abc.abstractmethod
+    def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
+        """
+        This method is used to obtained the metadata associated to a PID,
+        in case the destination allows it.
+        """
+
+        pass
+
+    @abc.abstractmethod
+    def book_pid(
+        self,
+        preferred_id: "Optional[str]" = None,
+        initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Optional[DraftEntry]":
         """
         This method is used to book a new PID,
         in case the destination allows it.
 
         We can even "suggest" either a new or existing PID.
 
+        It can return both the internal PID as the future, official one.
+        It also returns the associated internal metadata.
+
         When it returns None, it means either
         the destination does not allow booking
         pids, either temporary or permanently
         """
 
-        return self.preferred_id
+        pass
+
+    @abc.abstractmethod
+    def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
+        """
+        This method is used to release a previously booked PID,
+        which has not been published.
+
+        When it returns False, it means that the
+        provided id did exist, but it was not a draft
+        """
+
+        pass
+
+    @abc.abstractmethod
+    def upload_file_to_draft(
+        self,
+        draft_record: "Mapping[str, Any]",
+        filename: "Union[str, IO[bytes]]",
+        remote_filename: "Optional[str]",
+    ) -> "Mapping[str, Any]":
+        """
+        It takes as input the draft record representation, a local filename and optionally the remote filename to use
+        """
+        pass
+
+    def upload_file_to_draft_by_id(
+        self,
+        record_id: "str",
+        filename: "Union[str, IO[bytes]]",
+        remote_filename: "Optional[str]",
+    ) -> "Mapping[str, Any]":
+        draft_record = self.get_pid_metadata(record_id)
+        if draft_record is None:
+            raise KeyError(
+                f"Record {record_id} could not be updated because it was not available"
+            )
+
+        return self.upload_file_to_draft(draft_record, filename, remote_filename)
+
+    @abc.abstractmethod
+    def update_record_metadata(
+        self,
+        record: "Mapping[str, Any]",
+        metadata: "Mapping[str, Any]",
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Mapping[str, Any]":
+        """
+        This method updates the (draft or not) record metadata,
+        both the general one, and the specific of the community.
+        This one could not make sense for some providers.
+        """
+        pass
+
+    def update_record_metadata_by_id(
+        self,
+        record_id: "str",
+        metadata: "Mapping[str, Any]",
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Mapping[str, Any]":
+        """
+        This method updates the (draft or not) record metadata,
+        both the general one, and the specific of the community.
+        This one could not make sense for some providers.
+        """
+        record = self.get_pid_metadata(record_id)
+        if record is None:
+            raise KeyError(
+                f"Record {record_id} could not be updated because it was not available"
+            )
+
+        return self.update_record_metadata(
+            record, metadata, community_specific_metadata=community_specific_metadata
+        )
+
+    @abc.abstractmethod
+    def publish_draft_record(
+        self,
+        draft_record: "Mapping[str, Any]",
+    ) -> "Mapping[str, Any]":
+        """
+        This method publishes a draft record, so its public id is permanent
+        """
+        pass
+
+    def publish_draft_record_by_id(
+        self,
+        record_id: "str",
+    ) -> "Mapping[str, Any]":
+        """
+        This method publishes a draft record, so its public id is permanent
+        """
+        draft_record = self.get_pid_metadata(record_id)
+        if draft_record is None:
+            raise KeyError(
+                f"Draft record {record_id} could not be published because it was not available"
+            )
+
+        return self.publish_draft_record(draft_record)
 
     @classmethod
     def PluginName(cls) -> "SymbolicName":

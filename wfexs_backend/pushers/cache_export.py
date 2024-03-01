@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,8 +35,15 @@ from ..common import (
 
 if TYPE_CHECKING:
     from typing import (
+        Any,
+        Mapping,
         Optional,
         Sequence,
+        Union,
+    )
+
+    from . import (
+        DraftEntry,
     )
 
     from ..common import (
@@ -64,10 +71,35 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
 
     PLUGIN_NAME = cast("SymbolicName", "cache")
 
+    def book_pid(
+        self,
+        preferred_id: "Optional[str]" = None,
+        initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Optional[DraftEntry]":
+        return None
+
+    def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
+        """
+        This method is used to release a previously booked PID,
+        which has not been published.
+
+        When it returns False, it means that the
+        provided id did exist, but it was not a draft
+        """
+
+        return False
+
+    def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
+        """
+        This method is used to obtained the metadata associated to a PID,
+        in case the destination allows it.
+        """
+
+        return None
+
     def push(
         self,
         items: "Sequence[AnyContent]",
-        preferred_scheme: "Optional[str]" = None,
         preferred_id: "Optional[str]" = None,
     ) -> "Sequence[URIWithMetadata]":
         if self.wfInstance is None:
@@ -80,12 +112,6 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         """
         if len(items) == 0:
             raise ValueError("This plugin needs at least one element to be processed")
-
-        if (preferred_scheme is None) or len(preferred_scheme) == 0:
-            raise ValueError("This plugin needs a scheme to generate a PID")
-
-        if ":" in preferred_scheme:
-            raise ValueError(f"Scheme {preferred_scheme} contains a colon")
 
         # We are starting to learn whether we already have a PID
         preferred_id = self.preferred_id if preferred_id is None else preferred_id
@@ -134,7 +160,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
                             path=source,
                             params="",
                             query=urllib.parse.urlencode(
-                                {"inject_as": f"{preferred_scheme}:{preferred_id}"},
+                                {"inject_as": preferred_id},
                                 doseq=True,
                             ),
                             fragment="",

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -3081,30 +3081,41 @@ class WF:
                 # check whether plugin is available
                 # TODO: Should we include mechanism to reuse a PID
                 # already used in a previous export?
+                preferred_id: "Optional[str]" = None
+                if action.preferred_id is not None:
+                    if action.preferred_scheme is not None:
+                        preferred_id = (
+                            action.preferred_scheme + ":" + action.preferred_id
+                        )
+                    else:
+                        preferred_id = action.preferred_id
                 export_p = self._instantiate_export_plugin(
                     plugin_id=action.plugin_id,
                     sec_context=a_setup_block,
                     licences=the_licences,
                     orcids=the_orcids,
-                    preferred_id=action.preferred_id,
+                    preferred_id=preferred_id,
                 )
 
                 # This booked pid could differ from the preferred one
-                # as it could not be reused due some constraints
-                booked_pid = export_p.book_pid()
+                # as it could not be reused due some constraints.
+                # Also, we need to know the internal_pid associated to
+                # the booked one, so we can handle drafts
+                booked_entry = export_p.book_pid()
+
+                assert booked_entry is not None
 
                 elems = self.locateExportItems(
                     action.what,
                     licences=the_licences,
                     orcids=the_orcids,
-                    crate_pid=booked_pid,
+                    crate_pid=booked_entry.pid,
                 )
 
                 # Export the contents and obtain a PID
                 new_pids = export_p.push(
                     elems,
-                    preferred_scheme=action.preferred_scheme,
-                    preferred_id=booked_pid,
+                    preferred_id=booked_entry.draft_id,
                 )
 
                 # Last, register the PID
