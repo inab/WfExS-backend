@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 import aioftp  # type: ignore[import]
 
 
-def asyncio_run(tasks: "Tuple[Coroutine[Any, Any, CT], ...]") -> "CT":
+def asyncio_run(tasks: "Tuple[asyncio.Task[CT], ...]") -> "CT":
     """
     Helper method which abstracts differences from
     Python 3.7 and before about coroutines
@@ -359,12 +359,18 @@ class FTPDownloader:
         exclude_ext: "Sequence[str]" = [],
     ) -> "Sequence[Path]":
         tasks = (
-            self.download_dir_async(download_from_dir, upload_to_dir, exclude_ext),
+            asyncio.create_task(
+                self.download_dir_async(download_from_dir, upload_to_dir, exclude_ext)
+            ),
         )
         return asyncio_run(tasks)
 
     def download_file(self, download_from_file: "str", upload_to_file: "str") -> "Path":
-        tasks = (self.download_file_async(download_from_file, upload_to_file),)
+        tasks = (
+            asyncio.create_task(
+                self.download_file_async(download_from_file, upload_to_file)
+            ),
+        )
         return asyncio_run(tasks)
 
     def download(
@@ -373,7 +379,11 @@ class FTPDownloader:
         upload_path: "str",
         exclude_ext: "Sequence[str]" = [],
     ) -> "Union[Path, Sequence[Path]]":
-        tasks = (self.download_async(download_path, upload_path, exclude_ext),)
+        tasks = (
+            asyncio.create_task(
+                self.download_async(download_path, upload_path, exclude_ext)
+            ),
+        )
         return asyncio_run(tasks)
 
     @staticmethod

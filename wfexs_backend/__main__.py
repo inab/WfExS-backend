@@ -900,11 +900,15 @@ def processExportCommand(
 
     return retval
 
+
 def get_wfexs_argparse() -> "argparse.ArgumentParser":
     retval, _ = _get_wfexs_argparse_internal(docgen=True)
     return retval
 
-def _get_wfexs_argparse_internal(docgen: "bool") -> "Tuple[argparse.ArgumentParser, str]":
+
+def _get_wfexs_argparse_internal(
+    docgen: "bool",
+) -> "Tuple[argparse.ArgumentParser, str]":
     verstr = get_WfExS_version_str()
 
     defaultLocalConfigFilename = os.environ.get("WFEXS_CONFIG_FILE")
@@ -1100,6 +1104,7 @@ def _get_wfexs_argparse_internal(docgen: "bool") -> "Tuple[argparse.ArgumentPars
     )
 
     return ap, defaultLocalConfigFilename
+
 
 def main() -> None:
     ap, defaultLocalConfigFilename = _get_wfexs_argparse_internal(docgen=False)
