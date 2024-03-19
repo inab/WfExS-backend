@@ -412,10 +412,16 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
 
         return False
 
-    def _get_file_bucket_prefix_from_draft(
-        self, draft_record: "Mapping[str, Any]"
+    def get_file_bucket_prefix(
+        self,
+        draft_entry: "DraftEntry",
     ) -> "str":
-        return cast("str", draft_record["links"]["files"])
+        """
+        This is an accessory method which is used to build upload paths
+        """
+        assert draft_entry.metadata is not None
+
+        return cast("str", draft_entry.metadata["links"]["files"])
 
     def _get_record_prefix_from_record(self, record: "Mapping[str, Any]") -> "str":
         return cast("str", record["links"]["self"])
@@ -430,10 +436,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         """
         It takes as input the draft record representation, a local filename and optionally the remote filename to use
         """
-        assert draft_entry.metadata is not None
-        draft_record = draft_entry.metadata
-
-        file_bucket_prefix = self._get_file_bucket_prefix_from_draft(draft_record)
+        file_bucket_prefix = self.get_file_bucket_prefix(draft_entry)
 
         # file_size = os.stat(filename).st_size
         headers = {
@@ -623,10 +626,6 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         assert booked_entry is not None
         assert booked_entry.metadata is not None
 
-        file_bucket_prefix = self._get_file_bucket_prefix_from_draft(
-            booked_entry.metadata
-        )
-
         # Upload
         failed = False
         relitems: "Set[str]" = set()
@@ -667,9 +666,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 failed = True
 
         if failed:
-            file_bucket_prefix = self._get_file_bucket_prefix_from_draft(
-                booked_entry.metadata
-            )
+            file_bucket_prefix = self.get_file_bucket_prefix(booked_entry)
             raise ExportPluginException(
                 f"Some contents could not be uploaded to entry {booked_entry.metadata.get('id')}, bucket {file_bucket_prefix}"
             )

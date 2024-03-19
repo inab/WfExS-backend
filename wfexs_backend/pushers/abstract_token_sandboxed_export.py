@@ -53,6 +53,10 @@ if TYPE_CHECKING:
         URIWithMetadata,
     )
 
+    from . import (
+        DraftEntry,
+    )
+
 from . import (
     AbstractExportPlugin,
     ExportPluginException,
@@ -91,3 +95,13 @@ class AbstractTokenSandboxedExportPlugin(AbstractExportPlugin):
                 )
 
         self.sandbox = bool(self.setup_block["sandbox"])
+
+    @abc.abstractmethod
+    def get_file_bucket_prefix(
+        self,
+        draft_entry: "DraftEntry",
+    ) -> "str":
+        """
+        This is an accessory method which is used to build upload paths
+        """
+        raise NotImplementedError()

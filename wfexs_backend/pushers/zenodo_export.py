@@ -324,9 +324,16 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
 
         return None
 
-    def _get_upload_bucket_prefix(self, draft_record: "Mapping[str, Any]") -> "str":
+    def get_file_bucket_prefix(
+        self,
+        draft_entry: "DraftEntry",
+    ) -> "str":
+        """
+        This is an accessory method which is used to build upload paths
+        """
+        assert draft_entry.metadata is not None
         upload_bucket_prefix = cast(
-            "Optional[str]", draft_record.get("links", {}).get("bucket")
+            "Optional[str]", draft_entry.metadata.get("links", {}).get("bucket")
         )
         assert upload_bucket_prefix is not None
         upload_bucket_prefix += "/"
@@ -340,9 +347,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         remote_filename: "Optional[str]",
         content_size: "Optional[int]" = None,
     ) -> "Mapping[str, Any]":
-        assert draft_entry.metadata is not None
-        draft_record = draft_entry.metadata
-        upload_bucket_prefix = self._get_upload_bucket_prefix(draft_record)
+        upload_bucket_prefix = self.get_file_bucket_prefix(draft_entry)
 
         pH: "IO[bytes]"
         if isinstance(filename, str):
@@ -514,7 +519,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                 failed = True
 
         if failed:
-            upload_bucket_prefix = self._get_upload_bucket_prefix(booked_entry.metadata)
+            upload_bucket_prefix = self.get_file_bucket_prefix(booked_entry)
             raise ExportPluginException(
                 f"Some contents could not be uploaded to entry {booked_entry.metadata.get('id')}, bucket {upload_bucket_prefix}"
             )
