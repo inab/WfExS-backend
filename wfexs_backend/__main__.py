@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from typing import (
         Callable,
         Sequence,
+        Tuple,
         Type,
         Union,
     )
@@ -899,8 +900,11 @@ def processExportCommand(
 
     return retval
 
+def get_wfexs_argparse() -> "argparse.ArgumentParser":
+    retval, _ = _get_wfexs_argparse_internal(docgen=True)
+    return retval
 
-def main() -> None:
+def _get_wfexs_argparse_internal(docgen: "bool") -> "Tuple[argparse.ArgumentParser, str]":
     verstr = get_WfExS_version_str()
 
     defaultLocalConfigFilename = os.environ.get("WFEXS_CONFIG_FILE")
@@ -912,6 +916,9 @@ def main() -> None:
         defaultLocalConfigFilename = os.path.join(
             os.getcwd(), defaultLocalConfigFilename
         )
+
+    rawpre = "" if docgen else "raw|"
+
     ap = argparse.ArgumentParser(
         description="WfExS (workflow execution service) backend " + verstr,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -976,7 +983,7 @@ def main() -> None:
     ap_c = genParserSub(sp, WfExS_Commands.Cache)
     ap_c.add_argument(
         "cache_command",
-        help="raw|Cache command to perform\n\n"
+        help=f"{rawpre}Cache command to perform\n\n"
         + "\n".join(
             map(lambda c: f"{c.value:<12}{c.description}", WfExS_Cache_Commands)  # type: ignore[attr-defined]
         ),
@@ -1007,7 +1014,7 @@ def main() -> None:
     )
     ap_c.add_argument(
         "cache_type",
-        help="raw|Cache type to perform the cache command\n\n"
+        help=f"{rawpre}Cache type to perform the cache command\n\n"
         + "\n".join(map(lambda c: f"{c.value:<12}{c.description}", WfExS_CacheType)),  # type: ignore[attr-defined]
         type=cast("Callable_WfExS_CacheType", WfExS_CacheType.argtype),
         choices=WfExS_CacheType,
@@ -1019,7 +1026,7 @@ def main() -> None:
     ap_w = genParserSub(sp, WfExS_Commands.StagedWorkDir, crateParams=True)
     ap_w.add_argument(
         "staged_workdir_command",
-        help="raw|Staged working directory command to perform\n\n"
+        help=f"{rawpre}Staged working directory command to perform\n\n"
         + "\n".join(
             map(
                 lambda c: f"{c.value:<16}{c.description}", WfExS_Staged_WorkDir_Commands  # type: ignore[attr-defined]
@@ -1050,7 +1057,7 @@ def main() -> None:
     )
     ap_expt.add_argument(
         "export_contents_command",
-        help="raw|Export operations from staged working directory to perform\n\n"
+        help=f"{rawpre}Export operations from staged working directory to perform\n\n"
         + "\n".join(
             map(lambda c: f"{c.value:<16}{c.description}", WfExS_Export_Commands)  # type: ignore[attr-defined]
         ),
@@ -1091,6 +1098,11 @@ def main() -> None:
     ap_ec = genParserSub(
         sp, WfExS_Commands.ExportCrate, postStageParams=True, crateParams=True
     )
+
+    return ap, defaultLocalConfigFilename
+
+def main() -> None:
+    ap, defaultLocalConfigFilename = _get_wfexs_argparse_internal(docgen=False)
 
     args = ap.parse_args()
 
