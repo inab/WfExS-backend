@@ -36,6 +36,7 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        IO,
         Mapping,
         Optional,
         Sequence,
@@ -96,6 +97,32 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         """
 
         return None
+
+    def upload_file_to_draft(
+        self,
+        draft_entry: "DraftEntry",
+        filename: "Union[str, IO[bytes]]",
+        remote_filename: "Optional[str]",
+        content_size: "Optional[int]" = None,
+    ) -> "Mapping[str, Any]":
+        # This is a no-op
+        return {}
+
+    def update_record_metadata(
+        self,
+        draft_entry: "DraftEntry",
+        metadata: "Mapping[str, Any]",
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Mapping[str, Any]":
+        # This is a no-op
+        return {}
+
+    def publish_draft_record(
+        self,
+        draft_entry: "DraftEntry",
+    ) -> "Mapping[str, Any]":
+        # This is a no-op
+        return {}
 
     def push(
         self,

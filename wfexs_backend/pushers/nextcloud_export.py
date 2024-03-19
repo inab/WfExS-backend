@@ -21,6 +21,8 @@ from __future__ import absolute_import
 import datetime
 import logging
 import os
+import shutil
+import tempfile
 from typing import (
     cast,
     NamedTuple,
@@ -34,6 +36,7 @@ from extended_nc_client.extended_nc_client import (
 )
 
 from ..common import (
+    ContentKind,
     LicensedURI,
     MaterializedContent,
     URIWithMetadata,
@@ -42,6 +45,7 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        IO,
         Mapping,
         MutableSet,
         Optional,
@@ -201,8 +205,7 @@ class NextcloudContentExporter:
     def mappings_uploader(
         self,
         contents_to_process: "Sequence[ExportMapping]",
-        uplodir: "Optional[str]" = None,
-        destname: "Optional[str]" = None,
+        destname: "Optional[RelPath]" = None,
     ) -> "Tuple[Sequence[DAVRequestResponse], Optional[AbsPath], Optional[RelPath]]":
         files_to_process = []
         dirs_to_process = []
@@ -212,7 +215,7 @@ class NextcloudContentExporter:
         # Reading the CSV file
         if len(contents_to_process) > 0:
             # Declaring the remote path
-            _, retval_reldir, retval_relreldir = self.create_remote_path()
+            _, retval_reldir, retval_relreldir = self.create_remote_path(name=destname)
 
         for mapping in contents_to_process:
             assert retval_relreldir is not None
@@ -288,7 +291,7 @@ class NextcloudContentExporter:
         emails: "Sequence[str]",
         expire_in: "Optional[int]" = None,
         licences: "Tuple[URIType, ...]" = tuple(),
-    ) -> "Sequence[Optional[LicensedURI]]":
+    ) -> "Sequence[LicensedURI]":
         retvals = []
         permissions = ExtendedNextcloudClient.OCS_PERMISSION_READ
         the_path = urllib.parse.quote(self.base_directory + "/" + relpath)
@@ -374,13 +377,39 @@ class NextcloudExportPlugin(AbstractExportPlugin):
                     f"Key {conf_key} was not found in security context block"
                 )
 
+        # Setting up the instance
+        self.ce = NextcloudContentExporter(
+            self.setup_block["server"],
+            self.setup_block["user"],
+            self.setup_block["token"],
+            self.setup_block["base-directory"],
+            retention_tag_name=self.setup_block.get("retention-tag-name"),
+        )
+
+        self.cached_remote_relpath: "Optional[str]" = None
+
     def book_pid(
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Optional[DraftEntry]":
-        # TODO: implement book_pid, as it is needed for proper RO-Crate generation
-        return None
+        _, retpath, relretpath = self.ce.create_remote_path(
+            name=cast("RelPath", preferred_id)
+        )
+        # TODO: embargo share links, fix this, revise
+        share_links, email_addresses, expire_in = self._create_share_links(relretpath)
+        if len(share_links) == 0:
+            return None
+
+        return DraftEntry(
+            draft_id=relretpath,
+            pid=share_links[0].uri,
+            metadata={
+                "share_links": share_links,
+                "email_addresses": email_addresses,
+                "expire_in": expire_in,
+            },
+        )
 
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
         """
@@ -391,40 +420,17 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         provided id did exist, but it was not a draft
         """
 
+        self.cached_remote_relpath = None
         return False
 
     def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
         # TODO: implement get_pid_metadata, as it might be useful
         return None
 
-    def push(
+    def _prepare_upload_mappings(
         self,
         items: "Sequence[AnyContent]",
-        preferred_id: "Optional[str]" = None,
-    ) -> "Sequence[URIWithMetadata]":
-        """
-        These contents will be included in the Nextcloud share
-        """
-        if len(items) == 0:
-            raise ValueError(
-                "This plugin requires at least one element to be processed"
-            )
-
-        # We are starting to learn whether we already have a PID
-        preferred_id = self.preferred_id if preferred_id is None else preferred_id
-        if (preferred_id is not None) and len(preferred_id) > 0:
-            self.logger.debug(f"Ignoring preferred PID {preferred_id}")
-
-        # Setting up the instance
-        ce = NextcloudContentExporter(
-            self.setup_block["server"],
-            self.setup_block["user"],
-            self.setup_block["token"],
-            self.setup_block["base-directory"],
-            retention_tag_name=self.setup_block.get("retention-tag-name"),
-        )
-
-        # Generate mappings
+    ) -> "Sequence[ExportMapping]":
         mappings = []
         if len(items) > 1:
             for i_item, item in enumerate(items):
@@ -463,8 +469,148 @@ class NextcloudExportPlugin(AbstractExportPlugin):
                 )
             )
 
+        return mappings
+
+    def upload_file_to_draft(
+        self,
+        draft_entry: "DraftEntry",
+        filename: "Union[str, IO[bytes]]",
+        remote_filename: "Optional[str]",
+        content_size: "Optional[int]" = None,
+    ) -> "Mapping[str, Any]":
+        local_filename: "str"
+        do_remove_temp = False
+        if isinstance(filename, str):
+            local_filename = filename
+            if remote_filename is None:
+                remote_filename = os.path.relpath(local_filename, self.refdir)
+        else:
+            assert isinstance(
+                remote_filename, str
+            ), "When filename is a data stream, remote_filename must be declared"
+            # assert content_size is not None, "When filename is a data stream, content_size must be declared"
+
+            # This has to be simulated
+            lfd, local_filename = tempfile.mkstemp(
+                prefix="wfexs-nextcloud", suffix="push.bin"
+            )
+            do_remove_temp = True
+            with os.fdopen(lfd, "wb") as lH:
+                if content_size is not None:
+                    shutil.copyfileobj(filename, lH, length=content_size)
+                else:
+                    shutil.copyfileobj(filename, lH)
+
+        try:
+            mappings = [
+                MaterializedContent(
+                    local=cast("AbsPath", local_filename),
+                    licensed_uri=LicensedURI(uri=cast("URIType", "")),
+                    prettyFilename=cast("RelPath", remote_filename),
+                    kind=ContentKind.File,
+                )
+            ]
+            # Now, upload the contents
+            retvals, remote_path, remote_relpath = self.ce.mappings_uploader(
+                self._prepare_upload_mappings(mappings)
+            )
+        finally:
+            if do_remove_temp:
+                os.unlink(local_filename)
+
+        # And check errors
+        failed = False
+        for retval in retvals:
+            if not retval:
+                failed = True
+                self.logger.error(f"There was some problem uploading to {remote_path}")
+
+        if failed:
+            raise ExportPluginException(
+                f"Some contents could not be uploaded to {remote_path}"
+            )
+
+        assert remote_relpath is not None
+
+        # Update cached content path
+        if self.cached_remote_relpath is None:
+            self.cached_remote_relpath = remote_relpath
+        elif self.cached_remote_relpath != remote_relpath:
+            raise ExportPluginException(
+                f"Inconsistent remote_relpath between executions: {remote_relpath} vs {self.cached_remote_relpath}"
+            )
+
+        # TODO: add something more meaningful
+        return {}
+
+    def update_record_metadata(
+        self,
+        draft_entry: "DraftEntry",
+        metadata: "Mapping[str, Any]",
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+    ) -> "Mapping[str, Any]":
+        # TODO: implement this (if it makes sense!)
+
+        return {}
+
+    def _create_share_links(
+        self,
+        remote_relpath: "str",
+    ) -> "Tuple[Sequence[LicensedURI], Sequence[str], Optional[int]]":
+        # Generate the share link(s) once all the contents are there
+        email_addresses = self.setup_block.get("email-addresses")
+        if not isinstance(email_addresses, list):
+            email_addresses = []
+
+        expire_in = self.setup_block.get("expires-in")
+        return (
+            self.ce.create_share_links(
+                remote_relpath,
+                email_addresses,
+                expire_in=expire_in,
+                licences=self.licences,
+            ),
+            email_addresses,
+            expire_in,
+        )
+
+    def publish_draft_record(
+        self,
+        draft_entry: "DraftEntry",
+    ) -> "Mapping[str, Any]":
+        assert (
+            self.cached_remote_relpath is not None
+        ), "Please call upload_file_to_draft at least once"
+        self._create_share_links(self.cached_remote_relpath)
+
+        self.cached_remote_relpath = None
+
+        # TODO: improve this (if it makes sense!)
+        return {}
+
+    def push(
+        self,
+        items: "Sequence[AnyContent]",
+        preferred_id: "Optional[str]" = None,
+    ) -> "Sequence[URIWithMetadata]":
+        """
+        These contents will be included in the Nextcloud share
+        """
+        if len(items) == 0:
+            raise ValueError(
+                "This plugin requires at least one element to be processed"
+            )
+
+        # We are starting to learn whether we already have a PID
+        preferred_id = self.preferred_id if preferred_id is None else preferred_id
+        if (preferred_id is not None) and len(preferred_id) > 0:
+            self.logger.debug(f"Ignoring preferred PID {preferred_id}")
+
+        # Generate mappings
+        mappings = self._prepare_upload_mappings(items)
+
         # Now, upload the contents
-        retvals, remote_path, remote_relpath = ce.mappings_uploader(mappings)
+        retvals, remote_path, remote_relpath = self.ce.mappings_uploader(mappings)
 
         # And check errors
         failed = False
@@ -481,30 +627,24 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         assert remote_relpath is not None
 
         # Generate the share link(s) once all the contents are there
-        email_addresses = self.setup_block.get("email-addresses")
-        if not isinstance(email_addresses, list):
-            email_addresses = []
-
-        expire_in = self.setup_block.get("expires-in")
-        shared_links = ce.create_share_links(
-            remote_relpath, email_addresses, expire_in=expire_in, licences=self.licences
+        shared_links, email_addresses, expire_in = self._create_share_links(
+            remote_relpath
         )
 
         shared_uris = []
         for i_share, shared_link in enumerate(shared_links):
             self.logger.debug(f"Generated share link {shared_link}")
-            if shared_link is not None:
-                shared_uris.append(
-                    URIWithMetadata(
-                        uri=shared_link.uri,
-                        # TODO: Add meaninful metadata
-                        metadata={
-                            "shared-with": email_addresses[i_share]
-                            if len(email_addresses) > 0
-                            else None,
-                            "expires-in": expire_in,
-                        },
-                    )
+            shared_uris.append(
+                URIWithMetadata(
+                    uri=shared_link.uri,
+                    # TODO: Add meaninful metadata
+                    metadata={
+                        "shared-with": email_addresses[i_share]
+                        if len(email_addresses) > 0
+                        else None,
+                        "expires-in": expire_in,
+                    },
                 )
+            )
 
         return shared_uris

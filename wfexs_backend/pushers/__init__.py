@@ -120,6 +120,24 @@ class AbstractExportPlugin(abc.ABC):
 
         pass
 
+    def get_pid_draftentry(self, pid: "str") -> "Optional[DraftEntry]":
+        """
+        This method is used to obtained the metadata associated to a PID,
+        in case the destination allows it.
+        """
+
+        metadata = self.get_pid_metadata(pid)
+
+        if metadata is None:
+            return None
+
+        return DraftEntry(
+            # These assignments could be wrong
+            draft_id=pid,
+            pid=pid,
+            metadata=metadata,
+        )
+
     @abc.abstractmethod
     def book_pid(
         self,
@@ -157,9 +175,10 @@ class AbstractExportPlugin(abc.ABC):
     @abc.abstractmethod
     def upload_file_to_draft(
         self,
-        draft_record: "Mapping[str, Any]",
+        draft_entry: "DraftEntry",
         filename: "Union[str, IO[bytes]]",
         remote_filename: "Optional[str]",
+        content_size: "Optional[int]" = None,
     ) -> "Mapping[str, Any]":
         """
         It takes as input the draft record representation, a local filename and optionally the remote filename to use
@@ -172,7 +191,7 @@ class AbstractExportPlugin(abc.ABC):
         filename: "Union[str, IO[bytes]]",
         remote_filename: "Optional[str]",
     ) -> "Mapping[str, Any]":
-        draft_record = self.get_pid_metadata(record_id)
+        draft_record = self.get_pid_draftentry(record_id)
         if draft_record is None:
             raise KeyError(
                 f"Record {record_id} could not be updated because it was not available"
@@ -183,7 +202,7 @@ class AbstractExportPlugin(abc.ABC):
     @abc.abstractmethod
     def update_record_metadata(
         self,
-        record: "Mapping[str, Any]",
+        draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Mapping[str, Any]":
@@ -205,7 +224,7 @@ class AbstractExportPlugin(abc.ABC):
         both the general one, and the specific of the community.
         This one could not make sense for some providers.
         """
-        record = self.get_pid_metadata(record_id)
+        record = self.get_pid_draftentry(record_id)
         if record is None:
             raise KeyError(
                 f"Record {record_id} could not be updated because it was not available"
@@ -218,7 +237,7 @@ class AbstractExportPlugin(abc.ABC):
     @abc.abstractmethod
     def publish_draft_record(
         self,
-        draft_record: "Mapping[str, Any]",
+        draft_entry: "DraftEntry",
     ) -> "Mapping[str, Any]":
         """
         This method publishes a draft record, so its public id is permanent
@@ -232,7 +251,7 @@ class AbstractExportPlugin(abc.ABC):
         """
         This method publishes a draft record, so its public id is permanent
         """
-        draft_record = self.get_pid_metadata(record_id)
+        draft_record = self.get_pid_draftentry(record_id)
         if draft_record is None:
             raise KeyError(
                 f"Draft record {record_id} could not be published because it was not available"
