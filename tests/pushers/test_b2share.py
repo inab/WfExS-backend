@@ -441,7 +441,9 @@ def test_b2share_update_record_metadata(file_params: "ParamTestData") -> "None":
             " at " + datetime.datetime.utcnow().isoformat()
         )
 
-        updated_meta = bep.update_record_metadata(booked_entry, entry_metadata)
+        updated_meta = bep.update_record_metadata(
+            booked_entry, entry_metadata, do_validate=True
+        )
         logger.info(updated_meta)
         # assert entry_metadata["metadata"]["title"] == updated_meta.get("metadata", {}).get("title")
         # assert entry_metadata["metadata"]["upload_type"] == updated_meta.get("metadata", {}).get("upload_type")
@@ -495,7 +497,9 @@ def test_b2share_failed_update_record_metadata(file_params: "ParamTestData") -> 
                 " at " + datetime.datetime.utcnow().isoformat()
             )
 
-            updated_meta = bep.update_record_metadata(booked_entry, entry_metadata)
+            updated_meta = bep.update_record_metadata(
+                booked_entry, entry_metadata, do_validate=True
+            )
             logger.info(updated_meta)
             # assert entry_metadata["metadata"]["title"] == updated_meta.get("metadata", {}).get("title")
             # assert entry_metadata["metadata"]["upload_type"] == updated_meta.get("metadata", {}).get("upload_type")

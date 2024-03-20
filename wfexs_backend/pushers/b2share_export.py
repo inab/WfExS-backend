@@ -18,7 +18,9 @@
 
 from __future__ import absolute_import
 
+import copy
 import datetime
+import functools
 import json
 import os
 import re
@@ -30,6 +32,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+
+import jsonschema.validators
+import jsonpointer
 
 from ..common import (
     MaterializedContent,
@@ -48,8 +53,11 @@ if TYPE_CHECKING:
         Sequence,
         Set,
         Tuple,
+        Type,
         Union,
     )
+
+    from jsonschema.exceptions import ValidationError
 
     from typing_extensions import (
         Final,
@@ -74,6 +82,19 @@ from .abstract_token_sandboxed_export import (
 )
 
 
+# These are the supported JSON Schema validators
+INTROSPECT_VALIDATOR_MAPPER: "Mapping[str, Type[jsonschema.validators._Validator]]" = {
+    j_valid.META_SCHEMA["$schema"]: cast(
+        "Type[jsonschema.validators._Validator]", j_valid
+    )
+    for j_valid in filter(
+        lambda j_val: hasattr(j_val, "META_SCHEMA")
+        and isinstance(j_val.META_SCHEMA, dict),
+        jsonschema.validators.__dict__.values(),
+    )
+}
+
+
 class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
     """
     See https://eudat.eu/services/userdoc/b2share-http-rest-api
@@ -91,6 +112,11 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
     SANDBOX_B2SHARE_DOI_PREFIX: "Final[str]" = "XXXX/b2share."
 
     DEFAULT_B2SHARE_COMMUNITY: "Final[str]" = "EUDAT"
+
+    BANNED_SCHEMA_KEYS: "Final[Sequence[str]]" = [
+        "$future_doi",
+        "owners",
+    ]
 
     def __init__(
         self,
@@ -159,9 +185,40 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         with urllib.request.urlopen(req) as res:
             return cast("Mapping[str, Any]", json.load(res))
 
+    @staticmethod
+    @functools.lru_cache
+    def __fetch_schema(
+        schema_url: "str",
+    ) -> "Tuple[str, Mapping[str, Any]]":
+        req = urllib.request.Request(schema_url)
+        with urllib.request.urlopen(req) as res:
+            community_metadata_schema = json.load(res)
+            # We are keeping only what we are interested in
+            parsed_url = urllib.parse.urlparse(schema_url)
+            if parsed_url.fragment:
+                community_metadata_schema_json = jsonpointer.resolve_pointer(
+                    community_metadata_schema, parsed_url.fragment
+                )
+            else:
+                community_metadata_schema_json = community_metadata_schema
+
+            # Is it inline?
+            jsonschema_meta_id = community_metadata_schema_json.get("$schema")
+            if jsonschema_meta_id is None:
+                jsonschema_meta_id = community_metadata_schema_json.get(
+                    "draft_json_schema", {}
+                ).get(
+                    "$schema", jsonschema.validators.Draft4Validator.META_SCHEMA["id"]
+                )
+
+            return jsonschema_meta_id, community_metadata_schema_json
+
     def _get_community_schema(
         self, community_id: "str"
-    ) -> "Tuple[Mapping[str, Any], Optional[str]]":
+    ) -> "Optional[Tuple[str, Mapping[str, Any], str, Optional[str]]]":
+        """
+        It fetches the community schema
+        """
         community_metadata: "Optional[Mapping[str, Any]]"
         if community_id == self.community_id:
             community_metadata = self.community_metadata
@@ -177,11 +234,142 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         )
 
         # Now, let's build the schema URL
-        req = urllib.request.Request(community_metadata["links"]["schemas"] + "/last")
-        with urllib.request.urlopen(req) as res:
-            community_schema_metadata = json.load(res)
+        schema_url = community_metadata["links"].get("block_schema")
+        if schema_url is None:
+            return None
 
-        return community_schema_metadata, community_specific_uuid
+        jsonschema_meta_id, community_metadata_schema_json = self.__fetch_schema(
+            schema_url
+        )
+
+        return (
+            jsonschema_meta_id,
+            community_metadata_schema_json,
+            schema_url,
+            community_specific_uuid,
+        )
+
+    def _get_entries_schema(
+        self, community_id: "str"
+    ) -> "Tuple[str, Mapping[str, Any], str]":
+        """
+        It fetches the community schema
+        """
+        community_metadata: "Optional[Mapping[str, Any]]"
+        if community_id == self.community_id:
+            community_metadata = self.community_metadata
+        else:
+            community_metadata = self.get_community_metadata(community_id)
+            if community_metadata is None:
+                raise KeyError(
+                    f"Unable to fetch metadata about community {community_id}"
+                )
+
+        # Now, let's build the schema URL
+        schema_url = community_metadata["links"]["schema"]
+        jsonschema_meta_id, entries_metadata_schema_json = self.__fetch_schema(
+            schema_url
+        )
+
+        return jsonschema_meta_id, entries_metadata_schema_json, schema_url
+
+    def _validate_community_schema(
+        self,
+        community_id: "str",
+        community_specific_metadata: "Mapping[str, Any]",
+    ) -> "Optional[str]":
+        got_schema = self._get_community_schema(community_id)
+        if got_schema is None:
+            return None
+
+        (
+            jsonschema_meta_id,
+            community_metadata_schema_json,
+            community_schema_url,
+            community_specific_uuid,
+        ) = got_schema
+
+        validator = INTROSPECT_VALIDATOR_MAPPER.get(jsonschema_meta_id)
+        if validator is None:
+            raise ExportPluginException(
+                f"Unsupported JSON Schema validation based on {jsonschema_meta_id}"
+            )
+        reported_errors = False
+        for se in validator(community_metadata_schema_json).iter_errors(
+            community_specific_metadata
+        ):
+            if not reported_errors:
+                self.logger.error(
+                    f"B2SHARE community {community_specific_uuid} validation errors."
+                )
+                self.logger.error(f"\tSchema is at {community_schema_url}")
+                self.logger.error("\tMetadata:")
+                self.logger.error(json.dumps(community_specific_metadata, indent=4))
+                reported_errors = True
+
+                self.logger.error(
+                    "\t\tPath: {0} . Message: {1}".format(
+                        "/" + "/".join(map(lambda e: str(e), se.path)),
+                        se.message,
+                    )
+                )
+
+        if reported_errors:
+            raise ExportPluginException(
+                f"B2SHARE community {community_specific_uuid} specific metadata could not be validated. Inspect log messages.\nSchema is at {community_schema_url}\nMetadata:\n{json.dumps(community_specific_metadata, indent=4)}"
+            )
+
+        return community_specific_uuid
+
+    def _validate_entry_schema(
+        self,
+        community_id: "str",
+        entry_metadata: "Mapping[str, Any]",
+    ) -> "None":
+        (
+            jsonschema_meta_id,
+            entries_metadata_schema_json,
+            entries_schema_url,
+        ) = self._get_entries_schema(community_id)
+
+        if any(
+            map(
+                lambda banned_key: banned_key in entry_metadata, self.BANNED_SCHEMA_KEYS
+            )
+        ):
+            # Removing banned keys
+            patched_entry_metadata = cast(
+                "MutableMapping[str, Any]", copy.copy(entry_metadata)
+            )
+            for banned_key in self.BANNED_SCHEMA_KEYS:
+                patched_entry_metadata.pop(banned_key, None)
+            entry_metadata = patched_entry_metadata
+
+        validator = INTROSPECT_VALIDATOR_MAPPER.get(jsonschema_meta_id)
+        if validator is None:
+            raise ExportPluginException(
+                f"Unsupported JSON Schema validation based on {jsonschema_meta_id}"
+            )
+        reported_errors = False
+        for se in validator(entries_metadata_schema_json).iter_errors(entry_metadata):
+            if not reported_errors:
+                self.logger.error(f"B2SHARE entry metadata could not be validated.")
+                self.logger.error(f"\tSchema is at {entries_schema_url}")
+                self.logger.error("\tMetadata:")
+                self.logger.error(json.dumps(entry_metadata, indent=4))
+                reported_errors = True
+
+                self.logger.error(
+                    "\t\tPath: {0} . Message: {1}".format(
+                        "/" + "/".join(map(lambda e: str(e), se.path)),
+                        se.message,
+                    )
+                )
+
+        if reported_errors:
+            raise ExportPluginException(
+                f"B2SHARE entry metadata could not be validated. Inspect log messages.\nSchema is at {entries_schema_url}\nMetadata:\n{json.dumps(entry_metadata, indent=4)}"
+            )
 
     def _get_records_prefix(self) -> "str":
         return self.api_prefix + "records/"
@@ -197,6 +385,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         self,
         community_specific_metadata: "Optional[Mapping[str, Any]]",
         base_id: "Optional[str]" = None,
+        do_validate: "bool" = False,
     ) -> "Mapping[str, Any]":
         if base_id is None:
             base_id = self.preferred_id
@@ -240,18 +429,28 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         }
         if self.community_id is not None:
             minimal_metadata["community"] = self.community_id
+            if do_validate:
+                self._validate_entry_schema(self.community_id, minimal_metadata)
+
             # This one has to be properly initialized
             # even when no specific metadata has to be provided
             minimal_metadata["community_specific"] = {}
-            if community_specific_metadata is not None:
-                (
-                    community_schema_metadata,
-                    community_specific_uuid,
-                ) = self._get_community_schema(self.community_id)
-                if community_specific_uuid is not None:
-                    minimal_metadata.setdefault("community_specific", {})[
-                        community_specific_uuid
-                    ] = community_specific_metadata
+            if community_specific_metadata is None:
+                community_specific_metadata = {}
+
+            if do_validate:
+                community_specific_uuid = self._validate_community_schema(
+                    self.community_id,
+                    community_specific_metadata,
+                )
+            else:
+                got_schema = self._get_community_schema(self.community_id)
+                community_specific_uuid = None if got_schema is None else got_schema[3]
+
+            if community_specific_uuid is not None:
+                minimal_metadata["community_specific"][
+                    community_specific_uuid
+                ] = community_specific_metadata
 
         req = urllib.request.Request(
             self._get_records_prefix()
@@ -481,15 +680,52 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 fH.close()
 
     @staticmethod
-    def __patch_ops(
+    def __update_meta(
         draft_record_metadata: "Mapping[str, Any]",
         metadata: "Mapping[str, Any]",
-        patch_ops: "MutableSequence[Mapping[str, Any]]" = [],
-        prefix: "str" = "/",
-    ) -> "MutableSequence[Mapping[str, Any]]":
+    ) -> "Mapping[str, Any]":
         """
         Generator of JSON Patch operations
         """
+        updated_record_metadata = cast(
+            "MutableMapping[str, Any]", copy.deepcopy(draft_record_metadata)
+        )
+        for key, val in metadata.items():
+            if val is None:
+                updated_record_metadata.pop(key, None)
+            elif key in draft_record_metadata:
+                # Is it a list?
+                # if isinstance(draft_record_metadata[key], list):
+                # 	# Is the value a list itself
+                # 	if isinstance(val, list):
+                # 		# Let's concatenate
+                # 		the_val = val
+                # 	else:
+                # 		the_val = [ val ]
+                #
+                # 	for a_idx, a_val in enumerate(the_val, len(draft_record_metadata[key])):
+                # 		patch_ops.append({
+                # 			"op": "add",
+                # 			"path": prefix + key + '/' + str(a_idx),
+                # 			"value": a_val,
+                # 		})
+                # else:
+                updated_record_metadata[key] = val
+            else:
+                updated_record_metadata[key] = val
+
+        return updated_record_metadata
+
+    @staticmethod
+    def __patch_ops(
+        draft_record_metadata: "Mapping[str, Any]",
+        metadata: "Mapping[str, Any]",
+        prefix: "str" = "/",
+    ) -> "Sequence[Mapping[str, Any]]":
+        """
+        Generator of JSON Patch operations
+        """
+        patch_ops: "MutableSequence[Mapping[str, Any]]" = []
         for key, val in metadata.items():
             if val is None:
                 patch_ops.append(
@@ -538,6 +774,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        do_validate: "bool" = False,
     ) -> "Mapping[str, Any]":
         """
         This method updates the (draft or not) record metadata,
@@ -545,28 +782,56 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         This one could not make sense for some providers.
         """
         assert draft_entry.metadata is not None
-        record = draft_entry.metadata
+        record = self.get_pid_metadata(draft_entry.draft_id)
+        if record is None:
+            raise ExportPluginException(
+                f"B2SHARE draft/entry {draft_entry.draft_id} is unavailable"
+            )
 
-        patch_ops = self.__patch_ops(record["metadata"], metadata)
-        community_id = cast(
-            "Optional[str]", record.get("metadata", {}).get("community")
-        )
-        if community_id is not None and community_specific_metadata is not None:
-            (
-                community_schema_metadata,
-                community_specific_uuid,
-            ) = self._get_community_schema(community_id)
+        patch_ops: "MutableSequence[Mapping[str, Any]]"
+        # Do not patch when no metadata is provided
+
+        updated_metadata = self.__update_meta(record["metadata"], metadata)
+        community_id = cast("Optional[str]", updated_metadata.get("community"))
+
+        if do_validate:
+            assert community_id is not None
+            # Validate metadata changes
+            self._validate_entry_schema(community_id, updated_metadata)
+
+        if metadata:
+            metadata_patch_ops = self.__patch_ops(record["metadata"], metadata)
+        else:
+            metadata_patch_ops = []
+
+        community_metadata_patch_ops: "Sequence[Mapping[str, Any]]" = []
+        if community_id is not None:
+            got_schema = self._get_community_schema(community_id)
+            community_specific_uuid = None if got_schema is None else got_schema[3]
+
+            if community_specific_metadata is None:
+                community_specific_metadata = {}
             if community_specific_uuid is not None:
-                patch_ops = self.__patch_ops(
-                    record["metadata"]["community_specific"].get(
+                if do_validate:
+                    updated_community_specific_metadata = self.__update_meta(
+                        updated_metadata["community_specific"].get(
+                            community_specific_uuid, {}
+                        ),
+                        community_specific_metadata,
+                    )
+                    self._validate_community_schema(
+                        community_id, updated_community_specific_metadata
+                    )
+
+                community_metadata_patch_ops = self.__patch_ops(
+                    updated_metadata["community_specific"].get(
                         community_specific_uuid, {}
                     ),
                     community_specific_metadata,
-                    patch_ops=patch_ops,
                     prefix="/community_specific/" + community_specific_uuid + "/",
                 )
 
-        if len(patch_ops) > 0:
+        if len(metadata_patch_ops) > 0 or len(community_metadata_patch_ops) > 0:
             record_url = self._get_record_prefix_from_record(record)
             headers = {
                 "Content-Type": "application/json-patch+json",
@@ -574,7 +839,9 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             req = urllib.request.Request(
                 record_url + "?" + self._get_query_params(include_credentials=True),
                 headers=headers,
-                data=json.dumps(patch_ops).encode("utf-8"),
+                data=json.dumps(
+                    [*metadata_patch_ops, *community_metadata_patch_ops]
+                ).encode("utf-8"),
                 method="PATCH",
             )
             try:
@@ -599,6 +866,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             metadata={
                 "publication_state": "submitted",
             },
+            do_validate=True,
         )
 
         return published_record

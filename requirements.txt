@@ -1,6 +1,8 @@
 pyyaml
 jsonpath-ng
-jsonschema[format_nongpl] >= 3.0.0 , < 4.18.0
+jsonschema[format_nongpl] >= 3.0.0
+jsonschema[format_nongpl] < 4.18.0 ; python_version <= '3.7'
+jsonpointer
 python-magic >= 0.4.27
 paramiko[ed25519]
 certifi
