@@ -240,6 +240,9 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         }
         if self.community_id is not None:
             minimal_metadata["community"] = self.community_id
+            # This one has to be properly initialized
+            # even when no specific metadata has to be provided
+            minimal_metadata["community_specific"] = {}
             if community_specific_metadata is not None:
                 (
                     community_schema_metadata,
