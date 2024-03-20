@@ -1,0 +1,17 @@
+# This yaml is processed by https://pypi.org/project/pytest_param_files/
+# So, you can learn how to prepare a test battery with several accounts
+# having a look at https://github.com/chrisjsewell/pytest-param-files/blob/bfa86b99f425f001d571fa48b324103c2c68dbd0/README.md
+
+# The label of the test
+zenodo_sandbox:
+  # The description of the test
+  description: Zenodo sandbox connection
+  # Is the test performed using sandbox.zenodo.org?
+  sandbox: true
+  # The personal access token obtained from your profile.
+  # Procedure to obtain one is described at https://developers.zenodo.org/#creating-a-personal-access-token
+  # It should allow creating new entries.
+  token: AN_ACCESS_TOKEN
+  # An existing internal record identifier, owned by the very same profile
+  # as the one used to emit the access token. It is needed for versioning tests.
+  owned_existing_pid: "22580"
