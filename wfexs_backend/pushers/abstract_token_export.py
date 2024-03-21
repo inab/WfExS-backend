@@ -19,7 +19,6 @@
 from __future__ import absolute_import
 
 import abc
-import copy
 import logging
 from typing import (
     cast,
@@ -52,7 +51,6 @@ if TYPE_CHECKING:
         SymbolicName,
         URIType,
         URIWithMetadata,
-        WritableSecurityContextConfig,
     )
 
     from . import (
@@ -60,15 +58,12 @@ if TYPE_CHECKING:
     )
 
 from . import (
+    AbstractExportPlugin,
     ExportPluginException,
 )
 
-from .abstract_token_export import (
-    AbstractTokenExportPlugin,
-)
 
-
-class AbstractTokenSandboxedExportPlugin(AbstractTokenExportPlugin):
+class AbstractTokenExportPlugin(AbstractExportPlugin):
     def __init__(
         self,
         refdir: "AbsPath",
@@ -77,32 +72,43 @@ class AbstractTokenSandboxedExportPlugin(AbstractTokenExportPlugin):
         orcids: "Sequence[str]" = [],
         preferred_id: "Optional[str]" = None,
     ):
-        if setup_block is None:
-            setup_block = {}
-        for conf_key in ("sandbox",):
-            if conf_key not in setup_block:
-                raise ExportPluginException(
-                    f"Key {conf_key} was not found in setup block"
-                )
-
-        self.sandbox = bool(setup_block["sandbox"])
-
-        new_setup_block = cast("WritableSecurityContextConfig", copy.copy(setup_block))
-        # This code expects the children to implement it
-        new_setup_block["api-prefix"] = self.get_api_prefix()
-
         super().__init__(
             refdir=refdir,
-            setup_block=new_setup_block,
+            setup_block=setup_block,
             licences=licences,
             orcids=orcids,
             preferred_id=preferred_id,
         )
 
+        for conf_key in ("token",):
+            if conf_key not in self.setup_block:
+                raise ExportPluginException(
+                    f"Key {conf_key} was not found in security context block"
+                )
+
+        self.api_token = self.setup_block["token"]
+
+        for conf_key in ("api-prefix",):
+            if conf_key not in self.setup_block:
+                raise ExportPluginException(
+                    f"Key {conf_key} was not found in setup block"
+                )
+
+        self.api_prefix = cast("str", self.setup_block["api-prefix"])
+
     @abc.abstractmethod
+    def get_file_bucket_prefix(
+        self,
+        draft_entry: "DraftEntry",
+    ) -> "str":
+        """
+        This is an accessory method which is used to build upload paths
+        """
+        raise NotImplementedError()
+
     def get_api_prefix(self) -> "str":
         """
         This method returns the REST API prefix.
         It could be re-implemented
         """
-        raise NotImplementedError()
+        return self.api_prefix

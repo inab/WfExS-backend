@@ -135,10 +135,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         )
 
         if self.sandbox:
-            self.api_prefix = self.SANDBOX_B2SHARE_API_PREFIX
             self.b2share_doi_prefix = self.SANDBOX_B2SHARE_DOI_PREFIX
         else:
-            self.api_prefix = self.B2SHARE_API_PREFIX
             self.b2share_doi_prefix = self.B2SHARE_DOI_PREFIX
 
         community_id_or_name = cast(
@@ -153,6 +151,11 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         else:
             self.community_metadata = community_metadata
             self.community_id = cast("str", community_metadata["id"])
+
+    def get_api_prefix(self) -> "str":
+        return (
+            self.SANDBOX_B2SHARE_API_PREFIX if self.sandbox else self.B2SHARE_API_PREFIX
+        )
 
     def get_community_metadata(
         self, community_id_or_name: "Optional[str]"

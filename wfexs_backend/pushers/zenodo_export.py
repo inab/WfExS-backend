@@ -116,11 +116,9 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         if "/" in self.path_sep:
             raise ValueError("Path separator used in Zenodo file uploads cannot be '/'")
 
-        self.api_token = self.setup_block["token"]
         self.zenodo_prefix = (
             self.SANDBOX_ZENODO_PREFIX if self.sandbox else self.ZENODO_PREFIX
         )
-        self.api_prefix = self.zenodo_prefix + "/api/"
         self.deposit_api_prefix = self.api_prefix + "deposit/"
         self.depositions_api_prefix = self.deposit_api_prefix + "depositions"
         self.records_api_prefix = self.api_prefix + "records"
@@ -139,6 +137,12 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         # )
         # with urllib.request.urlopen(firstreq) as eH:
         #    pass
+
+    def get_api_prefix(self) -> "str":
+        zenodo_prefix = (
+            self.SANDBOX_ZENODO_PREFIX if self.sandbox else self.ZENODO_PREFIX
+        )
+        return zenodo_prefix + "/api/"
 
     def _gen_headers(self) -> "MutableMapping[str, str]":
         return {
