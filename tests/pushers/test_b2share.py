@@ -70,7 +70,7 @@ logger.setLevel(logging.INFO)
 @pytest.mark.dependency
 def test_b2share_basic_fail_nosandbox() -> "None":
     """
-    Check B2SHARE plugin complains about missing token parameter
+    Check B2SHARE plugin complains about missing sandbox parameter
     """
     with pytest.raises(ExportPluginException):
         B2SHAREPublisher(cast("AbsPath", "/"), setup_block={"token": ""})
@@ -80,7 +80,7 @@ def test_b2share_basic_fail_nosandbox() -> "None":
 @pytest.mark.dependency
 def test_b2share_basic_fail_notoken() -> "None":
     """
-    Check B2SHARE plugin complains about missing sandbox parameter
+    Check B2SHARE plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
         bep = B2SHAREPublisher(cast("AbsPath", "/"), setup_block={"sandbox": True})

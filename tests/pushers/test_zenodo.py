@@ -68,7 +68,7 @@ logger.setLevel(logging.INFO)
 @pytest.mark.dependency
 def test_zenodo_basic_fail_nosandbox() -> "None":
     """
-    Check Zenodo plugin complains about missing token parameter
+    Check Zenodo plugin complains about missing sandbox parameter
     """
     with pytest.raises(ExportPluginException):
         ZenodoExportPlugin(cast("AbsPath", "/"), setup_block={"token": ""})
@@ -78,7 +78,7 @@ def test_zenodo_basic_fail_nosandbox() -> "None":
 @pytest.mark.dependency
 def test_zenodo_basic_fail_notoken() -> "None":
     """
-    Check Zenodo plugin complains about missing sandbox parameter
+    Check Zenodo plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
         zep = ZenodoExportPlugin(cast("AbsPath", "/"), setup_block={"sandbox": True})
