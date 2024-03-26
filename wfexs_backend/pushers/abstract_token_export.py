@@ -95,6 +95,9 @@ class AbstractTokenExportPlugin(AbstractExportPlugin):
                 )
 
         self.api_prefix = cast("str", self.setup_block["api-prefix"])
+        # Prefix should always end with a slash
+        if not self.api_prefix.endswith("/"):
+            self.api_prefix += "/"
 
     @abc.abstractmethod
     def get_file_bucket_prefix(
