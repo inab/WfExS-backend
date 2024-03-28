@@ -51,6 +51,8 @@ if TYPE_CHECKING:
         RelPath,
     )
 
+import urllib.request
+
 import jsonschema.validators
 
 from ..common import AbstractWfExSException
@@ -279,3 +281,25 @@ def iter_namespace(ns_pkg: "ModuleType") -> "Iterator[pkgutil.ModuleInfo]":
     # import_module to work without having to do additional modification to
     # the name.
     return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
+
+
+def get_opener_with_auth(
+    top_level_url: "str", username: "str", password: "str"
+) -> "urllib.request.OpenerDirector":
+    """
+    Taken from https://stackoverflow.com/a/44239906
+    """
+
+    # create a password manager
+    password_mgr = urllib.request.HTTPPasswordMgrWithPriorAuth()
+
+    # Add the username and password.
+    # If we knew the realm, we could use it instead of None.
+    password_mgr.add_password(
+        None, top_level_url, username, password, is_authenticated=True
+    )
+
+    handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
+
+    # create "opener" (OpenerDirector instance)
+    return urllib.request.build_opener(handler)
