@@ -18,18 +18,16 @@
 
 import pytest
 
+from tests.pushers.marks import (
+    MARKERS,
+)
+
 
 def pytest_addoption(parser: "pytest.Parser") -> "None":
-    parser.addoption(
-        "--zenodo-config",
-        dest="zenodo_config_filename",
-        action="store",
-        help="This flag enables Zenodo config filename",
-    )
-
-    parser.addoption(
-        "--b2share-config",
-        dest="b2share_config_filename",
-        action="store",
-        help="This flag enables B2SHARE config filename",
-    )
+    for mark_details in MARKERS:
+        parser.addoption(
+            mark_details.option,
+            dest=mark_details.param,
+            action="store",
+            help=mark_details.param_description,
+        )

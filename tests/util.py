@@ -29,3 +29,17 @@ def get_path(filename: "str") -> "str":
     return os.path.normpath(
         os.path.join(os.path.dirname(inspect.stack()[1].filename), filename)
     )
+
+
+from typing import (
+    NamedTuple,
+)
+
+
+class MarkDetails(NamedTuple):
+    acronym: "str"
+    name: "str"
+    param: "str"
+    option: "str"
+    param_description: "str"
+    mark_description: "str"

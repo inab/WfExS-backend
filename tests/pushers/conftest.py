@@ -18,16 +18,17 @@
 
 import pytest
 
+from tests.pushers.marks import (
+    MARKERS,
+)
+
 
 def pytest_configure(config: "pytest.Config") -> "None":
-    config.addinivalue_line(
-        "markers",
-        "zenodo_params: mark test to run only when a configuration file with Zenodo credentials is provided",
-    )
-    config.addinivalue_line(
-        "markers",
-        "b2share_params: mark test to run only when a configuration file with B2SHARE credentials is provided",
-    )
+    for mark_details in MARKERS:
+        config.addinivalue_line(
+            "markers",
+            f"{mark_details.name}: {mark_details.mark_description}",
+        )
 
 
 import logging
@@ -63,49 +64,28 @@ logger = logging.getLogger(__name__)
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_generate_tests(metafunc: "pytest.Metafunc") -> "None":
-    found_zenodo = False
-    for mark in metafunc.definition.iter_markers(name="zenodo_params"):
-        found_zenodo = True
+    for mark_details in MARKERS:
+        found_mark = False
+        for mark in metafunc.definition.iter_markers(name=mark_details.name):
+            found_mark = True
 
-    if found_zenodo:
-        zenodo_config_filename = metafunc.config.getoption("zenodo_config_filename")
-        if zenodo_config_filename is not None:
-            zenodo_mark = pytest.mark.param_file(zenodo_config_filename, fmt="yaml")
-        else:
-            zenodo_mark = pytest.mark.skip(
-                "No configuration file provided through --zenodo-config for this batch of Zenodo tests"
-            )
+        if found_mark:
+            mark_config_filename = metafunc.config.getoption(mark_details.param)
+            if mark_config_filename is not None:
+                the_mark = pytest.mark.param_file(mark_config_filename, fmt="yaml")
+            else:
+                the_mark = pytest.mark.skip(
+                    f"No configuration file provided through {mark_details.option} for this batch of {mark_details.acronym} tests"
+                )
 
-        metafunc.function = zenodo_mark(metafunc.function)
-        metafunc.definition.obj = metafunc.function
-        metafunc.definition.add_marker(zenodo_mark)
-        metafunc.function.pytestmark = [
-            mark
-            for mark in metafunc.function.pytestmark
-            if mark.name != "zenodo_params"
-        ]
-
-    found_b2share = False
-    for mark in metafunc.definition.iter_markers(name="b2share_params"):
-        found_b2share = True
-
-    if found_b2share:
-        b2share_config_filename = metafunc.config.getoption("b2share_config_filename")
-        if b2share_config_filename is not None:
-            b2share_mark = pytest.mark.param_file(b2share_config_filename, fmt="yaml")
-        else:
-            b2share_mark = pytest.mark.skip(
-                "No configuration file provided through --b2share-config for this batch of B2SHARE tests"
-            )
-
-        metafunc.function = b2share_mark(metafunc.function)
-        metafunc.definition.obj = metafunc.function
-        metafunc.definition.add_marker(b2share_mark)
-        metafunc.function.pytestmark = [
-            mark
-            for mark in metafunc.function.pytestmark
-            if mark.name != "b2share_params"
-        ]
+            metafunc.function = the_mark(metafunc.function)
+            metafunc.definition.obj = metafunc.function
+            metafunc.definition.add_marker(the_mark)
+            metafunc.function.pytestmark = [
+                mark
+                for mark in metafunc.function.pytestmark
+                if mark.name != mark_details.name
+            ]
 
 
 # @pytest.hookimpl(tryfirst=True)
