@@ -265,9 +265,19 @@ def test_dataverse_book_new_version_pid(file_params: "ParamTestData") -> "None":
 
     booked_entry = None
     try:
+        orig_booked_entry = dep.get_pid_draftentry(
+            file_params.extra["owned_existing_pid"]
+        )
+        logger.info(orig_booked_entry)
+        assert orig_booked_entry is not None
+
         booked_entry = dep.book_pid()
         logger.info(booked_entry)
         assert booked_entry is not None
+
+        assert (
+            orig_booked_entry.draft_id != booked_entry.draft_id
+        ), f"Internal booked PIDs do match {orig_booked_entry.draft_id} vs {booked_entry.draft_id}"
     except urllib.error.HTTPError as he:
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")

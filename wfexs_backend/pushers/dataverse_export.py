@@ -18,6 +18,7 @@
 
 from __future__ import absolute_import
 
+import copy
 import datetime
 
 # import http.cookiejar
@@ -381,10 +382,23 @@ class DataversePublisher(AbstractTokenExportPlugin):
                         != "DRAFT"
                     ):
                         # Built the request url for new version
-                        newentry_url = (
-                            booked_entry.metadata["links"]["latest_draft"]
-                            + "/actions/newversion"
+                        # This should force the creation of a new draft
+                        updated_metadata = self.update_record_metadata(
+                            booked_entry, booked_entry.metadata.get("latestVersion", {})
                         )
+                        if updated_metadata is not None:
+                            new_draft_id = updated_metadata.get(
+                                "latestVersion", {}
+                            ).get("id")
+                            if new_draft_id is not None:
+                                return booked_entry._replace(
+                                    draft_id=new_draft_id,
+                                    metadata=updated_metadata,
+                                )
+                        return None
+                        # updated_entry = self._sword_book_revision(booked_entry)
+                        #
+                        # return updated_entry
                     else:
                         preferred_id = booked_entry.draft_id
                 else:
@@ -475,6 +489,90 @@ class DataversePublisher(AbstractTokenExportPlugin):
         """
         raise NotImplementedError()
 
+    def __gen_sword_dataset_url(self, draft_entry: "DraftEntry") -> "str":
+        return (
+            self.sword_api_prefix
+            + "edit/study/"
+            + urllib.parse.quote(draft_entry.pid, safe="/:")
+        )
+
+    EXPORT_FORMATS: "Final[Set[str]]" = {
+        "ddi",
+        "oai_ddi",
+        "dcterms",
+        "oai_dc",
+        "schema.org",
+        "OAI_ORE",
+        "Datacite",
+        "oai_datacite",
+        "dataverse_json",
+    }
+
+    def _export_metadata_raw(
+        self, draft_entry: "DraftEntry", format: "str" = "dcterms"
+    ) -> "bytes":
+        """
+        Get the metadata in SWORD format
+        """
+        if format not in self.EXPORT_FORMATS:
+            raise KeyError(f"{format} is an unsupported export format")
+
+        query = {
+            "exporter": format,
+            "persistentId": draft_entry.pid,
+        }
+
+        req = urllib.request.Request(
+            url=self.datasets_api_prefix
+            + "export"
+            + "?"
+            + urllib.parse.urlencode(query, encoding="utf-8"),
+            headers=self._gen_headers(),
+        )
+        try:
+            with urllib.request.urlopen(req) as bH:
+                return cast("bytes", bH.read())
+        except urllib.error.HTTPError as he:
+            errmsg = f"Could not get metadata from entry {draft_entry.pid} . Server response: {he.read().decode('utf-8')}"
+            self.logger.exception(errmsg)
+            raise ExportPluginException(errmsg) from he
+
+    def _sword_book_revision(self, draft_entry: "DraftEntry") -> "Optional[DraftEntry]":
+        existing_metadata_raw = self._export_metadata_raw(draft_entry, format="dcterms")
+
+        req = urllib.request.Request(
+            url=self.__gen_sword_dataset_url(draft_entry),
+            headers={
+                "Content-Type": self.ATOM_CONTENT_TYPE,
+            },
+            data=existing_metadata_raw,
+            method="PUT",
+        )
+        try:
+            with self.sword_opener(req) as bH:
+                root = ElementTree.parse(bH)
+                link_elem = root.find(
+                    f".//{self.ATOM_PREFIX}:id", namespaces=self.XML_NS
+                )
+                if link_elem is None:
+                    return None
+
+                link_id = link_elem.text
+                if link_id is None:
+                    return None
+
+                doipos = link_id.find("doi:")
+                if doipos < 0:
+                    return None
+
+                return self.get_pid_draftentry(link_id[doipos:])
+        except urllib.error.HTTPError as he:
+            errmsg = f"Could not book Dataverse entry using {self.dataverse_collection_url}. Server response: {he.read().decode('utf-8')}"
+            self.logger.exception(errmsg)
+            # for cookie in self._shared_cookie_jar:
+            #    self.logger.error(f"Cookie: {cookie.name}, {cookie.value}")
+            raise ExportPluginException(errmsg) from he
+
     def update_record_metadata(
         self,
         draft_entry: "DraftEntry",
@@ -482,11 +580,53 @@ class DataversePublisher(AbstractTokenExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Mapping[str, Any]":
         """
-        This method updates the (draft or not) record metadata,
+        This method updates the draft record metadata,
         both the general one, and the specific of the community.
         This one could not make sense for some providers.
+        For non draft entries, it fails
         """
-        raise NotImplementedError()
+
+        cleaned_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+        for key in ("files", "versionState"):
+            if key in cleaned_metadata:
+                del cleaned_metadata[key]
+
+        if metadata.get("versionState") != "DRAFT":
+            cleaned_metadata["versionNumber"] += 1
+
+        query = {
+            "persistentId": draft_entry.pid,
+        }
+
+        req = urllib.request.Request(
+            url=self.datasets_api_prefix
+            + ":persistentId/versions/:draft"
+            + "?"
+            + urllib.parse.urlencode(query, encoding="utf-8"),
+            headers={"Content-Type": "application/json", **self._gen_headers()},
+            data=json.dumps(cleaned_metadata).encode("utf-8"),
+            method="PUT",
+        )
+        try:
+            with urllib.request.urlopen(req) as bH:
+                retval = json.load(bH)
+                return cast("Mapping[str, Any]", retval.get("data", {}))
+        except urllib.error.HTTPError as he:
+            # This corner case happens when there is a draft already
+            if he.code == 400:
+                err_payload = json.load(he)
+                self.logger.exception(
+                    f"Error {he.code} on update metadata {err_payload}"
+                )
+                self.logger.exception(f"See also {metadata}")
+            raise ExportPluginException(
+                f"Unable to update metadata about {draft_entry.pid} Dataverse entry at {self.api_prefix}"
+            ) from he
+        except:
+            self.logger.exception(
+                f"Unable to update metadata about {draft_entry.pid} Dataverse entry at {self.api_prefix}"
+            )
+            raise
 
     def publish_draft_record(
         self,
