@@ -1,4 +1,5 @@
 sphinx-rtd-theme
 sphinx-copybutton
 sphinx-argparse
+libmagic
 wfexs_backend @ git+https://github.com/inab/WfExS-backend.git@5ed3c01eaa06194661880bb50b13f7783757b37a
