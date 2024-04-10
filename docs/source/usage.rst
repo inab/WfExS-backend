@@ -1,10 +1,5 @@
-Usage
-=====
-
-WfExS (which can be pronounced like "why-fex", "why-fix" or "why-fixes" is used to import and execute workflows. It currently supports only workflows which are written in either Nextflow or CWL.
-WfExS is written in Python. The workflows you want to use can be fetched from one of these places: the `WorkflowHub <https://workflowhub.eu/>`_, `Dockstore <https://dockstore.org>`_ and Github (either the URL or the git repository).
-
-This document will give you more information about the installation of the software and how you can import and execute a certain workflow. In this document there is a small section with gearshift specific installation instructions. If you want to install WfExS on gearshift please first read this part and then proceed to the general installation of WFeXs.
+Executing WfExS
+===============
 
 General websites:
 
@@ -17,52 +12,74 @@ General websites:
 .. index::
    single: usage; first_steps
 
-How to work with WfExS
-----------------------
 
-WfExS software needs at least two and sometimes three different input files to run your workflow:
-- Local configuration file: This file contains the encryption keys  (necessary)
-- Workflow configuration file: This file describes which workflow you want to run and with which input files and optional references  (necessary)
-- Security contexts file: for some input files/references you need usernames and passwords to use them, they should be added to this file.  (optional)
-
-All the different options for running WfExS (different commands/options)  and input file formats are also described on this page: https://github.com/inab/WfExS-backend  (you have to scroll down to find this information).
-First of all we are going to explain running a very small NextFlow workflow, Cosifer test to give you an idea of how this software works.
+All the different options for running WfExS (different commands/options)  and input file 
+formats are also described on this page: https://github.com/inab/WfExS-backend  
+(you have to scroll down to find this information).
+First of all we are going to explain running a very small NextFlow workflow,
+Cosifer test to give you an idea of how this software works.
 
 
 .. index::
    single: usage; test_workflow
 
-Running a test workflow to see the software in action
------------------------------------------------------
+Testing the Software: Running a Test Workflow
+----------------------------------------------
 
-For testing purposes, the Cosifer test workflow is an excellent choice, since this is a small workflow and downloading/executing this workflow will take the least amount of time.
-Make sure the python environment is loaded (see installation procedure).
-The shell prompt should start with: (.pyWEenv), f.e. (.pyWEenv) user@cluster my_install_folder $ 
+Testing the functionality of the software through a test workflow is crucial for understanding its 
+capabilities. One recommended choice for this purpose is the Cosifer test workflow, due to its 
+manageable size, ensuring a swift download and execution process.
 
-The general command for executing a workflow with WfExs should look like this:
-python WfExS-backend.py -d -L /PATH/TO/local_config_file.yaml execute -W /PATH/TO/workflow_configuration_file.stage 
+To initiate the test workflow, ensure that the Python environment is loaded, as outlined in the 
+installation procedure. Upon successful setup, your shell prompt should begin with ``(.pyWEenv)``.
 
-Use this command for Running the Cosifer workflow:
-cd WfExS-backend
-python WfExS-backend.py -d -L tests/local_config_${USERNAME}.yaml execute -W tests/ipc/cosifer_test1_nxf.wfex.stage 
+Executing a workflow with WfExS typically follows a standard command format:
 
-This will take some time (a couple of hours is normal)  since it has to download the workflow/containers, prepare the workflow and then execute the workflow.
-When it's done it will give you the path to the results, the line starts with: createResultsResearchObject 1687][INFO] RO-Crate created: 
+.. code-block:: bash
+
+    python WfExS-backend.py -d -L /PATH/TO/local_config_file.yaml execute -W /PATH/TO/workflow_configuration_file.stage
+
+For running the Cosifer workflow specifically, use to the following command sequence:
+
+.. code-block:: bash
+
+    cd WfExS-backend
+    python WfExS-backend.py -d -L tests/local_config_${USERNAME}.yaml execute -W workflow_examples/ipc/cosifer_test1_nxf.wfex.stage
+
+Be prepared for a moderate duration of execution, typically a couple of hours, as the process 
+involves downloading the workflow and containers, preparing the workflow environment, 
+and executing the workflow itself.
+
+Upon completion, the software will provide the path to the results, beginning with the line: 
+``createResultsResearchObject [INFO] RO-Crate created:``
+
+By following these steps, you can effectively assess the software's performance and functionality using the Cosifer test workflow.
+
 
 .. index::
    single: usage; own_workflow
 
-How to work with WfExS to run your own workflow
------------------------------------------------
 
-Just to remind you, WfExS currently only supports workflows written in CWL and Nextflow.
-Please keep in mind that any workflow/situation is different so we can't give you an exact manual on what to do here.
+Working with WfExS to Run Your Own Workflow
+--------------------------------------------
 
-As explained in the section above, to run a workflow you need at least two/maybe three different input files.
-Assuming you have run a workflow before (f.e. the Cosifer test workflow),  you already have the local configuration file so this section will only discuss making your own workflow configuration file: and the security contexts file.
+Before proceeding, it's important to note that WfExS currently supports workflows written in 
+CWL and Nextflow. Additionally, it's crucial to acknowledge that each workflow and situation 
+may vary, so providing an exact manual for every scenario isn't feasible.
 
-General examples of a workflow configuration file can be found on the Github page of WfExs. 
- (https://github.com/inab/WfExS-backend/tree/main/tests )  
+As explained in the section above, to run a workflow with WfExS, you'll need at least two, 
+and possibly three, input files. 
+Assuming you've previously executed a workflow (e.g., the Cosifer test workflow), you likely 
+already have the local configuration file. 
+Thus, this section will focus on creating your own workflow configuration file and, 
+if applicable, the security contexts file.
+
+You can find general examples of workflow configuration files on the WfExS GitHub page at the following link: https://github.com/inab/WfExS-backend/tree/main/tests. Here, you'll find examples of workflow configuration files (files ending with ".stage") tailored for both CWL and Nextflow workflows.
+
+
+
+General examples of a workflow configuration file can be found on the Github page of WfExs.
+(https://https://github.com/WfExS-backend/tree/main/workflow_examples )  
 There are examples of workflow configuration files (files that end with ".stage") for CWL and Nextflow workflows.
 
 .. index::
