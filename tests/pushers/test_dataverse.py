@@ -330,8 +330,12 @@ def test_dataverse_upload_file_to_draft(file_params: "ParamTestData") -> "None":
             remote_filename=None,
         )
         logger.info(uploaded_file_meta)
-        assert uploaded_file_meta.get("key") == os.path.basename(naive_path)
-        assert uploaded_file_meta.get("size") == os.path.getsize(naive_path)
+        assert uploaded_file_meta.get("data", {}).get("files", [])[0]["dataFile"].get(
+            "filename"
+        ) == os.path.basename(naive_path)
+        assert uploaded_file_meta.get("data", {}).get("files", [])[0]["dataFile"].get(
+            "filesize"
+        ) == os.path.getsize(naive_path)
     except urllib.error.HTTPError as he:
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")

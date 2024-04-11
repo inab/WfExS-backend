@@ -34,9 +34,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import xml.etree.ElementTree
 
 from defusedxml import ElementTree
-import xml.etree.ElementTree
 
 from ..common import (
     MaterializedContent,
@@ -103,6 +103,14 @@ from .abstract_token_export import (
 
 from ..utils.misc import (
     get_opener_with_auth,
+)
+
+from ..utils.io_wrappers import (
+    DigestIOWrapper,
+    LimitedStreamIOWrapper,
+    MIMETypeIOWrapper,
+    MultipartEncoderIOWrapper,
+    MultipartFile,
 )
 
 
@@ -477,7 +485,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
             + urllib.parse.urlencode(query, encoding="utf-8")
         )
 
-    def upload_file_to_draft(
+    def _direct_upload_file_to_draft(
         self,
         draft_entry: "DraftEntry",
         filename: "Union[str, IO[bytes]]",
@@ -487,7 +495,261 @@ class DataversePublisher(AbstractTokenExportPlugin):
         """
         It takes as input the draft record representation, a local filename and optionally the remote filename to use
         """
-        raise NotImplementedError()
+        # curl -H "X-Dataverse-key:$API_TOKEN" -X POST -F "file=@$FILENAME" -F 'jsonData={"description":"My description.","directoryLabel":"data/subdir1","categories":["Data"], "restrict":"false", "tabIngest":"false"}' "$SERVER_URL/api/datasets/:persistentId/add?persistentId=$PERSISTENT_ID"
+
+        pH: "SupportsRead[bytes]"
+        if isinstance(filename, str):
+            pH = open(filename, mode="rb")
+            content_size = os.stat(filename).st_size
+            if remote_filename is None:
+                remote_filename = os.path.relpath(filename, self.refdir)
+        else:
+            assert isinstance(
+                remote_filename, str
+            ), "When filename is a data stream, remote_filename must be declared"
+            assert (
+                content_size is not None
+            ), "When filename is a data stream, content_size must be declared"
+            pH = filename
+
+        filename_label: "str" = remote_filename
+        directory_label: "Optional[str]" = None
+        rslash = remote_filename.rfind("/")
+        if rslash > 0:
+            directory_label = remote_filename[0:rslash]
+            filename_label = remote_filename[rslash + 1 :]
+
+        # The code is guessing the MIME type of the stream on the fly
+        mpH = MIMETypeIOWrapper(stream=pH)
+
+        # Also, the code is computing the SHA256 of the stream on the fly
+        dpH = DigestIOWrapper(stream=mpH, algo="sha256")
+
+        # Assuming direct uploads are available ....
+        query = {
+            "persistentId": draft_entry.pid,
+            "size": content_size,
+        }
+        req = urllib.request.Request(
+            url=self.datasets_api_prefix
+            + ":persistentId/uploadurls"
+            + "?"
+            + urllib.parse.urlencode(query, encoding="utf-8"),
+            headers=self._gen_headers(),
+        )
+        with urllib.request.urlopen(req) as uF:
+            upload_desc = json.load(uF)
+
+            if upload_desc.get("status") != "OK":
+                raise ExportPluginException()
+        storage_identifier = upload_desc.get("data", {}).get("storageIdentifier")
+        if not isinstance(storage_identifier, str):
+            raise ExportPluginException()
+
+        upload_url = upload_desc.get("data", {}).get("url")
+        if isinstance(upload_url, str):
+            putreq = urllib.request.Request(
+                url=upload_url,
+                data=dpH,
+                method="PUT",
+                headers={
+                    "x-amz-tagging:dv-state": "temp",
+                },
+            )
+            with urllib.request.urlopen(putreq) as pr:
+                # upload_response = cast("Mapping[str, Any]", json.load(pr))
+                pass
+        else:
+            upload_urls_mapping: "Optional[Mapping[str,str]]" = upload_desc.get(
+                "data", {}
+            ).get("urls")
+            if not isinstance(upload_urls_mapping, dict):
+                raise ExportPluginException()
+
+            # Sorting the URLs in a list
+            upload_urls = list(
+                sorted(upload_urls_mapping.items(), key=lambda p: int(p[0]))
+            )
+
+            maxreadsize: "Optional[int]" = upload_desc.get("data", {}).get("partSize")
+            if not isinstance(maxreadsize, int):
+                raise ExportPluginException()
+
+            abort_url: "Optional[str]" = upload_desc.get("data", {}).get("abort")
+            if not isinstance(abort_url, str):
+                raise ExportPluginException()
+
+            completion_url: "Optional[str]" = upload_desc.get("data", {}).get(
+                "complete"
+            )
+            if not isinstance(completion_url, str):
+                raise ExportPluginException()
+
+            try:
+                etags: "MutableMapping[str, str]" = {}
+                for upload_label, upload_url in upload_urls:
+                    lH = LimitedStreamIOWrapper(stream=dpH, maxreadsize=maxreadsize)
+                    putreq = urllib.request.Request(
+                        url=upload_url,
+                        data=lH,
+                        method="PUT",
+                        headers={
+                            "x-amz-tagging:dv-state": "temp",
+                        },
+                    )
+                    with urllib.request.urlopen(putreq) as pr:
+                        etag = pr.headers.get("ETag")
+                        if etag is None:
+                            raise ExportPluginException()
+
+                        etags[upload_label] = etag
+
+                creq = urllib.request.Request(
+                    url=completion_url,
+                    data=json.dumps(etags).encode("utf-8"),
+                    method="PUT",
+                )
+                with urllib.request.urlopen(creq) as cr:
+                    pass
+            except Exception as e:
+                # In case of some failure, remove remote fragments
+                dreq = urllib.request.Request(
+                    url=abort_url,
+                    method="DELETE",
+                )
+                with urllib.request.urlopen(creq) as cr:
+                    pass
+                raise e
+
+        # Now, time to attach the file to the entry
+        JSON_DATA = {
+            "description": "My description.",
+            "categories": ["Data"],
+            "restrict": "false",
+            "storageIdentifier": storage_identifier,
+            "fileName": filename_label,
+            "mimeType": mpH.mime(),
+            "checksum": {
+                # This must correlate with the algorithm
+                # Supported ones are declared at https://guides.dataverse.org/en/latest/developers/s3-direct-upload-api.html#adding-the-uploaded-file-to-the-dataset
+                "@type": "SHA-256",
+                "@value": dpH.hexdigest(),
+            },
+        }
+        if directory_label is not None:
+            JSON_DATA["directoryLabel"] = directory_label
+
+        areq = urllib.request.Request(
+            url=self.get_file_bucket_prefix(draft_entry),
+            data=urllib.parse.urlencode(
+                {"jsonData": json.dumps(JSON_DATA)}, encoding="utf-8"
+            ).encode("ascii"),
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                **self._gen_headers(),
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(areq) as aH:
+            upload_response = cast("Mapping[str, Any]", json.load(aH))
+
+        return upload_response
+
+    def _form_upload_file_to_draft(
+        self,
+        draft_entry: "DraftEntry",
+        filename: "Union[str, IO[bytes]]",
+        remote_filename: "Optional[str]",
+        content_size: "Optional[int]" = None,
+    ) -> "Mapping[str, Any]":
+        pH: "SupportsRead[bytes]"
+        if isinstance(filename, str):
+            pH = open(filename, mode="rb")
+            content_size = os.stat(filename).st_size
+            if remote_filename is None:
+                remote_filename = os.path.relpath(filename, self.refdir)
+        else:
+            assert isinstance(
+                remote_filename, str
+            ), "When filename is a data stream, remote_filename must be declared"
+            assert (
+                content_size is not None
+            ), "When filename is a data stream, content_size must be declared"
+            pH = filename
+
+        filename_label: "str" = remote_filename
+        directory_label: "Optional[str]" = None
+        rslash = remote_filename.rfind("/")
+        if rslash > 0:
+            directory_label = remote_filename[0:rslash]
+            filename_label = remote_filename[rslash + 1 :]
+
+        # Now, time to attach the file to the entry
+        JSON_DATA = {
+            "description": "My description.",
+            "categories": ["Data"],
+            "restrict": "false",
+            "tabIngest": "false",
+            "fileName": filename_label,
+        }
+        if directory_label is not None:
+            JSON_DATA["directoryLabel"] = directory_label
+
+        mpH = MIMETypeIOWrapper(pH)
+
+        mencH = MultipartEncoderIOWrapper(
+            [
+                ("jsonData", [json.dumps(JSON_DATA)]),
+                (
+                    "file",
+                    [
+                        MultipartFile(
+                            filename=filename_label,
+                            mime=mpH.mime(),
+                            stream=cast("SupportsRead[bytes]", mpH),
+                            size=content_size,
+                        )
+                    ],
+                ),
+            ]
+        )
+        areq = urllib.request.Request(
+            url=self.get_file_bucket_prefix(draft_entry),
+            data=mencH,
+            headers={
+                "Content-Type": mencH.content_type,
+                **self._gen_headers(),
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(areq) as aH:
+            upload_response = cast("Mapping[str, Any]", json.load(aH))
+
+        return upload_response
+
+    def upload_file_to_draft(
+        self,
+        draft_entry: "DraftEntry",
+        filename: "Union[str, IO[bytes]]",
+        remote_filename: "Optional[str]",
+        content_size: "Optional[int]" = None,
+    ) -> "Mapping[str, Any]":
+        try:
+            # First, try the direct upload API
+            return self._direct_upload_file_to_draft(
+                draft_entry, filename, remote_filename, content_size=content_size
+            )
+        except urllib.error.HTTPError as he:
+            if he.code != 404:
+                errmsg = f"Could not upload file to Dataverse draft entry. Server response: {he.read().decode('utf-8')}"
+                self.logger.exception(errmsg)
+                # for cookie in self._shared_cookie_jar:
+                #    self.logger.error(f"Cookie: {cookie.name}, {cookie.value}")
+                raise ExportPluginException(errmsg) from he
+
+            return self._form_upload_file_to_draft(
+                draft_entry, filename, remote_filename, content_size=content_size
+            )
 
     def __gen_sword_dataset_url(self, draft_entry: "DraftEntry") -> "str":
         return (
