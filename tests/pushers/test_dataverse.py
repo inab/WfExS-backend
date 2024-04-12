@@ -391,8 +391,22 @@ def test_dataverse_upload_stream_to_draft(file_params: "ParamTestData") -> "None
                 content_size=naive_path_size,
             )
         logger.info(uploaded_file_meta)
-        assert uploaded_file_meta.get("key") == STREAM_FILENAME
-        assert uploaded_file_meta.get("size") == naive_path_size
+        basename = (
+            uploaded_file_meta.get("data", {})
+            .get("files", [])[0]["dataFile"]
+            .get("filename")
+        )
+        dirname = (
+            uploaded_file_meta.get("data", {}).get("files", [])[0].get("directoryLabel")
+        )
+        filename = basename if dirname is None else dirname + "/" + basename
+        assert filename == STREAM_FILENAME
+        assert (
+            uploaded_file_meta.get("data", {})
+            .get("files", [])[0]["dataFile"]
+            .get("filesize")
+            == naive_path_size
+        )
     except urllib.error.HTTPError as he:
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
