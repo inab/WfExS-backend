@@ -73,9 +73,9 @@ class AbstractTokenSandboxedExportPlugin(AbstractTokenExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
-        preferred_id: "Optional[str]" = None,
+        default_licences: "Sequence[URIType]" = [],
+        default_orcids: "Sequence[str]" = [],
+        default_preferred_id: "Optional[str]" = None,
     ):
         if setup_block is None:
             setup_block = {}
@@ -94,9 +94,9 @@ class AbstractTokenSandboxedExportPlugin(AbstractTokenExportPlugin):
         super().__init__(
             refdir=refdir,
             setup_block=new_setup_block,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
+            default_licences=default_licences,
+            default_orcids=default_orcids,
+            default_preferred_id=default_preferred_id,
         )
 
     @abc.abstractmethod

@@ -354,16 +354,16 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
-        preferred_id: "Optional[str]" = None,
+        default_licences: "Sequence[URIType]" = [],
+        default_orcids: "Sequence[str]" = [],
+        default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
             refdir=refdir,
             setup_block=setup_block,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
+            default_licences=default_licences,
+            default_orcids=default_orcids,
+            default_preferred_id=default_preferred_id,
         )
 
         for conf_key in ("server", "base-directory"):
@@ -392,6 +392,10 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Optional[DraftEntry]":
         _, retpath, relretpath = self.ce.create_remote_path(
             name=cast("RelPath", preferred_id)
@@ -548,6 +552,10 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
         # TODO: implement this (if it makes sense!)
 
@@ -556,6 +564,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
     def _create_share_links(
         self,
         remote_relpath: "str",
+        licences: "Sequence[URIType]" = [],
     ) -> "Tuple[Sequence[LicensedURI], Sequence[str], Optional[int]]":
         # Generate the share link(s) once all the contents are there
         email_addresses = self.setup_block.get("email-addresses")
@@ -568,7 +577,9 @@ class NextcloudExportPlugin(AbstractExportPlugin):
                 remote_relpath,
                 email_addresses,
                 expire_in=expire_in,
-                licences=self.licences,
+                licences=tuple(licences)
+                if len(licences) > 0
+                else self.default_licences,
             ),
             email_addresses,
             expire_in,
@@ -592,6 +603,10 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         self,
         items: "Sequence[AnyContent]",
         preferred_id: "Optional[str]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the Nextcloud share
@@ -602,7 +617,9 @@ class NextcloudExportPlugin(AbstractExportPlugin):
             )
 
         # We are starting to learn whether we already have a PID
-        preferred_id = self.preferred_id if preferred_id is None else preferred_id
+        preferred_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
         if (preferred_id is not None) and len(preferred_id) > 0:
             self.logger.debug(f"Ignoring preferred PID {preferred_id}")
 

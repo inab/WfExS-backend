@@ -98,16 +98,16 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
-        preferred_id: "Optional[str]" = None,
+        default_licences: "Sequence[URIType]" = [],
+        default_orcids: "Sequence[str]" = [],
+        default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
             refdir=refdir,
             setup_block=setup_block,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
+            default_licences=default_licences,
+            default_orcids=default_orcids,
+            default_preferred_id=default_preferred_id,
         )
 
         self.path_sep = self.setup_block.get(
@@ -154,6 +154,10 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Optional[DraftEntry]":
         draft_id, pid, draft_metadata = self._book_pid_internal(preferred_id)
         if draft_id is None:
@@ -173,7 +177,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         preferred id is None or an invalid one
         """
         if preferred_id is None:
-            preferred_id = self.preferred_id
+            preferred_id = self.default_preferred_id
 
         booked_meta: "Optional[Mapping[str, Any]]" = None
         fill_in_new_entry = True
@@ -410,6 +414,10 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
         assert draft_entry.metadata is not None
         record = draft_entry.metadata
@@ -458,6 +466,10 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         self,
         items: "Sequence[AnyContent]",
         preferred_id: "Optional[str]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the Zenodo share
@@ -469,7 +481,9 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             )
 
         # We are starting to learn whether we already have a PID
-        internal_id = self.preferred_id if preferred_id is None else preferred_id
+        internal_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
 
         booked_entry = self.book_pid(internal_id)
 

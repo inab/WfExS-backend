@@ -76,6 +76,10 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Optional[DraftEntry]":
         return None
 
@@ -113,6 +117,10 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
         # This is a no-op
         return {}
@@ -128,6 +136,10 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         self,
         items: "Sequence[AnyContent]",
         preferred_id: "Optional[str]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Sequence[URIWithMetadata]":
         if self.wfInstance is None:
             raise ValueError(
@@ -141,7 +153,9 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
             raise ValueError("This plugin needs at least one element to be processed")
 
         # We are starting to learn whether we already have a PID
-        preferred_id = self.preferred_id if preferred_id is None else preferred_id
+        preferred_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
         if (preferred_id is None) or len(preferred_id) == 0:
             raise ValueError("This plugin needs a preferred_id to generate a PID")
 
@@ -194,7 +208,9 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
                         )
                     ),
                 ),
-                licences=self.licences,
+                licences=tuple(licences)
+                if len(licences) > 0
+                else self.default_licences,
             )
 
             cached_uri = self.wfInstance.wfexs.cacheFetch(

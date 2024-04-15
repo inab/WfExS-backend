@@ -78,9 +78,9 @@ class AbstractExportPlugin(abc.ABC):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
-        preferred_id: "Optional[str]" = None,
+        default_licences: "Sequence[URIType]" = [],
+        default_orcids: "Sequence[str]" = [],
+        default_preferred_id: "Optional[str]" = None,
     ):
         import inspect
 
@@ -95,16 +95,20 @@ class AbstractExportPlugin(abc.ABC):
 
         # This is the default value for the preferred PID
         # which can be updated through a call to book_pid
-        self.preferred_id = preferred_id
+        self.default_preferred_id = default_preferred_id
 
-        self.licences: "Tuple[URIType, ...]" = tuple(licences)
-        self.orcids: "Tuple[str, ...]" = tuple(orcids)
+        self.default_licences: "Tuple[URIType, ...]" = tuple(default_licences)
+        self.default_orcids: "Tuple[str, ...]" = tuple(default_orcids)
 
     @abc.abstractmethod
     def push(
         self,
         items: "Sequence[AnyContent]",
         preferred_id: "Optional[str]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Sequence[URIWithMetadata]":
         """
         This is the method to be implemented by the stateful pusher
@@ -143,6 +147,10 @@ class AbstractExportPlugin(abc.ABC):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Optional[DraftEntry]":
         """
         This method is used to book a new PID,
@@ -205,6 +213,10 @@ class AbstractExportPlugin(abc.ABC):
         draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
         """
         This method updates the (draft or not) record metadata,
@@ -218,6 +230,8 @@ class AbstractExportPlugin(abc.ABC):
         record_id: "str",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
         """
         This method updates the (draft or not) record metadata,

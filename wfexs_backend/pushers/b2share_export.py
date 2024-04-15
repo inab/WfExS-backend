@@ -122,16 +122,16 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
-        preferred_id: "Optional[str]" = None,
+        default_licences: "Sequence[URIType]" = [],
+        default_orcids: "Sequence[str]" = [],
+        default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
             refdir=refdir,
             setup_block=setup_block,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
+            default_licences=default_licences,
+            default_orcids=default_orcids,
+            default_preferred_id=default_preferred_id,
         )
 
         if self.sandbox:
@@ -391,7 +391,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         do_validate: "bool" = False,
     ) -> "Mapping[str, Any]":
         if base_id is None:
-            base_id = self.preferred_id
+            base_id = self.default_preferred_id
 
         if base_id is not None:
             try:
@@ -561,6 +561,10 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Optional[DraftEntry]":
         """
         It returns the publisher internal draft id, the public DOI / link, and the draft record representation
@@ -777,6 +781,10 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
         do_validate: "bool" = False,
     ) -> "Mapping[str, Any]":
         """
@@ -878,6 +886,10 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         self,
         items: "Sequence[AnyContent]",
         preferred_id: "Optional[str]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the B2SHARE share
@@ -889,7 +901,9 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             )
 
         # We are starting to learn whether we already have a PID
-        internal_id = self.preferred_id if preferred_id is None else preferred_id
+        internal_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
 
         booked_entry = self.book_pid(internal_id)
 

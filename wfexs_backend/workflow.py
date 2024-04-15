@@ -2931,32 +2931,7 @@ class WF:
 
         return self.exportResults(actions, vault, action_ids, fail_ok=fail_ok)
 
-    def _instantiate_export_plugin(
-        self,
-        plugin_id: "SymbolicName",
-        sec_context: "Optional[SecurityContextConfig]",
-        licences: "Sequence[str]",
-        orcids: "Sequence[str]",
-        preferred_id: "Optional[str]",
-    ) -> "AbstractExportPlugin":
-        """
-        This method instantiates an stateful export plugin
-        """
-
-        _export_plugin_clazz = self.wfexs.getExportPluginClass(plugin_id)
-        if _export_plugin_clazz is None:
-            raise KeyError(f"Unavailable plugin {plugin_id}")
-
-        stagedSetup = self.getStagedSetup()
-
-        if stagedSetup.work_dir is None:
-            raise ValueError(
-                f"Staged setup from {stagedSetup.instance_id} is corrupted"
-            )
-
-        if stagedSetup.is_damaged:
-            raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
-
+    def _curate_licence_list(self, licences: "Sequence[str]") -> "Sequence[URIType]":
         # As these licences can be in short format, resolve them to URIs
         expanded_licences: "MutableSequence[URIType]" = []
         if len(licences) == 0:
@@ -2984,15 +2959,48 @@ class WF:
                     f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
                 )
 
+        return expanded_licences
+
+    def _curate_orcid_list(self, orcids: "Sequence[str]") -> "Sequence[str]":
         # FIXME: ORCIDs are bypassed (for now)
-        expanded_orcids = orcids
+        return orcids
+
+    def _instantiate_export_plugin(
+        self,
+        plugin_id: "SymbolicName",
+        sec_context: "Optional[SecurityContextConfig]",
+        default_licences: "Sequence[URIType]",
+        default_orcids: "Sequence[str]",
+        default_preferred_id: "Optional[str]",
+    ) -> "AbstractExportPlugin":
+        """
+        This method instantiates an stateful export plugin. Although the
+        licences, ORCIDs and preferred ids are not used at the beginning,
+        they are supplied as default values to the implementation, in case
+        it is able to do something meaningful with them.
+        Licence list should be curated outside this method.
+        """
+
+        _export_plugin_clazz = self.wfexs.getExportPluginClass(plugin_id)
+        if _export_plugin_clazz is None:
+            raise KeyError(f"Unavailable plugin {plugin_id}")
+
+        stagedSetup = self.getStagedSetup()
+
+        if stagedSetup.work_dir is None:
+            raise ValueError(
+                f"Staged setup from {stagedSetup.instance_id} is corrupted"
+            )
+
+        if stagedSetup.is_damaged:
+            raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
 
         export_p = _export_plugin_clazz(
             refdir=stagedSetup.work_dir,
             setup_block=sec_context,
-            licences=expanded_licences,
-            orcids=expanded_orcids,
-            preferred_id=preferred_id,
+            default_licences=default_licences,
+            default_orcids=default_orcids,
+            default_preferred_id=default_preferred_id,
         )
 
         if isinstance(export_p, AbstractContextedExportPlugin):
@@ -3089,32 +3097,42 @@ class WF:
                         )
                     else:
                         preferred_id = action.preferred_id
+
+                expanded_licences = self._curate_licence_list(the_licences)
+                curated_orcids = self._curate_orcid_list(the_orcids)
+
                 export_p = self._instantiate_export_plugin(
                     plugin_id=action.plugin_id,
                     sec_context=a_setup_block,
-                    licences=the_licences,
-                    orcids=the_orcids,
-                    preferred_id=preferred_id,
+                    default_licences=expanded_licences,
+                    default_orcids=curated_orcids,
+                    default_preferred_id=preferred_id,
                 )
 
                 # This booked pid could differ from the preferred one
                 # as it could not be reused due some constraints.
                 # Also, we need to know the internal_pid associated to
                 # the booked one, so we can handle drafts
-                booked_entry = export_p.book_pid()
+                booked_entry = export_p.book_pid(
+                    licences=expanded_licences,
+                    orcids=curated_orcids,
+                    preferred_id=preferred_id,
+                )
 
                 assert booked_entry is not None
 
                 elems = self.locateExportItems(
                     action.what,
-                    licences=the_licences,
-                    orcids=the_orcids,
+                    licences=expanded_licences,
+                    orcids=curated_orcids,
                     crate_pid=booked_entry.pid,
                 )
 
                 # Export the contents and obtain a PID
                 new_pids = export_p.push(
                     elems,
+                    licences=expanded_licences,
+                    orcids=curated_orcids,
                     preferred_id=booked_entry.draft_id,
                 )
 

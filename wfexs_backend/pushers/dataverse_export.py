@@ -142,16 +142,16 @@ class DataversePublisher(AbstractTokenExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
-        preferred_id: "Optional[str]" = None,
+        default_licences: "Sequence[URIType]" = [],
+        default_orcids: "Sequence[str]" = [],
+        default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
             refdir=refdir,
             setup_block=setup_block,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
+            default_licences=default_licences,
+            default_orcids=default_orcids,
+            default_preferred_id=default_preferred_id,
         )
 
         # This is for the native API
@@ -352,6 +352,10 @@ class DataversePublisher(AbstractTokenExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Optional[DraftEntry]":
         """
         This method is used to book a new PID,
@@ -371,7 +375,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
         preferred id is None or an invalid one
         """
         if preferred_id is None:
-            preferred_id = self.preferred_id
+            preferred_id = self.default_preferred_id
 
         booked_entry: "Optional[DraftEntry]" = None
         fill_in_new_entry = True
@@ -840,6 +844,10 @@ class DataversePublisher(AbstractTokenExportPlugin):
         draft_entry: "DraftEntry",
         metadata: "Mapping[str, Any]",
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
         """
         This method updates the draft record metadata,
@@ -923,6 +931,10 @@ class DataversePublisher(AbstractTokenExportPlugin):
         self,
         items: "Sequence[AnyContent]",
         preferred_id: "Optional[str]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Sequence[URIWithMetadata]":
         """
         This is the method to be implemented by the stateful pusher
