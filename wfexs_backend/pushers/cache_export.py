@@ -115,7 +115,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
     def update_record_metadata(
         self,
         draft_entry: "DraftEntry",
-        metadata: "Mapping[str, Any]",
+        metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
@@ -140,6 +140,8 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
+        metadata: "Optional[Mapping[str, Any]]" = None,
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
         if self.wfInstance is None:
             raise ValueError(

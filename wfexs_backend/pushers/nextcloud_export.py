@@ -550,7 +550,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
     def update_record_metadata(
         self,
         draft_entry: "DraftEntry",
-        metadata: "Mapping[str, Any]",
+        metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
@@ -607,6 +607,8 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
+        metadata: "Optional[Mapping[str, Any]]" = None,
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the Nextcloud share
