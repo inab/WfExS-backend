@@ -18,6 +18,7 @@
 
 from __future__ import absolute_import
 
+import copy
 import datetime
 
 # import http.cookiejar
@@ -159,7 +160,14 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
     ) -> "Optional[DraftEntry]":
-        draft_id, pid, draft_metadata = self._book_pid_internal(preferred_id)
+        draft_id, pid, draft_metadata = self._book_pid_internal(
+            preferred_id=preferred_id,
+            initially_required_metadata=initially_required_metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
+        )
         if draft_id is None:
             return None
 
@@ -170,7 +178,13 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         )
 
     def _book_pid_internal(
-        self, preferred_id: "Optional[str]" = None
+        self,
+        preferred_id: "Optional[str]" = None,
+        initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Tuple[Optional[str], Optional[str], Optional[Mapping[str, Any]]]":
         """
         We are booking a new PID, in case the default
@@ -212,9 +226,52 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             newentry_url = self.depositions_api_prefix
 
         if newentry_url is not None:
+            # Setting up the initial metadata
+            initial_metadata_entry = {}
+            modifiable_metadata: "Optional[MutableMapping[str, Any]]" = None
+            if (
+                initially_required_metadata is not None
+                and len(initially_required_metadata) > 0
+            ):
+                modifiable_metadata = cast(
+                    "MutableMapping[str, Any]",
+                    copy.deepcopy(initially_required_metadata),
+                )
+
+            if len(licences) == 0 and len(self.default_licences) > 0:
+                licences = self.default_licences
+
+            if len(orcids) == 0 and len(self.default_orcids) > 0:
+                orcids = self.default_orcids
+
+            if (
+                title is not None
+                or description is not None
+                or len(licences) > 0
+                or len(orcids) > 0
+            ):
+                if modifiable_metadata is None:
+                    modifiable_metadata = {}
+
+                if title is not None:
+                    modifiable_metadata["title"] = title
+
+                if description is not None:
+                    modifiable_metadata["description"] = description
+
+                # TODO: process addition of both licences and creators
+                if len(licences) > 0:
+                    pass
+
+                if len(orcids) > 0:
+                    pass
+
+            if modifiable_metadata is not None:
+                initial_metadata_entry["metadata"] = modifiable_metadata
+
             req = urllib.request.Request(
                 url=newentry_url,
-                data=json.dumps({}).encode("utf-8"),
+                data=json.dumps(initial_metadata_entry).encode("utf-8"),
                 headers={"Content-Type": "application/json", **self._gen_headers()},
             )
             try:
@@ -412,7 +469,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
     def update_record_metadata(
         self,
         draft_entry: "DraftEntry",
-        metadata: "Mapping[str, Any]",
+        metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
@@ -421,18 +478,57 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
     ) -> "Mapping[str, Any]":
         assert draft_entry.metadata is not None
         record = draft_entry.metadata
+
+        modifiable_metadata = cast("Optional[MutableMapping[str, Any]]", metadata)
+
+        if (
+            title is not None
+            or description is not None
+            or len(licences) > 0
+            or len(orcids) > 0
+        ):
+            if metadata is None:
+                # In this case, we need the metadata as it is, in order to avoid
+                # "forgetting" already set metadata
+                fetched_metadata = self.get_pid_metadata(draft_entry.draft_id)
+                if fetched_metadata is None:
+                    modifiable_metadata = {}
+                else:
+                    modifiable_metadata = fetched_metadata.get("metadata", {})
+                    assert modifiable_metadata is not None
+            else:
+                modifiable_metadata = cast(
+                    "MutableMapping[str, Any]", copy.copy(metadata)
+                )
+
+            if title is not None:
+                modifiable_metadata["title"] = title
+
+            if description is not None:
+                modifiable_metadata["description"] = description
+
+            # TODO: add the code to properly integrate licences and orcids
+            if len(licences) > 0:
+                pass
+
+            if len(orcids) > 0:
+                pass
+
         # This might not be needed
-        metareq = urllib.request.Request(
-            url=record.get("links", {}).get("self"),
-            data=json.dumps(metadata).encode("utf-8"),
-            headers={"Content-Type": "application/json", **self._gen_headers()},
-            method="PUT",
-        )
-        try:
-            with urllib.request.urlopen(metareq) as mH:
-                meta_update = cast("Mapping[str, Any]", json.load(mH))
-        except:
-            raise ExportPluginException("Failed to update metadata")
+        if modifiable_metadata is not None:
+            metareq = urllib.request.Request(
+                url=record.get("links", {}).get("self"),
+                data=json.dumps({"metadata": modifiable_metadata}).encode("utf-8"),
+                headers={"Content-Type": "application/json", **self._gen_headers()},
+                method="PUT",
+            )
+            try:
+                with urllib.request.urlopen(metareq) as mH:
+                    meta_update = cast("Mapping[str, Any]", json.load(mH))
+            except:
+                raise ExportPluginException("Failed to update metadata")
+        else:
+            meta_update = {}
 
         return meta_update
 
@@ -470,6 +566,8 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
+        metadata: "Optional[Mapping[str, Any]]" = None,
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the Zenodo share
@@ -485,7 +583,14 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             self.default_preferred_id if preferred_id is None else preferred_id
         )
 
-        booked_entry = self.book_pid(internal_id)
+        booked_entry = self.book_pid(
+            preferred_id=internal_id,
+            initially_required_metadata=metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
+        )
 
         if preferred_id is None:
             raise ExportPluginException("Unable to book a Zenodo entry")
@@ -545,102 +650,94 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         # Add metadata to the entry
         # Publish the entry
         entry_metadata = {
-            # "metadata": {
-            #    "title": "My first upload",
-            #    "upload_type": "dataset",
-            #    "description": "This is my first upload",
-            #    "creators": [
-            #       {
-            #           'name': 'Doe, John',
-            #           'affiliation': 'Zenodo',
-            #       }
-            #   ]
-            # }
-            "metadata": {
-                "creators": [
-                    {
-                        "person_or_org": {
-                            "type": "personal",
-                            "name": "Fernández, José M.",
-                            "given_name": "José M.",
-                            "family_name": "Fernández",
-                            "identifiers": [
-                                {"identifier": "0000-0002-4806-5140", "scheme": "orcid"}
-                            ],
-                        },
-                        "role": {
-                            "id": "datacollector",
-                            "title": {"de": "DatensammlerIn", "en": "Data collector"},
-                        },
-                        "affiliations": [
-                            {
-                                "id": "05sd8tv96",
-                                "name": "Barcelona Supercomputing Center",
-                            }
+            "creators": [
+                {
+                    "person_or_org": {
+                        "type": "personal",
+                        "name": "Fernández, José M.",
+                        "given_name": "José M.",
+                        "family_name": "Fernández",
+                        "identifiers": [
+                            {"identifier": "0000-0002-4806-5140", "scheme": "orcid"}
                         ],
-                    }
-                ],
-                "title": "My first upload",
-                "related_identifiers": [
-                    {
-                        "identifier": "https://w3id.org/ro/crate/1.1",
-                        "scheme": "w3id",
-                        "relation_type": {
-                            "id": "requires",
-                            "title": {"de": "Setzt voraus", "en": "Requires"},
-                        },
-                        "resource_type": {
-                            "id": "publication",
-                            "title": {"de": "Publikation", "en": "Publication"},
-                        },
                     },
-                    {
-                        "identifier": "https://w3id.org/ro/wfrun/process/0.3",
-                        "scheme": "w3id",
-                        "relation_type": {
-                            "id": "requires",
-                            "title": {"de": "Setzt voraus", "en": "Requires"},
-                        },
-                        "resource_type": {
-                            "id": "publication",
-                            "title": {"de": "Publikation", "en": "Publication"},
-                        },
+                    "role": {
+                        "id": "datacollector",
+                        "title": {"de": "DatensammlerIn", "en": "Data collector"},
                     },
-                    {
-                        "identifier": "https://w3id.org/ro/wfrun/workflow/0.3",
-                        "scheme": "w3id",
-                        "relation_type": {
-                            "id": "requires",
-                            "title": {"de": "Setzt voraus", "en": "Requires"},
-                        },
-                        "resource_type": {
-                            "id": "publication",
-                            "title": {"de": "Publikation", "en": "Publication"},
-                        },
+                    "affiliations": [
+                        {
+                            "id": "05sd8tv96",
+                            "name": "Barcelona Supercomputing Center",
+                        }
+                    ],
+                }
+            ],
+            "title": "My first upload",
+            "related_identifiers": [
+                {
+                    "identifier": "https://w3id.org/ro/crate/1.1",
+                    "scheme": "w3id",
+                    "relation_type": {
+                        "id": "requires",
+                        "title": {"de": "Setzt voraus", "en": "Requires"},
                     },
-                ],
-                "rights": [
-                    {
-                        "id": "cc-by-4.0",
-                        "title": {
-                            "en": "Creative Commons Attribution 4.0 International"
-                        },
-                        "description": {
-                            "en": "The Creative Commons Attribution license allows re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited."
-                        },
-                        "icon": "cc-by-icon",
-                        "props": {
-                            "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
-                            "scheme": "spdx",
-                        },
-                    }
-                ],
-                "description": "This is my first upload",
-            },
+                    "resource_type": {
+                        "id": "publication",
+                        "title": {"de": "Publikation", "en": "Publication"},
+                    },
+                },
+                {
+                    "identifier": "https://w3id.org/ro/wfrun/process/0.3",
+                    "scheme": "w3id",
+                    "relation_type": {
+                        "id": "requires",
+                        "title": {"de": "Setzt voraus", "en": "Requires"},
+                    },
+                    "resource_type": {
+                        "id": "publication",
+                        "title": {"de": "Publikation", "en": "Publication"},
+                    },
+                },
+                {
+                    "identifier": "https://w3id.org/ro/wfrun/workflow/0.3",
+                    "scheme": "w3id",
+                    "relation_type": {
+                        "id": "requires",
+                        "title": {"de": "Setzt voraus", "en": "Requires"},
+                    },
+                    "resource_type": {
+                        "id": "publication",
+                        "title": {"de": "Publikation", "en": "Publication"},
+                    },
+                },
+            ],
+            "rights": [
+                {
+                    "id": "cc-by-4.0",
+                    "title": {"en": "Creative Commons Attribution 4.0 International"},
+                    "description": {
+                        "en": "The Creative Commons Attribution license allows re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited."
+                    },
+                    "icon": "cc-by-icon",
+                    "props": {
+                        "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
+                        "scheme": "spdx",
+                    },
+                }
+            ],
+            "description": "This is my first upload",
         }
 
         # This might not be needed
-        meta_update = self.update_record_metadata(booked_entry, entry_metadata)
+        meta_update = self.update_record_metadata(
+            booked_entry,
+            metadata=entry_metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
+        )
 
         # Last, publish!
         pub_update = self.publish_draft_record(booked_entry)

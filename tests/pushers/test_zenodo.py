@@ -373,7 +373,7 @@ def test_zenodo_upload_stream_to_draft(file_params: "ParamTestData") -> "None":
     collect=True,
 )
 @zenodo_params
-def test_zenodo_update_record_metadata(file_params: "ParamTestData") -> "None":
+def test_zenodo_update_record_metadata_raw(file_params: "ParamTestData") -> "None":
     assert isinstance(
         file_params.extra.get("token"), str
     ), "This test needs a valid Zenodo user token"
@@ -394,26 +394,80 @@ def test_zenodo_update_record_metadata(file_params: "ParamTestData") -> "None":
         assert booked_entry.metadata is not None
         logger.info(f"Booked PID is {booked_entry.pid}")
         entry_metadata = {
-            "metadata": {
-                "title": "My test upload",
-                "upload_type": "dataset",
-                "description": "This is my test upload",
+            "title": "My test upload",
+            "upload_type": "dataset",
+            "description": "This is my test upload",
+            "creators": [
+                {
+                    "name": "Doe, John",
+                    "affiliation": "Zenodo",
+                }
+            ],
+        }
+        updated_meta = zep.update_record_metadata(booked_entry, entry_metadata)
+        logger.info(updated_meta)
+        assert entry_metadata["title"] == updated_meta.get("metadata", {}).get("title")
+        assert entry_metadata["upload_type"] == updated_meta.get("metadata", {}).get(
+            "upload_type"
+        )
+    except urllib.error.HTTPError as he:
+        irbytes = he.read()
+        logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
+        logger.error(irbytes.decode())
+        raise he
+    finally:
+        if booked_entry is not None:
+            zep.discard_booked_pid(booked_entry)
+
+
+@pytest.mark.dependency(
+    depends=[
+        test_zenodo_book_new_pid.__name__,
+    ],
+    collect=True,
+)
+@zenodo_params
+def test_zenodo_update_record_metadata_facets(file_params: "ParamTestData") -> "None":
+    assert isinstance(
+        file_params.extra.get("token"), str
+    ), "This test needs a valid Zenodo user token"
+    assert isinstance(
+        file_params.extra.get("sandbox"), bool
+    ), "This test needs to know whether to run against sandbox or production"
+
+    setup_block: "SecurityContextConfig" = {
+        "token": file_params.extra["token"],
+        "sandbox": file_params.extra["sandbox"],
+    }
+    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+
+    booked_entry = None
+    try:
+        test_upload_type = "dataset"
+        booked_entry = zep.book_pid(
+            initially_required_metadata={
+                "upload_type": test_upload_type,
                 "creators": [
                     {
                         "name": "Doe, John",
                         "affiliation": "Zenodo",
                     }
                 ],
-            }
-        }
-        updated_meta = zep.update_record_metadata(booked_entry, entry_metadata)
+            },
+        )
+        assert booked_entry is not None
+        assert booked_entry.metadata is not None
+        logger.info(f"Booked PID is {booked_entry.pid}")
+        test_title = "My test upload"
+        test_description = "This is my test upload"
+        updated_meta = zep.update_record_metadata(
+            booked_entry,
+            title=test_title,
+            description=test_description,
+        )
         logger.info(updated_meta)
-        assert entry_metadata["metadata"]["title"] == updated_meta.get(
-            "metadata", {}
-        ).get("title")
-        assert entry_metadata["metadata"]["upload_type"] == updated_meta.get(
-            "metadata", {}
-        ).get("upload_type")
+        assert test_title == updated_meta.get("metadata", {}).get("title")
+        assert test_upload_type == updated_meta.get("metadata", {}).get("upload_type")
     except urllib.error.HTTPError as he:
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
@@ -427,7 +481,7 @@ def test_zenodo_update_record_metadata(file_params: "ParamTestData") -> "None":
 @pytest.mark.dependency(
     depends=[
         test_zenodo_upload_file_to_draft.__name__,
-        test_zenodo_update_record_metadata.__name__,
+        test_zenodo_update_record_metadata_raw.__name__,
     ],
     collect=True,
 )
@@ -468,27 +522,23 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
         logger.info(uploaded_file_meta)
 
         entry_metadata = {
-            "metadata": {
-                "title": "My test upload at " + datetime.datetime.utcnow().isoformat(),
-                "upload_type": "dataset",
-                "description": "This is my test upload at "
-                + datetime.datetime.utcnow().isoformat(),
-                "creators": [
-                    {
-                        "name": "Doe, John",
-                        "affiliation": "Zenodo",
-                    }
-                ],
-            }
+            "title": "My test upload at " + datetime.datetime.utcnow().isoformat(),
+            "upload_type": "dataset",
+            "description": "This is my test upload at "
+            + datetime.datetime.utcnow().isoformat(),
+            "creators": [
+                {
+                    "name": "Doe, John",
+                    "affiliation": "Zenodo",
+                }
+            ],
         }
         updated_meta = zep.update_record_metadata(booked_entry, entry_metadata)
         logger.info(updated_meta)
-        assert entry_metadata["metadata"]["title"] == updated_meta.get(
-            "metadata", {}
-        ).get("title")
-        assert entry_metadata["metadata"]["upload_type"] == updated_meta.get(
-            "metadata", {}
-        ).get("upload_type")
+        assert entry_metadata["title"] == updated_meta.get("metadata", {}).get("title")
+        assert entry_metadata["upload_type"] == updated_meta.get("metadata", {}).get(
+            "upload_type"
+        )
 
         published_meta = zep.publish_draft_record(booked_entry)
         logger.info(published_meta)
