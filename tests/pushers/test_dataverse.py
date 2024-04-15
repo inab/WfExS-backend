@@ -263,7 +263,7 @@ def test_dataverse_book_new_version_pid(file_params: "ParamTestData") -> "None":
     dep = DataversePublisher(
         cast("AbsPath", "/tofill"),
         setup_block=setup_block,
-        preferred_id=file_params.extra["owned_existing_pid"],
+        default_preferred_id=file_params.extra["owned_existing_pid"],
     )
 
     booked_entry = None
