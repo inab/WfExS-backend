@@ -531,7 +531,7 @@ def test_dataverse_update_record_metadata(file_params: "ParamTestData") -> "None
 
 @pytest.mark.dependency(
     depends=[
-        test_dataverse_upload_file_to_draft.__name__,
+        # test_dataverse_upload_file_to_draft.__name__,
         test_dataverse_update_record_metadata.__name__,
     ],
     collect=True,
@@ -556,25 +556,82 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
     dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
 
     booked_entry = None
+    published_meta = None
     try:
         booked_entry = dep.book_pid()
         assert booked_entry is not None
         assert booked_entry.metadata is not None
         logger.info(f"Booked PID is {booked_entry.pid}")
 
-        # TO BE DONE
-        entry_metadata: "MutableMapping[str, Any]" = {}
-        entry_metadata["titles"][0]["title"] += (
-            " at " + datetime.datetime.utcnow().isoformat()
-        )
-        entry_metadata["descriptions"][0]["description"] += (
-            " at " + datetime.datetime.utcnow().isoformat()
+        entry_metadata: "MutableMapping[str, Any]" = cast(
+            "MutableMapping[str, Any]",
+            copy.deepcopy(booked_entry.metadata["latestVersion"]),
         )
 
+        field_checks: "MutableMapping[str, Mapping[str, Any]]" = dict()
+        for field in (
+            entry_metadata.get("metadataBlocks", {})
+            .get("citation", {})
+            .get("fields", [])
+        ):
+            if isinstance(field, dict):
+                typeName = field.get("typeName")
+                if typeName == "title":
+                    field_checks[typeName] = field
+                    field["value"] = (
+                        "My test published entry updated at "
+                        + datetime.datetime.utcnow().isoformat()
+                    )
+                elif typeName == "author":
+                    field_checks[typeName] = field
+                    field["value"] = [
+                        {
+                            "authorName": {
+                                "typeName": "authorName",
+                                "multiple": False,
+                                "typeClass": "primitive",
+                                "value": "Doe, John",
+                            }
+                        }
+                    ]
+                elif typeName == "dsDescription":
+                    field_checks[typeName] = field
+                    field["value"] = [
+                        {
+                            "dsDescriptionValue": {
+                                "typeName": "dsDescriptionValue",
+                                "multiple": False,
+                                "typeClass": "primitive",
+                                "value": "This is my test published entry description updated at "
+                                + datetime.datetime.utcnow().isoformat(),
+                            }
+                        }
+                    ]
+                elif typeName == "subject":
+                    field_checks[typeName] = field
+                    field["value"] = [
+                        "Computer and Information Science",
+                    ]
+
+        # logger.info(json.dumps(entry_metadata, indent=4))
         updated_meta = dep.update_record_metadata(booked_entry, entry_metadata)
         logger.info(updated_meta)
-        # assert entry_metadata["metadata"]["title"] == updated_meta.get("metadata", {}).get("title")
-        # assert entry_metadata["metadata"]["upload_type"] == updated_meta.get("metadata", {}).get("upload_type")
+        # checked_types: "Set[str]" = set()
+        # for field in (
+        #     updated_meta.get("metadataBlocks", {}).get("citation", {}).get("fields", [])
+        # ):
+        #     typeName = field.get("typeName")
+        #     field_check = field_checks.get(typeName)
+        #     if field_check is not None:
+        #         checked_types.add(typeName)
+        #         assert (
+        #             field == field_check
+        #         ), f"Metadata inconsistencies in field {typeName}"
+        #
+        # assert checked_types == set(
+        #     field_checks.keys()
+        # ), "Some of the changed keys were not found"
+
         published_meta = dep.publish_draft_record(booked_entry)
         logger.info(published_meta)
     except urllib.error.HTTPError as he:
@@ -583,5 +640,5 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
         logger.error(irbytes.decode())
         raise he
     finally:
-        if booked_entry is not None:
+        if booked_entry is not None and published_meta is None:
             dep.discard_booked_pid(booked_entry)
