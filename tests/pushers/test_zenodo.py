@@ -453,6 +453,7 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
     )
 
     booked_entry = None
+    published_meta = None
     try:
         booked_entry = zep.book_pid()
         assert booked_entry is not None
@@ -497,5 +498,5 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
         logger.error(irbytes.decode())
         raise he
     finally:
-        if booked_entry is not None:
+        if booked_entry is not None and published_meta is None:
             zep.discard_booked_pid(booked_entry)

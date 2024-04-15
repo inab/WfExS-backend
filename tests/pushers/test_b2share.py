@@ -537,6 +537,7 @@ def test_b2share_publish_new_pid(file_params: "ParamTestData") -> "None":
     bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
 
     booked_entry = None
+    published_meta = None
     try:
         booked_entry = bep.book_pid()
         assert booked_entry is not None
@@ -563,5 +564,5 @@ def test_b2share_publish_new_pid(file_params: "ParamTestData") -> "None":
         logger.error(irbytes.decode())
         raise he
     finally:
-        if booked_entry is not None:
+        if booked_entry is not None and published_meta is None:
             bep.discard_booked_pid(booked_entry)
