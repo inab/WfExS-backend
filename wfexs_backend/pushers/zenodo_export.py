@@ -284,7 +284,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                     if booked_id is not None:
                         preferred_id = str(booked_id)
             except urllib.error.HTTPError as he:
-                errmsg = f"Could not book Zenodo entry using {newentry_url}. Server response: {he.read().decode('utf-8')}"
+                errmsg = f"{self._customized_book_pid_error_string} using {newentry_url}. Server response: {he.read().decode('utf-8')}"
                 self.logger.exception(errmsg)
                 # for cookie in self._shared_cookie_jar:
                 #    self.logger.error(f"Cookie: {cookie.name}, {cookie.value}")
@@ -300,6 +300,13 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
 
         # It should be the doi
         return internal_id, preferred_id, booked_meta
+
+    @property
+    def _customized_book_pid_error_string(self) -> "str":
+        """
+        This method can be overridden to provide more context
+        """
+        return "Unable to book a Zenodo entry"
 
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
         if isinstance(pid_or_draft, DraftEntry):
@@ -598,10 +605,9 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         )
 
         if booked_entry is None:
-            raise ExportPluginException("Unable to book a Zenodo entry")
+            raise ExportPluginException(self._customized_book_pid_error_string)
 
         # Now, obtain the metadata, which is needed
-        assert booked_entry is not None
         assert booked_entry.metadata is not None
 
         # TODO: Finish this
@@ -647,9 +653,9 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                 failed = True
 
         if failed:
-            upload_bucket_prefix = self.get_file_bucket_prefix(booked_entry)
+            file_bucket_prefix = self.get_file_bucket_prefix(booked_entry)
             raise ExportPluginException(
-                f"Some contents could not be uploaded to entry {booked_entry.metadata.get('id')}, bucket {upload_bucket_prefix}"
+                f"Some contents could not be uploaded to entry {booked_entry.metadata.get('id')}, bucket {file_bucket_prefix}"
             )
 
         # Add metadata to the entry
@@ -738,6 +744,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         meta_update = self.update_record_metadata(
             booked_entry,
             metadata=entry_metadata,
+            community_specific_metadata=community_specific_metadata,
             title=title,
             description=description,
             licences=licences,
