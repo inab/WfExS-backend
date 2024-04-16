@@ -412,7 +412,7 @@ SOME_FAILURE_ENTRY_METADATA = {
     collect=True,
 )
 @b2share_params
-def test_b2share_update_record_metadata(file_params: "ParamTestData") -> "None":
+def test_b2share_update_record_metadata_raw(file_params: "ParamTestData") -> "None":
     assert isinstance(
         file_params.extra.get("token"), str
     ), "This test needs a valid B2SHARE user token"
@@ -442,7 +442,9 @@ def test_b2share_update_record_metadata(file_params: "ParamTestData") -> "None":
         )
 
         updated_meta = bep.update_record_metadata(
-            booked_entry, entry_metadata, do_validate=True
+            booked_entry,
+            metadata=entry_metadata,
+            do_validate=True,
         )
         logger.info(updated_meta)
         # assert entry_metadata["metadata"]["title"] == updated_meta.get("metadata", {}).get("title")
@@ -464,7 +466,63 @@ def test_b2share_update_record_metadata(file_params: "ParamTestData") -> "None":
     collect=True,
 )
 @b2share_params
-def test_b2share_failed_update_record_metadata(file_params: "ParamTestData") -> "None":
+def test_b2share_update_record_metadata_facets(file_params: "ParamTestData") -> "None":
+    assert isinstance(
+        file_params.extra.get("token"), str
+    ), "This test needs a valid B2SHARE user token"
+    assert isinstance(
+        file_params.extra.get("sandbox"), bool
+    ), "This test needs to know whether to run against sandbox or production"
+
+    setup_block: "SecurityContextConfig" = {
+        "token": file_params.extra["token"],
+        "sandbox": file_params.extra["sandbox"],
+    }
+    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+
+    booked_entry = None
+    try:
+        booked_entry = bep.book_pid()
+        assert booked_entry is not None
+        assert booked_entry.metadata is not None
+        logger.info(f"Booked PID is {booked_entry.pid}")
+
+        updated_meta = bep.update_record_metadata(
+            booked_entry,
+            metadata={
+                "creators": MINIMAL_VALID_ENTRY_METADATA["creators"],
+            },
+            title=MINIMAL_VALID_ENTRY_METADATA["titles"][0]["title"]
+            + " at "
+            + datetime.datetime.utcnow().isoformat(),
+            description=MINIMAL_VALID_ENTRY_METADATA["descriptions"][0]["description"]
+            + " at "
+            + datetime.datetime.utcnow().isoformat(),
+            do_validate=True,
+        )
+        logger.info(updated_meta)
+        # assert entry_metadata["metadata"]["title"] == updated_meta.get("metadata", {}).get("title")
+        # assert entry_metadata["metadata"]["upload_type"] == updated_meta.get("metadata", {}).get("upload_type")
+    except urllib.error.HTTPError as he:
+        irbytes = he.read()
+        logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
+        logger.error(irbytes.decode())
+        raise he
+    finally:
+        if booked_entry is not None:
+            bep.discard_booked_pid(booked_entry)
+
+
+@pytest.mark.dependency(
+    depends=[
+        test_b2share_book_new_pid.__name__,
+    ],
+    collect=True,
+)
+@b2share_params
+def test_b2share_failed_update_record_metadata_raw(
+    file_params: "ParamTestData",
+) -> "None":
     assert isinstance(
         file_params.extra.get("token"), str
     ), "This test needs a valid B2SHARE user token"
@@ -498,7 +556,9 @@ def test_b2share_failed_update_record_metadata(file_params: "ParamTestData") -> 
             )
 
             updated_meta = bep.update_record_metadata(
-                booked_entry, entry_metadata, do_validate=True
+                booked_entry,
+                metadata=entry_metadata,
+                do_validate=True,
             )
             logger.info(updated_meta)
             # assert entry_metadata["metadata"]["title"] == updated_meta.get("metadata", {}).get("title")
@@ -516,8 +576,8 @@ def test_b2share_failed_update_record_metadata(file_params: "ParamTestData") -> 
 @pytest.mark.dependency(
     depends=[
         test_b2share_upload_file_to_draft.__name__,
-        test_b2share_update_record_metadata.__name__,
-        test_b2share_failed_update_record_metadata.__name__,
+        test_b2share_update_record_metadata_raw.__name__,
+        test_b2share_failed_update_record_metadata_raw.__name__,
     ],
     collect=True,
 )

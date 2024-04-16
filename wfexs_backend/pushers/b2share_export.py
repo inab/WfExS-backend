@@ -118,6 +118,14 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         "owners",
     ]
 
+    BANNED_PATCH_OPS_KEYS: "Final[Sequence[str]]" = [
+        "$schema",
+        "community",
+        *BANNED_SCHEMA_KEYS,
+    ]
+
+    DEFAULT_DESCRIPTION_TYPE: "Final[str]" = "TechnicalInfo"
+
     def __init__(
         self,
         refdir: "AbsPath",
@@ -310,12 +318,12 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 self.logger.error(json.dumps(community_specific_metadata, indent=4))
                 reported_errors = True
 
-                self.logger.error(
-                    "\t\tPath: {0} . Message: {1}".format(
-                        "/" + "/".join(map(lambda e: str(e), se.path)),
-                        se.message,
-                    )
+            self.logger.error(
+                "\t\tPath: {0} . Message: {1}".format(
+                    "/" + "/".join(map(lambda e: str(e), se.path)),
+                    se.message,
                 )
+            )
 
         if reported_errors:
             raise ExportPluginException(
@@ -362,12 +370,12 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 self.logger.error(json.dumps(entry_metadata, indent=4))
                 reported_errors = True
 
-                self.logger.error(
-                    "\t\tPath: {0} . Message: {1}".format(
-                        "/" + "/".join(map(lambda e: str(e), se.path)),
-                        se.message,
-                    )
+            self.logger.error(
+                "\t\tPath: {0} . Message: {1}".format(
+                    "/" + "/".join(map(lambda e: str(e), se.path)),
+                    se.message,
                 )
+            )
 
         if reported_errors:
             raise ExportPluginException(
@@ -386,9 +394,14 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
 
     def _create_draft_record(
         self,
-        community_specific_metadata: "Optional[Mapping[str, Any]]",
+        metadata: "Optional[Mapping[str, Any]]" = None,
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         base_id: "Optional[str]" = None,
         do_validate: "bool" = False,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
         if base_id is None:
             base_id = self.default_preferred_id
@@ -422,14 +435,47 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         headers = {
             "Content-Type": "application/json",
         }
-        minimal_metadata: "MutableMapping[str, Any]" = {
-            "titles": [
+
+        # Setting the minimum needed metadata
+        minimal_metadata: "MutableMapping[str, Any]"
+        if metadata is not None:
+            minimal_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+        else:
+            minimal_metadata = {
+                "titles": [
+                    {
+                        "title": f"Draft record created at {datetime.datetime.utcnow().isoformat()}",
+                    },
+                ],
+                "open_access": True,
+            }
+
+        if title is not None:
+            minimal_metadata["titles"] = [
                 {
-                    "title": f"Draft record created at {datetime.datetime.utcnow().isoformat()}"
-                }
-            ],
-            "open_access": True,
-        }
+                    "title": title,
+                },
+            ]
+        if description is not None:
+            minimal_metadata["descriptions"] = [
+                {
+                    "description": description,
+                    "description_type": self.DEFAULT_DESCRIPTION_TYPE,
+                },
+            ]
+
+        if len(licences) == 0 and len(self.default_licences) > 0:
+            licences = self.default_licences
+
+        if len(orcids) == 0 and len(self.default_orcids) > 0:
+            orcids = self.default_orcids
+        # TODO: process addition of both licences and creators
+        if len(licences) > 0:
+            pass
+
+        if len(orcids) > 0:
+            pass
+
         if self.community_id is not None:
             minimal_metadata["community"] = self.community_id
             if do_validate:
@@ -561,6 +607,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
@@ -571,7 +618,12 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         """
         draft_record = self._create_draft_record(
             base_id=preferred_id,
-            community_specific_metadata=initially_required_metadata,
+            metadata=initially_required_metadata,
+            community_specific_metadata=initially_required_community_specific_metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
         )
 
         return DraftEntry(
@@ -690,7 +742,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
     def __update_meta(
         draft_record_metadata: "Mapping[str, Any]",
         metadata: "Mapping[str, Any]",
-    ) -> "Mapping[str, Any]":
+    ) -> "MutableMapping[str, Any]":
         """
         Generator of JSON Patch operations
         """
@@ -723,8 +775,9 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
 
         return updated_record_metadata
 
-    @staticmethod
-    def __patch_ops(
+    @classmethod
+    def __PatchOps(
+        cls,
         draft_record_metadata: "Mapping[str, Any]",
         metadata: "Mapping[str, Any]",
         prefix: "str" = "/",
@@ -734,6 +787,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         """
         patch_ops: "MutableSequence[Mapping[str, Any]]" = []
         for key, val in metadata.items():
+            if key in cls.BANNED_PATCH_OPS_KEYS:
+                continue
             if val is None:
                 patch_ops.append(
                     {
@@ -779,7 +834,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
     def update_record_metadata(
         self,
         draft_entry: "DraftEntry",
-        metadata: "Mapping[str, Any]",
+        metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
@@ -802,7 +857,48 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         patch_ops: "MutableSequence[Mapping[str, Any]]"
         # Do not patch when no metadata is provided
 
-        updated_metadata = self.__update_meta(record["metadata"], metadata)
+        updated_metadata: "Optional[MutableMapping[str, Any]]" = None
+        if (
+            metadata is not None
+            or title is not None
+            or description is not None
+            or len(licences) > 0
+            or len(orcids) > 0
+        ):
+            if metadata is None:
+                updated_metadata = record.get("metadata")
+                assert updated_metadata is not None
+            else:
+                updated_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+
+            if title is not None:
+                updated_metadata["titles"] = [
+                    {
+                        "title": title,
+                    },
+                ]
+
+            if description is not None:
+                updated_metadata["descriptions"] = [
+                    {
+                        "description": description,
+                        "description_type": self.DEFAULT_DESCRIPTION_TYPE,
+                    },
+                ]
+
+            # TODO: add proper implementation
+            if len(licences) > 0:
+                pass
+
+            if len(orcids) > 0:
+                pass
+
+        seed_metadata = record.get("metadata")
+        assert seed_metadata is not None
+        if updated_metadata is None:
+            updated_metadata = seed_metadata
+        else:
+            updated_metadata = self.__update_meta(seed_metadata, updated_metadata)
         community_id = cast("Optional[str]", updated_metadata.get("community"))
 
         if do_validate:
@@ -810,8 +906,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             # Validate metadata changes
             self._validate_entry_schema(community_id, updated_metadata)
 
-        if metadata:
-            metadata_patch_ops = self.__patch_ops(record["metadata"], metadata)
+        if updated_metadata != seed_metadata:
+            metadata_patch_ops = self.__PatchOps(seed_metadata, updated_metadata)
         else:
             metadata_patch_ops = []
 
@@ -834,7 +930,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                         community_id, updated_community_specific_metadata
                     )
 
-                community_metadata_patch_ops = self.__patch_ops(
+                community_metadata_patch_ops = self.__PatchOps(
                     updated_metadata["community_specific"].get(
                         community_specific_uuid, {}
                     ),
@@ -890,6 +986,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
+        metadata: "Optional[Mapping[str, Any]]" = None,
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
         """
         These contents will be included in the B2SHARE share
@@ -905,7 +1003,14 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             self.default_preferred_id if preferred_id is None else preferred_id
         )
 
-        booked_entry = self.book_pid(internal_id)
+        booked_entry = self.book_pid(
+            preferred_id=internal_id,
+            initially_required_metadata=metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
+        )
 
         if preferred_id is None:
             raise ExportPluginException("Unable to book a B2SHARE entry")
@@ -961,15 +1066,15 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
 
         # Add metadata to the entry
         # Publish the entry
-        entry_metadata: "Mapping[str, Any]" = {}
-
-        community_specific_metadata: "Mapping[str, Any]" = {}
-
         # This might not be needed
         meta_update = self.update_record_metadata(
             booked_entry,
-            entry_metadata,
+            metadata=metadata,
             community_specific_metadata=community_specific_metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
         )
 
         # Last, publish!
