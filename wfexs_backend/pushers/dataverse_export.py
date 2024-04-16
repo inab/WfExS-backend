@@ -35,6 +35,7 @@ import urllib.parse
 import urllib.request
 import uuid
 import xml.etree.ElementTree
+import xml.dom
 
 from defusedxml import ElementTree
 
@@ -129,6 +130,8 @@ class DataversePublisher(AbstractTokenExportPlugin):
     SWORD_APP_PREFIX: "Final[str]" = "app"
     ATOM_NAMESPACE: "Final[str]" = "http://www.w3.org/2005/Atom"
     ATOM_PREFIX: "Final[str]" = "atom"
+    PURL_NAMESPACE: "Final[str]" = "http://purl.org/dc/terms/"
+    PURL_PREFIX: "Final[str]" = "dcterms"
     SWORD_TERMS_NAMESPACE: "Final[str]" = "http://purl.org/net/sword/terms/"
     SWORD_TERMS_PREFIX: "Final[str]" = "st"
 
@@ -285,42 +288,108 @@ class DataversePublisher(AbstractTokenExportPlugin):
         in case the destination allows it.
         """
 
-        metadata = self.get_pid_metadata(pid)
+        raw_metadata = self.get_pid_metadata(pid)
 
-        if metadata is None:
+        if raw_metadata is None:
             return None
 
-        latest_meta = metadata.get("latestVersion", {})
+        latest_meta = raw_metadata.get("latestVersion", {})
         return DraftEntry(
             # These assignments could be wrong
             draft_id=str(latest_meta["datasetId"]),
             pid=latest_meta["datasetPersistentId"],
-            metadata=metadata,
+            metadata=latest_meta,
+            raw_metadata=raw_metadata,
         )
 
-    def _sword_book_entry(self) -> "Optional[str]":
-        sword_draft_entry = f"""\
-<?xml version="1.0"?>
-<entry xmlns="{self.ATOM_NAMESPACE}" xmlns:dcterms="http://purl.org/dc/terms/">
-   <!-- some embedded metadata -->
-   <dcterms:title>Draft record created at {datetime.datetime.utcnow().isoformat()}</dcterms:title>
-   <dcterms:creator>WfExS-backend ghost creator</dcterms:creator>
-   <!-- Dataverse controlled vocabulary subject term -->
-   <dcterms:subject>Bioinformatics</dcterms:subject>
-   <dcterms:description>Empty draft record created by WfExS-backend at {datetime.datetime.utcnow().isoformat()}</dcterms:description>
-   <!-- Producer with financial or admin responsibility of the data -->
-   <!--
-   <dcterms:contributor type="Contact">CaffeineForAll</dcterms:contributor>
-   -->
-</entry>
-"""
+    def _sword_book_entry(
+        self,
+        initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[URIType]" = [],
+        orcids: "Sequence[str]" = [],
+    ) -> "Optional[str]":
+        # TODO: implement initially_required_metadata processing
+
+        if title is None:
+            title = f"Draft record created at {datetime.datetime.utcnow().isoformat()}"
+
+        if description is None:
+            description = f"Empty draft record created by WfExS-backend at {datetime.datetime.utcnow().isoformat()}"
+
+        if len(licences) == 0:
+            licences = self.default_licences
+
+        if len(orcids) == 0:
+            orcids = self.default_orcids
+            # The entry must have at least one author
+            if len(orcids) == 0:
+                orcids = ["WfExS-backend ghost creator"]
+
+        #        sword_draft_entry = f"""\
+        # <?xml version="1.0"?>
+        # <entry xmlns="{self.ATOM_NAMESPACE}" xmlns:dcterms="http://purl.org/dc/terms/">
+        #   <!-- some embedded metadata -->
+        #   <dcterms:title>Draft record created at {datetime.datetime.utcnow().isoformat()}</dcterms:title>
+        #   <dcterms:creator>WfExS-backend ghost creator</dcterms:creator>
+        #   <!-- Dataverse controlled vocabulary subject term -->
+        #   <dcterms:subject>Bioinformatics</dcterms:subject>
+        #   <dcterms:description>Empty draft record created by WfExS-backend at {datetime.datetime.utcnow().isoformat()}</dcterms:description>
+        #   <!-- Producer with financial or admin responsibility of the data -->
+        #   <!--
+        #   <dcterms:contributor type="Contact">CaffeineForAll</dcterms:contributor>
+        #   -->
+        # </entry>
+        # """
+
+        domi = xml.dom.getDOMImplementation()
+        xdoc = domi.createDocument(self.ATOM_NAMESPACE, "entry", None)
+        xroot = xdoc.documentElement
+        xroot.setAttribute("xmlns", self.ATOM_NAMESPACE)
+        xroot.setAttribute(f"xmlns:{self.PURL_PREFIX}", self.PURL_NAMESPACE)
+
+        title_node = xdoc.createElementNS(
+            self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:title"
+        )
+        title_node.appendChild(xdoc.createTextNode(title))
+        xroot.appendChild(title_node)
+
+        for orcid in orcids:
+            # TODO: implement authors management properly
+            creator_node = xdoc.createElementNS(
+                self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:creator"
+            )
+            creator_node.appendChild(xdoc.createTextNode(orcid))
+            xroot.appendChild(creator_node)
+
+        subject_node = xdoc.createElementNS(
+            self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:subject"
+        )
+        subject_node.appendChild(xdoc.createTextNode("Bioinformatics"))
+        xroot.appendChild(subject_node)
+
+        description_node = xdoc.createElementNS(
+            self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:description"
+        )
+        description_node.appendChild(xdoc.createTextNode(description))
+        xroot.appendChild(description_node)
+
+        # TODO: properly represent licences
+        for licence in licences:
+            licence_node = xdoc.createElementNS(
+                self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:license"
+            )
+            licence_node.appendChild(xdoc.createTextNode("CC0 1.0"))
+            xroot.appendChild(licence_node)
 
         req = urllib.request.Request(
             url=self.dataverse_collection_url,
             headers={
                 "Content-Type": self.ATOM_CONTENT_TYPE,
             },
-            data=sword_draft_entry.encode("utf-8"),
+            data=xdoc.toxml(encoding="UTF-8"),
             method="POST",
         )
         try:
@@ -352,6 +421,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
@@ -382,41 +452,31 @@ class DataversePublisher(AbstractTokenExportPlugin):
         newentry_url: "Optional[str]" = None
         if preferred_id is not None:
             booked_entry = self.get_pid_draftentry(preferred_id)
-            if booked_entry is not None:
+            if booked_entry is not None and booked_entry.metadata is not None:
                 # Booked
-                if booked_entry.metadata is not None:
-                    fill_in_new_entry = False
-                    # Submitted
-                    if (
-                        booked_entry.metadata.get("latestVersion", {}).get(
-                            "versionState"
-                        )
-                        != "DRAFT"
-                    ):
-                        # Built the request url for new version
-                        # This should force the creation of a new draft
-                        updated_metadata = self.update_record_metadata(
-                            booked_entry, booked_entry.metadata.get("latestVersion", {})
-                        )
-                        if updated_metadata is not None:
-                            new_draft_id = updated_metadata.get(
-                                "latestVersion", {}
-                            ).get("id")
-                            if new_draft_id is not None:
-                                return booked_entry._replace(
-                                    draft_id=new_draft_id,
-                                    metadata=updated_metadata,
-                                )
-                        return None
-                        # updated_entry = self._sword_book_revision(booked_entry)
-                        #
-                        # return updated_entry
-                    else:
-                        preferred_id = booked_entry.draft_id
-                else:
-                    self.logger.info(
-                        f"Discarding pre-booked {preferred_id} Dataverse entry id reusage from {self.api_prefix}"
+                fill_in_new_entry = False
+                # Submitted
+                if booked_entry.metadata.get("versionState") != "DRAFT":
+                    # Built the request url for new version
+                    # This should force the creation of a new draft
+                    updated_metadata = self.update_record_metadata(
+                        booked_entry,
+                        metadata=booked_entry.metadata,
                     )
+                    if updated_metadata is not None:
+                        new_draft_id = updated_metadata.get("id")
+                        if new_draft_id is not None:
+                            assert new_draft_id != booked_entry.metadata.get("id")
+                            return booked_entry._replace(
+                                draft_id=updated_metadata["datasetId"],
+                                metadata=updated_metadata,
+                            )
+                    return None
+                    # updated_entry = self._sword_book_revision(booked_entry)
+                    #
+                    # return updated_entry
+                else:
+                    preferred_id = booked_entry.draft_id
             else:
                 self.logger.info(
                     f"Discarding pre-booked {preferred_id} Dataverse entry id reusage from {self.api_prefix}"
@@ -424,7 +484,14 @@ class DataversePublisher(AbstractTokenExportPlugin):
 
         if fill_in_new_entry:
             # With the booked_id
-            booked_id = self._sword_book_entry()
+            booked_id = self._sword_book_entry(
+                initially_required_metadata=initially_required_metadata,
+                initially_required_community_specific_metadata=initially_required_community_specific_metadata,
+                title=title,
+                description=description,
+                licences=licences,
+                orcids=orcids,
+            )
 
             # we are getting the entry in the native API
             if booked_id is not None:
@@ -842,7 +909,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
     def update_record_metadata(
         self,
         draft_entry: "DraftEntry",
-        metadata: "Mapping[str, Any]",
+        metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
@@ -856,13 +923,119 @@ class DataversePublisher(AbstractTokenExportPlugin):
         For non draft entries, it fails
         """
 
-        cleaned_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+        # When no parameter is provided, get the latest metadata
+        # because this operation can be used to create a new revision
+        if metadata is None:
+            existing_entry = self.get_pid_draftentry(draft_entry.draft_id)
+            if existing_entry is None:
+                raise ExportPluginException(
+                    f"Dataverse draft/entry {draft_entry.draft_id} is unavailable at {self.api_prefix}"
+                )
+            assert existing_entry.metadata is not None
+            cleaned_metadata = cast("MutableMapping[str, Any]", existing_entry.metadata)
+        else:
+            cleaned_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+
+        if cleaned_metadata.get("versionState") != "DRAFT":
+            cleaned_metadata["versionNumber"] += 1
+
+        # These keys must not exist on submitted metadata!!!
         for key in ("files", "versionState"):
             if key in cleaned_metadata:
                 del cleaned_metadata[key]
 
-        if metadata.get("versionState") != "DRAFT":
-            cleaned_metadata["versionNumber"] += 1
+        if (
+            title is not None
+            or description is not None
+            or len(licences) > 0
+            or len(orcids) > 0
+        ):
+            fields = (
+                cleaned_metadata.setdefault("metadataBlocks", {})
+                .setdefault("citation", {})
+                .setdefault("fields", [])
+            )
+
+            # These are the specific fields we are updated later
+            title_field: "Optional[MutableMapping[str, Any]]" = None
+            description_field: "Optional[MutableMapping[str, Any]]" = None
+            authors_field: "Optional[MutableMapping[str, Any]]" = None
+
+            # But first, we have to locate already declared instances
+            for field in fields:
+                if not isinstance(field, dict):
+                    continue
+
+                typeName = field.get("typeName")
+                if typeName == "title" and title is not None:
+                    title_field = field
+                elif typeName == "author" and len(orcids) > 0:
+                    authors_field = field
+                elif typeName == "dsDescription" and description is not None:
+                    description_field = field
+
+            # This part of the code is needed because there could happen
+            # no title or description was previously provided
+            # (i.e. incomplete minimal metadata)
+            if title is not None:
+                if title_field is None:
+                    title_field = {
+                        "typeName": "title",
+                        "multiple": False,
+                        "typeClass": "primitive",
+                    }
+                    fields.append(title_field)
+
+                title_field["value"] = title
+
+            if description is not None:
+                if description_field is None:
+                    description_field = {
+                        "typeName": "dsDescription",
+                        "multiple": True,
+                        "typeClass": "compound",
+                    }
+                    fields.append(description_field)
+
+                description_field["value"] = [
+                    {
+                        "dsDescriptionValue": {
+                            "typeName": "dsDescriptionValue",
+                            "multiple": False,
+                            "typeClass": "primitive",
+                            "value": description,
+                        },
+                    },
+                ]
+
+            if len(orcids) > 0:
+                if authors_field is None:
+                    authors_field = {
+                        "typeName": "author",
+                        "multiple": True,
+                        "typeClass": "compound",
+                    }
+                    fields.append(authors_field)
+
+                field_values = []
+                # TODO: implement this
+                for orcid in orcids:
+                    field_values.append(
+                        {
+                            "authorName": {
+                                "typeName": "authorName",
+                                "multiple": False,
+                                "typeClass": "primitive",
+                                "value": orcid,
+                            }
+                        }
+                    )
+
+                authors_field["value"] = field_values
+
+            # TODO: implement these
+            if len(licences) > 0:
+                pass
 
         query = {
             "persistentId": draft_entry.pid,
@@ -885,12 +1058,15 @@ class DataversePublisher(AbstractTokenExportPlugin):
             # This corner case happens when there is a draft already
             if he.code == 400:
                 err_payload = json.load(he)
-                self.logger.exception(
-                    f"Error {he.code} on update metadata {err_payload}"
-                )
-                self.logger.exception(f"See also {metadata}")
+                self.logger.error(f"Error {he.code} on update metadata {err_payload}")
+            else:
+                self.logger.error(f"Error {he.code} on update metadata (raw)")
+                self.logger.error(he.read())
+            self.logger.error(
+                f"Error arisen with this payload {json.dumps(cleaned_metadata, indent=4)}"
+            )
             raise ExportPluginException(
-                f"Unable to update metadata about {draft_entry.pid} Dataverse entry at {self.api_prefix}"
+                f"Unable to update metadata about {draft_entry.pid} Dataverse entry at {self.api_prefix} (error {he.code})"
             ) from he
         except:
             self.logger.exception(
@@ -935,8 +1111,112 @@ class DataversePublisher(AbstractTokenExportPlugin):
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
+        metadata: "Optional[Mapping[str, Any]]" = None,
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
         """
         This is the method to be implemented by the stateful pusher
         """
-        raise NotImplementedError()
+        """
+        These contents will be included in the B2SHARE share
+        """
+
+        if len(items) == 0:
+            raise ValueError(
+                "This plugin requires at least one element to be processed"
+            )
+
+        # We are starting to learn whether we already have a PID
+        internal_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
+
+        booked_entry = self.book_pid(
+            preferred_id=internal_id,
+            initially_required_metadata=metadata,
+            initially_required_community_specific_metadata=community_specific_metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
+        )
+
+        if booked_entry is None:
+            raise ExportPluginException(
+                f"Unable to book a Dataverse entry at {self.api_prefix}"
+            )
+
+        # Now, obtain the metadata, which is needed
+        assert booked_entry.metadata is not None
+
+        # Upload
+        failed = False
+        relitems: "Set[str]" = set()
+        for i_item, item in enumerate(items):
+            relitem = os.path.relpath(item.local, self.refdir)
+            # Outside the relative directory
+            if relitem.startswith(os.path.pardir):
+                # This is needed to avoid collisions
+                prefname: "Optional[RelPath]"
+                if isinstance(item, MaterializedContent):
+                    prefname = item.prettyFilename
+                else:
+                    prefname = item.preferredFilename
+
+                if prefname is None:
+                    prefname = cast("RelPath", os.path.basename(item.local))
+
+            while prefname in relitems:
+                baserelitem = cast(
+                    "RelPath", str(i_item) + "_" + os.path.basename(prefname)
+                )
+                dirrelitem = os.path.dirname(prefname)
+                prefname = (
+                    cast("RelPath", os.path.join(dirrelitem, baserelitem))
+                    if len(dirrelitem) > 0
+                    else baserelitem
+                )
+
+            assert prefname is not None
+            relitem = prefname
+            relitems.add(relitem)
+
+            try:
+                upload_response = self.upload_file_to_draft(
+                    booked_entry, item.local, relitem
+                )
+            except urllib.error.HTTPError as he:
+                failed = True
+
+        if failed:
+            file_bucket_prefix = self.get_file_bucket_prefix(booked_entry)
+            raise ExportPluginException(
+                f"Some contents could not be uploaded to entry {booked_entry.metadata.get('id')}, bucket {file_bucket_prefix}"
+            )
+
+        # Add metadata to the entry
+        # Publish the entry
+        # This might not be needed
+        meta_update = self.update_record_metadata(
+            booked_entry,
+            metadata=metadata,
+            community_specific_metadata=community_specific_metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
+        )
+
+        # Last, publish!
+        pub_update = self.publish_draft_record(booked_entry)
+
+        shared_uris = []
+        shared_uris.append(
+            URIWithMetadata(
+                uri=cast("URIType", booked_entry.pid),
+                # TODO: Add meaninful metadata
+                metadata=booked_entry.metadata,
+            )
+        )
+
+        return shared_uris
