@@ -502,6 +502,13 @@ class DataversePublisher(AbstractTokenExportPlugin):
         # TO BE FINISHED
         return booked_entry
 
+    @property
+    def _customized_book_pid_error_string(self) -> "str":
+        """
+        This method can be overridden to provide more context
+        """
+        return f"Unable to book a Dataverse entry at {self.api_prefix}"
+
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
         """
         This method is used to release a previously booked PID,
@@ -1102,121 +1109,3 @@ class DataversePublisher(AbstractTokenExportPlugin):
             )
 
         return {}
-
-    def push(
-        self,
-        items: "Sequence[AnyContent]",
-        preferred_id: "Optional[str]" = None,
-        title: "Optional[str]" = None,
-        description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
-        metadata: "Optional[Mapping[str, Any]]" = None,
-        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
-    ) -> "Sequence[URIWithMetadata]":
-        """
-        This is the method to be implemented by the stateful pusher
-        """
-        """
-        These contents will be included in the B2SHARE share
-        """
-
-        if len(items) == 0:
-            raise ValueError(
-                "This plugin requires at least one element to be processed"
-            )
-
-        # We are starting to learn whether we already have a PID
-        internal_id = (
-            self.default_preferred_id if preferred_id is None else preferred_id
-        )
-
-        booked_entry = self.book_pid(
-            preferred_id=internal_id,
-            initially_required_metadata=metadata,
-            initially_required_community_specific_metadata=community_specific_metadata,
-            title=title,
-            description=description,
-            licences=licences,
-            orcids=orcids,
-        )
-
-        if booked_entry is None:
-            raise ExportPluginException(
-                f"Unable to book a Dataverse entry at {self.api_prefix}"
-            )
-
-        # Now, obtain the metadata, which is needed
-        assert booked_entry.metadata is not None
-
-        # Upload
-        failed = False
-        relitems: "Set[str]" = set()
-        for i_item, item in enumerate(items):
-            relitem = os.path.relpath(item.local, self.refdir)
-            # Outside the relative directory
-            if relitem.startswith(os.path.pardir):
-                # This is needed to avoid collisions
-                prefname: "Optional[RelPath]"
-                if isinstance(item, MaterializedContent):
-                    prefname = item.prettyFilename
-                else:
-                    prefname = item.preferredFilename
-
-                if prefname is None:
-                    prefname = cast("RelPath", os.path.basename(item.local))
-
-            while prefname in relitems:
-                baserelitem = cast(
-                    "RelPath", str(i_item) + "_" + os.path.basename(prefname)
-                )
-                dirrelitem = os.path.dirname(prefname)
-                prefname = (
-                    cast("RelPath", os.path.join(dirrelitem, baserelitem))
-                    if len(dirrelitem) > 0
-                    else baserelitem
-                )
-
-            assert prefname is not None
-            relitem = prefname
-            relitems.add(relitem)
-
-            try:
-                upload_response = self.upload_file_to_draft(
-                    booked_entry, item.local, relitem
-                )
-            except urllib.error.HTTPError as he:
-                failed = True
-
-        if failed:
-            file_bucket_prefix = self.get_file_bucket_prefix(booked_entry)
-            raise ExportPluginException(
-                f"Some contents could not be uploaded to entry {booked_entry.metadata.get('id')}, bucket {file_bucket_prefix}"
-            )
-
-        # Add metadata to the entry
-        # Publish the entry
-        # This might not be needed
-        meta_update = self.update_record_metadata(
-            booked_entry,
-            metadata=metadata,
-            community_specific_metadata=community_specific_metadata,
-            title=title,
-            description=description,
-            licences=licences,
-            orcids=orcids,
-        )
-
-        # Last, publish!
-        pub_update = self.publish_draft_record(booked_entry)
-
-        shared_uris = []
-        shared_uris.append(
-            URIWithMetadata(
-                uri=cast("URIType", booked_entry.pid),
-                # TODO: Add meaninful metadata
-                metadata=booked_entry.metadata,
-            )
-        )
-
-        return shared_uris
