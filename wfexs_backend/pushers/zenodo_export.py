@@ -155,6 +155,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         self,
         preferred_id: "Optional[str]" = None,
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
@@ -492,7 +493,9 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                 # "forgetting" already set metadata
                 fetched_metadata = self.get_pid_metadata(draft_entry.draft_id)
                 if fetched_metadata is None:
-                    modifiable_metadata = {}
+                    raise ExportPluginException(
+                        f"Zenodo draft/entry {draft_entry.draft_id} is unavailable"
+                    )
                 else:
                     modifiable_metadata = fetched_metadata.get("metadata", {})
                     assert modifiable_metadata is not None
