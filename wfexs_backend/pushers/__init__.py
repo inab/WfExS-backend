@@ -175,6 +175,13 @@ class AbstractExportPlugin(abc.ABC):
 
         pass
 
+    @property
+    def _customized_book_pid_error_string(self) -> "str":
+        """
+        This method can be overridden to provide more context
+        """
+        return f"Unable to book a {self.PluginName()} entry"
+
     @abc.abstractmethod
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
         """
