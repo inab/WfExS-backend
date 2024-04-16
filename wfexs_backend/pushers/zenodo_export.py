@@ -595,7 +595,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             orcids=orcids,
         )
 
-        if preferred_id is None:
+        if booked_entry is None:
             raise ExportPluginException("Unable to book a Zenodo entry")
 
         # Now, obtain the metadata, which is needed

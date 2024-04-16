@@ -1012,7 +1012,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             orcids=orcids,
         )
 
-        if preferred_id is None:
+        if booked_entry is None:
             raise ExportPluginException("Unable to book a B2SHARE entry")
 
         # Now, obtain the metadata, which is needed
