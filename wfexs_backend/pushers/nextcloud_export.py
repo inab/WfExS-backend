@@ -406,14 +406,17 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         if len(share_links) == 0:
             return None
 
+        draftentry_metadata: "Mapping[str, Any]" = {
+            "share_links": share_links,
+            "email_addresses": email_addresses,
+            "expire_in": expire_in,
+        }
         return DraftEntry(
             draft_id=relretpath,
             pid=share_links[0].uri,
-            metadata={
-                "share_links": share_links,
-                "email_addresses": email_addresses,
-                "expire_in": expire_in,
-            },
+            metadata=draftentry_metadata,
+            # TODO: hook raw metadata
+            raw_metadata=None,
         )
 
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":

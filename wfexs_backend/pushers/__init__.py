@@ -63,6 +63,7 @@ class DraftEntry(NamedTuple):
     draft_id: "str"
     pid: "str"
     metadata: "Optional[Mapping[str, Any]]"
+    raw_metadata: "Optional[Mapping[str, Any]]"
 
 
 class AbstractExportPlugin(abc.ABC):
@@ -142,6 +143,9 @@ class AbstractExportPlugin(abc.ABC):
             draft_id=pid,
             pid=pid,
             metadata=metadata,
+            # In some cases metadata is either a subset or
+            # a processed version of raw_metadata
+            raw_metadata=metadata,
         )
 
     @abc.abstractmethod
@@ -231,8 +235,10 @@ class AbstractExportPlugin(abc.ABC):
     def update_record_metadata_by_id(
         self,
         record_id: "str",
-        metadata: "Mapping[str, Any]",
+        metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
         orcids: "Sequence[str]" = [],
     ) -> "Mapping[str, Any]":
@@ -248,7 +254,13 @@ class AbstractExportPlugin(abc.ABC):
             )
 
         return self.update_record_metadata(
-            record, metadata, community_specific_metadata=community_specific_metadata
+            record,
+            metadata=metadata,
+            community_specific_metadata=community_specific_metadata,
+            title=title,
+            description=description,
+            licences=licences,
+            orcids=orcids,
         )
 
     @abc.abstractmethod

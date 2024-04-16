@@ -176,6 +176,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             draft_id=draft_id,
             pid=cast("str", pid),
             metadata=draft_metadata,
+            raw_metadata=draft_metadata,
         )
 
     def _book_pid_internal(
@@ -589,6 +590,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         booked_entry = self.book_pid(
             preferred_id=internal_id,
             initially_required_metadata=metadata,
+            initially_required_community_specific_metadata=community_specific_metadata,
             title=title,
             description=description,
             licences=licences,

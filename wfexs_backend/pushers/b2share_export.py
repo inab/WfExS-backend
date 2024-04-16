@@ -630,6 +630,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             draft_id=draft_record["id"],
             pid=cast("str", draft_record["metadata"]["$future_doi"]),
             metadata=draft_record,
+            raw_metadata=draft_record,
         )
 
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
@@ -1006,6 +1007,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         booked_entry = self.book_pid(
             preferred_id=internal_id,
             initially_required_metadata=metadata,
+            initially_required_community_specific_metadata=community_specific_metadata,
             title=title,
             description=description,
             licences=licences,
