@@ -1176,7 +1176,7 @@ either `docker save` or `podman save` commands. These archives have all
 the layers needed to restore the container image in a local registry
 through either `docker load` or `podman load`.
 
-## Posibly used URI schemes
+## Possibly used URI schemes
 
 As {wfexs_backend_name} is able to manage several exotic CURIEs and schemes,
 you can find here an almost complete list of the possible ones:
