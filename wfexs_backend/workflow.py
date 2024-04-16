@@ -207,6 +207,10 @@ from .security_context import (
 )
 import bagit
 
+from . import __url__ as wfexs_backend_url
+from . import __official_name__ as wfexs_backend_name
+from . import get_WfExS_version_str
+
 from . import common as common_defs_module
 
 # We have preference for the C based loader and dumper, but the code
@@ -763,7 +767,7 @@ class WF:
             self.logger.error(errstr)
             raise WFException(errstr) from ve
 
-        self.stagedSetup = StagedSetup(
+        self.staged_setup = StagedSetup(
             instance_id=self.instanceId,
             container_type=container_type,
             nickname=self.nickname,
@@ -1077,7 +1081,7 @@ class WF:
         self.unmountWorkdir()
 
     def getStagedSetup(self) -> "StagedSetup":
-        return self.stagedSetup
+        return self.staged_setup
 
     def getMarshallingStatus(self, reread_stats: "bool" = False) -> "MarshallingStatus":
         if reread_stats:
@@ -1446,7 +1450,7 @@ class WF:
         if self.engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 self.logger.debug("Testing engine " + engineDesc.trs_descriptor)
-                engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
+                engine = self.wfexs.instantiateEngine(engineDesc, self.staged_setup)
 
                 try:
                     engineVer, candidateLocalWorkflow = engine.identifyWorkflow(
@@ -1471,7 +1475,7 @@ class WF:
                 )
         else:
             self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)
-            engine = self.wfexs.instantiateEngine(self.engineDesc, self.stagedSetup)
+            engine = self.wfexs.instantiateEngine(self.engineDesc, self.staged_setup)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException(
@@ -3044,6 +3048,7 @@ class WF:
             filtered_actions = actions
 
         # First, let's check all the requested actions are viable
+        verstr = get_WfExS_version_str()
         for action in filtered_actions:
             try:
                 # check the export items are available
@@ -3128,9 +3133,22 @@ class WF:
                     crate_pid=booked_entry.pid,
                 )
 
+                title = f"Dataset pushed from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname})"
+                description = f"""\
+This dataset has been created and uploaded using {wfexs_backend_name} {verstr},
+whose sources are available at {wfexs_backend_url}.
+
+The contents come from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname}).
+This is an enumeration of the types of collected contents:
+
+"""
+                for e_item in action.what:
+                    description += f" * {e_item.name} ({e_item.type.value})\n"
                 # Export the contents and obtain a PID
                 new_pids = export_p.push(
                     elems,
+                    title=title,
+                    description=description,
                     licences=expanded_licences,
                     orcids=curated_orcids,
                     preferred_id=booked_entry.draft_id,
@@ -3522,7 +3540,9 @@ class WF:
                             ].type
 
                         self.container_type_str = guessed_container_type.value
-                        self.stagedSetup._replace(container_type=guessed_container_type)
+                        self.staged_setup = self.staged_setup._replace(
+                            container_type=guessed_container_type
+                        )
 
                     self.containerEngineVersion = stage.get("containerEngineVersion")
                     self.containerEngineOs = stage.get("containerEngineOs")
@@ -3540,7 +3560,7 @@ class WF:
                         self.setupEngine(offline=True)
                     elif self.engineDesc is not None:
                         self.engine = self.wfexs.instantiateEngine(
-                            self.engineDesc, self.stagedSetup
+                            self.engineDesc, self.staged_setup
                         )
             except Exception as e:
                 errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(
@@ -3910,11 +3930,11 @@ class WF:
             if item.type == ExportItemType.Param:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
                     raise WFException(
-                        f"Cannot export inputs from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                        f"Cannot export inputs from {self.staged_setup.instance_id} until the workflow has been properly staged"
                     )
 
                 assert self.materializedParams is not None
-                assert self.stagedSetup.inputs_dir is not None
+                assert self.staged_setup.inputs_dir is not None
                 if item.name is not None:
                     if not materializedParamsDict:
                         materializedParamsDict = dict(
@@ -3943,16 +3963,16 @@ class WF:
                     # and / or directories references from environment
                     # variables
                     prettyFilename = cast(
-                        "RelPath", os.path.basename(self.stagedSetup.inputs_dir)
+                        "RelPath", os.path.basename(self.staged_setup.inputs_dir)
                     )
                     retval.append(
                         MaterializedContent(
-                            local=self.stagedSetup.inputs_dir,
+                            local=self.staged_setup.inputs_dir,
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
                                     "wfexs:"
-                                    + self.stagedSetup.instance_id
+                                    + self.staged_setup.instance_id
                                     + "/"
                                     + prettyFilename,
                                 )
@@ -3964,11 +3984,11 @@ class WF:
             elif item.type == ExportItemType.Environment:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
                     raise WFException(
-                        f"Cannot export environment from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                        f"Cannot export environment from {self.staged_setup.instance_id} until the workflow has been properly staged"
                     )
 
                 assert self.materializedEnvironment is not None
-                assert self.stagedSetup.inputs_dir is not None
+                assert self.staged_setup.inputs_dir is not None
                 if item.name is not None:
                     if not materializedEnvironmentDict:
                         materializedEnvironmentDict = dict(
@@ -3999,14 +4019,14 @@ class WF:
                     self.getMarshallingStatus().execution, datetime.datetime
                 ):
                     raise WFException(
-                        f"Cannot export outputs from {self.stagedSetup.instance_id} until the workflow has been executed at least once"
+                        f"Cannot export outputs from {self.staged_setup.instance_id} until the workflow has been executed at least once"
                     )
 
                 assert (
                     isinstance(self.stagedExecutions, list)
                     and len(self.stagedExecutions) > 0
                 )
-                assert self.stagedSetup.outputs_dir is not None
+                assert self.staged_setup.outputs_dir is not None
                 # TODO: select which of the executions export
                 stagedExec = self.stagedExecutions[-1]
                 # if item.block:
@@ -4035,7 +4055,7 @@ class WF:
                         )
                     )
                 else:
-                    assert self.stagedSetup.work_dir is not None
+                    assert self.staged_setup.work_dir is not None
                     # The whole output directory
                     prettyFilename = cast("RelPath", stagedExec.outputsDir)
                     retval.append(
@@ -4043,14 +4063,14 @@ class WF:
                             local=cast(
                                 "AbsPath",
                                 os.path.join(
-                                    self.stagedSetup.work_dir, stagedExec.outputsDir
+                                    self.staged_setup.work_dir, stagedExec.outputsDir
                                 ),
                             ),
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
                                     "wfexs:"
-                                    + self.stagedSetup.instance_id
+                                    + self.staged_setup.instance_id
                                     + "/"
                                     + prettyFilename,
                                 )
@@ -4063,9 +4083,11 @@ class WF:
                 # The whole working directory
                 retval.append(
                     MaterializedContent(
-                        local=cast("AbsPath", self.stagedSetup.work_dir),
+                        local=cast("AbsPath", self.staged_setup.work_dir),
                         licensed_uri=LicensedURI(
-                            uri=cast("URIType", "wfexs:" + self.stagedSetup.instance_id)
+                            uri=cast(
+                                "URIType", "wfexs:" + self.staged_setup.instance_id
+                            )
                         ),
                         prettyFilename=prettyFilename,
                         kind=ContentKind.Directory,
@@ -4092,7 +4114,7 @@ class WF:
                         self.getMarshallingStatus().stage, datetime.datetime
                     ):
                         raise WFException(
-                            f"Cannot export the prospective provenance crate from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                            f"Cannot export the prospective provenance crate from {self.staged_setup.instance_id} until the workflow has been properly staged"
                         )
 
                     create_rocrate = self.createStageResearchObject
@@ -4103,7 +4125,7 @@ class WF:
                         self.getMarshallingStatus().execution, datetime.datetime
                     ):
                         raise WFException(
-                            f"Cannot export the restrospective provenance crate from {self.stagedSetup.instance_id} until the workflow has been executed at least once"
+                            f"Cannot export the restrospective provenance crate from {self.staged_setup.instance_id} until the workflow has been executed at least once"
                         )
 
                     create_rocrate = self.createResultsResearchObject
@@ -4135,7 +4157,7 @@ class WF:
                             uri=cast(
                                 "URIType",
                                 "wfexs:"
-                                + self.stagedSetup.instance_id
+                                + self.staged_setup.instance_id
                                 + "/"
                                 + pretty_relname,
                             )
@@ -4171,9 +4193,9 @@ class WF:
         assert self.remote_repo.tag is not None
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
-        assert self.stagedSetup.work_dir is not None
-        assert self.stagedSetup.inputs_dir is not None
-        assert self.stagedSetup.outputs_dir is not None
+        assert self.staged_setup.work_dir is not None
+        assert self.staged_setup.inputs_dir is not None
+        assert self.staged_setup.outputs_dir is not None
 
         the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
         for orcid in orcids:
@@ -4188,7 +4210,7 @@ class WF:
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            staged_setup=self.stagedSetup,
+            staged_setup=self.staged_setup,
             payloads=payloads,
             licences=licences,
             orcids=the_orcids,
@@ -4239,7 +4261,7 @@ class WF:
         assert self.materializedEngine is not None
         assert self.remote_repo is not None
         assert self.remote_repo.tag is not None
-        assert self.stagedSetup.work_dir is not None
+        assert self.staged_setup.work_dir is not None
         assert (
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
@@ -4257,7 +4279,7 @@ class WF:
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            staged_setup=self.stagedSetup,
+            staged_setup=self.staged_setup,
             payloads=payloads,
             licences=licences,
             orcids=the_orcids,
