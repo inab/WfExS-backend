@@ -50,12 +50,19 @@ if TYPE_CHECKING:
     from wfexs_backend.common import (
         AbsPath,
         SecurityContextConfig,
+        URIType,
     )
     from pytest_param_files import (  # type: ignore[import]
         ParamTestData,
     )
 
-from tests.util import get_path
+from tests.common import (
+    TEST_ORCID,
+)
+
+from tests.util import (
+    get_path,
+)
 
 
 dataverse_params = pytest.mark.dataverse_params()
@@ -604,7 +611,9 @@ def test_dataverse_update_record_metadata_facets(
             title="My test upload updated at " + datetime.datetime.utcnow().isoformat(),
             description="This is my test upload description updated at "
             + datetime.datetime.utcnow().isoformat(),
-            orcids=["Doe, John"],
+            resolved_orcids=[
+                TEST_ORCID,
+            ],
         )
         logger.info(updated_meta)
         checked_types: "Set[str]" = set()
@@ -717,7 +726,13 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
                     ]
 
         # logger.info(json.dumps(entry_metadata, indent=4))
-        updated_meta = dep.update_record_metadata(booked_entry, entry_metadata)
+        updated_meta = dep.update_record_metadata(
+            booked_entry,
+            metadata=entry_metadata,
+            resolved_orcids=[
+                TEST_ORCID,
+            ],
+        )
         logger.info(updated_meta)
         # checked_types: "Set[str]" = set()
         # for field in (

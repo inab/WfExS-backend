@@ -41,6 +41,7 @@ from defusedxml import ElementTree
 
 from ..common import (
     MaterializedContent,
+    ResolvedORCID,
     URIWithMetadata,
 )
 
@@ -146,7 +147,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[URIType]" = [],
-        default_orcids: "Sequence[str]" = [],
+        default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -304,15 +305,11 @@ class DataversePublisher(AbstractTokenExportPlugin):
 
     def _sword_book_entry(
         self,
-        initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
-        initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[str]":
-        # TODO: implement initially_required_metadata processing
-
         if title is None:
             title = f"Draft record created at {datetime.datetime.utcnow().isoformat()}"
 
@@ -322,11 +319,30 @@ class DataversePublisher(AbstractTokenExportPlugin):
         if len(licences) == 0:
             licences = self.default_licences
 
-        if len(orcids) == 0:
-            orcids = self.default_orcids
+        if len(resolved_orcids) == 0:
+            resolved_orcids = self.default_orcids
             # The entry must have at least one author
-            if len(orcids) == 0:
-                orcids = ["WfExS-backend ghost creator"]
+            if len(resolved_orcids) == 0:
+                resolved_orcids = [
+                    ResolvedORCID(
+                        orcid="",
+                        url=cast("URIType", ""),
+                        record={
+                            "title": None,
+                            "displayName": None,
+                            "names": None,
+                            "biography": None,
+                            "otherNames": None,
+                            "countries": None,
+                            "keyword": None,
+                            "emails": None,
+                            "externalIdentifier": None,
+                            "website": None,
+                            "lastModifiedTime": None,
+                        },
+                        record_fetch_metadata=[],
+                    ),
+                ]
 
         #        sword_draft_entry = f"""\
         # <?xml version="1.0"?>
@@ -356,12 +372,19 @@ class DataversePublisher(AbstractTokenExportPlugin):
         title_node.appendChild(xdoc.createTextNode(title))
         xroot.appendChild(title_node)
 
-        for orcid in orcids:
+        for resolved_orcid in resolved_orcids:
             # TODO: implement authors management properly
             creator_node = xdoc.createElementNS(
                 self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:creator"
             )
-            creator_node.appendChild(xdoc.createTextNode(orcid))
+            displayName = resolved_orcid.record.get("displayName")
+            creator_node.appendChild(
+                xdoc.createTextNode(
+                    "WfExS-backend ghost creator"
+                    if displayName is None
+                    else displayName
+                )
+            )
             xroot.appendChild(creator_node)
 
         subject_node = xdoc.createElementNS(
@@ -425,7 +448,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         """
         This method is used to book a new PID,
@@ -485,17 +508,34 @@ class DataversePublisher(AbstractTokenExportPlugin):
         if fill_in_new_entry:
             # With the booked_id
             booked_id = self._sword_book_entry(
-                initially_required_metadata=initially_required_metadata,
-                initially_required_community_specific_metadata=initially_required_community_specific_metadata,
                 title=title,
                 description=description,
                 licences=licences,
-                orcids=orcids,
+                resolved_orcids=resolved_orcids,
             )
 
             # we are getting the entry in the native API
             if booked_id is not None:
                 booked_entry = self.get_pid_draftentry(booked_id)
+                if booked_entry is not None and (
+                    initially_required_metadata is not None
+                    or initially_required_community_specific_metadata is not None
+                ):
+                    # As _sword_book_entry is incomplete, and uses SWORD API
+                    # it is better to use the update call to set custom metadata
+                    updated_metadata = self.update_record_metadata(
+                        booked_entry,
+                        metadata=initially_required_metadata,
+                        community_specific_metadata=initially_required_community_specific_metadata,
+                        title=title,
+                        description=description,
+                        licences=licences,
+                        resolved_orcids=resolved_orcids,
+                    )
+                    if updated_metadata is not None:
+                        booked_entry = booked_entry._replace(
+                            metadata=updated_metadata,
+                        )
             # Book new entry
             newentry_url = self.depositions_api_url
 
@@ -921,7 +961,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         """
         This method updates the draft record metadata,
@@ -955,7 +995,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
             title is not None
             or description is not None
             or len(licences) > 0
-            or len(orcids) > 0
+            or len(resolved_orcids) > 0
         ):
             fields = (
                 cleaned_metadata.setdefault("metadataBlocks", {})
@@ -976,7 +1016,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                 typeName = field.get("typeName")
                 if typeName == "title" and title is not None:
                     title_field = field
-                elif typeName == "author" and len(orcids) > 0:
+                elif typeName == "author" and len(resolved_orcids) > 0:
                     authors_field = field
                 elif typeName == "dsDescription" and description is not None:
                     description_field = field
@@ -1015,7 +1055,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                     },
                 ]
 
-            if len(orcids) > 0:
+            if len(resolved_orcids) > 0:
                 if authors_field is None:
                     authors_field = {
                         "typeName": "author",
@@ -1025,18 +1065,33 @@ class DataversePublisher(AbstractTokenExportPlugin):
                     fields.append(authors_field)
 
                 field_values = []
-                # TODO: implement this
-                for orcid in orcids:
-                    field_values.append(
-                        {
-                            "authorName": {
-                                "typeName": "authorName",
-                                "multiple": False,
-                                "typeClass": "primitive",
-                                "value": orcid,
-                            }
+                for resolved_orcid in resolved_orcids:
+                    displayName = resolved_orcid.record.get("displayName")
+                    field_value = {
+                        "authorName": {
+                            "typeName": "authorName",
+                            "multiple": False,
+                            "typeClass": "primitive",
+                            "value": "Unknown author"
+                            if displayName is None
+                            else displayName,
                         }
-                    )
+                    }
+                    # Covering the corner case of empty orcid
+                    if len(resolved_orcid.orcid) > 0:
+                        field_value["authorIdentifierScheme"] = {
+                            "typeName": "authorIdentifierScheme",
+                            "multiple": False,
+                            "typeClass": "controlledVocabulary",
+                            "value": "ORCID",
+                        }
+                        field_value["authorIdentifier"] = {
+                            "typeName": "authorIdentifier",
+                            "multiple": False,
+                            "typeClass": "primitive",
+                            "value": resolved_orcid.orcid,
+                        }
+                    field_values.append(field_value)
 
                 authors_field["value"] = field_values
 
