@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from typing_extensions import (
         Final,
         TypeAlias,
+        TypedDict,
     )
 
 
@@ -296,6 +297,19 @@ class LicensedURI(NamedTuple):
 if TYPE_CHECKING:
     AnyURI: TypeAlias = Union[URIType, LicensedURI]
 
+    class ORCIDPublicRecord(TypedDict):
+        title: Optional[str]
+        displayName: Optional[str]
+        names: Optional[Mapping[str, Any]]
+        biography: Optional[Any]
+        otherNames: Optional[Mapping[str, Any]]
+        countries: Optional[Mapping[str, Any]]
+        keyword: Optional[Mapping[str, Any]]
+        emails: Optional[Mapping[str, Any]]
+        externalIdentifier: Optional[Mapping[str, Any]]
+        website: Optional[Mapping[str, Any]]
+        lastModifiedTime: Optional[int]
+
 
 class URIWithMetadata(NamedTuple):
     """
@@ -308,6 +322,22 @@ class URIWithMetadata(NamedTuple):
     uri: "URIType"
     metadata: "Mapping[str, Any]"
     preferredName: "Optional[RelPath]" = None
+
+
+class ResolvedORCID(NamedTuple):
+    """
+    A resolved ORCID
+
+    orcid: The resolved ORCID id
+    url: The URL of the ORCID profile
+    record: The fetched, public ORCID record
+    record_fetch_metadata: Metadata about the resolution process
+    """
+
+    orcid: "str"
+    url: "URIType"
+    record: "ORCIDPublicRecord"
+    record_fetch_metadata: "Sequence[URIWithMetadata]"
 
 
 class MaterializedContent(NamedTuple):

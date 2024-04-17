@@ -30,6 +30,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        ResolvedORCID,
         SecurityContextConfig,
         URIType,
     )
@@ -50,7 +51,7 @@ class AbstractContextedExportPlugin(AbstractExportPlugin):
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[URIType]" = [],
-        default_orcids: "Sequence[str]" = [],
+        default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(

@@ -48,6 +48,7 @@ if TYPE_CHECKING:
         MaterializedInput,
         MaterializedOutput,
         RelPath,
+        ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -74,7 +75,7 @@ class AbstractTokenSandboxedExportPlugin(AbstractTokenExportPlugin):
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[URIType]" = [],
-        default_orcids: "Sequence[str]" = [],
+        default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
         if setup_block is None:

@@ -51,6 +51,7 @@ if TYPE_CHECKING:
         AbsPath,
         AnyContent,
         RelPath,
+        ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -80,7 +81,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         return None
 
@@ -121,7 +122,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         # This is a no-op
         return {}
@@ -140,7 +141,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":

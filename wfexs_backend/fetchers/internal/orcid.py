@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,39 +39,30 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
-        TypedDict,
     )
 
     from ...common import (
+        ORCIDPublicRecord,
         URIType,
         URIWithMetadata,
     )
 
-    class ORCIDPublicRecord(TypedDict):
-        title: Optional[str]
-        displayName: Optional[str]
-        names: Optional[Mapping[str, Any]]
-        biography: Optional[Any]
-        otherNames: Optional[Mapping[str, Any]]
-        countries: Optional[Mapping[str, Any]]
-        keyword: Optional[Mapping[str, Any]]
-        emails: Optional[Mapping[str, Any]]
-        externalIdentifier: Optional[Mapping[str, Any]]
-        website: Optional[Mapping[str, Any]]
-        lastModifiedTime: Optional[int]
 
-
+from ...common import (
+    ResolvedORCID,
+)
 from ..http import fetchClassicURL
 from .. import FetcherException
 
 ORCID_HOST: "Final[str]" = "orcid.org"
 ORCID_PATTERN: "Final[Pattern[str]]" = re.compile(r"^0\d{3}-\d{4}-\d{4}-\d{3}(?:\d|X)$")
 ORCID_CURIE: "Final[str]" = "orcid"
+ORCID_URL_PREFIX: "Final[str]" = f"https://{ORCID_HOST}"
 
 
 def validate_orcid(
     orcid_or_url: "str",
-) -> "Optional[Tuple[str, URIType, ORCIDPublicRecord, Sequence[URIWithMetadata]]]":
+) -> "Optional[ResolvedORCID]":
     """
     This method validates the input possible orcid. When it is a valid one
     it returns the ORCID in short form, the URL of the ORCID profile,
@@ -102,7 +93,7 @@ def validate_orcid(
 
     if ORCID_PATTERN.match(possible_orcid):
         public_record_b = io.BytesIO()
-        public_orcid_url = cast("URIType", f"https://{ORCID_HOST}/{possible_orcid}")
+        public_orcid_url = cast("URIType", f"{ORCID_URL_PREFIX}/{possible_orcid}")
         # If there is any issue fetching, next call should raise an exception
         _, meta_public_record, _ = fetchClassicURL(
             cast("URIType", f"{public_orcid_url}/public-record.json"), public_record_b
@@ -117,11 +108,11 @@ def validate_orcid(
                 None
                 if not isinstance(public_record, dict)
                 or public_record.get("lastModifiedTime") is None
-                else (
-                    possible_orcid,
-                    public_orcid_url,
-                    public_record,
-                    meta_public_record,
+                else ResolvedORCID(
+                    orcid=possible_orcid,
+                    url=public_orcid_url,
+                    record=public_record,
+                    record_fetch_metadata=meta_public_record,
                 )
             )
         except json.JSONDecodeError as jde:

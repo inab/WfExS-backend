@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -87,10 +87,6 @@ if TYPE_CHECKING:
         WorkflowType,
     )
 
-    from .fetchers.internal.orcid import (
-        ORCIDPublicRecord,
-    )
-
     from .utils.licences import (
         LicenceMatcher,
     )
@@ -151,6 +147,7 @@ from .common import (
     META_JSON_POSTFIX,
     NoCratableItem,
     NoLicence,
+    ResolvedORCID,
 )
 
 from .utils.licences import (
@@ -734,7 +731,7 @@ class WorkflowRunROCrate:
         staged_setup: "StagedSetup",
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        orcids: "Sequence[Union[str, ResolvedORCID]]" = [],
         progs: "ProgsMapping" = {},
         tempdir: "Optional[str]" = None,
         scheme_desc: "Sequence[Tuple[str, str, int]]" = [],
@@ -810,18 +807,23 @@ class WorkflowRunROCrate:
         for orcid in orcids:
             # validate ORCID asking for its public metadata
             try:
-                val_res = validate_orcid(orcid)
-                if val_res is not None:
+                resolved_orcid: "Optional[ResolvedORCID]"
+                if isinstance(orcid, ResolvedORCID):
+                    resolved_orcid = orcid
+                else:
+                    resolved_orcid = validate_orcid(orcid)
+
+                if resolved_orcid is not None:
                     agent = rocrate.model.person.Person(
-                        self.crate, identifier=val_res[1]
+                        self.crate, identifier=resolved_orcid.url
                     )
 
                     # enrich agent entry from the metadata obtained from the ORCID
-                    agent_name = val_res[2].get("displayName")
+                    agent_name = resolved_orcid.record.get("displayName")
                     if agent_name is not None:
                         agent["name"] = agent_name
 
-                    emails_dict = val_res[2].get("emails", {})
+                    emails_dict = resolved_orcid.record.get("emails", {})
                     if isinstance(emails_dict, dict):
                         emails = emails_dict.get("emails", [])
                         if isinstance(emails, list):
@@ -836,7 +838,7 @@ class WorkflowRunROCrate:
                                         )
                                         contact_point["email"] = the_email
                                         contact_point["identifier"] = the_email
-                                        contact_point["url"] = val_res[1]
+                                        contact_point["url"] = resolved_orcid.url
 
                                         self.crate.add(contact_point)
                                         agent.append_to(

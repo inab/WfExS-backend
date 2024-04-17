@@ -48,7 +48,16 @@ from .common import (
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
     NoLicence,
+    ResolvedORCID,
     StagedExecution,
+)
+
+from .fetchers import (
+    FetcherException,
+)
+
+from .fetchers.internal.orcid import (
+    validate_orcid,
 )
 
 if TYPE_CHECKING:
@@ -2973,16 +2982,40 @@ class WF:
 
         return expanded_licences
 
-    def _curate_orcid_list(self, orcids: "Sequence[str]") -> "Sequence[str]":
-        # FIXME: ORCIDs are bypassed (for now)
-        return orcids
+    def _curate_orcid_list(
+        self, orcids: "Sequence[str]", fail_ok: "bool" = True
+    ) -> "Sequence[ResolvedORCID]":
+        failed_orcids: "MutableSequence[str]" = []
+        val_orcids: "MutableSequence[ResolvedORCID]" = []
+        for orcid in orcids:
+            # validate ORCID asking for its public metadata
+            try:
+                resolved_orcid = validate_orcid(orcid)
+                if resolved_orcid is not None:
+                    val_orcids.append(resolved_orcid)
+                else:
+                    self.logger.error(
+                        f"ORCID {orcid} was discarded because it could not be resolved"
+                    )
+                    failed_orcids.append(orcid)
+
+            except FetcherException as fe:
+                self.logger.exception(f"Error resolving ORCID {orcid}")
+                failed_orcids.append(orcid)
+
+        if len(failed_orcids) > 0 and not fail_ok:
+            raise WFException(
+                f"{len(failed_orcids)} of {len(orcids)} ORCIDs were not valid: {', '.join(failed_orcids)}"
+            )
+
+        return val_orcids
 
     def _instantiate_export_plugin(
         self,
         action: "ExportAction",
         sec_context: "Optional[SecurityContextConfig]",
         default_licences: "Sequence[URIType]",
-        default_orcids: "Sequence[str]",
+        default_orcids: "Sequence[ResolvedORCID]",
         default_preferred_id: "Optional[str]",
     ) -> "AbstractExportPlugin":
         """
@@ -3128,7 +3161,7 @@ class WF:
                 # the booked one, so we can handle drafts
                 booked_entry = export_p.book_pid(
                     licences=expanded_licences,
-                    orcids=curated_orcids,
+                    resolved_orcids=curated_orcids,
                     preferred_id=preferred_id,
                     initially_required_metadata=action.custom_metadata,
                     initially_required_community_specific_metadata=action.community_custom_metadata,
@@ -3139,7 +3172,7 @@ class WF:
                 elems = self.locateExportItems(
                     action.what,
                     licences=expanded_licences,
-                    orcids=curated_orcids,
+                    resolved_orcids=curated_orcids,
                     crate_pid=booked_entry.pid,
                 )
 
@@ -3168,7 +3201,7 @@ This is an enumeration of the types of collected contents:
                     title=title,
                     description=description,
                     licences=expanded_licences,
-                    orcids=curated_orcids,
+                    resolved_orcids=curated_orcids,
                     preferred_id=booked_entry.draft_id,
                     metadata=action.custom_metadata,
                     community_specific_metadata=action.community_custom_metadata,
@@ -3934,7 +3967,7 @@ This is an enumeration of the types of collected contents:
         self,
         items: "Sequence[ExportItem]",
         licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "Sequence[AnyContent]":
         """
@@ -4167,7 +4200,7 @@ This is an enumeration of the types of collected contents:
                     filename=cast("AbsPath", temp_rocrate_file),
                     payloads=payloads_param,
                     licences=licences,
-                    orcids=orcids,
+                    resolved_orcids=resolved_orcids,
                     crate_pid=crate_pid,
                 )
                 retval.append(
@@ -4198,7 +4231,7 @@ This is an enumeration of the types of collected contents:
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
         """
@@ -4217,10 +4250,21 @@ This is an enumeration of the types of collected contents:
         assert self.staged_setup.inputs_dir is not None
         assert self.staged_setup.outputs_dir is not None
 
-        the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
-        for orcid in orcids:
-            if orcid not in the_orcids:
-                the_orcids.append(orcid)
+        the_orcid_ids = set(
+            map(lambda resolved_orcid: resolved_orcid.orcid, resolved_orcids)
+        )
+        raw_orcids: "MutableSequence[str]" = []
+        for raw_orcid in self.orcids:
+            if raw_orcid not in the_orcid_ids:
+                raw_orcids.append(raw_orcid)
+        the_orcids: "Sequence[ResolvedORCID]"
+        if len(raw_orcids) > 0:
+            the_orcids = [
+                *self._curate_orcid_list(raw_orcids, fail_ok=False),
+                *resolved_orcids,
+            ]
+        else:
+            the_orcids = resolved_orcids
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
             self.getPID(),
@@ -4269,7 +4313,7 @@ This is an enumeration of the types of collected contents:
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
         """
@@ -4286,10 +4330,21 @@ This is an enumeration of the types of collected contents:
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
 
-        the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
-        for orcid in orcids:
-            if orcid not in the_orcids:
-                the_orcids.append(orcid)
+        the_orcid_ids = set(
+            map(lambda resolved_orcid: resolved_orcid.orcid, resolved_orcids)
+        )
+        raw_orcids: "MutableSequence[str]" = []
+        for raw_orcid in self.orcids:
+            if raw_orcid not in the_orcid_ids:
+                raw_orcids.append(raw_orcid)
+        the_orcids: "Sequence[ResolvedORCID]"
+        if len(raw_orcids) > 0:
+            the_orcids = [
+                *self._curate_orcid_list(raw_orcids, fail_ok=False),
+                *resolved_orcids,
+            ]
+        else:
+            the_orcids = resolved_orcids
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
             self.getPID(),

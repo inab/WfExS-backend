@@ -48,6 +48,7 @@ if TYPE_CHECKING:
         MaterializedInput,
         MaterializedOutput,
         RelPath,
+        ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -80,7 +81,7 @@ class AbstractExportPlugin(abc.ABC):
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[URIType]" = [],
-        default_orcids: "Sequence[str]" = [],
+        default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
         import inspect
@@ -99,7 +100,7 @@ class AbstractExportPlugin(abc.ABC):
         self.default_preferred_id = default_preferred_id
 
         self.default_licences: "Tuple[URIType, ...]" = tuple(default_licences)
-        self.default_orcids: "Tuple[str, ...]" = tuple(default_orcids)
+        self.default_orcids: "Tuple[ResolvedORCID, ...]" = tuple(default_orcids)
 
     @abc.abstractmethod
     def push(
@@ -109,7 +110,7 @@ class AbstractExportPlugin(abc.ABC):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
@@ -157,7 +158,7 @@ class AbstractExportPlugin(abc.ABC):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         """
         This method is used to book a new PID,
@@ -230,7 +231,7 @@ class AbstractExportPlugin(abc.ABC):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         """
         This method updates the (draft or not) record metadata,
@@ -247,7 +248,7 @@ class AbstractExportPlugin(abc.ABC):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         """
         This method updates the (draft or not) record metadata,
@@ -267,7 +268,7 @@ class AbstractExportPlugin(abc.ABC):
             title=title,
             description=description,
             licences=licences,
-            orcids=orcids,
+            resolved_orcids=resolved_orcids,
         )
 
     @abc.abstractmethod

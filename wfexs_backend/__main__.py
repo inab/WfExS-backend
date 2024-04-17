@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -813,6 +813,7 @@ def processStagedWorkdirCommand(
                         else:
                             doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
 
+                        resolved_orcids = wfInstance._curate_orcid_list(op_orcids)
                         if (
                             args.staged_workdir_command
                             == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
@@ -827,7 +828,7 @@ def processStagedWorkdirCommand(
                                 filename=args.staged_workdir_command_args[1],
                                 payloads=doMaterializedROCrate,
                                 licences=op_licences,
-                                orcids=op_orcids,
+                                resolved_orcids=resolved_orcids,
                                 crate_pid=op_crate_pid,
                             )
                         else:
@@ -843,7 +844,7 @@ def processStagedWorkdirCommand(
                                     filename=args.staged_workdir_command_args[1],
                                     payloads=doMaterializedROCrate,
                                     licences=op_licences,
-                                    orcids=op_orcids,
+                                    resolved_orcids=resolved_orcids,
                                     crate_pid=op_crate_pid,
                                 )
                             else:
@@ -1406,10 +1407,11 @@ def main() -> None:
         doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
 
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
+        resolved_orcids = wfInstance._curate_orcid_list(op_orcids)
         wfInstance.createStageResearchObject(
             payloads=doMaterializedROCrate,
             licences=op_licences,
-            orcids=op_orcids,
+            resolved_orcids=resolved_orcids,
             crate_pid=op_crate_pid,
         )
 

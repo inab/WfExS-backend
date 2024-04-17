@@ -62,6 +62,7 @@ if TYPE_CHECKING:
         AbsPath,
         AnyContent,
         RelPath,
+        ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -355,7 +356,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[URIType]" = [],
-        default_orcids: "Sequence[str]" = [],
+        default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -396,7 +397,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         _, retpath, relretpath = self.ce.create_remote_path(
             name=cast("RelPath", preferred_id)
@@ -559,7 +560,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         # TODO: implement this (if it makes sense!)
 
@@ -610,7 +611,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
