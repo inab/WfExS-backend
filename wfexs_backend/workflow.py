@@ -309,6 +309,10 @@ class ExportAction(NamedTuple):
     preferred_scheme: "Optional[str]"
     preferred_id: "Optional[str]"
     licences: "Sequence[str]" = []
+    title: "Optional[str]" = None
+    description: "Optional[str]" = None
+    custom_metadata: "Optional[Mapping[str, Any]]" = None
+    community_custom_metadata: "Optional[Mapping[str, Any]]" = None
 
 
 class MaterializedExportAction(NamedTuple):
@@ -2812,7 +2816,7 @@ class WF:
         return expectedOutputs
 
     def parseExportActions(
-        self, raw_actions: "Sequence[Mapping[str, Any]]"
+        self, raw_actions: "Sequence[ExportActionBlock]"
     ) -> "Sequence[ExportAction]":
         assert self.outputs is not None
 
@@ -2865,6 +2869,10 @@ class WF:
                 preferred_scheme=actionDesc.get("preferred-scheme"),
                 preferred_id=actionDesc.get("preferred-pid"),
                 licences=actionDesc.get("licences", []),
+                title=actionDesc.get("title"),
+                description=actionDesc.get("description"),
+                custom_metadata=actionDesc.get("custom-metadata"),
+                community_custom_metadata=actionDesc.get("community-custom-metadata"),
             )
             actions.append(action)
 
@@ -2971,7 +2979,7 @@ class WF:
 
     def _instantiate_export_plugin(
         self,
-        plugin_id: "SymbolicName",
+        action: "ExportAction",
         sec_context: "Optional[SecurityContextConfig]",
         default_licences: "Sequence[URIType]",
         default_orcids: "Sequence[str]",
@@ -2985,22 +2993,22 @@ class WF:
         Licence list should be curated outside this method.
         """
 
-        _export_plugin_clazz = self.wfexs.getExportPluginClass(plugin_id)
+        _export_plugin_clazz = self.wfexs.getExportPluginClass(action.plugin_id)
         if _export_plugin_clazz is None:
-            raise KeyError(f"Unavailable plugin {plugin_id}")
+            raise KeyError(f"Unavailable plugin {action.plugin_id}")
 
-        stagedSetup = self.getStagedSetup()
+        staged_setup = self.getStagedSetup()
 
-        if stagedSetup.work_dir is None:
+        if staged_setup.work_dir is None:
             raise ValueError(
-                f"Staged setup from {stagedSetup.instance_id} is corrupted"
+                f"Staged setup from {staged_setup.instance_id} is corrupted"
             )
 
-        if stagedSetup.is_damaged:
-            raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
+        if staged_setup.is_damaged:
+            raise ValueError(f"Staged setup from {staged_setup.instance_id} is damaged")
 
         export_p = _export_plugin_clazz(
-            refdir=stagedSetup.work_dir,
+            refdir=staged_setup.work_dir,
             setup_block=sec_context,
             default_licences=default_licences,
             default_orcids=default_orcids,
@@ -3107,7 +3115,7 @@ class WF:
                 curated_orcids = self._curate_orcid_list(the_orcids)
 
                 export_p = self._instantiate_export_plugin(
-                    plugin_id=action.plugin_id,
+                    action=action,
                     sec_context=a_setup_block,
                     default_licences=expanded_licences,
                     default_orcids=curated_orcids,
@@ -3122,6 +3130,8 @@ class WF:
                     licences=expanded_licences,
                     orcids=curated_orcids,
                     preferred_id=preferred_id,
+                    initially_required_metadata=action.custom_metadata,
+                    initially_required_community_specific_metadata=action.community_custom_metadata,
                 )
 
                 assert booked_entry is not None
@@ -3133,8 +3143,13 @@ class WF:
                     crate_pid=booked_entry.pid,
                 )
 
-                title = f"Dataset pushed from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname})"
-                description = f"""\
+                if action.title is None:
+                    title = f"Dataset pushed from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname})"
+                else:
+                    title = action.title
+
+                if action.description is None:
+                    description = f"""\
 This dataset has been created and uploaded using {wfexs_backend_name} {verstr},
 whose sources are available at {wfexs_backend_url}.
 
@@ -3142,8 +3157,11 @@ The contents come from staged WfExS working directory {self.staged_setup.instanc
 This is an enumeration of the types of collected contents:
 
 """
-                for e_item in action.what:
-                    description += f" * {e_item.name} ({e_item.type.value})\n"
+                    for e_item in action.what:
+                        description += f" * {e_item.name} ({e_item.type.value})\n"
+                else:
+                    description = action.description
+
                 # Export the contents and obtain a PID
                 new_pids = export_p.push(
                     elems,
@@ -3152,6 +3170,8 @@ This is an enumeration of the types of collected contents:
                     licences=expanded_licences,
                     orcids=curated_orcids,
                     preferred_id=booked_entry.draft_id,
+                    metadata=action.custom_metadata,
+                    community_specific_metadata=action.community_custom_metadata,
                 )
 
                 # Last, register the PID
