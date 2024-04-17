@@ -52,7 +52,13 @@ if TYPE_CHECKING:
         ParamTestData,
     )
 
-from tests.util import get_path
+from tests.common import (
+    TEST_ORCID,
+)
+
+from tests.util import (
+    get_path,
+)
 
 
 # Setting up the decorators
@@ -489,15 +495,15 @@ def test_b2share_update_record_metadata_facets(file_params: "ParamTestData") -> 
 
         updated_meta = bep.update_record_metadata(
             booked_entry,
-            metadata={
-                "creators": MINIMAL_VALID_ENTRY_METADATA["creators"],
-            },
             title=MINIMAL_VALID_ENTRY_METADATA["titles"][0]["title"]
             + " at "
             + datetime.datetime.utcnow().isoformat(),
             description=MINIMAL_VALID_ENTRY_METADATA["descriptions"][0]["description"]
             + " at "
             + datetime.datetime.utcnow().isoformat(),
+            resolved_orcids=[
+                TEST_ORCID,
+            ],
             do_validate=True,
         )
         logger.info(updated_meta)
@@ -612,7 +618,13 @@ def test_b2share_publish_new_pid(file_params: "ParamTestData") -> "None":
             " at " + datetime.datetime.utcnow().isoformat()
         )
 
-        updated_meta = bep.update_record_metadata(booked_entry, entry_metadata)
+        updated_meta = bep.update_record_metadata(
+            booked_entry,
+            metadata=entry_metadata,
+            resolved_orcids=[
+                TEST_ORCID,
+            ],
+        )
         logger.info(updated_meta)
         # assert entry_metadata["metadata"]["title"] == updated_meta.get("metadata", {}).get("title")
         # assert entry_metadata["metadata"]["upload_type"] == updated_meta.get("metadata", {}).get("upload_type")

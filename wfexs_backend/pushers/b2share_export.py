@@ -67,6 +67,7 @@ if TYPE_CHECKING:
         AbsPath,
         AnyContent,
         RelPath,
+        ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -131,7 +132,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[URIType]" = [],
-        default_orcids: "Sequence[str]" = [],
+        default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -401,7 +402,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         if base_id is None:
             base_id = self.default_preferred_id
@@ -467,14 +468,26 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         if len(licences) == 0 and len(self.default_licences) > 0:
             licences = self.default_licences
 
-        if len(orcids) == 0 and len(self.default_orcids) > 0:
-            orcids = self.default_orcids
+        if len(resolved_orcids) == 0 and len(self.default_orcids) > 0:
+            resolved_orcids = self.default_orcids
         # TODO: process addition of both licences and creators
         if len(licences) > 0:
             pass
 
-        if len(orcids) > 0:
-            pass
+        if len(resolved_orcids) > 0:
+            creators = [
+                {
+                    "creator_name": resolved_orcid.record["displayName"],
+                    "name_identifiers": [
+                        {
+                            "name_identifier": resolved_orcid.orcid,
+                            "scheme": "ORCID",
+                        },
+                    ],
+                }
+                for resolved_orcid in resolved_orcids
+            ]
+            minimal_metadata["creators"] = creators
 
         if self.community_id is not None:
             minimal_metadata["community"] = self.community_id
@@ -611,7 +624,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         """
         It returns the publisher internal draft id, the public DOI / link, and the draft record representation
@@ -623,7 +636,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             title=title,
             description=description,
             licences=licences,
-            orcids=orcids,
+            resolved_orcids=resolved_orcids,
         )
 
         return DraftEntry(
@@ -847,7 +860,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         do_validate: "bool" = False,
     ) -> "Mapping[str, Any]":
         """
@@ -871,7 +884,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             or title is not None
             or description is not None
             or len(licences) > 0
-            or len(orcids) > 0
+            or len(resolved_orcids) > 0
         ):
             if metadata is None:
                 updated_metadata = record.get("metadata")
@@ -898,8 +911,20 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             if len(licences) > 0:
                 pass
 
-            if len(orcids) > 0:
-                pass
+            if len(resolved_orcids) > 0:
+                creators = [
+                    {
+                        "creator_name": resolved_orcid.record["displayName"],
+                        "name_identifiers": [
+                            {
+                                "name_identifier": resolved_orcid.orcid,
+                                "scheme": "ORCID",
+                            },
+                        ],
+                    }
+                    for resolved_orcid in resolved_orcids
+                ]
+                updated_metadata["creators"] = creators
 
         seed_metadata = record.get("metadata")
         assert seed_metadata is not None
