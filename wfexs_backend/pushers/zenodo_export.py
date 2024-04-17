@@ -63,6 +63,7 @@ if TYPE_CHECKING:
         AbsPath,
         AnyContent,
         RelPath,
+        ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -100,7 +101,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[URIType]" = [],
-        default_orcids: "Sequence[str]" = [],
+        default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -159,7 +160,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         draft_id, pid, draft_metadata = self._book_pid_internal(
             preferred_id=preferred_id,
@@ -167,7 +168,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             title=title,
             description=description,
             licences=licences,
-            orcids=orcids,
+            resolved_orcids=resolved_orcids,
         )
         if draft_id is None:
             return None
@@ -186,7 +187,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Tuple[Optional[str], Optional[str], Optional[Mapping[str, Any]]]":
         """
         We are booking a new PID, in case the default
@@ -243,18 +244,21 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             if len(licences) == 0 and len(self.default_licences) > 0:
                 licences = self.default_licences
 
-            if len(orcids) == 0 and len(self.default_orcids) > 0:
-                orcids = self.default_orcids
+            if len(resolved_orcids) == 0 and len(self.default_orcids) > 0:
+                resolved_orcids = self.default_orcids
+
+            if modifiable_metadata is None:
+                # A dataset is being uploaded
+                modifiable_metadata = {
+                    "upload_type": "dataset",
+                }
 
             if (
                 title is not None
                 or description is not None
                 or len(licences) > 0
-                or len(orcids) > 0
+                or len(resolved_orcids) > 0
             ):
-                if modifiable_metadata is None:
-                    modifiable_metadata = {}
-
                 if title is not None:
                     modifiable_metadata["title"] = title
 
@@ -265,8 +269,15 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                 if len(licences) > 0:
                     pass
 
-                if len(orcids) > 0:
-                    pass
+                if len(resolved_orcids) > 0:
+                    creators = [
+                        {
+                            "name": resolved_orcid.record["displayName"],
+                            "orcid": resolved_orcid.orcid,
+                        }
+                        for resolved_orcid in resolved_orcids
+                    ]
+                    modifiable_metadata["creators"] = creators
 
             if modifiable_metadata is not None:
                 initial_metadata_entry["metadata"] = modifiable_metadata
@@ -483,7 +494,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         assert draft_entry.metadata is not None
         record = draft_entry.metadata
@@ -494,7 +505,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             title is not None
             or description is not None
             or len(licences) > 0
-            or len(orcids) > 0
+            or len(resolved_orcids) > 0
         ):
             if metadata is None:
                 # In this case, we need the metadata as it is, in order to avoid
@@ -522,8 +533,15 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             if len(licences) > 0:
                 pass
 
-            if len(orcids) > 0:
-                pass
+            if len(resolved_orcids) > 0:
+                creators = [
+                    {
+                        "name": resolved_orcid.record["displayName"],
+                        "orcid": resolved_orcid.orcid,
+                    }
+                    for resolved_orcid in resolved_orcids
+                ]
+                modifiable_metadata["creators"] = creators
 
         # This might not be needed
         if modifiable_metadata is not None:
@@ -576,7 +594,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
         licences: "Sequence[URIType]" = [],
-        orcids: "Sequence[str]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
@@ -601,7 +619,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             title=title,
             description=description,
             licences=licences,
-            orcids=orcids,
+            resolved_orcids=resolved_orcids,
         )
 
         if booked_entry is None:
@@ -748,7 +766,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             title=title,
             description=description,
             licences=licences,
-            orcids=orcids,
+            resolved_orcids=resolved_orcids,
         )
 
         # Last, publish!

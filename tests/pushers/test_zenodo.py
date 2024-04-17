@@ -46,7 +46,13 @@ if TYPE_CHECKING:
         ParamTestData,
     )
 
-from tests.util import get_path
+from tests.common import (
+    TEST_ORCID,
+)
+
+from tests.util import (
+    get_path,
+)
 
 
 # def pytest_generate_tests(metafunc):
@@ -447,12 +453,6 @@ def test_zenodo_update_record_metadata_facets(file_params: "ParamTestData") -> "
         booked_entry = zep.book_pid(
             initially_required_metadata={
                 "upload_type": test_upload_type,
-                "creators": [
-                    {
-                        "name": "Doe, John",
-                        "affiliation": "Zenodo",
-                    }
-                ],
             },
         )
         assert booked_entry is not None
@@ -464,6 +464,9 @@ def test_zenodo_update_record_metadata_facets(file_params: "ParamTestData") -> "
             booked_entry,
             title=test_title,
             description=test_description,
+            resolved_orcids=[
+                TEST_ORCID,
+            ],
         )
         logger.info(updated_meta)
         assert test_title == updated_meta.get("metadata", {}).get("title")
@@ -526,14 +529,14 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
             "upload_type": "dataset",
             "description": "This is my test upload at "
             + datetime.datetime.utcnow().isoformat(),
-            "creators": [
-                {
-                    "name": "Doe, John",
-                    "affiliation": "Zenodo",
-                }
-            ],
         }
-        updated_meta = zep.update_record_metadata(booked_entry, entry_metadata)
+        updated_meta = zep.update_record_metadata(
+            booked_entry,
+            metadata=entry_metadata,
+            resolved_orcids=[
+                TEST_ORCID,
+            ],
+        )
         logger.info(updated_meta)
         assert entry_metadata["title"] == updated_meta.get("metadata", {}).get("title")
         assert entry_metadata["upload_type"] == updated_meta.get("metadata", {}).get(
