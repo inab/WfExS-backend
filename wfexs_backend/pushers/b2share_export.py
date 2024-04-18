@@ -471,9 +471,13 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
 
         if len(resolved_orcids) == 0 and len(self.default_orcids) > 0:
             resolved_orcids = self.default_orcids
-        # TODO: process addition of both licences and creators
+
+        # TODO: study how to represent more than one licence
         if len(licences) > 0:
-            pass
+            minimal_metadata["license"] = {
+                "license": " + ".join(map(lambda l: l.short, licences)),
+                "license_uri": " + ".join(map(lambda l: l.get_uri(), licences)),
+            }
 
         if len(resolved_orcids) > 0:
             creators = [
@@ -910,7 +914,10 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
 
             # TODO: add proper implementation
             if len(licences) > 0:
-                pass
+                updated_metadata["license"] = {
+                    "license": " + ".join(map(lambda l: l.short, licences)),
+                    "license_uri": " + ".join(map(lambda l: l.get_uri(), licences)),
+                }
 
             if len(resolved_orcids) > 0:
                 creators = [

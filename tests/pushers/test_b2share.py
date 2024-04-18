@@ -60,6 +60,11 @@ from tests.util import (
     get_path,
 )
 
+from wfexs_backend.common import (
+    CC_BY_40_LicenceDescription,
+    NoLicenceDescription,
+)
+
 
 # Setting up the decorators
 # if "PYTEST_WFEXS_B2SHARE" in os.environ:
@@ -504,6 +509,9 @@ def test_b2share_update_record_metadata_facets(file_params: "ParamTestData") -> 
             resolved_orcids=[
                 TEST_ORCID,
             ],
+            licences=[
+                CC_BY_40_LicenceDescription,
+            ],
             do_validate=True,
         )
         logger.info(updated_meta)
@@ -623,6 +631,10 @@ def test_b2share_publish_new_pid(file_params: "ParamTestData") -> "None":
             metadata=entry_metadata,
             resolved_orcids=[
                 TEST_ORCID,
+            ],
+            licences=[
+                NoLicenceDescription,
+                CC_BY_40_LicenceDescription,
             ],
         )
         logger.info(updated_meta)
