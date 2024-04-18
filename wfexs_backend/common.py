@@ -269,6 +269,7 @@ class Attribution(NamedTuple):
         return attributions
 
 
+NoLicenceShort: "Final[str]" = "notspecified"
 NoLicence: "Final[URIType]" = cast(
     "URIType", "https://choosealicense.com/no-permission/"
 )
@@ -296,6 +297,22 @@ class LicenceDescription(NamedTuple):
             return NoLicence
 
 
+# According to Workflow RO-Crate, this is the term for no license (or not specified)
+NoLicenceDescription: "Final[LicenceDescription]" = LicenceDescription(
+    short=NoLicenceShort,
+    uris=[NoLicence],
+    description="No license - no permission to use unless the owner grants a licence",
+    is_spdx=False,
+)
+
+CC_BY_40_LICENCE: "Final[str]" = "CC-BY-4.0"
+CC_BY_40_LicenceDescription: "Final[LicenceDescription]" = LicenceDescription(
+    short=CC_BY_40_LICENCE,
+    uris=[cast("URIType", "https://creativecommons.org/licenses/by/4.0/")],
+    description="Creative Commons Attribution 4.0 International",
+)
+
+
 class LicensedURI(NamedTuple):
     """
     uri: The uri
@@ -310,7 +327,7 @@ class LicensedURI(NamedTuple):
     uri: "URIType"
     # One or more licence URLs, either from a repository, or a site like
     # choosealicense.com or spdx.org/licenses/
-    licences: "Tuple[URIType, ...]" = DefaultNoLicenceTuple
+    licences: "Tuple[Union[URIType, LicenceDescription], ...]" = DefaultNoLicenceTuple
     attributions: "Sequence[Attribution]" = []
     secContext: "Optional[SecurityContextConfig]" = None
 

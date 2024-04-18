@@ -47,7 +47,7 @@ from .common import (
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
-    NoLicence,
+    NoLicenceDescription,
     ResolvedORCID,
     StagedExecution,
 )
@@ -96,6 +96,7 @@ if TYPE_CHECKING:
         EnvironmentBlock,
         ExitVal,
         ExportActionBlock,
+        LicenceDescription,
         MaterializedOutput,
         MutableParamsBlock,
         OutputsBlock,
@@ -2952,31 +2953,25 @@ class WF:
 
         return self.exportResults(actions, vault, action_ids, fail_ok=fail_ok)
 
-    def _curate_licence_list(self, licences: "Sequence[str]") -> "Sequence[URIType]":
+    def _curate_licence_list(
+        self, licences: "Sequence[str]"
+    ) -> "Sequence[LicenceDescription]":
         # As these licences can be in short format, resolve them to URIs
-        expanded_licences: "MutableSequence[URIType]" = []
+        expanded_licences: "MutableSequence[LicenceDescription]" = []
         if len(licences) == 0:
-            expanded_licences.append(NoLicence)
+            expanded_licences.append(NoLicenceDescription)
         else:
             licence_matcher = self.GetLicenceMatcher()
             rejected_licences: "MutableSequence[str]" = []
             for lic in licences:
-                expanded_licence_tuple = licence_matcher.match_ShortLicence(lic)
-                if expanded_licence_tuple is None:
-                    if (
-                        urllib.parse.urlparse(lic).scheme
-                        not in AcceptableLicenceSchemes
-                    ):
-                        rejected_licences.append(lic)
-
-                    expanded_licence = lic
+                matched_licence = licence_matcher.matchLicence(lic)
+                if matched_licence is None:
+                    rejected_licences.append(lic)
                 else:
-                    expanded_licence = expanded_licence_tuple.uris[0]
-
-                expanded_licences.append(cast("URIType", expanded_licence))
+                    expanded_licences.append(matched_licence)
 
             if len(rejected_licences) > 0:
-                raise ExportPluginException(
+                raise WFException(
                     f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
                 )
 
@@ -3014,7 +3009,7 @@ class WF:
         self,
         action: "ExportAction",
         sec_context: "Optional[SecurityContextConfig]",
-        default_licences: "Sequence[URIType]",
+        default_licences: "Sequence[LicenceDescription]",
         default_orcids: "Sequence[ResolvedORCID]",
         default_preferred_id: "Optional[str]",
     ) -> "AbstractExportPlugin":
@@ -3966,7 +3961,7 @@ This is an enumeration of the types of collected contents:
     def locateExportItems(
         self,
         items: "Sequence[ExportItem]",
-        licences: "Sequence[str]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "Sequence[AnyContent]":
@@ -4230,7 +4225,7 @@ This is an enumeration of the types of collected contents:
         self,
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[str]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
@@ -4282,7 +4277,6 @@ This is an enumeration of the types of collected contents:
             tempdir=self.tempDir,
             scheme_desc=self.wfexs.describeFetchableSchemes(),
             crate_pid=crate_pid,
-            licence_matcher=self.GetLicenceMatcher(),
         )
 
         wrroc.addWorkflowInputs(
@@ -4312,7 +4306,7 @@ This is an enumeration of the types of collected contents:
         self,
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[str]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
@@ -4362,7 +4356,6 @@ This is an enumeration of the types of collected contents:
             tempdir=self.tempDir,
             scheme_desc=self.wfexs.describeFetchableSchemes(),
             crate_pid=crate_pid,
-            licence_matcher=self.GetLicenceMatcher(),
         )
 
         for stagedExec in self.stagedExecutions:

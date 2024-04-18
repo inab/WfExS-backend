@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyContent,
+        LicenceDescription,
         RelPath,
         ResolvedORCID,
         SecurityContextConfig,
@@ -100,7 +101,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[URIType]" = [],
+        default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
@@ -159,7 +160,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         draft_id, pid, draft_metadata = self._book_pid_internal(
@@ -186,7 +187,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Tuple[Optional[str], Optional[str], Optional[Mapping[str, Any]]]":
         """
@@ -493,7 +494,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         assert draft_entry.metadata is not None
@@ -593,7 +594,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -110,6 +110,7 @@ from .common import (
     Attribution,
     ContentKind,
     DefaultNoLicenceTuple,
+    LicenceDescription,
     LicensedURI,
     META_JSON_POSTFIX,
     URIWithMetadata,
@@ -620,7 +621,12 @@ class SchemeHandlerCacheHandler:
         the_licences: "Tuple[URIType, ...]" = tuple()
         if isinstance(the_remote_file, LicensedURI):
             the_remote_uri = the_remote_file.uri
-            the_licences = the_remote_file.licences
+            the_licences = tuple(
+                licence.get_uri()
+                if isinstance(licence, LicenceDescription)
+                else licence
+                for licence in the_remote_file.licences
+            )
         elif isinstance(the_remote_file, urllib.parse.ParseResult):
             the_remote_uri = cast("URIType", urllib.parse.urlunparse(the_remote_file))
         else:
@@ -913,7 +919,12 @@ class SchemeHandlerCacheHandler:
                     if isinstance(a_remote_file, LicensedURI):
                         the_remote_file = a_remote_file.uri
                         attachedSecContext = a_remote_file.secContext
-                        the_licences = a_remote_file.licences
+                        the_licences = tuple(
+                            a_licence.get_uri()
+                            if isinstance(a_licence, LicenceDescription)
+                            else a_licence
+                            for a_licence in a_remote_file.licences
+                        )
                     else:
                         the_remote_file = a_remote_file
 

@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyContent,
+        LicenceDescription,
         RelPath,
         ResolvedORCID,
         SecurityContextConfig,
@@ -80,7 +81,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         return None
@@ -121,7 +122,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         # This is a no-op
@@ -140,7 +141,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,

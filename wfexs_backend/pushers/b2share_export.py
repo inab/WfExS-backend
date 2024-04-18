@@ -66,6 +66,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyContent,
+        LicenceDescription,
         RelPath,
         ResolvedORCID,
         SecurityContextConfig,
@@ -131,7 +132,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[URIType]" = [],
+        default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
@@ -401,7 +402,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         do_validate: "bool" = False,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         if base_id is None:
@@ -623,7 +624,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         """
@@ -859,7 +860,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         do_validate: "bool" = False,
     ) -> "Mapping[str, Any]":

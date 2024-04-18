@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyContent,
+        LicenceDescription,
         MaterializedInput,
         MaterializedOutput,
         RelPath,
@@ -80,7 +81,7 @@ class AbstractExportPlugin(abc.ABC):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[URIType]" = [],
+        default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
@@ -99,7 +100,9 @@ class AbstractExportPlugin(abc.ABC):
         # which can be updated through a call to book_pid
         self.default_preferred_id = default_preferred_id
 
-        self.default_licences: "Tuple[URIType, ...]" = tuple(default_licences)
+        self.default_licences: "Tuple[LicenceDescription, ...]" = tuple(
+            default_licences
+        )
         self.default_orcids: "Tuple[ResolvedORCID, ...]" = tuple(default_orcids)
 
     @abc.abstractmethod
@@ -109,7 +112,7 @@ class AbstractExportPlugin(abc.ABC):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
@@ -157,7 +160,7 @@ class AbstractExportPlugin(abc.ABC):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         """
@@ -230,7 +233,7 @@ class AbstractExportPlugin(abc.ABC):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         """
@@ -247,7 +250,7 @@ class AbstractExportPlugin(abc.ABC):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         """

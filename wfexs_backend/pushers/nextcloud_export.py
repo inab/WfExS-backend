@@ -61,6 +61,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyContent,
+        LicenceDescription,
         RelPath,
         ResolvedORCID,
         SecurityContextConfig,
@@ -291,7 +292,7 @@ class NextcloudContentExporter:
         relpath: "str",
         emails: "Sequence[str]",
         expire_in: "Optional[int]" = None,
-        licences: "Tuple[URIType, ...]" = tuple(),
+        licences: "Tuple[LicenceDescription, ...]" = tuple(),
     ) -> "Sequence[LicensedURI]":
         retvals = []
         permissions = ExtendedNextcloudClient.OCS_PERMISSION_READ
@@ -355,7 +356,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[URIType]" = [],
+        default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
@@ -396,7 +397,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
         _, retpath, relretpath = self.ce.create_remote_path(
@@ -559,7 +560,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Mapping[str, Any]":
         # TODO: implement this (if it makes sense!)
@@ -569,7 +570,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
     def _create_share_links(
         self,
         remote_relpath: "str",
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
     ) -> "Tuple[Sequence[LicensedURI], Sequence[str], Optional[int]]":
         # Generate the share link(s) once all the contents are there
         email_addresses = self.setup_block.get("email-addresses")
@@ -610,7 +611,7 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,

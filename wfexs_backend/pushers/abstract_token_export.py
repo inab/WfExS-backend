@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyContent,
+        LicenceDescription,
         MaterializedInput,
         MaterializedOutput,
         RelPath,
@@ -75,7 +76,7 @@ class AbstractTokenExportPlugin(AbstractExportPlugin):
         self,
         refdir: "AbsPath",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[URIType]" = [],
+        default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],
         default_preferred_id: "Optional[str]" = None,
     ):
@@ -129,7 +130,7 @@ class AbstractTokenExportPlugin(AbstractExportPlugin):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[URIType]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,

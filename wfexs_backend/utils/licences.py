@@ -49,6 +49,7 @@ import inspect
 import json
 import logging
 import os.path
+import urllib.parse
 
 import xdg.BaseDirectory
 
@@ -58,8 +59,9 @@ from ..cache_handler import (
 )
 
 from ..common import (
+    CC_BY_40_LicenceDescription,
     LicenceDescription,
-    NoLicence,
+    NoLicenceDescription,
 )
 
 from ..fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
@@ -72,10 +74,6 @@ AcceptableLicenceSchemes: "Final[Set[str]]" = {
     "https",
     "data",
 }
-
-# According to Workflow RO-Crate, this is the term for no license (or not specified)
-NoLicenceShort: "Final[str]" = "notspecified"
-CC_BY_40_LICENCE: "Final[str]" = "CC-BY-4.0"
 
 # The correspondence from short Workflow RO-Crate licences and their URIs
 # taken from https://about.workflowhub.eu/Workflow-RO-Crate/#supported-licenses
@@ -135,11 +133,7 @@ WorkflowHubShortLicencesList: "Final[Sequence[LicenceDescription]]" = [
         uris=[cast("URIType", "https://opensource.org/licenses/BSL-1.0")],
         description="Boost Software License 1.0",
     ),
-    LicenceDescription(
-        short=CC_BY_40_LICENCE,
-        uris=[cast("URIType", "https://creativecommons.org/licenses/by/4.0/")],
-        description="Creative Commons Attribution 4.0 International",
-    ),
+    CC_BY_40_LicenceDescription,
     LicenceDescription(
         short="CC0-1.0",
         uris=[cast("URIType", "https://creativecommons.org/publicdomain/zero/1.0/")],
@@ -512,17 +506,12 @@ WorkflowHubShortLicencesList: "Final[Sequence[LicenceDescription]]" = [
         uris=[cast("URIType", "https://opensource.org/licenses/Zlib")],
         description="zlib/libpng license",
     ),
-    LicenceDescription(
-        short=NoLicenceShort,
-        uris=[NoLicence],
-        description="No license - no permission to use unless the owner grants a licence",
-        is_spdx=False,
-    ),
+    NoLicenceDescription,
 ]
 
 
 class LicenceMatcher:
-    DEFAULT_SPDX_VERSION: "Final[str]" = "3.22"
+    DEFAULT_SPDX_VERSION: "Final[str]" = "3.23"
 
     SPDX_JSON_URL_TEMPLATE: "Final[str]" = "https://raw.githubusercontent.com/spdx/license-list-data/v{}/json/licenses.json"
 
@@ -607,6 +596,22 @@ class LicenceMatcher:
 
     def match_LongLicence(self, long_licence: "str") -> "Optional[LicenceDescription]":
         return self.dict_long_licences.get(long_licence)
+
+    def matchLicence(self, licence: "str") -> "Optional[LicenceDescription]":
+        resolved_licence = self.match_ShortLicence(licence)
+        if resolved_licence is None:
+            resolved_licence = self.match_LongLicence(licence)
+        if resolved_licence is None:
+            if urllib.parse.urlparse(licence).scheme in AcceptableLicenceSchemes:
+                resolved_licence = LicenceDescription(
+                    short=licence,
+                    uris=[
+                        cast("URIType", licence),
+                    ],
+                    description=f"Custom licence {licence} . Please visit the link to learn more details",
+                    is_spdx=False,
+                )
+        return resolved_licence
 
     def describeDocumentedLicences(self) -> "Sequence[LicenceDescription]":
         return list(self.dict_short_licences.values())
