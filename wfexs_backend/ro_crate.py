@@ -117,7 +117,7 @@ from .fetchers import (
     FetcherException,
 )
 
-from .fetchers.internal.orcid import (
+from .utils.orcid import (
     validate_orcid,
 )
 

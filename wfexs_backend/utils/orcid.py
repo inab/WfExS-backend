@@ -41,18 +41,18 @@ if TYPE_CHECKING:
         Final,
     )
 
-    from ...common import (
+    from ..common import (
         ORCIDPublicRecord,
         URIType,
         URIWithMetadata,
     )
 
 
-from ...common import (
+from ..common import (
     ResolvedORCID,
 )
-from ..http import fetchClassicURL
-from .. import FetcherException
+from ..fetchers.http import fetchClassicURL
+from ..fetchers import FetcherException
 
 ORCID_HOST: "Final[str]" = "orcid.org"
 ORCID_PATTERN: "Final[Pattern[str]]" = re.compile(r"^0\d{3}-\d{4}-\d{4}-\d{3}(?:\d|X)$")

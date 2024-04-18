@@ -275,6 +275,27 @@ NoLicence: "Final[URIType]" = cast(
 DefaultNoLicenceTuple: "Tuple[URIType, ...]" = (NoLicence,)
 
 
+class LicenceDescription(NamedTuple):
+    """
+    This tuple is used to describe licences
+    """
+
+    short: "str"
+    uris: "Sequence[URIType]"
+    description: "str"
+    is_spdx: "bool" = True
+
+    def get_uri(self) -> "URIType":
+        if self.is_spdx:
+            return cast("URIType", f"https://spdx.org/licenses/{self.short}")
+        elif len(self.uris) > 0:
+            return self.uris[0]
+        # TODO: cover the case of custom licences
+        # where text is available, but it is not in any URL
+        else:
+            return NoLicence
+
+
 class LicensedURI(NamedTuple):
     """
     uri: The uri
