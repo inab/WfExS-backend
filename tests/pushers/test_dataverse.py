@@ -64,6 +64,10 @@ from tests.util import (
     get_path,
 )
 
+from wfexs_backend.common import (
+    CC_BY_40_LicenceDescription,
+    NoLicenceDescription,
+)
 
 dataverse_params = pytest.mark.dataverse_params()
 
@@ -614,6 +618,9 @@ def test_dataverse_update_record_metadata_facets(
             resolved_orcids=[
                 TEST_ORCID,
             ],
+            licences=[
+                CC_BY_40_LicenceDescription,
+            ],
         )
         logger.info(updated_meta)
         checked_types: "Set[str]" = set()
@@ -731,6 +738,10 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
             metadata=entry_metadata,
             resolved_orcids=[
                 TEST_ORCID,
+            ],
+            licences=[
+                CC_BY_40_LicenceDescription,
+                NoLicenceDescription,
             ],
         )
         logger.info(updated_meta)

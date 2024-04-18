@@ -40,7 +40,9 @@ import xml.dom
 from defusedxml import ElementTree
 
 from ..common import (
+    CC_BY_40_LicenceDescription,
     MaterializedContent,
+    NoLicenceDescription,
     ResolvedORCID,
     URIWithMetadata,
 )
@@ -72,6 +74,8 @@ if TYPE_CHECKING:
     from _typeshed import SupportsRead
 
     import urllib.request
+
+    import xml.dom.minidom
 
     from ..common import (
         AbsPath,
@@ -136,6 +140,24 @@ class DataversePublisher(AbstractTokenExportPlugin):
     PURL_PREFIX: "Final[str]" = "dcterms"
     SWORD_TERMS_NAMESPACE: "Final[str]" = "http://purl.org/net/sword/terms/"
     SWORD_TERMS_PREFIX: "Final[str]" = "st"
+
+    DATAVERSE_VALID_LICENCES: "Final[Set[str]]" = {
+        "CC0 1.0",
+        "CC BY 4.0",
+        "CC BY-NC 4.0",
+        "CC BY-NC-ND 4.0",
+        "CC BY-NC-SA 4.0",
+        "CC BY-ND 4.0",
+        "CC BY-SA 4.0",
+        "PDDL-1.0",
+        "ODC-By 1.0",
+        "ODbL 1.0",
+        "OGL UK 3.0",
+    }
+    VALID_LICENCES_MAPPING: "Final[Mapping[str, str]]" = {
+        dataverse_label.replace(" ", "-"): dataverse_label
+        for dataverse_label in DATAVERSE_VALID_LICENCES
+    }
 
     XML_NS: "Final[Dict[str, str]]" = {
         SWORD_APP_PREFIX: SWORD_APP_NAMESPACE,
@@ -245,6 +267,12 @@ class DataversePublisher(AbstractTokenExportPlugin):
             else None
         )
 
+    @staticmethod
+    def _genLicenceText(licences: "Sequence[LicenceDescription]") -> "str":
+        return "This dataset has next licences:\n\n" + "\n".join(
+            map(lambda licence: licence.short + " => " + licence.get_uri(), licences)
+        )
+
     def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
         if pid.isnumeric():
             req = urllib.request.Request(
@@ -319,6 +347,10 @@ class DataversePublisher(AbstractTokenExportPlugin):
 
         if len(licences) == 0:
             licences = self.default_licences
+
+        # Corner case, as Dataverse always requires providing a licence
+        if len(licences) == 0:
+            licences = [CC_BY_40_LicenceDescription]
 
         if len(resolved_orcids) == 0:
             resolved_orcids = self.default_orcids
@@ -400,13 +432,28 @@ class DataversePublisher(AbstractTokenExportPlugin):
         description_node.appendChild(xdoc.createTextNode(description))
         xroot.appendChild(description_node)
 
-        # TODO: properly represent licences
-        for licence in licences:
-            licence_node = xdoc.createElementNS(
-                self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:license"
+        # Dataverse only supports a single licence from the restricted list it manages
+        licence_node: "Optional[xml.dom.minidom.Element]" = None
+        if len(licences) == 1:
+            licence_label = self.VALID_LICENCES_MAPPING.get(
+                licences[0].short, licences[0].short
             )
-            licence_node.appendChild(xdoc.createTextNode("CC0 1.0"))
-            xroot.appendChild(licence_node)
+            if licence_label in self.DATAVERSE_VALID_LICENCES:
+                licence_node = xdoc.createElementNS(
+                    self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:license"
+                )
+                # Assertion needed by mypy
+                assert licence_node is not None
+                licence_node.appendChild(xdoc.createTextNode(licence_label))
+
+        # Otherwise, a compound description has to be provided
+        if licence_node is None:
+            licence_node = xdoc.createElementNS(
+                self.PURL_NAMESPACE, f"{self.PURL_PREFIX}:rights"
+            )
+            licence_text = self._genLicenceText(licences)
+            licence_node.appendChild(xdoc.createTextNode(licence_text))
+        xroot.appendChild(licence_node)
 
         req = urllib.request.Request(
             url=self.dataverse_collection_url,
@@ -992,12 +1039,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
             if key in cleaned_metadata:
                 del cleaned_metadata[key]
 
-        if (
-            title is not None
-            or description is not None
-            or len(licences) > 0
-            or len(resolved_orcids) > 0
-        ):
+        if title is not None or description is not None or len(resolved_orcids) > 0:
             fields = (
                 cleaned_metadata.setdefault("metadataBlocks", {})
                 .setdefault("citation", {})
@@ -1096,9 +1138,27 @@ class DataversePublisher(AbstractTokenExportPlugin):
 
                 authors_field["value"] = field_values
 
-            # TODO: implement these
-            if len(licences) > 0:
-                pass
+        if len(licences) > 0:
+            # First, remove previous elements
+            for k in ("termsOfUse", "license"):
+                if k in cleaned_metadata:
+                    del cleaned_metadata[k]
+
+            added_licence = False
+            if len(licences) == 1:
+                licence_label = self.VALID_LICENCES_MAPPING.get(
+                    licences[0].short, licences[0].short
+                )
+                if licence_label in self.DATAVERSE_VALID_LICENCES:
+                    cleaned_metadata["license"] = {
+                        "name": licence_label,
+                        "uri": licences[0].get_uri(),
+                    }
+                    added_licence = True
+
+            # Otherwise, a compound description has to be provided
+            if not added_licence:
+                cleaned_metadata["termsOfUse"] = self._genLicenceText(licences)
 
         query = {
             "persistentId": draft_entry.pid,
