@@ -54,6 +54,11 @@ from tests.util import (
     get_path,
 )
 
+from wfexs_backend.common import (
+    CC_BY_40_LicenceDescription,
+    NoLicenceDescription,
+)
+
 
 # def pytest_generate_tests(metafunc):
 #    if "stringinput" in metafunc.fixturenames:
@@ -467,6 +472,9 @@ def test_zenodo_update_record_metadata_facets(file_params: "ParamTestData") -> "
             resolved_orcids=[
                 TEST_ORCID,
             ],
+            licences=[
+                CC_BY_40_LicenceDescription,
+            ],
         )
         logger.info(updated_meta)
         assert test_title == updated_meta.get("metadata", {}).get("title")
@@ -535,6 +543,10 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
             metadata=entry_metadata,
             resolved_orcids=[
                 TEST_ORCID,
+            ],
+            licences=[
+                CC_BY_40_LicenceDescription,
+                NoLicenceDescription,
             ],
         )
         logger.info(updated_meta)

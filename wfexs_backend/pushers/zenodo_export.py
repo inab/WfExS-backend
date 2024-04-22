@@ -250,9 +250,10 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
 
             if modifiable_metadata is None:
                 # A dataset is being uploaded
-                modifiable_metadata = {
-                    "upload_type": "dataset",
-                }
+                modifiable_metadata = {}
+
+            if modifiable_metadata.get("upload_type") is None:
+                modifiable_metadata["upload_type"] = "dataset"
 
             if (
                 title is not None
@@ -266,9 +267,21 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                 if description is not None:
                     modifiable_metadata["description"] = description
 
-                # TODO: process addition of both licences and creators
                 if len(licences) > 0:
-                    pass
+                    # Zenodo has a severe restriction in its REST API
+                    # Only first licence is include due a severe limitation
+                    # of REST API
+                    # modifiable_metadata["license"] = [
+                    #     {
+                    #         "id": licence.short
+                    #     }
+                    #     for licence in licences
+                    # ]
+                    modifiable_metadata["license"] = {"id": licences[0].short}
+                    if len(licences) > 1:
+                        self.logger.warning(
+                            f"Only the first licence was attached to record due Zenodo technical limitations"
+                        )
 
                 if len(resolved_orcids) > 0:
                     creators = [
@@ -530,9 +543,20 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             if description is not None:
                 modifiable_metadata["description"] = description
 
-            # TODO: add the code to properly integrate licences and orcids
             if len(licences) > 0:
-                pass
+                # Only first licence is include due a severe limitation
+                # of REST API
+                # modifiable_metadata["license"] = [
+                #     {
+                #         "id": licence.short
+                #     }
+                #     for licence in licences
+                # ]
+                modifiable_metadata["license"] = {"id": licences[0].short}
+                if len(licences) > 1:
+                    self.logger.warning(
+                        f"Only the first licence was attached to record {draft_entry.pid} due Zenodo technical limitations"
+                    )
 
             if len(resolved_orcids) > 0:
                 creators = [
@@ -587,199 +611,3 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             ) from e
 
         return pub_update
-
-    def push(
-        self,
-        items: "Sequence[AnyContent]",
-        preferred_id: "Optional[str]" = None,
-        title: "Optional[str]" = None,
-        description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
-        metadata: "Optional[Mapping[str, Any]]" = None,
-        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
-    ) -> "Sequence[URIWithMetadata]":
-        """
-        These contents will be included in the Zenodo share
-        """
-
-        if len(items) == 0:
-            raise ValueError(
-                "This plugin requires at least one element to be processed"
-            )
-
-        # We are starting to learn whether we already have a PID
-        internal_id = (
-            self.default_preferred_id if preferred_id is None else preferred_id
-        )
-
-        booked_entry = self.book_pid(
-            preferred_id=internal_id,
-            initially_required_metadata=metadata,
-            initially_required_community_specific_metadata=community_specific_metadata,
-            title=title,
-            description=description,
-            licences=licences,
-            resolved_orcids=resolved_orcids,
-        )
-
-        if booked_entry is None:
-            raise ExportPluginException(self._customized_book_pid_error_string)
-
-        # Now, obtain the metadata, which is needed
-        assert booked_entry.metadata is not None
-
-        # TODO: Finish this
-        # TODO: include licences in the metadata submitted to Zenodo
-
-        # Upload
-        failed = False
-        relitems: "Set[str]" = set()
-        for i_item, item in enumerate(items):
-            relitem = os.path.relpath(item.local, self.refdir)
-            # Outside the relative directory
-            if relitem.startswith(os.path.pardir):
-                # This is needed to avoid collisions
-                prefname: "Optional[RelPath]"
-                if isinstance(item, MaterializedContent):
-                    prefname = item.prettyFilename
-                else:
-                    prefname = item.preferredFilename
-
-                if prefname is None:
-                    prefname = cast("RelPath", os.path.basename(item.local))
-
-            while prefname in relitems:
-                baserelitem = cast(
-                    "RelPath", str(i_item) + "_" + os.path.basename(prefname)
-                )
-                dirrelitem = os.path.dirname(prefname)
-                prefname = (
-                    cast("RelPath", os.path.join(dirrelitem, baserelitem))
-                    if len(dirrelitem) > 0
-                    else baserelitem
-                )
-
-            assert prefname is not None
-            relitem = prefname
-            relitems.add(relitem)
-
-            try:
-                upload_response = self.upload_file_to_draft(
-                    booked_entry, item.local, relitem
-                )
-            except urllib.error.HTTPError as he:
-                failed = True
-
-        if failed:
-            file_bucket_prefix = self.get_file_bucket_prefix(booked_entry)
-            raise ExportPluginException(
-                f"Some contents could not be uploaded to entry {booked_entry.metadata.get('id')}, bucket {file_bucket_prefix}"
-            )
-
-        # Add metadata to the entry
-        # Publish the entry
-        entry_metadata = {
-            "creators": [
-                {
-                    "person_or_org": {
-                        "type": "personal",
-                        "name": "Fernández, José M.",
-                        "given_name": "José M.",
-                        "family_name": "Fernández",
-                        "identifiers": [
-                            {"identifier": "0000-0002-4806-5140", "scheme": "orcid"}
-                        ],
-                    },
-                    "role": {
-                        "id": "datacollector",
-                        "title": {"de": "DatensammlerIn", "en": "Data collector"},
-                    },
-                    "affiliations": [
-                        {
-                            "id": "05sd8tv96",
-                            "name": "Barcelona Supercomputing Center",
-                        }
-                    ],
-                }
-            ],
-            "title": "My first upload",
-            "related_identifiers": [
-                {
-                    "identifier": "https://w3id.org/ro/crate/1.1",
-                    "scheme": "w3id",
-                    "relation_type": {
-                        "id": "requires",
-                        "title": {"de": "Setzt voraus", "en": "Requires"},
-                    },
-                    "resource_type": {
-                        "id": "publication",
-                        "title": {"de": "Publikation", "en": "Publication"},
-                    },
-                },
-                {
-                    "identifier": "https://w3id.org/ro/wfrun/process/0.3",
-                    "scheme": "w3id",
-                    "relation_type": {
-                        "id": "requires",
-                        "title": {"de": "Setzt voraus", "en": "Requires"},
-                    },
-                    "resource_type": {
-                        "id": "publication",
-                        "title": {"de": "Publikation", "en": "Publication"},
-                    },
-                },
-                {
-                    "identifier": "https://w3id.org/ro/wfrun/workflow/0.3",
-                    "scheme": "w3id",
-                    "relation_type": {
-                        "id": "requires",
-                        "title": {"de": "Setzt voraus", "en": "Requires"},
-                    },
-                    "resource_type": {
-                        "id": "publication",
-                        "title": {"de": "Publikation", "en": "Publication"},
-                    },
-                },
-            ],
-            "rights": [
-                {
-                    "id": "cc-by-4.0",
-                    "title": {"en": "Creative Commons Attribution 4.0 International"},
-                    "description": {
-                        "en": "The Creative Commons Attribution license allows re-distribution and re-use of a licensed work on the condition that the creator is appropriately credited."
-                    },
-                    "icon": "cc-by-icon",
-                    "props": {
-                        "url": "https://creativecommons.org/licenses/by/4.0/legalcode",
-                        "scheme": "spdx",
-                    },
-                }
-            ],
-            "description": "This is my first upload",
-        }
-
-        # This might not be needed
-        meta_update = self.update_record_metadata(
-            booked_entry,
-            metadata=entry_metadata,
-            community_specific_metadata=community_specific_metadata,
-            title=title,
-            description=description,
-            licences=licences,
-            resolved_orcids=resolved_orcids,
-        )
-
-        # Last, publish!
-        pub_update = self.publish_draft_record(booked_entry)
-
-        shared_uris = []
-        shared_uris.append(
-            URIWithMetadata(
-                uri=cast("URIType", booked_entry.pid),
-                # TODO: Add meaninful metadata
-                metadata=booked_entry.metadata,
-            )
-        )
-
-        return shared_uris
