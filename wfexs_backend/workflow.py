@@ -37,9 +37,11 @@ import warnings
 
 from typing import (
     cast,
+    Dict,
     NamedTuple,
     Pattern,
     TYPE_CHECKING,
+    TypeVar,
 )
 
 from .common import (
@@ -337,6 +339,20 @@ class MaterializedExportAction(NamedTuple):
     when: "datetime.datetime" = datetime.datetime.now(
         tz=datetime.timezone.utc
     ).astimezone()
+
+
+KT = TypeVar("KT")
+VT = TypeVar("VT")
+
+
+class DefaultMissing(Dict[KT, VT]):
+    """
+    This is inspired in the example available at
+    https://docs.python.org/3/library/stdtypes.html#str.format_map
+    """
+
+    def __missing__(self, key: KT) -> VT:
+        return cast(VT, key)
 
 
 # The list of classes to be taken into account
@@ -1860,7 +1876,13 @@ class WF:
 
         return remote_pairs
 
-    def _formatStringFromPlaceHolders(self, the_string: "str") -> "str":
+    def _formatStringFromPlaceHolders(
+        self, the_string: "str", placeholders: "Optional[PlaceHoldersBlock]" = None
+    ) -> "str":
+        # Default placeholders are workflow level ones
+        if placeholders is None:
+            placeholders = self.placeholders
+
         i_l_the_string = the_string.find("{")
         i_r_the_string = the_string.find("}")
         if (
@@ -1869,7 +1891,11 @@ class WF:
             and i_l_the_string < i_r_the_string
         ):
             try:
-                the_string = the_string.format(**self.placeholders)
+                """
+                This is inspired in the example available at
+                https://docs.python.org/3/library/stdtypes.html#str.format_map
+                """
+                the_string = the_string.format_map(DefaultMissing(placeholders))
             except:
                 # Ignore failures
                 self.logger.warning(
@@ -3171,17 +3197,28 @@ class WF:
                     crate_pid=booked_entry.pid,
                 )
 
+                placeholders: "Mapping[str, str]" = {
+                    "instance_id": self.staged_setup.instance_id,
+                    "nickname": self.staged_setup.nickname
+                    if self.staged_setup.nickname is not None
+                    else self.staged_setup.instance_id,
+                    "wfexs_verstr": verstr,
+                    "wfexs_backend_name": wfexs_backend_name,
+                    "wfexs_backend_url": wfexs_backend_url,
+                }
+
                 if action.title is None:
-                    title = f"Dataset pushed from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname})"
+                    title = "Dataset pushed from staged WfExS working directory {instance_id} ({nickname})"
                 else:
                     title = action.title
+                title = self._formatStringFromPlaceHolders(title, placeholders)
 
                 if action.description is None:
-                    description = f"""\
-This dataset has been created and uploaded using {wfexs_backend_name} {verstr},
+                    description = """\
+This dataset has been created and uploaded using {wfexs_backend_name} {wfexs_verstr},
 whose sources are available at {wfexs_backend_url}.
 
-The contents come from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname}).
+The contents come from staged WfExS working directory {instance_id} ({nickname}).
 This is an enumeration of the types of collected contents:
 
 """
@@ -3189,6 +3226,9 @@ This is an enumeration of the types of collected contents:
                         description += f" * {e_item.name} ({e_item.type.value})\n"
                 else:
                     description = action.description
+                description = self._formatStringFromPlaceHolders(
+                    description, placeholders
+                )
 
                 # Export the contents and obtain a PID
                 new_pids = export_p.push(
