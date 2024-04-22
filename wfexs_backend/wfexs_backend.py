@@ -353,6 +353,11 @@ class WfExSBackend:
             # which is not supported in every Python interpreter
             orig_scrypt_supported = crypt4gh.keys.c4gh.scrypt_supported
             crypt4gh.keys.c4gh.scrypt_supported = False
+
+            # This is needed to protect WfExS from unwanted umask changes
+            # from the reference crypt4gh library
+            umask = os.umask(0)
+            os.umask(umask)
             try:
                 crypt4gh.keys.c4gh.generate(
                     privKey,
@@ -361,6 +366,7 @@ class WfExSBackend:
                     comment=comment.encode("utf-8"),
                 )
             finally:
+                os.umask(umask)
                 crypt4gh.keys.c4gh.scrypt_supported = orig_scrypt_supported
         elif not crypt4gh.keys.c4gh.scrypt_supported:
             logger.info(
