@@ -63,7 +63,10 @@ if TYPE_CHECKING:
 
 from ..utils.contents import link_or_copy
 
-from . import AbstractExportPlugin
+from . import (
+    AbstractExportPlugin,
+    DraftEntry,
+)
 from .abstract_contexted_export import AbstractContextedExportPlugin
 
 
@@ -84,7 +87,25 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
-        return None
+        # We are starting to learn whether we already have a PID
+        preferred_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
+        if (preferred_id is None) or len(preferred_id) == 0:
+            raise ValueError("This plugin needs a preferred_id to generate a PID")
+
+        p = urllib.parse.urlparse(preferred_id)
+        if p.scheme == "":
+            raise ValueError(
+                "This plugin needs that the provided preferred_id is a URI (i.e. with a scheme)"
+            )
+
+        return DraftEntry(
+            draft_id=preferred_id,
+            pid=preferred_id,
+            metadata=None,
+            raw_metadata=None,
+        )
 
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
         """
@@ -105,36 +126,6 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
 
         return None
 
-    def upload_file_to_draft(
-        self,
-        draft_entry: "DraftEntry",
-        filename: "Union[str, IO[bytes]]",
-        remote_filename: "Optional[str]",
-        content_size: "Optional[int]" = None,
-    ) -> "Mapping[str, Any]":
-        # This is a no-op
-        return {}
-
-    def update_record_metadata(
-        self,
-        draft_entry: "DraftEntry",
-        metadata: "Optional[Mapping[str, Any]]" = None,
-        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
-        title: "Optional[str]" = None,
-        description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
-    ) -> "Mapping[str, Any]":
-        # This is a no-op
-        return {}
-
-    def publish_draft_record(
-        self,
-        draft_entry: "DraftEntry",
-    ) -> "Mapping[str, Any]":
-        # This is a no-op
-        return {}
-
     def push(
         self,
         items: "Sequence[AnyContent]",
@@ -146,9 +137,9 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
-        if self.wfInstance is None:
+        if self.wfexs is None:
             raise ValueError(
-                "This plugin needs to be contextualized with the workflow instance"
+                "This plugin needs to be contextualized with the WfExS instance"
             )
 
         """
@@ -170,9 +161,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         metadata = None
         try:
             if len(items) > 1:
-                tmpdir = tempfile.mkdtemp(
-                    dir=self.wfInstance.getStagedSetup().temp_dir, suffix="export"
-                )
+                tmpdir = tempfile.mkdtemp(dir=self.tempdir, suffix="export")
                 source = tmpdir
 
                 # Now, transfer all of them
@@ -218,7 +207,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
                 else self.default_licences,
             )
 
-            cached_uri = self.wfInstance.wfexs.cacheFetch(
+            cached_uri = self.wfexs.cacheFetch(
                 uri_to_fetch, CacheType.Input, offline=False, ignoreCache=True
             )
         finally:

@@ -23,9 +23,15 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from os import (
+        PathLike,
+    )
+
     from typing import (
+        Any,
         Optional,
         Sequence,
+        Union,
     )
 
     from ..common import (
@@ -36,7 +42,7 @@ if TYPE_CHECKING:
         URIType,
     )
 
-    from ..workflow import WF
+    from ..wfexs_backend import WfExSBackend
 
 from . import AbstractExportPlugin
 
@@ -62,7 +68,13 @@ class AbstractContextedExportPlugin(AbstractExportPlugin):
             default_orcids=default_orcids,
             default_preferred_id=default_preferred_id,
         )
-        self.wfInstance: "Optional[WF]" = None
+        self.wfexs: "Optional[WfExSBackend]" = None
+        self.tempdir: "Optional[Union[str, PathLike[Any]]]" = None
 
-    def set_workflow_context(self, wfInstance: "WF") -> "None":
-        self.wfInstance = wfInstance
+    def set_wfexs_context(
+        self,
+        wfexs: "WfExSBackend",
+        tempdir: "Optional[Union[str, PathLike[Any]]]" = None,
+    ) -> "None":
+        self.wfexs = wfexs
+        self.tempdir = tempdir

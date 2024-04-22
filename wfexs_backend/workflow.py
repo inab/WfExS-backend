@@ -3069,8 +3069,9 @@ class WF:
             default_preferred_id=default_preferred_id,
         )
 
+        # Context-based export plugins need this initialization
         if isinstance(export_p, AbstractContextedExportPlugin):
-            export_p.set_workflow_context(self)
+            export_p.set_wfexs_context(self.wfexs, self.getStagedSetup().temp_dir)
 
         return export_p
 
@@ -3188,7 +3189,10 @@ class WF:
                     initially_required_community_specific_metadata=action.community_custom_metadata,
                 )
 
-                assert booked_entry is not None
+                if booked_entry is None:
+                    raise ExportActionException(
+                        f"Unable to book a PID for dataset export using export plugin with id {action.plugin_id}"
+                    )
 
                 elems = self.locateExportItems(
                     action.what,
