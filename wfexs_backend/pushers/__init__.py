@@ -198,6 +198,16 @@ class AbstractExportPlugin(abc.ABC):
 
         pass
 
+    @classmethod
+    def PluginName(cls) -> "SymbolicName":
+        return cls.PLUGIN_NAME
+
+
+class AbstractDraftedExportPlugin(AbstractExportPlugin):
+    """
+    Abstract class to model drafted stateful export plugins
+    """
+
     @abc.abstractmethod
     def upload_file_to_draft(
         self,
@@ -298,7 +308,3 @@ class AbstractExportPlugin(abc.ABC):
             )
 
         return self.publish_draft_record(draft_record)
-
-    @classmethod
-    def PluginName(cls) -> "SymbolicName":
-        return cls.PLUGIN_NAME

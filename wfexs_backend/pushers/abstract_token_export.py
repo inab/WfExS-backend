@@ -26,6 +26,7 @@ from typing import (
     NamedTuple,
     TYPE_CHECKING,
 )
+import urllib.error
 import urllib.parse
 
 if TYPE_CHECKING:
@@ -61,7 +62,7 @@ if TYPE_CHECKING:
     )
 
 from . import (
-    AbstractExportPlugin,
+    AbstractDraftedExportPlugin,
     ExportPluginException,
 )
 
@@ -71,7 +72,7 @@ from ..common import (
 )
 
 
-class AbstractTokenExportPlugin(AbstractExportPlugin):
+class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
     def __init__(
         self,
         refdir: "AbsPath",
