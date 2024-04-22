@@ -129,7 +129,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
     PLUGIN_NAME: "ClassVar[SymbolicName]" = cast("SymbolicName", "dataverse")
 
     # Is this implementation ready?
-    ENABLED: "ClassVar[bool]" = False
+    ENABLED: "ClassVar[bool]" = True
 
     ATOM_CONTENT_TYPE: "Final[str]" = "application/atom+xml"
     SWORD_APP_NAMESPACE: "Final[str]" = "http://www.w3.org/2007/app"

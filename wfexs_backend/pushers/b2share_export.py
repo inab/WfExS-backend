@@ -105,7 +105,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
     PLUGIN_NAME: "ClassVar[SymbolicName]" = cast("SymbolicName", "b2share")
 
     # Is this implementation ready?
-    ENABLED: "ClassVar[bool]" = False
+    ENABLED: "ClassVar[bool]" = True
 
     B2SHARE_API_PREFIX: "Final[str]" = "https://b2share.eudat.eu/api/"
     SANDBOX_B2SHARE_API_PREFIX: "Final[str]" = "https://trng-b2share.eudat.eu/api/"

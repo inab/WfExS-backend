@@ -36,6 +36,7 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        ClassVar,
         IO,
         Mapping,
         Optional,
@@ -76,6 +77,9 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
     """
 
     PLUGIN_NAME = cast("SymbolicName", "cache")
+
+    # Is this implementation ready?
+    ENABLED: "ClassVar[bool]" = True
 
     def book_pid(
         self,
