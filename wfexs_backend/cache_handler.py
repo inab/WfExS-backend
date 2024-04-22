@@ -1095,28 +1095,40 @@ class SchemeHandlerCacheHandler:
 
                         try:
                             # Content is fetched here
-                            (
-                                inputKind,
-                                fetched_metadata_array,
-                                fetched_licences,
-                            ) = schemeHandler.fetcher(
+                            pfr = schemeHandler.fetcher(
                                 the_remote_file,
                                 tempCachedFilename,
                                 secContext=usableSecContext
                                 if usableSecContext
                                 else None,
                             )
+                            inputKind = pfr.kind_or_resolved
+                            if (
+                                len(pfr.metadata_array) > 0
+                                and pfr.metadata_array[0].uri != the_remote_file
+                            ):
+                                # This is needed in cases where the fetching plugin
+                                # curates the input URI, in order to remove
+                                # details, like embedded credentials
+                                the_remote_file = pfr.metadata_array[0].uri
+                                (
+                                    _,
+                                    uriCachedFilename,
+                                    absUriCachedFilename,
+                                ) = self._genUriMetaCachedFilename(
+                                    hashDir, the_remote_file
+                                )
 
                             # Overwrite the licence if it is explicitly returned
-                            if fetched_licences is not None:
-                                the_licences = fetched_licences
+                            if pfr.licences is not None:
+                                the_licences = pfr.licences
 
                             # The cache entry is injected
                             finalCachedFilename, fingerprint = self._inject(
                                 hashDir,
                                 LicensedURI(uri=the_remote_file, licences=the_licences),
                                 destdir=destdir,
-                                fetched_metadata_array=fetched_metadata_array,
+                                fetched_metadata_array=pfr.metadata_array,
                                 tempCachedFilename=tempCachedFilename,
                                 inputKind=inputKind,
                             )
@@ -1145,7 +1157,7 @@ class SchemeHandlerCacheHandler:
                             os.symlink(next_input_file, absUriCachedFilename)
 
                             # Store the metadata
-                            metadata_array.extend(fetched_metadata_array)
+                            metadata_array.extend(pfr.metadata_array)
                             licences.extend(the_licences)
                         except FetcherException as che:
                             if nested_exception is not None:
