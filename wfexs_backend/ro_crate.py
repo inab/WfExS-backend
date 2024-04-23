@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -94,7 +94,11 @@ if TYPE_CHECKING:
 import urllib.parse
 import uuid
 
-import magic
+from .utils.misc import lazy_import
+
+magic = lazy_import("magic")
+# import magic
+
 from rfc6920.methods import extract_digest
 import rocrate.model.entity
 import rocrate.model.dataset
