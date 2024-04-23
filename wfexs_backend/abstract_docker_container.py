@@ -34,7 +34,10 @@ from typing import (
     TYPE_CHECKING,
 )
 
-import magic
+from .utils.misc import lazy_import
+magic = lazy_import("magic")
+#import magic
+
 import pgzip
 
 from .common import (

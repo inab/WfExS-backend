@@ -27,7 +27,10 @@ from typing import (
 )
 
 import data_url
-import magic
+
+from .misc import lazy_import
+magic = lazy_import("magic")
+#import magic
 
 from ..common import (
     ContentKind,
