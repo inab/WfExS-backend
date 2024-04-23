@@ -30,6 +30,7 @@ System requirements
 
 It is recomended to use WfExS on Linux system. 
 WfExS has been tested on the following systems:
+
    - Ubuntu
    - Gentoo
    - Windows subsystem for Linux 2
@@ -58,6 +59,7 @@ Prerequisites
 
 Before starting the installation process, please check whether your system has all the 
 necessary dependencies. Ensure the following prerequisites are installed: 
+
    - ``git``  
    - ``curl``
    - ``tar``

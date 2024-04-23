@@ -173,6 +173,7 @@ expected ``files`` / ``directories`` that come out at the end of the workflow ex
 
 Plese fill the workflow staging configuration file according to your workflow needs.
 You need to know the specific steps which are performed in the workflow you are going to execute. 
+
     - Define your ``input`` files and the ``references`` which need to be used for each step. 
     - Define your ``outputs`` files. It can be described what the output file type is (this is
       predefined by the workflow itself) and its preferred name.
