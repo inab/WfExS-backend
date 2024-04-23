@@ -11,7 +11,7 @@ This example will offer insight into the operational dynamics of the software.
 
 For a extended understanding of options for running WfExS, including its various commands, options, 
 refer to the documentation available on the project's 
-`GitHub repository <https://github.com/inab/WfExS-backend>`.
+`GitHub repository <https://github.com/inab/WfExS-backend>`_.
 Navigate through the page to locate detailed information on the software usage.
 
 
@@ -63,17 +63,17 @@ Before proceeding, note that WfExS currently supports workflows written in CWL a
 Additionally, it's crucial to acknowledge that each workflow and situation may vary, 
 so providing an exact manual for every scenario isn't feasible.
 
-As explained in the :ref:`configuration section WfExs<configuration>` above, to run a workflow 
+As explained in the :ref:`configuration section <configuration>` above, to run a workflow 
 with WfExS, you'll need at least two, and possibly three, configuration input files. 
 Assuming you've previously executed a workflow (e.g., the Cosifer test workflow), you likely 
 already have the :ref:`local configuration <local_config>` file. 
 Follow the configuration instructions to create your own :ref:`workflow confirguration <wf_stage_config>` 
 files and, if applicable, the :ref:`security contexts file <secure_config>`.
 
-When you are done with making your own workflow configuration file and optional security contexts 
+When you are done making your own workflow configuration file and optional security contexts 
 file, then you can try to execute the workflow with WfExS.
 
-To do so make sure your Python environment (:ref:`.pyWEenv <pyenv>`) is loaded and change this 
+To do so make sure your Python environment (:ref:`.pyWEenv <py_env>`) is loaded and change this 
 command to match with your newly made workflow configuration files:
 
 .. code-block:: bash

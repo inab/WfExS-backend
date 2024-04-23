@@ -62,11 +62,11 @@ An example of a local configuration file:
 
    cacheDir: ../wfexs-backend-test
    crypt4gh:
-   key: local_config.yaml.key
-   passphrase: strive backyard dividing gumball
-   pub: local_config.yaml.pub
+      key: local_config.yaml.key
+      passphrase: strive backyard dividing gumball
+      pub: local_config.yaml.pub
    tools:
-   dockerCommand: docker
+      dockerCommand: docker
    encrypted_fs:
       type: encfs
       command: encfs
@@ -83,15 +83,43 @@ An example of a local configuration file:
 
 More extensive examples are available at `workflow_examples/ <https://github.com/inab/WfExS-backend/tree/main/workflow_examples>`_. 
 
-Plese fill the local configuration file **according to your workflow needs**.
-
-.. index:: 
-    single: confguration ...>>
+Plese fill the local configuration file according to your workflow needs.
 
 Main local configuration parameters
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-...
+Description of main local configuration parameters. More detailed information can be found 
+`here <https://github.com/paulaidt/WfExS-backend?tab=readme-ov-file#configuration-files>`_.
+.. list-table::
+
+   * - ``cacheDir``
+     - The path in this key sets up the place where all the contents which can be cached are hold. 
+       It contains downloaded RO-Crate, workflow git repositories, workflow engines. 
+       It is recommended to have it outside /tmp directory when Singularity is being used, 
+       due undesirable side interactions with the way workflow engines use Singularity.
+   * - ``workDir``
+     - The path in this key sets up the place where all the executions are going to store both 
+       intermediate and final results, having a separate directory for each execution. 
+       It is recommended to have it outside /tmp directory when Singularity is being used, 
+       due undesirable side interactions with the way workflow engines use Singularity.
+   * - crypt4gh.key
+     - The path to the secret key used in this installation. It is paired to ``crypt4gh.pub``.
+   * - crypt4gh.pub
+     - The path to the public key used in this installation. It is paired to ``crypt4gh.key``.
+   * - crypt4gh.passphrase
+     - The passphrase needed to decrypt the contents of ``crypt4gh.key``.
+   * - tools.engineMode
+     - Currently, local mode only.
+   * - tools.containerType
+     - Currently, singularity, docker or podman.
+   * - tools.gitCommand
+     - Path to ``git`` command (only used when needed).
+   * - tools.dockerCommand
+     - Path to ``docker`` command (only used when needed).
+   * - tools.singularityCommand
+     - Path to ``singularity`` command (only used when needed).
+   * - tools.javaCommand
+     - Path to ``java`` command (only used when needed).
 
 .. index::
    single: configuration; wf-config
@@ -140,7 +168,7 @@ expected ``files`` / ``directories`` that come out at the end of the workflow ex
 
 .. warning::
     Only URLS can be used to define your workflow (i.e. workflow available through 
-    `WorkflowHub <https://workflowhub.eu/>`), input files and references, local files are 
+    `WorkflowHub <https://workflowhub.eu/>`_), input files and references, local files are 
     not yet supported by WfExS.
 
 Plese fill the workflow staging configuration file according to your workflow needs.
@@ -150,7 +178,7 @@ You need to know the specific steps which are performed in the workflow you are 
       predefined by the workflow itself) and its preferred name.
 
 You can find additional general examples of workflow configuration files on the WfExS GitHub page 
-in `workflow_examples <https://github.com/inab/WfExS-backend/tree/main/workflow_examples>` folder. 
+in `workflow_examples <https://github.com/inab/WfExS-backend/tree/main/workflow_examples>`_ folder. 
 You'll find examples of workflow configuration files (files ending with ``.stage``) tailored 
 for both CWL and Nextflow workflows.
 

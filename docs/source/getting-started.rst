@@ -36,7 +36,8 @@ WfExS has been tested on the following systems:
    - OPENSuse 
 
 .. note:: 
-   If you have problems installing it on a different system please write an `issue <https://github.com/inab/WfExS-backend/issues>`.
+   If you have problems installing it on a different system please write an 
+   `issue <https://github.com/inab/WfExS-backend/issues>`_.
 
 
 .. index::
@@ -112,11 +113,13 @@ libraries, or tools necessary for the complete functionality of WfExS. It fetche
    * - static ``ps``
      - Necessray for Nextflow metrics recopilation. 
 
+.. _py_env:
+
 By default, installation creates and sources a new python virtual environment for WfExS ``.pyWEenv``, 
 unless there is an activated one. If so, the installation is done inside the active 
 virtual environment. 
 
-Every time you want to work with WfExS make sure you first source the python environment. 
+Every time you want to work with WfExS make sure you first activate the python environment. 
 
 .. code-block:: bash
    
@@ -225,8 +228,6 @@ when no container technology is set up.
 
 .. index::
    single: getting-started; installation; devel
-
-.. _installation_wfexs:
 
 Development tips
 ~~~~~~~~~~~~~~~~~~
