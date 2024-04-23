@@ -30,13 +30,13 @@ System requirements
 
 It is recomended to use WfExS on Linux system. 
 WfExS has been tested on the following systems:
-- Ubuntu
-- Gentoo
-- Windows subsystem for Linux 2
-- OPENSuse 
+   - Ubuntu
+   - Gentoo
+   - Windows subsystem for Linux 2
+   - OPENSuse 
 
 .. note:: 
-   If you have problems installing it on a different system please write an issue.
+   If you have problems installing it on a different system please write an `issue <https://github.com/inab/WfExS-backend/issues>`.
 
 
 .. index::
@@ -57,14 +57,14 @@ Prerequisites
 
 Before starting the installation process, please check whether your system has all the 
 necessary dependencies. Ensure the following prerequisites are installed: 
-- ``git``  
-- ``curl``
-- ``tar``
-- ``gzip`` 
-- ``build-essential`` package in Linux systems.
-- ``python3`` (Python 3.7 or later)
-- ``pip``: available in many Linux distributions (Ubuntu packages python3-pip, CentOS EPEL package python-pip), and also as ``pip`` Python package. 
-- ``venv``: available in many Linux distributions (Ubuntu package python3-venv). In some of them is integrated into the Python 3.5 (or later) installation.
+   - ``git``  
+   - ``curl``
+   - ``tar``
+   - ``gzip`` 
+   - ``build-essential`` package in Linux systems.
+   - ``python3`` (Python 3.7 or later)
+   - ``pip``: available in many Linux distributions (Ubuntu packages python3-pip, CentOS EPEL package python-pip), and also as ``pip`` Python package. 
+   - ``venv``: available in many Linux distributions (Ubuntu package python3-venv). In some of them is integrated into the Python 3.5 (or later) installation.
 
 .. note:: 
    ``build-essential`` installation in Linux systems `here <https://www.ochobitshacenunbyte.com/2014/12/10/que-es-y-como-se-instala-build-essentials/>`_.
@@ -222,6 +222,29 @@ when no container technology is set up.
 
    - When `docker`_ or `podman`_ are set up, there is no support for secure or paranoid 
      working directories due technical and architectural limitations.
+
+.. index::
+   single: getting-started; installation; devel
+
+.. _installation_wfexs:
+
+Development tips
+~~~~~~~~~~~~~~~~~~
+
+All the development dependencies are declared at `dev-requirements.txt` and 
+`mypy-requirements.txt`. 
+
+To install development requistites:
+
+.. code-block:: bash
+   
+   python3 -m venv .pyWEenv
+   source .pyWEenv/bin/activate
+   pip install --upgrade pip wheel
+   pip install -r requirements.txt --> this is installed with the basic installer 
+   pip install -r dev-requirements.txt
+   pip install -r mypy-requirements.txt
+
 
 
 .. index::

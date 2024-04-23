@@ -1,3 +1,5 @@
+.. _configuration:
+
 Configuration 
 =============
 
@@ -99,12 +101,13 @@ Main local configuration parameters
 Workflow staging configuration
 -------------------------------
 
+Here, we describe how to make your own workflow configuration file. This is a
 ``YAML`` formatted file which describes the workflow staging before being executed:
 where inputs are located and can be fetched, the security contexts to be used 
 on specific inputs to get those controlled access resources, the parameters, 
-the outputs to capture,...
+the outputs to capture, etc.
 
-``JSON`` Schema describing the format and valid keys (and used for validation), 
+* ``JSON`` Schema describing the format and valid keys (and used for validation), 
 is available at `wfexs_backend/schemas/stage-definition.json <https://github.com/inab/WfExS-backend/blob/main/wfexs_backend/schemas/stage-definition.json>`_ 
 and there is also automatically generated documentation (see `stage-definition_schema.md <https://github.com/inab/WfExS-backend/blob/main/development-docs/schemas/stage-definition_schema.md>`_).
 
@@ -112,8 +115,7 @@ Generate a staging config file:
 
 .. code-block:: bash
 
-    touch ${CONFIG_DIR}/${WORKFLOW_NAME}_... .yaml 
-    touch ${CONFIG_DIR}/${WORKFLOW_NAME}_wfex.stage(.yaml)
+    touch ${CONFIG_DIR}/${WORKFLOW_NAME}_wfex.stage
 
 Minimum example template to fill in your ``${WORKFLOW_NAME}_wfex.stage`` file:
 
@@ -133,22 +135,24 @@ Minimum example template to fill in your ``${WORKFLOW_NAME}_wfex.stage`` file:
     outputs:
     ...
 
-The ``params`` are the inputs to your workflow. The ``outputs`` map to the expected 
-``files`` / ``directories`` that come out at the end of the workflow.
+The lines after ``params`` are used to describe the input files. The ``outputs`` map to the 
+expected ``files`` / ``directories`` that come out at the end of the workflow execution.
 
 .. warning::
-    Only URLS can be used to define your input files and references, local files are 
+    Only URLS can be used to define your workflow (i.e. workflow available through 
+    `WorkflowHub <https://workflowhub.eu/>`), input files and references, local files are 
     not yet supported by WfExS.
 
 Plese fill the workflow staging configuration file according to your workflow needs.
+You need to know the specific steps which are performed in the workflow you are going to execute. 
+    - Define your ``input`` files and the ``references`` which need to be used for each step. 
+    - Define your ``outputs`` files. It can be described what the output file type is (this is
+      predefined by the workflow itself) and its preferred name.
 
-- You need to know the specific steps which are performed in the workflow you are going to use. 
-- Define your ``input`` data and the ``references`` which need to be used for each step. 
-- Define your ``outputs`` files. It can be described what the output file type is (this is
-    predefined by the workflow itself) and its preferred name.
-
-Examples in different engines can be found in `Nextflow_example <https://github.com/inab/WfExS-backend/blob/main/workflow_examples/wetlab2variations_execution_nxf.wfex.stage>`_ 
-and `CWL_example <https://github.com/inab/WfExS-backend/blob/main/workflow_examples/wetlab2variations_execution_cwl.wfex.stage>`_
+You can find additional general examples of workflow configuration files on the WfExS GitHub page 
+in `workflow_examples <https://github.com/inab/WfExS-backend/tree/main/workflow_examples>` folder. 
+You'll find examples of workflow configuration files (files ending with ``.stage``) tailored 
+for both CWL and Nextflow workflows.
 
 .. index::
    single: configuration; security-config
@@ -166,10 +170,9 @@ or keys needed on different steps, like input fetching.
 
 .. code-block:: bash
 
-    touch ${CONFIG_DIR}/${WORKFLOW_NAME}_wfex.credentials(.yaml)
+    touch ${CONFIG_DIR}/${WORKFLOW_NAME}_wfex.credentials.ctxt
 
-An example of a security contexts file (``${CONFIG_DIR}/${WORKFLOW_NAME}_wfex.credentials(.yaml)``):
-
+An example of a security contexts file (``${CONFIG_DIR}/${WORKFLOW_NAME}_wfex.credentials.ctxt``):
 
 .. code-block:: bash
 
