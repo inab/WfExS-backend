@@ -108,7 +108,7 @@ def loadXLSXParams(paramsFilename: "str") -> "Sequence[Mapping[str, Any]]":
     for sheet_raw in sheets:
         # This is needed to avoid a mypy error fired
         # by latest openpyxl annotations
-        sheet = cast("Worksheet", sheet_raw)
+        sheet = cast("Worksheet", sheet_raw)  # type: ignore[redundant-cast]
         gotHeader = False
         headerMap: "MutableMapping[int,str]" = {}
         for cells_in_row in sheet.iter_rows():
