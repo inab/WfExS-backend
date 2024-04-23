@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -273,8 +273,10 @@ def config_validate(
             f"FATAL ERROR: corrupted schema {relSchemaFile}. Reason: {e}"
         )
 
+
 import importlib.util
 import sys
+
 
 def lazy_import(name: "str") -> "ModuleType":
     module = sys.modules.get(name)

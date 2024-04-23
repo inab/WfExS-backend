@@ -54,8 +54,9 @@ import crypt4gh.keys.kdf
 import crypt4gh.keys.c4gh
 
 from .utils.misc import lazy_import
+
 magic = lazy_import("magic")
-#import magic
+# import magic
 
 from .common import (
     AbstractWfExSException,

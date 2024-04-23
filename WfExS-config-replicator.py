@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,53 +25,61 @@ import os
 import sys
 
 from typing import (
-    Any,
     cast,
-    Mapping,
-    MutableMapping,
-    MutableSequence,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
+    TYPE_CHECKING,
 )
+
 
 import openpyxl
 import xlrd2  # type:ignore
 import yaml
 
+if TYPE_CHECKING:
+    from typing import (
+        Any,
+        Mapping,
+        MutableMapping,
+        MutableSequence,
+        Optional,
+        Sequence,
+        Tuple,
+        Type,
+        Union,
+    )
+
+    from openpyxl.worksheet.worksheet import Worksheet
+
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
-YAMLDumper: Type[Union[yaml.Dumper, yaml.CDumper]]
+YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
 try:
     from yaml import CDumper as YAMLDumper
 except ImportError:
     from yaml import Dumper as YAMLDumper
 
 
-def loadWorkflowConfig(workflowConfigFilename: str) -> Mapping[str, Any]:
+def loadWorkflowConfig(workflowConfigFilename: "str") -> "Mapping[str, Any]":
     with open(workflowConfigFilename, mode="r", encoding="utf-8") as wcf:
         workflow_config = yaml.safe_load(wcf)
 
-        return cast(Mapping[str, Any], workflow_config)
+        return cast("Mapping[str, Any]", workflow_config)
 
 
-def loadXLSParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
+def loadXLSParams(paramsFilename: "str") -> "Sequence[Mapping[str, Any]]":
     paramsArray = []
 
     wb = xlrd2.open_workbook(filename=paramsFilename)
 
     for sheet in wb.sheets():
         gotHeader = False
-        header: MutableSequence[Tuple[str, int]] = []
+        header: "MutableSequence[Tuple[str, int]]" = []
         for row in sheet.get_rows():
             if row is None:
                 continue
 
             # Either get the header or the data
             if gotHeader:
-                params: MutableMapping[str, MutableSequence[Any]] = dict()
+                params: "MutableMapping[str, MutableSequence[Any]]" = dict()
                 for headerName, iCell in header:
                     theVal = row[iCell].value
                     params.setdefault(headerName, []).append(theVal)
@@ -91,13 +99,16 @@ def loadXLSParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
     return paramsArray
 
 
-def loadXLSXParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
+def loadXLSXParams(paramsFilename: "str") -> "Sequence[Mapping[str, Any]]":
     paramsArray = []
 
     wb = openpyxl.load_workbook(filename=paramsFilename, data_only=True, read_only=True)
     sheets = wb.worksheets
 
-    for sheet in sheets:
+    for sheet_raw in sheets:
+        # This is needed to avoid a mypy error fired
+        # by latest openpyxl annotations
+        sheet = cast("Worksheet", sheet_raw)
         gotHeader = False
         headerMap: "MutableMapping[int,str]" = {}
         for cells_in_row in sheet.iter_rows():
@@ -123,7 +134,7 @@ def loadXLSXParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
     return paramsArray
 
 
-def loadCSVParams(paramsFilename: str) -> Sequence[Mapping[str, Any]]:
+def loadCSVParams(paramsFilename: "str") -> "Sequence[Mapping[str, Any]]":
     paramsArray = []
 
     with open(paramsFilename, mode="rb") as cR:
@@ -182,13 +193,13 @@ MIME_PARSERS = {
 }
 
 
-def loadParamsFiles(paramsFilenames: Sequence[str]) -> Sequence[Mapping[str, Any]]:
+def loadParamsFiles(paramsFilenames: "Sequence[str]") -> "Sequence[Mapping[str, Any]]":
     """
     This method returns a list of dictionaries
     being each dictionary a set of values to substitute
     into the workflow configuration template
     """
-    paramsArray: MutableSequence[Mapping[str, Any]] = list()
+    paramsArray: "MutableSequence[Mapping[str, Any]]" = list()
 
     if not mimetypes.inited:
         mimetypes.init()
@@ -227,14 +238,14 @@ VALID_ROOTS = tuple(VALID_ROOTS_DICT.keys())
 
 
 def applyValuesToTemplate(
-    workflow_config_template: Mapping[str, Any], params: Mapping[str, Any]
-) -> Mapping[str, Any]:
+    workflow_config_template: "Mapping[str, Any]", params: "Mapping[str, Any]"
+) -> "Mapping[str, Any]":
     """
     The parameters are set using as template the input
     """
 
     workflow_config = cast(
-        MutableMapping[str, Any], copy.deepcopy(workflow_config_template)
+        "MutableMapping[str, Any]", copy.deepcopy(workflow_config_template)
     )
 
     workflow_config.setdefault("params", {})
@@ -277,12 +288,12 @@ def applyValuesToTemplate(
 
 
 def writeWorkflowConfigVariations(
-    workflow_config_template: Mapping[str, Any],
-    paramsArray: Sequence[Mapping[str, Any]],
-    fnameTemplate: str,
-    destdir: str = ".",
-    paramSymbolTemplate: Optional[str] = None,
-) -> Sequence[str]:
+    workflow_config_template: "Mapping[str, Any]",
+    paramsArray: "Sequence[Mapping[str, Any]]",
+    fnameTemplate: "str",
+    destdir: "str" = ".",
+    paramSymbolTemplate: "Optional[str]" = None,
+) -> "Sequence[str]":
     # Creating the directory, in case it does not exist
     destdir = os.path.abspath(destdir)
     os.makedirs(destdir, exist_ok=True)
@@ -371,7 +382,7 @@ if __name__ == "__main__":
     if args.params_files:
         paramsArray = loadParamsFiles(args.params_files)
     else:
-        params: MutableMapping[str, Any] = {}
+        params: "MutableMapping[str, Any]" = {}
         paramsArray = [params]
         for param, value in args.inline_params:
             params.setdefault(param, []).append(value)
