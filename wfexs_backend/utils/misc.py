@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,17 +20,21 @@ from __future__ import absolute_import
 
 import datetime
 import fnmatch
+import importlib.util
 import json
 import os
 import pkgutil
 import re
+import sys
 
 from typing import (
     TYPE_CHECKING,
 )
 
 if TYPE_CHECKING:
-    from types import ModuleType
+    from types import (
+        ModuleType,
+    )
 
     from typing import (
         Any,
@@ -303,3 +307,25 @@ def get_opener_with_auth(
 
     # create "opener" (OpenerDirector instance)
     return urllib.request.build_opener(handler)
+
+
+def lazy_import(name: "str") -> "ModuleType":
+    """
+    Inspired in https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
+    """
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib.util.find_spec(name)
+        if spec is not None and spec.loader is not None:
+            loader = importlib.util.LazyLoader(spec.loader)
+            spec.loader = loader
+
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+
+            loader.exec_module(module)
+
+    if module is None:
+        raise ModuleNotFoundError(f"No module named '{name}'")
+
+    return module

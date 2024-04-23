@@ -94,7 +94,11 @@ if TYPE_CHECKING:
 import urllib.parse
 import uuid
 
-import magic
+from .utils.misc import lazy_import
+
+magic = lazy_import("magic")
+# import magic
+
 from rfc6920.methods import extract_digest
 import rocrate.model.entity
 import rocrate.model.dataset
