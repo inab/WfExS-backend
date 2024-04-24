@@ -452,8 +452,6 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
             retention_tag_name=self.setup_block.get("retention-tag-name"),
         )
 
-        self.cached_remote_relpath: "Optional[str]" = None
-
     def book_pid(
         self,
         preferred_id: "Optional[str]" = None,
@@ -510,7 +508,6 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
         else:
             internal = pid_or_draft
 
-        self.cached_remote_relpath = None
         return self.ce.remove_remote_path(cast("RelPath", internal))
 
     def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
@@ -672,7 +669,8 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
             ]
             # Now, upload the contents
             retvals, remote_path, remote_relpath = self.ce.mappings_uploader(
-                self._prepare_upload_mappings(mappings)
+                self._prepare_upload_mappings(mappings),
+                destname=cast("RelPath", draft_entry.draft_id),
             )
         finally:
             if do_remove_temp:
@@ -692,16 +690,11 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
 
         assert remote_relpath is not None
 
-        # Update cached content path
-        if self.cached_remote_relpath is None:
-            self.cached_remote_relpath = remote_relpath
-        elif self.cached_remote_relpath != remote_relpath:
-            raise ExportPluginException(
-                f"Inconsistent remote_relpath between executions: {remote_relpath} vs {self.cached_remote_relpath}"
-            )
-
         # TODO: add something more meaningful
-        return {}
+        return {
+            "remote_path": remote_path,
+            "remote_relpath": remote_relpath,
+        }
 
     def update_record_metadata(
         self,
@@ -745,12 +738,7 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
         self,
         draft_entry: "DraftEntry",
     ) -> "Mapping[str, Any]":
-        assert (
-            self.cached_remote_relpath is not None
-        ), "Please call upload_file_to_draft at least once"
-        self._create_share_links(self.cached_remote_relpath)
-
-        self.cached_remote_relpath = None
+        self._create_share_links(draft_entry.draft_id)
 
         # TODO: improve this (if it makes sense!)
         return {}
