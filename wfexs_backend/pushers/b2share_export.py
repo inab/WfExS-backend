@@ -199,7 +199,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             return cast("Mapping[str, Any]", json.load(res))
 
     @staticmethod
-    @functools.lru_cache
+    @functools.lru_cache(typed=True)
     def __fetch_schema(
         schema_url: "str",
     ) -> "Tuple[str, Mapping[str, Any]]":
