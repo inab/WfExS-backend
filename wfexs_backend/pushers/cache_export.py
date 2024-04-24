@@ -44,10 +44,6 @@ if TYPE_CHECKING:
         Union,
     )
 
-    from . import (
-        DraftEntry,
-    )
-
     from ..common import (
         AbsPath,
         AnyContent,
