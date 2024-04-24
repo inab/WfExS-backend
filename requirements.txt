@@ -1,6 +1,8 @@
 pyyaml
 jsonpath-ng
-jsonschema[format_nongpl] >= 3.0.0 , < 4.18.0
+jsonschema[format_nongpl] >= 3.0.0
+jsonschema[format_nongpl] < 4.18.0 ; python_version <= '3.7'
+jsonpointer
 python-magic >= 0.4.27
 paramiko[ed25519]
 certifi
@@ -13,7 +15,7 @@ dulwich
 python-dxf >= 10.0.0
 genluhn >= 0.3.0
 rfc6920 >= 0.1.3
-rocrate >= 0.7.0
+rocrate >= 0.9.0
 boto3
 botocore
 google-cloud-storage
@@ -24,3 +26,4 @@ pyxdg
 groovy-parser == 0.1.1
 data-url
 pgzip
+defusedxml

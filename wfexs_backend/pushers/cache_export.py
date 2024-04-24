@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,14 +35,21 @@ from ..common import (
 
 if TYPE_CHECKING:
     from typing import (
+        Any,
+        ClassVar,
+        IO,
+        Mapping,
         Optional,
         Sequence,
+        Union,
     )
 
     from ..common import (
         AbsPath,
         AnyContent,
+        LicenceDescription,
         RelPath,
+        ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -53,42 +60,98 @@ if TYPE_CHECKING:
 
 from ..utils.contents import link_or_copy
 
-from . import AbstractExportPlugin
+from . import (
+    AbstractExportPlugin,
+    DraftEntry,
+)
+from .abstract_contexted_export import AbstractContextedExportPlugin
 
 
-class CacheExportPlugin(AbstractExportPlugin):
+class CacheExportPlugin(AbstractContextedExportPlugin):
     """
     Class to model exporting results to WfExS-backend cache
     """
 
     PLUGIN_NAME = cast("SymbolicName", "cache")
 
-    def __init__(
+    # Is this implementation ready?
+    ENABLED: "ClassVar[bool]" = True
+
+    def book_pid(
         self,
-        wfInstance: "WF",
-        setup_block: "Optional[SecurityContextConfig]" = None,
-        licences: "Sequence[str]" = [],
-    ):
-        super().__init__(wfInstance, setup_block=setup_block, licences=licences)
+        preferred_id: "Optional[str]" = None,
+        initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
+        initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[LicenceDescription]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+    ) -> "Optional[DraftEntry]":
+        # We are starting to learn whether we already have a PID
+        preferred_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
+        if (preferred_id is None) or len(preferred_id) == 0:
+            raise ValueError("This plugin needs a preferred_id to generate a PID")
+
+        p = urllib.parse.urlparse(preferred_id)
+        if p.scheme == "":
+            raise ValueError(
+                "This plugin needs that the provided preferred_id is a URI (i.e. with a scheme)"
+            )
+
+        return DraftEntry(
+            draft_id=preferred_id,
+            pid=preferred_id,
+            metadata=None,
+            raw_metadata=None,
+        )
+
+    def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
+        """
+        This method is used to release a previously booked PID,
+        which has not been published.
+
+        When it returns False, it means that the
+        provided id did exist, but it was not a draft
+        """
+
+        return False
+
+    def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
+        """
+        This method is used to obtained the metadata associated to a PID,
+        in case the destination allows it.
+        """
+
+        return None
 
     def push(
         self,
         items: "Sequence[AnyContent]",
-        preferred_scheme: "Optional[str]" = None,
         preferred_id: "Optional[str]" = None,
+        title: "Optional[str]" = None,
+        description: "Optional[str]" = None,
+        licences: "Sequence[LicenceDescription]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        metadata: "Optional[Mapping[str, Any]]" = None,
+        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
+        if self.wfexs is None:
+            raise ValueError(
+                "This plugin needs to be contextualized with the WfExS instance"
+            )
+
         """
         These contents will be included in the cache
         """
         if len(items) == 0:
             raise ValueError("This plugin needs at least one element to be processed")
 
-        if (preferred_scheme is None) or len(preferred_scheme) == 0:
-            raise ValueError("This plugin needs a scheme to generate a PID")
-
-        if ":" in preferred_scheme:
-            raise ValueError(f"Scheme {preferred_scheme} contains a colon")
-
+        # We are starting to learn whether we already have a PID
+        preferred_id = (
+            self.default_preferred_id if preferred_id is None else preferred_id
+        )
         if (preferred_id is None) or len(preferred_id) == 0:
             raise ValueError("This plugin needs a preferred_id to generate a PID")
 
@@ -98,9 +161,7 @@ class CacheExportPlugin(AbstractExportPlugin):
         metadata = None
         try:
             if len(items) > 1:
-                tmpdir = tempfile.mkdtemp(
-                    dir=self.wfInstance.getStagedSetup().temp_dir, suffix="export"
-                )
+                tmpdir = tempfile.mkdtemp(dir=self.tempdir, suffix="export")
                 source = tmpdir
 
                 # Now, transfer all of them
@@ -134,17 +195,19 @@ class CacheExportPlugin(AbstractExportPlugin):
                             path=source,
                             params="",
                             query=urllib.parse.urlencode(
-                                {"inject_as": f"{preferred_scheme}:{preferred_id}"},
+                                {"inject_as": preferred_id},
                                 doseq=True,
                             ),
                             fragment="",
                         )
                     ),
                 ),
-                licences=self.licences,
+                licences=tuple(licences)
+                if len(licences) > 0
+                else self.default_licences,
             )
 
-            cached_uri = self.wfInstance.wfexs.cacheFetch(
+            cached_uri = self.wfexs.cacheFetch(
                 uri_to_fetch, CacheType.Input, offline=False, ignoreCache=True
             )
         finally:

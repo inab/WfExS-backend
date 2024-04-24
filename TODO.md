@@ -45,13 +45,15 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
   - [ ] **Step 7.f**: Upload workflow to WorkflowHub.
 
-  - [ ] **Step 7.g**: Upload to Zenodo.
+  - [x] **Step 7.g**: Upload to Zenodo.
 
-  - [ ] **Step 7.h**: Upload to B2SHARE.
+  - [x] **Step 7.h**: Upload to B2SHARE.
 
   - [ ] **Step 7.i**: Upload to osf.io .
   
   - [ ] **Setp 7.j**: Explore datacite doi service.
+
+  - [x] **Step 7.k**: Upload to Dataverse.
   
 - [ ] **Step 8**: (partially implemented) Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
 

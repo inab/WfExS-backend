@@ -70,6 +70,7 @@ import dulwich.porcelain
 
 from . import (
     AbstractRepoFetcher,
+    DocumentedStatefulProtocolFetcher,
     FetcherException,
     ProtocolFetcherReturn,
     RepoGuessException,
@@ -104,15 +105,19 @@ class GitFetcher(AbstractRepoFetcher):
         )
 
     @classmethod
-    def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractStatefulFetcher]]":
+    def GetSchemeHandlers(cls) -> "Mapping[str, DocumentedStatefulProtocolFetcher]":
         # These are de-facto schemes supported by pip and git client
+        dspf = DocumentedStatefulProtocolFetcher(
+            fetcher_class=cls,
+            priority=cls.PRIORITY,
+        )
         return {
-            cls.GIT_PROTO: cls,
-            cls.GIT_PROTO_PREFIX + "file": cls,
-            cls.GIT_PROTO_PREFIX + "https": cls,
-            cls.GIT_PROTO_PREFIX + "http": cls,
-            cls.GIT_PROTO_PREFIX + "ssh": cls,
-            cls.GITHUB_SCHEME: cls,
+            cls.GIT_PROTO: dspf,
+            cls.GIT_PROTO_PREFIX + "file": dspf,
+            cls.GIT_PROTO_PREFIX + "https": dspf,
+            cls.GIT_PROTO_PREFIX + "http": dspf,
+            cls.GIT_PROTO_PREFIX + "ssh": dspf,
+            cls.GITHUB_SCHEME: dspf,
         }
 
     @property

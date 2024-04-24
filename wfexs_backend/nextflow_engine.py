@@ -1349,6 +1349,7 @@ STDERR
 
         # searching for process\..*container = ['"]([^'"]+)['"]
         containerTags: "MutableSequence[ContainerTaggedName]" = []
+        containerTagsConda: "MutableSequence[ContainerTaggedName]" = []
         containerTagSet: "Set[str]" = set()
         assert flat_stdout is not None
         self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
@@ -1368,7 +1369,9 @@ STDERR
                 tagged_container = self._genDockSingContainerTaggedName(
                     contMatch[1], container_registries
                 )
-                if tagged_container is not None:
+                if (tagged_container is not None) and (
+                    tagged_container not in containerTags
+                ):
                     containerTags.append(tagged_container)
 
         # Early DSL2 detection
@@ -1423,13 +1426,15 @@ STDERR
                             tagged_container = self._genDockSingContainerTaggedName(
                                 container_tag, container_registries
                             )
-                            if tagged_container is not None:
+                            if (tagged_container is not None) and (
+                                tagged_container not in containerTags
+                            ):
                                 containerTags.append(tagged_container)
                     # Conda
                     for conda_tag in processDecl.condas:
                         if conda_tag not in containerTagSet:
-                            containerTagSet.add(container_tag)
-                            containerTags.append(
+                            containerTagSet.add(conda_tag)
+                            containerTagsConda.append(
                                 ContainerTaggedName(
                                     origTaggedName=conda_tag,
                                     type=ContainerType.Conda,
@@ -1446,6 +1451,9 @@ STDERR
                             if isinstance(dslVerVal, list):
                                 dslVer = dslVerVal[0][1]
 
+        # Join both lists
+        if len(containerTagsConda) > 0:
+            containerTags.extend(containerTagsConda)
         return matWorkflowEngine, containerTags
 
     def simpleContainerFileName(self, imageUrl: "URIType") -> "RelPath":

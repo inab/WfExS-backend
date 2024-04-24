@@ -128,7 +128,13 @@ As these checks are applied only to the python version currently being used in t
 there is a GitHub workflow at [.github/workflows/pre-commit.yml](.github/workflows/pre-commit.yml)
 which runs them on several Python versions.
 
-If you have lots of cores, fast disks and docker installed, you can locally run the pre-commit GitHub workflow using [act](https://github.com/nektos/act):
+Although there are few tests covering the code, they can be tried using next command line:
+
+```bash
+pytest
+```
+
+Last, if you have lots of cores, fast disks and docker installed, you can locally run the pre-commit GitHub workflow using [act](https://github.com/nektos/act):
 
 ```bash
 act -j pre-commit

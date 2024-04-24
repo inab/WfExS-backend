@@ -61,15 +61,18 @@ EOSC-Life deliverable D8.1, _Zenodo_
 ```bash
 python WfExS-backend.py --full-help
 ```
+<details open>
+<summary>General command line usage</summary>
+
 ```
 usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
                         [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
                         [--full-help]
-                        {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+                        {init,cache,staged-workdir,export,list-fetchers,list-exporters,list-licences,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.9.3-164-g6ed719c
-(6ed719c92b4db5bd9ad50ad57cb10747c9d9b7f1)
+WfExS (workflow execution service) backend 0.10.1-12-g24f2de3
+(24f2de3bb0b0f3f8a59c90ec16fdf07b66ebe641, branch jmfernandez)
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -92,13 +95,15 @@ optional arguments:
 commands:
   Command to run. It must be one of these
 
-  {init,cache,staged-workdir,export,list-fetchers,list-exporters,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+  {init,cache,staged-workdir,export,list-fetchers,list-exporters,list-licences,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
     init                Init local setup
     cache               Cache handling subcommands
     staged-workdir      Staged working directories handling subcommands
     export              Staged working directories export subcommands
     list-fetchers       List the supported fetchers / schemes
     list-exporters      List the supported export plugins
+    list-licences       List the documented licences, both embedded and
+                        fetched from SPDX release 3.22
     config-validate     Validate the configuration files to be used for
                         staging and execution
     stage               Prepare the staging (working) directory for workflow
@@ -116,14 +121,22 @@ commands:
                         their public ids
     export-crate        Export an already executed workflow in the staging
                         directory as an RO-Crate
+```
+</details>
+<details>
+<summary>Subparser <code>init</code></summary>
 
-Subparser 'init'
+```
 usage: WfExS-backend.py init [-h]
 
 optional arguments:
   -h, --help  show this help message and exit
+```
+<summary>Subparser <code>cache</code></summary>
 
-Subparser 'cache'
+```
+</details>
+<details>
 usage: WfExS-backend.py cache [-h] [-r] [--cascade] [-g]
                               {ls,status,inject,fetch,rm,validate}
                               {input,ro-crate,ga4gh-trs,workflow}
@@ -155,14 +168,19 @@ optional arguments:
   --cascade             Try doing the operation in cascade (including the URIs
                         which resolve to other URIs) (default: False)
   -g, --glob            Given cache element names are globs (default: False)
+```
+</details>
+<details>
+<summary>Subparser <code>staged-workdir</code></summary>
 
-Subparser 'staged-workdir'
+```
 usage: WfExS-backend.py staged-workdir [-h] [--orcid ORCIDS]
                                        [--private-key-file PRIVATE_KEY_FILE]
                                        [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
                                        [--inputs] [--outputs] [--workflow]
                                        [--containers] [--prospective] [--full]
-                                       [--licence LICENCES] [-g]
+                                       [--licence LICENCES]
+                                       [--crate-pid CRATE_PID] [-g]
                                        {offline-exec,ls,mount,rm,shell,status,create-staged-crate,create-prov-crate}
                                        [staged_workdir_command_args [staged_workdir_command_args ...]]
 
@@ -224,8 +242,16 @@ ro-crate-payload:
                         everything)? (default: [])
   --licence LICENCES    Licence(s) to attach to the generated RO-Crate
                         (default: [])
+  --crate-pid CRATE_PID
+                        Permanent identifier to embed within the generated RO-
+                        Crate metadata, like a pre-generated DOI (default:
+                        None)
+```
+</details>
+<details>
+<summary>Subparser <code>export</code></summary>
 
-Subparser 'export'
+```
 usage: WfExS-backend.py export [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME]
                                [-E EXPORTSCONFIGFILENAME] [--orcid ORCIDS]
                                [--public-key-file PUBLIC_KEY_FILES]
@@ -276,19 +302,45 @@ secure workdir arguments:
                         the private key needed to unlock an encrypted working
                         directory. (default: )
 
-Subparser 'list-fetchers'
+```
+</details>
+<details>
+<summary>Subparser <code>list-fetchers</code></summary>
+
+```
 usage: WfExS-backend.py list-fetchers [-h]
 
 optional arguments:
   -h, --help  show this help message and exit
 
-Subparser 'list-exporters'
+```
+</details>
+<details>
+<summary>Subparser <code>list-exporters</code></summary>
+
+```
 usage: WfExS-backend.py list-exporters [-h]
 
 optional arguments:
   -h, --help  show this help message and exit
 
-Subparser 'config-validate'
+```
+</details>
+<details>
+<summary>Subparser <code>list-licences</code></summary>
+
+```
+usage: WfExS-backend.py list-licences [-h]
+
+optional arguments:
+  -h, --help  show this help message and exit
+
+```
+</details>
+<details>
+<summary>Subparser <code>config-validate</code></summary>
+
+```
 usage: WfExS-backend.py config-validate [-h] -W WORKFLOWCONFIGFILENAME
                                         [-Z SECURITYCONTEXTSCONFIGFILENAME]
 
@@ -301,7 +353,12 @@ optional arguments:
                         Configuration file, describing security contexts,
                         which hold credentials and similar (default: None)
 
-Subparser 'stage'
+```
+</details>
+<details>
+<summary>Subparser <code>stage</code></summary>
+
+```
 usage: WfExS-backend.py stage [-h] -W WORKFLOWCONFIGFILENAME
                               [-Z SECURITYCONTEXTSCONFIGFILENAME]
                               [-n NICKNAME_PREFIX] [--orcid ORCIDS]
@@ -340,7 +397,12 @@ secure workdir arguments:
                         the private key needed to unlock an encrypted working
                         directory. (default: )
 
-Subparser 're-stage'
+```
+</details>
+<details>
+<summary>Subparser <code>re-stage</code></summary>
+
+```
 usage: WfExS-backend.py re-stage [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME]
                                  [-n NICKNAME_PREFIX] [--orcid ORCIDS]
                                  [--public-key-file PUBLIC_KEY_FILES]
@@ -378,7 +440,12 @@ secure workdir arguments:
                         the private key needed to unlock an encrypted working
                         directory. (default: )
 
-Subparser 'mount-workdir'
+```
+</details>
+<details>
+<summary>Subparser <code>mount-workdir</code></summary>
+
+```
 usage: WfExS-backend.py mount-workdir [-h]
                                       [--private-key-file PRIVATE_KEY_FILE]
                                       [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
@@ -402,7 +469,12 @@ secure workdir arguments:
                         the private key needed to unlock an encrypted working
                         directory. (default: )
 
-Subparser 'export-stage'
+```
+</details>
+<details>
+<summary>Subparser <code>export-stage</code></summary>
+
+```
 usage: WfExS-backend.py export-stage [-h] [--orcid ORCIDS]
                                      [--private-key-file PRIVATE_KEY_FILE]
                                      [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
@@ -410,6 +482,7 @@ usage: WfExS-backend.py export-stage [-h] [--orcid ORCIDS]
                                      [--outputs] [--workflow] [--containers]
                                      [--prospective] [--full]
                                      [--licence LICENCES]
+                                     [--crate-pid CRATE_PID]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -448,8 +521,17 @@ ro-crate-payload:
                         everything)? (default: [])
   --licence LICENCES    Licence(s) to attach to the generated RO-Crate
                         (default: [])
+  --crate-pid CRATE_PID
+                        Permanent identifier to embed within the generated RO-
+                        Crate metadata, like a pre-generated DOI (default:
+                        None)
 
-Subparser 'offline-execute'
+```
+</details>
+<details>
+<summary>Subparser <code>offline-execute</code></summary>
+
+```
 usage: WfExS-backend.py offline-execute [-h]
                                         [--private-key-file PRIVATE_KEY_FILE]
                                         [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
@@ -473,7 +555,12 @@ secure workdir arguments:
                         the private key needed to unlock an encrypted working
                         directory. (default: )
 
-Subparser 'execute'
+```
+</details>
+<details>
+<summary>Subparser <code>execute</code></summary>
+
+```
 usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME
                                 [-Z SECURITYCONTEXTSCONFIGFILENAME]
                                 [-E EXPORTSCONFIGFILENAME]
@@ -483,7 +570,7 @@ usage: WfExS-backend.py execute [-h] -W WORKFLOWCONFIGFILENAME
                                 [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
                                 [--inputs] [--outputs] [--workflow]
                                 [--containers] [--prospective] [--full]
-                                [--licence LICENCES]
+                                [--licence LICENCES] [--crate-pid CRATE_PID]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -536,8 +623,17 @@ ro-crate-payload:
                         everything)? (default: [])
   --licence LICENCES    Licence(s) to attach to the generated RO-Crate
                         (default: [])
+  --crate-pid CRATE_PID
+                        Permanent identifier to embed within the generated RO-
+                        Crate metadata, like a pre-generated DOI (default:
+                        None)
 
-Subparser 'export-results'
+```
+</details>
+<details>
+<summary>Subparser <code>export-results</code></summary>
+
+```
 usage: WfExS-backend.py export-results [-h] [--orcid ORCIDS]
                                        [--private-key-file PRIVATE_KEY_FILE]
                                        [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
@@ -566,7 +662,12 @@ secure workdir arguments:
                         the private key needed to unlock an encrypted working
                         directory. (default: )
 
-Subparser 'export-crate'
+```
+</details>
+<details>
+<summary>Subparser <code>export-crate</code></summary>
+
+```
 usage: WfExS-backend.py export-crate [-h] [--orcid ORCIDS]
                                      [--private-key-file PRIVATE_KEY_FILE]
                                      [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
@@ -574,6 +675,7 @@ usage: WfExS-backend.py export-crate [-h] [--orcid ORCIDS]
                                      [--outputs] [--workflow] [--containers]
                                      [--prospective] [--full]
                                      [--licence LICENCES]
+                                     [--crate-pid CRATE_PID]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -612,7 +714,12 @@ ro-crate-payload:
                         everything)? (default: [])
   --licence LICENCES    Licence(s) to attach to the generated RO-Crate
                         (default: [])
+  --crate-pid CRATE_PID
+                        Permanent identifier to embed within the generated RO-
+                        Crate metadata, like a pre-generated DOI (default:
+                        None)
 ```
+</details>
 
 WfExS commands are:
 
@@ -691,6 +798,6 @@ The program uses three different types of configuration files:
 * Security contexts file: YAML formatted file which holds the `user`/`password` pairs, security tokens or keys needed on different steps, like input fetching. ([Nextflow example](workflow_examples/wetlab2variations_credentials_nxf.wfex.ctxt), [CWL example](workflow_examples/wetlab2variations_credentials_cwl.wfex.ctxt)). JSON Schema describing the format and valid keys (and used for validation), is available at [wfexs_backend/schemas/security-context.json](wfexs_backend/schemas/security-context.json) and there is also automatically generated documentation (see [security-context_schema.md](development-docs/schemas/security-context_schema.md)).
 
 ## License
-* © 2020-2023 Barcelona Supercomputing Center (BSC), ES
+* © 2020-2024 Barcelona Supercomputing Center (BSC), ES
 
 Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE` for details.

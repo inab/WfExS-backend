@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -110,6 +110,7 @@ from .common import (
     Attribution,
     ContentKind,
     DefaultNoLicenceTuple,
+    LicenceDescription,
     LicensedURI,
     META_JSON_POSTFIX,
     URIWithMetadata,
@@ -118,6 +119,7 @@ from .common import (
 from .fetchers import (
     AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
+    DocumentedStatefulProtocolFetcher,
     FetcherException,
     FetcherInstanceException,
     InvalidFetcherException,
@@ -166,8 +168,6 @@ class SchemeHandlerCacheHandler:
         schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]" = dict(),
     ):
         # Getting a logger focused on specific classes
-        import inspect
-
         self.logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
             + "::"
@@ -189,26 +189,31 @@ class SchemeHandlerCacheHandler:
         else:
             raise InvalidFetcherException("Unable to add raw scheme handlers")
 
-    def addSchemeHandler(
+    def bypassSchemeHandler(
         self,
         scheme: "str",
-        handler: "Union[Type[StatefulFetcher], DocumentedProtocolFetcher]",
+        handler: "Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]",
         progs: "ProgsMapping" = dict(),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ) -> None:
         """
+        This method adds and overwrites a scheme handler,
+        instantiating it if it is a stateful one.
 
         :param scheme:
         :param handler:
         """
         the_handler: "DocumentedProtocolFetcher"
-        if inspect.isclass(handler):
+        if isinstance(handler, DocumentedStatefulProtocolFetcher):
             inst_handler = self.instantiateStatefulFetcher(
-                handler, progs=progs, setup_block=setup_block
+                handler.fetcher_class, progs=progs, setup_block=setup_block
             )
             the_handler = DocumentedProtocolFetcher(
                 fetcher=inst_handler.fetch,
-                description=inst_handler.description,
+                description=inst_handler.description
+                if handler.description is None
+                else handler.description,
+                priority=handler.priority,
             )
         elif isinstance(handler, DocumentedProtocolFetcher) and isinstance(
             handler.fetcher,
@@ -228,14 +233,14 @@ class SchemeHandlerCacheHandler:
 
         self.schemeHandlers[scheme.lower()] = the_handler
 
-    def addSchemeHandlers(
+    def bypassSchemeHandlers(
         self,
-        schemeHandlers: "Mapping[str, Union[Type[StatefulFetcher], DocumentedProtocolFetcher]]",
+        schemeHandlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]",
     ) -> None:
         # No validation is done here about validness of schemes
         if isinstance(schemeHandlers, dict):
             for scheme, clazz in schemeHandlers.items():
-                self.addSchemeHandler(scheme, clazz)
+                self.bypassSchemeHandler(scheme, clazz)
         else:
             raise InvalidFetcherException(
                 "Unable to instantiate to add scheme handlers"
@@ -269,9 +274,9 @@ class SchemeHandlerCacheHandler:
 
         return cast("StatefulFetcher", instStatefulFetcher)
 
-    def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str]]":
+    def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str, int]]":
         return [
-            (scheme, desc_fetcher.description)
+            (scheme, desc_fetcher.description, desc_fetcher.priority)
             for scheme, desc_fetcher in self.schemeHandlers.items()
         ]
 
@@ -616,7 +621,12 @@ class SchemeHandlerCacheHandler:
         the_licences: "Tuple[URIType, ...]" = tuple()
         if isinstance(the_remote_file, LicensedURI):
             the_remote_uri = the_remote_file.uri
-            the_licences = the_remote_file.licences
+            the_licences = tuple(
+                licence.get_uri()
+                if isinstance(licence, LicenceDescription)
+                else licence
+                for licence in the_remote_file.licences
+            )
         elif isinstance(the_remote_file, urllib.parse.ParseResult):
             the_remote_uri = cast("URIType", urllib.parse.urlunparse(the_remote_file))
         else:
@@ -909,7 +919,12 @@ class SchemeHandlerCacheHandler:
                     if isinstance(a_remote_file, LicensedURI):
                         the_remote_file = a_remote_file.uri
                         attachedSecContext = a_remote_file.secContext
-                        the_licences = a_remote_file.licences
+                        the_licences = tuple(
+                            a_licence.get_uri()
+                            if isinstance(a_licence, LicenceDescription)
+                            else a_licence
+                            for a_licence in a_remote_file.licences
+                        )
                     else:
                         the_remote_file = a_remote_file
 
@@ -1080,28 +1095,40 @@ class SchemeHandlerCacheHandler:
 
                         try:
                             # Content is fetched here
-                            (
-                                inputKind,
-                                fetched_metadata_array,
-                                fetched_licences,
-                            ) = schemeHandler.fetcher(
+                            pfr = schemeHandler.fetcher(
                                 the_remote_file,
                                 tempCachedFilename,
                                 secContext=usableSecContext
                                 if usableSecContext
                                 else None,
                             )
+                            inputKind = pfr.kind_or_resolved
+                            if (
+                                len(pfr.metadata_array) > 0
+                                and pfr.metadata_array[0].uri != the_remote_file
+                            ):
+                                # This is needed in cases where the fetching plugin
+                                # curates the input URI, in order to remove
+                                # details, like embedded credentials
+                                the_remote_file = pfr.metadata_array[0].uri
+                                (
+                                    _,
+                                    uriCachedFilename,
+                                    absUriCachedFilename,
+                                ) = self._genUriMetaCachedFilename(
+                                    hashDir, the_remote_file
+                                )
 
                             # Overwrite the licence if it is explicitly returned
-                            if fetched_licences is not None:
-                                the_licences = fetched_licences
+                            if pfr.licences is not None:
+                                the_licences = pfr.licences
 
                             # The cache entry is injected
                             finalCachedFilename, fingerprint = self._inject(
                                 hashDir,
                                 LicensedURI(uri=the_remote_file, licences=the_licences),
                                 destdir=destdir,
-                                fetched_metadata_array=fetched_metadata_array,
+                                fetched_metadata_array=pfr.metadata_array,
                                 tempCachedFilename=tempCachedFilename,
                                 inputKind=inputKind,
                             )
@@ -1130,7 +1157,7 @@ class SchemeHandlerCacheHandler:
                             os.symlink(next_input_file, absUriCachedFilename)
 
                             # Store the metadata
-                            metadata_array.extend(fetched_metadata_array)
+                            metadata_array.extend(pfr.metadata_array)
                             licences.extend(the_licences)
                         except FetcherException as che:
                             if nested_exception is not None:

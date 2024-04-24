@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -87,14 +87,18 @@ if TYPE_CHECKING:
         WorkflowType,
     )
 
-    from .fetchers.internal.orcid import (
-        ORCIDPublicRecord,
+    from .utils.licences import (
+        LicenceMatcher,
     )
 
 import urllib.parse
 import uuid
 
-import magic
+from .utils.misc import lazy_import
+
+magic = lazy_import("magic")
+# import magic
+
 from rfc6920.methods import extract_digest
 import rocrate.model.entity
 import rocrate.model.dataset
@@ -117,7 +121,7 @@ from .fetchers import (
     FetcherException,
 )
 
-from .fetchers.internal.orcid import (
+from .utils.orcid import (
     validate_orcid,
 )
 
@@ -129,24 +133,29 @@ from .utils.digests import (
     nullProcessDigest,
     unstringifyDigest,
 )
+from .utils.licences import (
+    LicenceMatcherSingleton,
+)
 from .utils.marshalling_handling import (
     marshall_namedtuple,
 )
 from .common import (
     AbstractWfExSException,
-    AcceptableLicenceSchemes,
+    CC_BY_40_LicenceDescription,
     ContainerType,
     ContentKind,
     CratableItem,
     DEFAULT_DOT_CMD,
     GeneratedContent,
     GeneratedDirectoryContent,
+    LicenceDescription,
     MaterializedContent,
     META_JSON_POSTFIX,
     NoCratableItem,
     NoLicence,
+    NoLicenceDescription,
     NoLicenceShort,
-    ROCrateShortLicences,
+    ResolvedORCID,
 )
 
 from . import __url__ as wfexs_backend_url
@@ -338,9 +347,12 @@ class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
     pass
 
 
+WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
+
+
 class ContainerImageAdditionalType(enum.Enum):
-    Docker = "DockerImage"
-    Singularity = "SIFImage"
+    Docker = WORKFLOW_RUN_CONTEXT + "#DockerImage"
+    Singularity = WORKFLOW_RUN_CONTEXT + "#SIFImage"
 
 
 ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
@@ -391,7 +403,12 @@ class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
             raise ValueError(
                 f"Unable to map container type {container_type.value} to an RO-Crate equivalent"
             )
-        fp_properties = {"name": name, "additionalType": additional_type.value}
+        fp_properties = {
+            "name": name,
+            "additionalType": {
+                "@id": additional_type.value,
+            },
+        }
 
         if registry is not None:
             fp_properties["registry"] = registry
@@ -715,11 +732,13 @@ class WorkflowRunROCrate:
         arch: "Optional[ProcessorArchitecture]",
         staged_setup: "StagedSetup",
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
+        orcids: "Sequence[Union[str, ResolvedORCID]]" = [],
         progs: "ProgsMapping" = {},
         tempdir: "Optional[str]" = None,
-        scheme_desc: "Sequence[Tuple[str, str]]" = [],
+        scheme_desc: "Sequence[Tuple[str, str, int]]" = [],
+        crate_pid: "Optional[str]" = None,
+        licence_matcher: "Optional[LicenceMatcher]" = None,
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -742,6 +761,7 @@ class WorkflowRunROCrate:
         # This is used to avoid including twice the very same value
         # in the RO-Crate
         self._item_hash: "MutableMapping[bytes, rocrate.model.entity.Entity]" = {}
+        self._added_containers: "MutableSequence[Container]" = []
         self._wf_to_containers: "MutableMapping[str, MutableSequence[ContainerImage]]" = (
             {}
         )
@@ -753,7 +773,12 @@ class WorkflowRunROCrate:
         )
 
         if len(licences) == 0:
-            licences = [NoLicenceShort]
+            licences = [NoLicenceDescription]
+
+        # This is only used for licences attached to materialized content
+        if licence_matcher is None:
+            licence_matcher = LicenceMatcherSingleton()
+        self.licence_matcher = licence_matcher
 
         if localWorkflow.relPath is not None:
             wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
@@ -776,6 +801,7 @@ class WorkflowRunROCrate:
             materializedEngine.instance.workflowType,
             localWorkflow.langVersion,
             licences,
+            crate_pid=crate_pid,
         )
 
         # add agents
@@ -784,18 +810,23 @@ class WorkflowRunROCrate:
         for orcid in orcids:
             # validate ORCID asking for its public metadata
             try:
-                val_res = validate_orcid(orcid)
-                if val_res is not None:
+                resolved_orcid: "Optional[ResolvedORCID]"
+                if isinstance(orcid, ResolvedORCID):
+                    resolved_orcid = orcid
+                else:
+                    resolved_orcid = validate_orcid(orcid)
+
+                if resolved_orcid is not None:
                     agent = rocrate.model.person.Person(
-                        self.crate, identifier=val_res[1]
+                        self.crate, identifier=resolved_orcid.url
                     )
 
                     # enrich agent entry from the metadata obtained from the ORCID
-                    agent_name = val_res[2].get("displayName")
+                    agent_name = resolved_orcid.record.get("displayName")
                     if agent_name is not None:
                         agent["name"] = agent_name
 
-                    emails_dict = val_res[2].get("emails", {})
+                    emails_dict = resolved_orcid.record.get("emails", {})
                     if isinstance(emails_dict, dict):
                         emails = emails_dict.get("emails", [])
                         if isinstance(emails, list):
@@ -810,7 +841,7 @@ class WorkflowRunROCrate:
                                         )
                                         contact_point["email"] = the_email
                                         contact_point["identifier"] = the_email
-                                        contact_point["url"] = val_res[1]
+                                        contact_point["url"] = resolved_orcid.url
 
                                         self.crate.add(contact_point)
                                         agent.append_to(
@@ -918,7 +949,8 @@ class WorkflowRunROCrate:
         self,
         wf_type: "WorkflowType",
         langVersion: "Optional[Union[EngineVersion, WFLangVersion]]",
-        licences: "Sequence[str]",
+        licences: "Sequence[LicenceDescription]",
+        crate_pid: "Optional[str]",
     ) -> "None":
         """
         Due the internal synergies between an instance of ComputerLanguage
@@ -926,38 +958,28 @@ class WorkflowRunROCrate:
         here, just at the same time
         """
 
-        # Let's check the licences
-        rejected_lics: "MutableSequence[str]" = []
-        for lic in licences:
-            if lic in ROCrateShortLicences:
-                continue
-            if urllib.parse.urlparse(lic).scheme in AcceptableLicenceSchemes:
-                continue
-
-            rejected_lics.append(lic)
-
-        if len(rejected_lics) > 0:
-            raise ROCrateGenerationException(
-                f"Unsupported Workflow RO-Crate short license(s) or license URI scheme(s): {', '.join(rejected_lics)}"
-            )
-
         self.crate = FixedROCrate(gen_preview=False)
+        if crate_pid is not None:
+            self.crate.root_dataset.append_to("identifier", crate_pid, compact=True)
+
+        RO_licences = self._process_licences(licences)
 
         # Add extra terms
-        self.crate.metadata.extra_terms.update(
-            {
-                "sha256": "https://w3id.org/ro/terms/workflow-run#sha256",
-                # Next ones are experimental
-                ContainerImageAdditionalType.Docker.value: "https://w3id.org/ro/terms/workflow-run#"
-                + ContainerImageAdditionalType.Docker.value,
-                ContainerImageAdditionalType.Singularity.value: "https://w3id.org/ro/terms/workflow-run#"
-                + ContainerImageAdditionalType.Singularity.value,
-                "containerImage": "https://w3id.org/ro/terms/workflow-run#containerImage",
-                "ContainerImage": "https://w3id.org/ro/terms/workflow-run#ContainerImage",
-                "registry": "https://w3id.org/ro/terms/workflow-run#registry",
-                "tag": "https://w3id.org/ro/terms/workflow-run#tag",
-            }
-        )
+        # self.crate.metadata.extra_terms.update(
+        #     {
+        #         "sha256": WORKFLOW_RUN_CONTEXT + "#sha256",
+        #         # Next ones are experimental
+        #         ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_CONTEXT + "#"
+        #         + ContainerImageAdditionalType.Docker.value,
+        #         ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_CONTEXT + "#"
+        #         + ContainerImageAdditionalType.Singularity.value,
+        #         "containerImage": WORKFLOW_RUN_CONTEXT + "#containerImage",
+        #         "ContainerImage": WORKFLOW_RUN_CONTEXT + "#ContainerImage",
+        #         "registry": WORKFLOW_RUN_CONTEXT + "#registry",
+        #         "tag": WORKFLOW_RUN_CONTEXT + "#tag",
+        #     }
+        # )
+        self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
@@ -971,31 +993,77 @@ class WorkflowRunROCrate:
             },
         )
         self.crate.description = f"RO-Crate from staged WfExS working directory {self.staged_setup.instance_id} ({self.staged_setup.nickname})"
-        self.crate.license = licences
+        self.crate.root_dataset.append_to("license", RO_licences, compact=True)
         # This should not be needed, as it is added later
         self.crate.add(self.compLang)
 
+    def _process_licences(
+        self, licdescs: "Sequence[LicenceDescription]"
+    ) -> "Sequence[Union[str, rocrate.model.creativework.CreativeWork]]":
+        RO_licences: "MutableSequence[Union[str, rocrate.model.creativework.CreativeWork]]" = (
+            []
+        )
+        for licdesc in licdescs:
+            RO_licences.append(self._process_licence(licdesc))
+
+        return RO_licences
+
+    def _process_licence(
+        self, licdesc: "LicenceDescription"
+    ) -> "Union[str, rocrate.model.creativework.CreativeWork]":
+        parsed_lic: "Union[str, rocrate.model.creativework.CreativeWork]"
+        rec_lic: "bool" = False
+        # In order to avoid so prominent "No Permission url"
+        if licdesc.short == NoLicenceShort or licdesc.get_uri() == NoLicence:
+            parsed_lic = NoLicenceShort
+        else:
+            lic_uri = licdesc.get_uri()
+            cw = cast(
+                "Optional[rocrate.model.creativework.CreativeWork]",
+                self.crate.dereference(lic_uri),
+            )
+            if cw is None:
+                rec_lic = True
+                parsed_lic = rocrate.model.creativework.CreativeWork(
+                    self.crate,
+                    identifier=lic_uri,
+                    properties={
+                        "identifier": licdesc.short,
+                        "name": licdesc.description,
+                        "url": licdesc.uris[0]
+                        if len(licdesc.uris) == 1
+                        else licdesc.uris,
+                    },
+                )
+            else:
+                parsed_lic = cw
+
+        if rec_lic and isinstance(parsed_lic, rocrate.model.creativework.CreativeWork):
+            self.crate.add(parsed_lic)
+
+        return parsed_lic
+
     def _add_wfexs_to_crate(
-        self, scheme_desc: "Sequence[Tuple[str, str]]"
+        self, scheme_desc: "Sequence[Tuple[str, str, int]]"
     ) -> "rocrate.model.softwareapplication.SoftwareApplication":
         # First, the profiles to be attached to the root dataset
         wrroc_profiles = [
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/process/0.2",
-                properties={"name": "ProcessRun Crate", "version": "0.2"},
+                identifier="https://w3id.org/ro/wfrun/process/0.3",
+                properties={"name": "ProcessRun Crate", "version": "0.3"},
             ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/workflow/0.2",
-                properties={"name": "Workflow Run Crate", "version": "0.2"},
+                identifier="https://w3id.org/ro/wfrun/workflow/0.3",
+                properties={"name": "Workflow Run Crate", "version": "0.3"},
             ),
             # TODO: This one can be enabled only when proper provenance
             # describing the execution steps is implemented
             # rocrate.model.creativework.CreativeWork(
             #     self.crate,
-            #     identifier="https://w3id.org/ro/wfrun/provenance/0.2",
-            #     properties={"name": "Provenance Run Crate", "version": "0.2"},
+            #     identifier="https://w3id.org/ro/wfrun/provenance/0.3",
+            #     properties={"name": "Provenance Run Crate", "version": "0.3"},
             # ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
@@ -1052,7 +1120,7 @@ either `docker save` or `podman save` commands. These archives have all
 the layers needed to restore the container image in a local registry
 through either `docker load` or `podman load`.
 
-## Posibly used URI schemes
+## Possibly used URI schemes
 
 As {wfexs_backend_name} is able to manage several exotic CURIEs and schemes,
 you can find here an almost complete list of the possible ones:
@@ -1067,7 +1135,7 @@ you can find here an almost complete list of the possible ones:
             the_uri=None,
             the_name=cast("RelPath", "README.md"),
             the_mime="text/markdown",
-            the_licences=["https://spdx.org/licenses/CC-BY-4.0.html"],
+            the_licences=[CC_BY_40_LicenceDescription],
         )
         readme_file.append_to("about", self.crate.root_dataset, compact=True)
 
@@ -1084,6 +1152,10 @@ you can find here an almost complete list of the possible ones:
         if len(containers) > 0:
             do_attach = CratableItem.Containers in self.payloads
             for container in containers:
+                # Skip early what it was already included in the crate
+                if container in self._added_containers:
+                    continue
+
                 container_type_metadata = self.ContainerTypeMetadataDetails[
                     container.type
                 ]
@@ -1146,6 +1218,18 @@ you can find here an almost complete list of the possible ones:
                     if container.source_type is not None
                     else container.type
                 )
+                upper_properties = {}
+                # This is for the cases where we have the docker image fingerprint
+                # This sha256 is about the image, but it is not associated
+                # to the physical image when it is materialized in some way
+                # like docker save or singularity pull
+                if (
+                    container.fingerprint is not None
+                    and "@sha256:" in container.fingerprint
+                ):
+                    _, upper_properties["sha256"] = container.fingerprint.split(
+                        "@sha256:", 1
+                    )
                 software_container = ContainerImage(
                     self.crate,
                     identifier=container.taggedName,
@@ -1153,15 +1237,25 @@ you can find here an almost complete list of the possible ones:
                     name=tag_name,
                     tag=tag_label,
                     container_type=original_container_type,
+                    properties=upper_properties,
                 )
                 if do_attach and container.localPath is not None:
                     the_size = os.stat(container.localPath).st_size
-                    assert container.image_signature is not None
-                    digest, algo = extract_digest(container.image_signature)
-                    if digest is None:
-                        digest, algo = unstringifyDigest(container.image_signature)
-                    assert algo is not None
-                    the_signature = hexDigest(algo, digest)
+                    if container.image_signature is not None:
+                        digest, algo = extract_digest(container.image_signature)
+                        if digest is None:
+                            digest, algo = unstringifyDigest(container.image_signature)
+                        assert algo is not None
+                        the_signature = hexDigest(algo, digest)
+                    else:
+                        the_signature = cast(
+                            "Fingerprint",
+                            ComputeDigestFromFile(
+                                container.localPath,
+                                "sha256",
+                                repMethod=hexDigest,
+                            ),
+                        )
 
                     materialized_software_container = MaterializedContainerImage(
                         self.crate,
@@ -1205,6 +1299,9 @@ you can find here an almost complete list of the possible ones:
 
                 crate_cont = self.crate.dereference(software_container.id)
                 if crate_cont is None:
+                    # Record the container
+                    self._added_containers.append(container)
+
                     # Now, add container metadata, which is going to be
                     # consumed by WfExS or third parties
                     metadataLocalPath: "Optional[str]" = None
@@ -1275,6 +1372,8 @@ you can find here an almost complete list of the possible ones:
         do_attach = CratableItem.Inputs in self.payloads
         input_sep = "envvar" if are_envvars else "param"
         fp_dest = "environment" if are_envvars else "input"
+
+        failed_licences: "MutableSequence[URIType]" = []
         for in_item in inputs:
             formal_parameter_id = (
                 f"{self.wf_file.id}#{input_sep}:"
@@ -1345,7 +1444,26 @@ you can find here an almost complete list of the possible ones:
                         assert isinstance(itemInValues, MaterializedContent)
                         itemInLocalSource = itemInValues.local  # local source
                         itemInURISource = itemInValues.licensed_uri.uri  # uri source
-                        itemInURILicenses = itemInValues.licensed_uri.licences
+
+                        itemInURILicences: "Optional[MutableSequence[LicenceDescription]]" = (
+                            None
+                        )
+                        if itemInValues.licensed_uri.licences is not None:
+                            itemInURILicences = []
+                            for licence in itemInValues.licensed_uri.licences:
+                                matched_licence: "Optional[LicenceDescription]"
+                                if isinstance(licence, LicenceDescription):
+                                    matched_licence = licence
+                                else:
+                                    matched_licence = self.licence_matcher.matchLicence(
+                                        licence
+                                    )
+                                    if matched_licence is None:
+                                        failed_licences.append(licence)
+
+                                if matched_licence is not None:
+                                    itemInURILicences.append(matched_licence)
+
                         if os.path.isfile(itemInLocalSource):
                             the_signature: "Optional[Fingerprint]" = None
                             if itemInValues.fingerprint is not None:
@@ -1363,7 +1481,7 @@ you can find here an almost complete list of the possible ones:
                                     os.path.relpath(itemInLocalSource, self.work_dir),
                                 ),
                                 the_signature=the_signature,
-                                the_licences=itemInURILicenses,
+                                the_licences=itemInURILicences,
                                 do_attach=do_attach,
                             )
 
@@ -1625,6 +1743,11 @@ you can find here an almost complete list of the possible ones:
                     formal_parameter.append_to("workExample", crate_coll, compact=True)
                 crate_inputs.append(crate_coll)
 
+        if len(failed_licences) > 0:
+            raise ROCrateGenerationException(
+                f"Unsupported Workflow RO-Crate short license(s) or license URI scheme(s): {', '.join(failed_licences)}"
+            )
+
             # TODO digest other types of inputs
         return crate_inputs
 
@@ -1637,7 +1760,7 @@ you can find here an almost complete list of the possible ones:
         the_alternate_name: "Optional[RelPath]" = None,
         the_size: "Optional[int]" = None,
         the_signature: "Optional[Fingerprint]" = None,
-        the_licences: "Optional[Sequence[str]]" = None,
+        the_licences: "Optional[Sequence[LicenceDescription]]" = None,
         the_mime: "Optional[str]" = None,
         is_soft_source: "bool" = False,
         do_attach: "bool" = True,
@@ -1689,10 +1812,9 @@ you can find here an almost complete list of the possible ones:
 
         if the_licences is not None:
             for the_licence in the_licences:
-                # In order to avoid so prominent "No Permission url"
-                if the_licence == NoLicence:
-                    the_licence = NoLicenceShort
-                the_file_crate.append_to("license", the_licence, compact=True)
+                the_file_crate.append_to(
+                    "license", self._process_licence(the_licence), compact=True
+                )
 
         return the_file_crate
 
@@ -1961,19 +2083,21 @@ you can find here an almost complete list of the possible ones:
             )
             if was_workflow_run and len(added_containers) > 0:
                 the_workflow_crate.append_to(
-                    "softwareAddOn", self._wf_to_container_sa[the_workflow_crate.id]
+                    "softwareRequirements",
+                    self._wf_to_container_sa[the_workflow_crate.id],
+                    compact=True,
                 )
             existing_containers = self._wf_to_containers.setdefault(
                 the_workflow_crate.id, []
             )
             for added_container in added_containers:
                 # Add containers as addons which were used
-                if was_workflow_run:
-                    the_workflow_crate.append_to(
-                        "softwareAddOn", added_container, compact=True
-                    )
                 if added_container not in existing_containers:
                     existing_containers.append(added_container)
+                    if was_workflow_run:
+                        the_workflow_crate.append_to(
+                            "softwareRequirements", added_container, compact=True
+                        )
         if materialized_engine.operational_containers is not None:
             added_operational_containers = self._add_containers(
                 materialized_engine.operational_containers,
@@ -2197,7 +2321,9 @@ you can find here an almost complete list of the possible ones:
                 validate_url=False,
                 properties={
                     "contentSize": str(os.stat(abs_diagram).st_size),
-                    "sha256": ComputeDigestFromFile(abs_diagram, repMethod=hexDigest),
+                    "sha256": ComputeDigestFromFile(
+                        abs_diagram, "sha256", repMethod=hexDigest
+                    ),
                     "encodingFormat": magic.from_file(abs_diagram, mime=True),
                 },
             )
@@ -2243,7 +2369,7 @@ you can find here an almost complete list of the possible ones:
                         properties={
                             "contentSize": str(os.stat(png_dot_path).st_size),
                             "sha256": ComputeDigestFromFile(
-                                png_dot_path, repMethod=hexDigest
+                                png_dot_path, "sha256", repMethod=hexDigest
                             ),
                             "encodingFormat": magic.from_file(png_dot_path, mime=True),
                         },

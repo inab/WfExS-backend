@@ -3,6 +3,7 @@ from typing import (
     Any,
     Optional,
     Mapping,
+    MutableSequence,
     MutableMapping,
     Sequence,
 )
@@ -33,6 +34,7 @@ class Metadata(File):
     BASENAME: str
     PROFILE: str
     extra_terms: MutableMapping[str, str]
+    extra_contexts: MutableSequence[str]
     def __init__(
         self,
         crate: ROCrate,

@@ -137,7 +137,7 @@ class CWLWorkflowEngine(WorkflowEngine):
     DEVEL_CWLTOOL_REPO = CWLTOOL_REPO
     CWL_UTILS_REPO = CWL_REPO + CWL_UTILS_PYTHON_PACKAGE
 
-    DEFAULT_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20230906142556")
+    DEFAULT_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20240112164112")
 
     # DEVEL_CWLTOOL_PACKAGE = f"git+{CWLTOOL_REPO}.git"
     DEVEL_CWLTOOL_PACKAGE = f"git+{DEVEL_CWLTOOL_REPO}.git"
@@ -818,12 +818,13 @@ STDERR
             if containerTag.startswith("http:") or containerTag.startswith("https:"):
                 container_type = ContainerType.Singularity
 
-            list_of_containers.append(
-                ContainerTaggedName(
-                    origTaggedName=containerTag,
-                    type=container_type,
-                )
+            putative_container_tag = ContainerTaggedName(
+                origTaggedName=containerTag,
+                type=container_type,
             )
+
+            if putative_container_tag not in list_of_containers:
+                list_of_containers.append(putative_container_tag)
 
         return newWfEngine, list_of_containers
 
