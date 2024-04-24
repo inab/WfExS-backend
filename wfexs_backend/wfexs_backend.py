@@ -21,6 +21,7 @@ import atexit
 import copy
 import datetime
 import hashlib
+import importlib
 import inspect
 import io
 import json
@@ -94,25 +95,27 @@ from .ro_crate import FixedROCrate
 
 from .security_context import SecurityContextVault
 
-from .utils.marshalling_handling import unmarshall_namedtuple
-from .utils.misc import config_validate
+from .utils.marshalling_handling import (
+    unmarshall_namedtuple,
+)
+
 from .utils.misc import (
+    config_validate,
     DatetimeEncoder,
+    iter_namespace,
     jsonFilterDecodeFromStream,
     translate_glob_args,
 )
+
 from .utils.passphrase_wrapper import (
     WfExSPassGenSingleton,
 )
 
 from .fetchers import (
+    AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
+    DocumentedStatefulProtocolFetcher,
 )
-from .fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
-from .fetchers.ftp import SCHEME_HANDLERS as FTP_SCHEME_HANDLERS
-from .fetchers.sftp import SCHEME_HANDLERS as SFTP_SCHEME_HANDLERS
-from .fetchers.file import SCHEME_HANDLERS as FILE_SCHEME_HANDLERS
-from .fetchers.data import SCHEME_HANDLERS as DATA_SCHEME_HANDLERS
 
 from .fetchers.git import (
     GitFetcher,
@@ -124,19 +127,7 @@ from .fetchers.swh import (
     SoftwareHeritageFetcher,
 )
 
-from .fetchers.pride import SCHEME_HANDLERS as PRIDE_SCHEME_HANDLERS
-from .fetchers.drs import SCHEME_HANDLERS as DRS_SCHEME_HANDLERS
-from .fetchers.trs_files import SCHEME_HANDLERS as INTERNAL_TRS_SCHEME_HANDLERS
-from .fetchers.s3 import S3_SCHEME_HANDLERS as S3_SCHEME_HANDLERS
-from .fetchers.gs import GS_SCHEME_HANDLERS as GS_SCHEME_HANDLERS
-from .fetchers.fasp import FASPFetcher
-from .fetchers.doi import SCHEME_HANDLERS as DOI_SCHEME_HANDLERS
-from .fetchers.zenodo import SCHEME_HANDLERS as ZENODO_SCHEME_HANDLERS
-from .fetchers.b2share import SCHEME_HANDLERS as B2SHARE_SCHEME_HANDLERS
-from .fetchers.osf_io import SCHEME_HANDLERS as OSF_IO_SCHEME_HANDLERS
-
-from .pushers.cache_export import CacheExportPlugin
-from .pushers.nextcloud_export import NextcloudExportPlugin
+from .pushers import AbstractExportPlugin
 
 from .workflow import (
     WF,
@@ -150,6 +141,8 @@ from .fetchers.trs_files import (
 
 
 if TYPE_CHECKING:
+    from types import ModuleType
+
     from typing import (
         Any,
         ClassVar,
@@ -202,11 +195,8 @@ if TYPE_CHECKING:
     )
 
     from .fetchers import (
-        AbstractStatefulFetcher,
         StatefulFetcher,
     )
-
-    from .pushers import AbstractExportPlugin
 
     from .utils.passphrase_wrapper import (
         WfExSPassphraseGenerator,
@@ -366,6 +356,11 @@ class WfExSBackend:
             # which is not supported in every Python interpreter
             orig_scrypt_supported = crypt4gh.keys.c4gh.scrypt_supported
             crypt4gh.keys.c4gh.scrypt_supported = False
+
+            # This is needed to protect WfExS from unwanted umask changes
+            # from the reference crypt4gh library
+            umask = os.umask(0)
+            os.umask(umask)
             try:
                 crypt4gh.keys.c4gh.generate(
                     privKey,
@@ -374,6 +369,7 @@ class WfExSBackend:
                     comment=comment.encode("utf-8"),
                 )
             finally:
+                os.umask(umask)
                 crypt4gh.keys.c4gh.scrypt_supported = orig_scrypt_supported
         elif not crypt4gh.keys.c4gh.scrypt_supported:
             logger.info(
@@ -602,35 +598,19 @@ class WfExSBackend:
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir)
 
         fetchers_setup_block = local_config.get("fetchers-setup")
-        # All the custom ones should be added here
-        self.addSchemeHandlers(PRIDE_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(DRS_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(INTERNAL_TRS_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(S3_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(GS_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addStatefulSchemeHandlers(FASPFetcher, fetchers_setup_block)
 
-        self.addSchemeHandlers(DOI_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(ZENODO_SCHEME_HANDLERS, fetchers_setup_block)
-
-        self.addSchemeHandlers(B2SHARE_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(OSF_IO_SCHEME_HANDLERS, fetchers_setup_block)
-
-        # These ones should have prevalence over other custom ones
-        self.addStatefulSchemeHandlers(GitFetcher, fetchers_setup_block)
-        self.addStatefulSchemeHandlers(SoftwareHeritageFetcher, fetchers_setup_block)
-        self.addSchemeHandlers(HTTP_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(FTP_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(SFTP_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(FILE_SCHEME_HANDLERS, fetchers_setup_block)
-        self.addSchemeHandlers(DATA_SCHEME_HANDLERS, fetchers_setup_block)
+        # All the scheme handlers should be added here
+        self.findAndAddSchemeHandlersFromModuleName(
+            fetchers_setup_block=fetchers_setup_block
+        )
 
         # Registry of export plugins is created here
         self._export_plugins: "MutableMapping[SymbolicName, Type[AbstractExportPlugin]]" = (
             dict()
         )
-        self.addExportPlugin(CacheExportPlugin)
-        self.addExportPlugin(NextcloudExportPlugin)
+
+        # All the export plugins should be added here
+        self.findAndAddExportPluginsFromModuleName()
 
     @property
     def cacheWorkflowDir(self) -> "AbsPath":
@@ -663,6 +643,9 @@ class WfExSBackend:
         """
         instStatefulFetcher = self._sngltn.get(statefulFetcher)
         if instStatefulFetcher is None:
+            # Setting the default list of programs
+            for prog in statefulFetcher.GetNeededPrograms():
+                self.progs.setdefault(prog, cast("RelPath", prog))
             # Let's augment the list of needed progs by this
             # stateful fetcher
             instStatefulFetcher = self.cacheHandler.instantiateStatefulFetcher(
@@ -672,45 +655,103 @@ class WfExSBackend:
 
         return cast("StatefulFetcher", instStatefulFetcher)
 
+    def findAndAddExportPluginsFromModuleName(
+        self,
+        the_module_name: "str" = "wfexs_backend.pushers",
+    ) -> None:
+        try:
+            the_module = importlib.import_module(the_module_name)
+            self.findAndAddExportPluginsFromModule(the_module)
+        except Exception as e:
+            errmsg = f"Unable to import module {the_module_name} in order to gather export plugins, due errors:"
+            self.logger.exception(errmsg)
+            raise WfExSBackendException(errmsg) from e
+
+    def findAndAddExportPluginsFromModule(
+        self,
+        the_module: "ModuleType",
+    ) -> None:
+        for finder, module_name, ispkg in iter_namespace(the_module):
+            try:
+                named_module = importlib.import_module(module_name)
+            except:
+                self.logger.exception(
+                    f"Skipping module {module_name} in order to gather export plugins, due errors:"
+                )
+                continue
+
+            for name, obj in inspect.getmembers(named_module):
+                if (
+                    inspect.isclass(obj)
+                    and not inspect.isabstract(obj)
+                    and issubclass(obj, AbstractExportPlugin)
+                ):
+                    # Now, let's learn whether the class is enabled
+                    if getattr(obj, "ENABLED", False):
+                        self.addExportPlugin(obj)
+
     def addExportPlugin(self, exportClazz: "Type[AbstractExportPlugin]") -> None:
         self._export_plugins[exportClazz.PluginName()] = exportClazz
 
     def listExportPluginNames(self) -> "Sequence[SymbolicName]":
         return list(self._export_plugins.keys())
 
-    def instantiateExportPlugin(
+    def getExportPluginClass(
+        self, plugin_id: "SymbolicName"
+    ) -> "Optional[Type[AbstractExportPlugin]]":
+        return self._export_plugins.get(plugin_id)
+
+    def findAndAddSchemeHandlersFromModuleName(
         self,
-        wfInstance: "WF",
-        plugin_id: "SymbolicName",
-        sec_context: "Optional[SecurityContextConfig]",
-        licences: "Sequence[str]",
-        orcids: "Sequence[str]",
-        preferred_id: "Optional[str]",
-    ) -> "AbstractExportPlugin":
-        """
-        This method instantiates an stateful export plugin
-        """
-
-        if plugin_id not in self._export_plugins:
-            raise KeyError(f"Unavailable plugin {plugin_id}")
-
-        stagedSetup = wfInstance.getStagedSetup()
-
-        if stagedSetup.work_dir is None:
-            raise ValueError(
-                f"Staged setup from {stagedSetup.instance_id} is corrupted"
+        the_module_name: "str" = "wfexs_backend.fetchers",
+        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
+    ) -> None:
+        try:
+            the_module = importlib.import_module(the_module_name)
+            self.findAndAddSchemeHandlersFromModule(
+                the_module,
+                fetchers_setup_block=fetchers_setup_block,
             )
+        except Exception as e:
+            errmsg = f"Unable to import module {the_module_name} in order to gather scheme handlers, due errors:"
+            self.logger.exception(errmsg)
+            raise WfExSBackendException(errmsg) from e
 
-        if stagedSetup.is_damaged:
-            raise ValueError(f"Staged setup from {stagedSetup.instance_id} is damaged")
+    def findAndAddSchemeHandlersFromModule(
+        self,
+        the_module: "ModuleType",
+        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
+    ) -> None:
+        for finder, module_name, ispkg in iter_namespace(the_module):
+            try:
+                named_module = importlib.import_module(module_name)
+            except:
+                self.logger.exception(
+                    f"Skipping module {module_name} in order to gather scheme handlers, due errors:"
+                )
+                continue
 
-        return self._export_plugins[plugin_id](
-            wfInstance,
-            setup_block=sec_context,
-            licences=licences,
-            orcids=orcids,
-            preferred_id=preferred_id,
-        )
+            # First, try locating a variable named SCHEME_HANDLERS
+            # then, the different class declarations inheriting
+            # from AbstractStatefulFetcher
+            for name, obj in inspect.getmembers(named_module):
+                if name == "SCHEME_HANDLERS":
+                    if isinstance(obj, dict):
+                        self.addSchemeHandlers(
+                            obj,
+                            fetchers_setup_block=fetchers_setup_block,
+                        )
+                elif (
+                    inspect.isclass(obj)
+                    and not inspect.isabstract(obj)
+                    and issubclass(obj, AbstractStatefulFetcher)
+                ):
+                    # Now, let's learn whether the class is enabled
+                    if getattr(obj, "ENABLED", False):
+                        self.addStatefulSchemeHandlers(
+                            obj,
+                            fetchers_setup_block=fetchers_setup_block,
+                        )
 
     def addStatefulSchemeHandlers(
         self,
@@ -725,10 +766,6 @@ class WfExSBackend:
         # Get the scheme handlers from this fetcher
         schemeHandlers = statefulSchemeHandler.GetSchemeHandlers()
 
-        # Setting the default list of programs
-        for prog in statefulSchemeHandler.GetNeededPrograms():
-            self.progs.setdefault(prog, cast("RelPath", prog))
-
         self.addSchemeHandlers(
             schemeHandlers, fetchers_setup_block=fetchers_setup_block
         )
@@ -738,7 +775,7 @@ class WfExSBackend:
 
     def addSchemeHandlers(
         self,
-        schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, Type[AbstractStatefulFetcher]]]",
+        schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, DocumentedStatefulProtocolFetcher]]",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
     ) -> None:
         """
@@ -762,14 +799,17 @@ class WfExSBackend:
                 setup_block = fetchers_setup_block.get(lScheme, dict())
 
                 instSchemeHandler = None
-                if inspect.isclass(schemeHandler):
+                if isinstance(schemeHandler, DocumentedStatefulProtocolFetcher):
                     instSchemeInstance = self.instantiateStatefulFetcher(
-                        schemeHandler, setup_block=setup_block
+                        schemeHandler.fetcher_class, setup_block=setup_block
                     )
                     if instSchemeInstance is not None:
                         instSchemeHandler = DocumentedProtocolFetcher(
                             fetcher=instSchemeInstance.fetch,
-                            description=instSchemeInstance.description,
+                            description=instSchemeInstance.description
+                            if schemeHandler.description is None
+                            else schemeHandler.description,
+                            priority=schemeHandler.priority,
                         )
                 elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
                     schemeHandler.fetcher
@@ -784,7 +824,7 @@ class WfExSBackend:
 
             self.cacheHandler.addRawSchemeHandlers(instSchemeHandlers)
 
-    def describeFetchableSchemes(self) -> "Sequence[Tuple[str, str]]":
+    def describeFetchableSchemes(self) -> "Sequence[Tuple[str, str, int]]":
         return self.cacheHandler.describeRegisteredSchemes()
 
     def newSetup(
@@ -1556,30 +1596,6 @@ class WfExSBackend:
             local_config=self.local_config,
             config_directory=self.config_directory,
         )
-
-    def addSchemeHandler(
-        self, scheme: "str", handler: "DocumentedProtocolFetcher"
-    ) -> None:
-        """
-
-        :param scheme:
-        :param handler:
-        """
-        if not isinstance(
-            handler,
-            (
-                types.FunctionType,
-                types.LambdaType,
-                types.MethodType,
-                types.BuiltinFunctionType,
-                types.BuiltinMethodType,
-            ),
-        ):
-            raise WfExSBackendException(
-                "Trying to set for scheme {} a invalid handler".format(scheme)
-            )
-
-        self.cacheHandler.addRawSchemeHandlers({scheme.lower(): handler})
 
     def guess_repo_params(
         self,

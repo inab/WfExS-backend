@@ -54,6 +54,7 @@ from ..common import (
 
 from . import (
     AbstractStatefulFetcher,
+    DocumentedStatefulProtocolFetcher,
     FetcherException,
     ProtocolFetcherReturn,
 )
@@ -68,10 +69,13 @@ class WiktionaryFetcher(AbstractStatefulFetcher):
         super().__init__(progs=progs, setup_block=setup_block)
 
     @classmethod
-    def GetSchemeHandlers(cls) -> "Mapping[str, Type[AbstractStatefulFetcher]]":
+    def GetSchemeHandlers(cls) -> "Mapping[str, DocumentedStatefulProtocolFetcher]":
         # These are de-facto schemes supported by pip and git client
         return {
-            cls.WIKTIONARY_PROTO: cls,
+            cls.WIKTIONARY_PROTO: DocumentedStatefulProtocolFetcher(
+                fetcher_class=cls,
+                priority=cls.PRIORITY,
+            ),
         }
 
     @property

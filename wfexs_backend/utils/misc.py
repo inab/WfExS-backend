@@ -20,9 +20,12 @@ from __future__ import absolute_import
 
 import datetime
 import fnmatch
+import importlib.util
 import json
 import os
+import pkgutil
 import re
+import sys
 
 from typing import (
     TYPE_CHECKING,
@@ -51,6 +54,8 @@ if TYPE_CHECKING:
     from ..common import (
         RelPath,
     )
+
+import urllib.request
 
 import jsonschema.validators
 
@@ -274,11 +279,40 @@ def config_validate(
         )
 
 
-import importlib.util
-import sys
+def iter_namespace(ns_pkg: "ModuleType") -> "Iterator[pkgutil.ModuleInfo]":
+    # Specifying the second argument (prefix) to iter_modules makes the
+    # returned name an absolute name instead of a relative one. This allows
+    # import_module to work without having to do additional modification to
+    # the name.
+    return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
+
+
+def get_opener_with_auth(
+    top_level_url: "str", username: "str", password: "str"
+) -> "urllib.request.OpenerDirector":
+    """
+    Taken from https://stackoverflow.com/a/44239906
+    """
+
+    # create a password manager
+    password_mgr = urllib.request.HTTPPasswordMgrWithPriorAuth()
+
+    # Add the username and password.
+    # If we knew the realm, we could use it instead of None.
+    password_mgr.add_password(
+        None, top_level_url, username, password, is_authenticated=True
+    )
+
+    handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
+
+    # create "opener" (OpenerDirector instance)
+    return urllib.request.build_opener(handler)
 
 
 def lazy_import(name: "str") -> "ModuleType":
+    """
+    Inspired in https://docs.python.org/3/library/importlib.html#implementing-lazy-imports
+    """
     module = sys.modules.get(name)
     if module is None:
         spec = importlib.util.find_spec(name)

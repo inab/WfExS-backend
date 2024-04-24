@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -82,6 +82,7 @@ from .security_context import SecurityContextVault
 from .wfexs_backend import WfExSBackend
 from .workflow import WF
 from . import get_WfExS_version_str
+from .utils.licences import LicenceMatcherSingleton
 from .utils.misc import DatetimeEncoder
 
 
@@ -99,6 +100,10 @@ class WfExS_Commands(StrDocEnum):
     ListPushers = (
         "list-exporters",
         "List the supported export plugins",
+    )
+    ListLicences = (
+        "list-licences",
+        f"List the documented licences, both embedded and fetched from SPDX release {LicenceMatcherSingleton.DEFAULT_SPDX_VERSION}",
     )
     Stage = (
         "stage",
@@ -360,8 +365,8 @@ def genParserSub(
 def processListFetchersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
     fetchable_schemes = wfBackend.describeFetchableSchemes()
     print(f"{len(fetchable_schemes)} supported fetchers")
-    for fetchable_scheme, description in fetchable_schemes:
-        print(f"\t{fetchable_scheme} => {description}")
+    for fetchable_scheme, description, priority in fetchable_schemes:
+        print(f"\t{fetchable_scheme} => {description} (priority {priority})")
 
     return 0
 
@@ -371,6 +376,19 @@ def processListPushersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "in
     print(f"{len(export_plugin_names)} supported export plugins")
     for export_plugin_name in export_plugin_names:
         print(f"\t{export_plugin_name}")
+    return 0
+
+
+def processListLicencesCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
+    licence_matcher = LicenceMatcherSingleton()
+    documented_licences = licence_matcher.describeDocumentedLicences()
+    print(f"{len(documented_licences)} documented licences")
+    for lic in documented_licences:
+        print(f"\t{lic.short} => {lic.description}")
+        print("\t\tMore details at:")
+        for lic_uri in lic.uris:
+            print(f"\t\t-> {lic_uri}")
+
     return 0
 
 
@@ -795,6 +813,7 @@ def processStagedWorkdirCommand(
                         else:
                             doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
 
+                        resolved_orcids = wfInstance._curate_orcid_list(op_orcids)
                         if (
                             args.staged_workdir_command
                             == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
@@ -809,7 +828,7 @@ def processStagedWorkdirCommand(
                                 filename=args.staged_workdir_command_args[1],
                                 payloads=doMaterializedROCrate,
                                 licences=op_licences,
-                                orcids=op_orcids,
+                                resolved_orcids=resolved_orcids,
                                 crate_pid=op_crate_pid,
                             )
                         else:
@@ -825,7 +844,7 @@ def processStagedWorkdirCommand(
                                     filename=args.staged_workdir_command_args[1],
                                     payloads=doMaterializedROCrate,
                                     licences=op_licences,
-                                    orcids=op_orcids,
+                                    resolved_orcids=resolved_orcids,
                                     crate_pid=op_crate_pid,
                                 )
                             else:
@@ -1056,6 +1075,7 @@ def _get_wfexs_argparse_internal(
 
     ap_lf = genParserSub(sp, WfExS_Commands.ListFetchers)
     ap_lp = genParserSub(sp, WfExS_Commands.ListPushers)
+    ap_ll = genParserSub(sp, WfExS_Commands.ListLicences)
     ap_cv = genParserSub(sp, WfExS_Commands.ConfigValidate, preStageParams=True)
 
     ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)
@@ -1213,6 +1233,9 @@ def main() -> None:
 
     if command == WfExS_Commands.ListPushers:
         sys.exit(processListPushersCommand(wfBackend, logLevel))
+
+    if command == WfExS_Commands.ListLicences:
+        sys.exit(processListLicencesCommand(wfBackend, logLevel))
 
     if command == WfExS_Commands.Cache:
         sys.exit(processCacheCommand(wfBackend, args, logLevel))
@@ -1384,10 +1407,11 @@ def main() -> None:
         doMaterializedROCrate = WF.ExportROCrate2Payloads[""]
 
     if command in (WfExS_Commands.ExportStage, WfExS_Commands.Execute):
+        resolved_orcids = wfInstance._curate_orcid_list(op_orcids)
         wfInstance.createStageResearchObject(
             payloads=doMaterializedROCrate,
             licences=op_licences,
-            orcids=op_orcids,
+            resolved_orcids=resolved_orcids,
             crate_pid=op_crate_pid,
         )
 

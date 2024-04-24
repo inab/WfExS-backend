@@ -24,14 +24,15 @@
 						"oneOf": [
 							{
 								"type": "string",
-								"enum": [
-									":working-directory:",
-									":stage-rocrate:",
-									":stage-rocrate:full",
-									":provenance-rocrate:",
-									":provenance-rocrate:output",
-									":provenance-rocrate:full"
-								]
+								"const": ":working-directory:"
+							},
+							{
+								"type": "string",
+								"pattern": "^:stage-rocrate:(full|(inputs|workflow|containers)(,(inputs|workflow|containers))*)?$"
+							},
+							{
+								"type": "string",
+								"pattern": "^:provenance-rocrate:(full|(inputs|outputs|workflow|containers)(,(inputs|outputs|workflow|containers))*)?$"
 							},
 							{
 								"type": "string",
@@ -47,6 +48,28 @@
 					"documentation": "Some export plugins are able to (or even have to) choose the permanent identifier to assign. Others will ignore this",
 					"type": "string",
 					"minLength": 1
+				},
+				"title": {
+					"name": "Dataset title",
+					"documentation": "Title to be assigned to the dataset. If no title is provided, WfExS-backend will create a custom one. Placeholders instance_id , nickname , wfexs_verstr , wfexs_backend_name and wfexs_backend_url are currently supported.",
+					"type": "string",
+					"minLength": 1
+				},
+				"documentation": {
+					"name": "Dataset documentation",
+					"documentation": "Documentation to be assigned to the dataset. If no documentation is provided, WfExS-backend will create a brief, agnostic one. Placeholders instance_id , nickname , wfexs_verstr , wfexs_backend_name and wfexs_backend_url are currently supported.",
+					"type": "string",
+					"minLength": 1
+				},
+				"custom-metadata": {
+					"name": "Custom metadata",
+					"documentation": "Metadata tailored specifically for the service being abstracted by the chosen plugin.",
+					"type": "object"
+				},
+				"community-custom-metadata": {
+					"name": "Custom community metadata",
+					"documentation": "Deposition sites like Zenodo, B2SHARE and Dataverse have the concept of community, which can accept or require separate, additional metadata with their own validation rules. This metadata is specifically for the community in the service being abstracted by the chosen plugin.",
+					"type": "object"
 				},
 				"licences": {
 					"name": "Licences to attach to this export item",

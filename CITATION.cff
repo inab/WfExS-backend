@@ -15,7 +15,7 @@ authors:
     given-names: Daniel
     orcid: "https://orcid.org/0000-0001-8152-0398"
 cff-version: 1.2.0
-date-released: "2023-11-07"
+date-released: "2024-04-24"
 identifiers:
   - description: WfExS-backend release in Zenodo
     type: doi
@@ -28,4 +28,4 @@ message: "If you use this software, please cite it using these metadata."
 repository-code: "https://github.com/inab/WfExS-backend"
 type: software
 title: "WfExS-backend"
-version: 0.10.2
+version: 0.99.0

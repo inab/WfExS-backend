@@ -137,5 +137,6 @@ SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
     "ftp": DocumentedProtocolFetcher(
         fetcher=fetchFTPURL,
         description="File Transfer Protocol (see https://www.iana.org/assignments/ftp-commands-extensions/ftp-commands-extensions.xhtml)",
+        priority=20,
     ),
 }

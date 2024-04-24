@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from typing_extensions import (
         Final,
         TypeAlias,
+        TypedDict,
     )
 
 
@@ -268,10 +269,48 @@ class Attribution(NamedTuple):
         return attributions
 
 
+NoLicenceShort: "Final[str]" = "notspecified"
 NoLicence: "Final[URIType]" = cast(
     "URIType", "https://choosealicense.com/no-permission/"
 )
 DefaultNoLicenceTuple: "Tuple[URIType, ...]" = (NoLicence,)
+
+
+class LicenceDescription(NamedTuple):
+    """
+    This tuple is used to describe licences
+    """
+
+    short: "str"
+    uris: "Sequence[URIType]"
+    description: "str"
+    is_spdx: "bool" = True
+
+    def get_uri(self) -> "URIType":
+        if self.is_spdx:
+            return cast("URIType", f"https://spdx.org/licenses/{self.short}")
+        elif len(self.uris) > 0:
+            return self.uris[0]
+        # TODO: cover the case of custom licences
+        # where text is available, but it is not in any URL
+        else:
+            return NoLicence
+
+
+# According to Workflow RO-Crate, this is the term for no license (or not specified)
+NoLicenceDescription: "Final[LicenceDescription]" = LicenceDescription(
+    short=NoLicenceShort,
+    uris=[NoLicence],
+    description="No license - no permission to use unless the owner grants a licence",
+    is_spdx=False,
+)
+
+CC_BY_40_LICENCE: "Final[str]" = "CC-BY-4.0"
+CC_BY_40_LicenceDescription: "Final[LicenceDescription]" = LicenceDescription(
+    short=CC_BY_40_LICENCE,
+    uris=[cast("URIType", "https://creativecommons.org/licenses/by/4.0/")],
+    description="Creative Commons Attribution 4.0 International",
+)
 
 
 class LicensedURI(NamedTuple):
@@ -288,13 +327,26 @@ class LicensedURI(NamedTuple):
     uri: "URIType"
     # One or more licence URLs, either from a repository, or a site like
     # choosealicense.com or spdx.org/licenses/
-    licences: "Tuple[URIType, ...]" = DefaultNoLicenceTuple
+    licences: "Tuple[Union[URIType, LicenceDescription], ...]" = DefaultNoLicenceTuple
     attributions: "Sequence[Attribution]" = []
     secContext: "Optional[SecurityContextConfig]" = None
 
 
 if TYPE_CHECKING:
     AnyURI: TypeAlias = Union[URIType, LicensedURI]
+
+    class ORCIDPublicRecord(TypedDict):
+        title: Optional[str]
+        displayName: Optional[str]
+        names: Optional[Mapping[str, Any]]
+        biography: Optional[Any]
+        otherNames: Optional[Mapping[str, Any]]
+        countries: Optional[Mapping[str, Any]]
+        keyword: Optional[Mapping[str, Any]]
+        emails: Optional[Mapping[str, Any]]
+        externalIdentifier: Optional[Mapping[str, Any]]
+        website: Optional[Mapping[str, Any]]
+        lastModifiedTime: Optional[int]
 
 
 class URIWithMetadata(NamedTuple):
@@ -308,6 +360,22 @@ class URIWithMetadata(NamedTuple):
     uri: "URIType"
     metadata: "Mapping[str, Any]"
     preferredName: "Optional[RelPath]" = None
+
+
+class ResolvedORCID(NamedTuple):
+    """
+    A resolved ORCID
+
+    orcid: The resolved ORCID id
+    url: The URL of the ORCID profile
+    record: The fetched, public ORCID record
+    record_fetch_metadata: Metadata about the resolution process
+    """
+
+    orcid: "str"
+    url: "URIType"
+    record: "ORCIDPublicRecord"
+    record_fetch_metadata: "Sequence[URIWithMetadata]"
 
 
 class MaterializedContent(NamedTuple):

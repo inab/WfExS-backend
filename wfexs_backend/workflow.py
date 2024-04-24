@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,9 +37,11 @@ import warnings
 
 from typing import (
     cast,
+    Dict,
     NamedTuple,
     Pattern,
     TYPE_CHECKING,
+    TypeVar,
 )
 
 from .common import (
@@ -47,12 +49,23 @@ from .common import (
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
+    NoLicenceDescription,
+    ResolvedORCID,
     StagedExecution,
+)
+
+from .fetchers import (
+    FetcherException,
+)
+
+from .utils.orcid import (
+    validate_orcid,
 )
 
 if TYPE_CHECKING:
     from typing import (
         Any,
+        ClassVar,
         Iterable,
         Iterator,
         Mapping,
@@ -85,6 +98,7 @@ if TYPE_CHECKING:
         EnvironmentBlock,
         ExitVal,
         ExportActionBlock,
+        LicenceDescription,
         MaterializedOutput,
         MutableParamsBlock,
         OutputsBlock,
@@ -116,6 +130,14 @@ if TYPE_CHECKING:
 
     from .engine import (
         AbstractWorkflowEngineType,
+    )
+
+    from .pushers import (
+        AbstractExportPlugin,
+    )
+
+    from .utils.licences import (
+        LicenceMatcher,
     )
 
     Sch_PlainURI = URIType
@@ -176,13 +198,30 @@ from .engine import (
     WorkflowType,
 )
 
+from .pushers import (
+    ExportPluginException,
+)
+
+from .pushers.abstract_contexted_export import (
+    AbstractContextedExportPlugin,
+)
+
 from .ro_crate import (
     WorkflowRunROCrate,
 )
+from .utils.licences import (
+    AcceptableLicenceSchemes,
+    LicenceMatcherSingleton,
+)
+
 from .security_context import (
     SecurityContextVault,
 )
 import bagit
+
+from . import __url__ as wfexs_backend_url
+from . import __official_name__ as wfexs_backend_name
+from . import get_WfExS_version_str
 
 from . import common as common_defs_module
 
@@ -282,6 +321,10 @@ class ExportAction(NamedTuple):
     preferred_scheme: "Optional[str]"
     preferred_id: "Optional[str]"
     licences: "Sequence[str]" = []
+    title: "Optional[str]" = None
+    description: "Optional[str]" = None
+    custom_metadata: "Optional[Mapping[str, Any]]" = None
+    community_custom_metadata: "Optional[Mapping[str, Any]]" = None
 
 
 class MaterializedExportAction(NamedTuple):
@@ -296,6 +339,20 @@ class MaterializedExportAction(NamedTuple):
     when: "datetime.datetime" = datetime.datetime.now(
         tz=datetime.timezone.utc
     ).astimezone()
+
+
+KT = TypeVar("KT")
+VT = TypeVar("VT")
+
+
+class DefaultMissing(Dict[KT, VT]):
+    """
+    This is inspired in the example available at
+    https://docs.python.org/3/library/stdtypes.html#str.format_map
+    """
+
+    def __missing__(self, key: KT) -> VT:
+        return cast(VT, key)
 
 
 # The list of classes to be taken into account
@@ -342,8 +399,8 @@ class WF:
     STAGE_DEFINITION_SCHEMA: "Final[RelPath]" = cast("RelPath", "stage-definition.json")
     EXPORT_ACTIONS_SCHEMA: "Final[RelPath]" = cast("RelPath", "export-actions.json")
 
-    STAGED_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "staged.crate")
-    EXECUTION_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "execution.crate")
+    STAGED_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "staged.ro-crate.zip")
+    EXECUTION_CRATE_FILE: "Final[RelPath]" = cast("RelPath", "execution.ro-crate.zip")
 
     DEFAULT_TRS_ENDPOINT: "Final[str]" = (
         "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
@@ -740,7 +797,7 @@ class WF:
             self.logger.error(errstr)
             raise WFException(errstr) from ve
 
-        self.stagedSetup = StagedSetup(
+        self.staged_setup = StagedSetup(
             instance_id=self.instanceId,
             container_type=container_type,
             nickname=self.nickname,
@@ -1054,7 +1111,7 @@ class WF:
         self.unmountWorkdir()
 
     def getStagedSetup(self) -> "StagedSetup":
-        return self.stagedSetup
+        return self.staged_setup
 
     def getMarshallingStatus(self, reread_stats: "bool" = False) -> "MarshallingStatus":
         if reread_stats:
@@ -1423,7 +1480,7 @@ class WF:
         if self.engineDesc is None:
             for engineDesc in self.WORKFLOW_ENGINES:
                 self.logger.debug("Testing engine " + engineDesc.trs_descriptor)
-                engine = self.wfexs.instantiateEngine(engineDesc, self.stagedSetup)
+                engine = self.wfexs.instantiateEngine(engineDesc, self.staged_setup)
 
                 try:
                     engineVer, candidateLocalWorkflow = engine.identifyWorkflow(
@@ -1448,7 +1505,7 @@ class WF:
                 )
         else:
             self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)
-            engine = self.wfexs.instantiateEngine(self.engineDesc, self.stagedSetup)
+            engine = self.wfexs.instantiateEngine(self.engineDesc, self.staged_setup)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
             if engineVer is None:
                 raise WFException(
@@ -1819,7 +1876,13 @@ class WF:
 
         return remote_pairs
 
-    def _formatStringFromPlaceHolders(self, the_string: "str") -> "str":
+    def _formatStringFromPlaceHolders(
+        self, the_string: "str", placeholders: "Optional[PlaceHoldersBlock]" = None
+    ) -> "str":
+        # Default placeholders are workflow level ones
+        if placeholders is None:
+            placeholders = self.placeholders
+
         i_l_the_string = the_string.find("{")
         i_r_the_string = the_string.find("}")
         if (
@@ -1828,7 +1891,11 @@ class WF:
             and i_l_the_string < i_r_the_string
         ):
             try:
-                the_string = the_string.format(**self.placeholders)
+                """
+                This is inspired in the example available at
+                https://docs.python.org/3/library/stdtypes.html#str.format_map
+                """
+                the_string = the_string.format_map(DefaultMissing(placeholders))
             except:
                 # Ignore failures
                 self.logger.warning(
@@ -2785,7 +2852,7 @@ class WF:
         return expectedOutputs
 
     def parseExportActions(
-        self, raw_actions: "Sequence[Mapping[str, Any]]"
+        self, raw_actions: "Sequence[ExportActionBlock]"
     ) -> "Sequence[ExportAction]":
         assert self.outputs is not None
 
@@ -2814,10 +2881,6 @@ class WF:
                 if colPos == 0:
                     assert rColPos > colPos
 
-                    if encoded_name[-1] != ":":
-                        raise WFException(
-                            f"Unexpected element to export {encoded_name}"
-                        )
                     rawItemType = encoded_name[1:rColPos]
                     blockName = encoded_name[rColPos + 1 :]
                     whatName = None
@@ -2842,6 +2905,10 @@ class WF:
                 preferred_scheme=actionDesc.get("preferred-scheme"),
                 preferred_id=actionDesc.get("preferred-pid"),
                 licences=actionDesc.get("licences", []),
+                title=actionDesc.get("title"),
+                description=actionDesc.get("description"),
+                custom_metadata=actionDesc.get("custom-metadata"),
+                community_custom_metadata=actionDesc.get("community-custom-metadata"),
             )
             actions.append(action)
 
@@ -2912,6 +2979,102 @@ class WF:
 
         return self.exportResults(actions, vault, action_ids, fail_ok=fail_ok)
 
+    def _curate_licence_list(
+        self, licences: "Sequence[str]"
+    ) -> "Sequence[LicenceDescription]":
+        # As these licences can be in short format, resolve them to URIs
+        expanded_licences: "MutableSequence[LicenceDescription]" = []
+        if len(licences) == 0:
+            expanded_licences.append(NoLicenceDescription)
+        else:
+            licence_matcher = self.GetLicenceMatcher()
+            rejected_licences: "MutableSequence[str]" = []
+            for lic in licences:
+                matched_licence = licence_matcher.matchLicence(lic)
+                if matched_licence is None:
+                    rejected_licences.append(lic)
+                else:
+                    expanded_licences.append(matched_licence)
+
+            if len(rejected_licences) > 0:
+                raise WFException(
+                    f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
+                )
+
+        return expanded_licences
+
+    def _curate_orcid_list(
+        self, orcids: "Sequence[str]", fail_ok: "bool" = True
+    ) -> "Sequence[ResolvedORCID]":
+        failed_orcids: "MutableSequence[str]" = []
+        val_orcids: "MutableSequence[ResolvedORCID]" = []
+        for orcid in orcids:
+            # validate ORCID asking for its public metadata
+            try:
+                resolved_orcid = validate_orcid(orcid)
+                if resolved_orcid is not None:
+                    val_orcids.append(resolved_orcid)
+                else:
+                    self.logger.error(
+                        f"ORCID {orcid} was discarded because it could not be resolved"
+                    )
+                    failed_orcids.append(orcid)
+
+            except FetcherException as fe:
+                self.logger.exception(f"Error resolving ORCID {orcid}")
+                failed_orcids.append(orcid)
+
+        if len(failed_orcids) > 0 and not fail_ok:
+            raise WFException(
+                f"{len(failed_orcids)} of {len(orcids)} ORCIDs were not valid: {', '.join(failed_orcids)}"
+            )
+
+        return val_orcids
+
+    def _instantiate_export_plugin(
+        self,
+        action: "ExportAction",
+        sec_context: "Optional[SecurityContextConfig]",
+        default_licences: "Sequence[LicenceDescription]",
+        default_orcids: "Sequence[ResolvedORCID]",
+        default_preferred_id: "Optional[str]",
+    ) -> "AbstractExportPlugin":
+        """
+        This method instantiates an stateful export plugin. Although the
+        licences, ORCIDs and preferred ids are not used at the beginning,
+        they are supplied as default values to the implementation, in case
+        it is able to do something meaningful with them.
+        Licence list should be curated outside this method.
+        """
+
+        _export_plugin_clazz = self.wfexs.getExportPluginClass(action.plugin_id)
+        if _export_plugin_clazz is None:
+            raise KeyError(f"Unavailable plugin {action.plugin_id}")
+
+        staged_setup = self.getStagedSetup()
+
+        if staged_setup.work_dir is None:
+            raise ValueError(
+                f"Staged setup from {staged_setup.instance_id} is corrupted"
+            )
+
+        if staged_setup.is_damaged:
+            raise ValueError(f"Staged setup from {staged_setup.instance_id} is damaged")
+
+        export_p = _export_plugin_clazz(
+            refdir=staged_setup.work_dir,
+            setup_block=sec_context,
+            default_licences=default_licences,
+            default_orcids=default_orcids,
+            default_preferred_id=default_preferred_id,
+        )
+
+        # Context-based export plugins need this initialization
+        if isinstance(export_p, AbstractContextedExportPlugin):
+            export_p.set_wfexs_context(self.wfexs, self.getStagedSetup().temp_dir)
+
+        return export_p
+
     def exportResults(
         self,
         actions: "Optional[Sequence[ExportAction]]" = None,
@@ -2948,6 +3111,7 @@ class WF:
             filtered_actions = actions
 
         # First, let's check all the requested actions are viable
+        verstr = get_WfExS_version_str()
         for action in filtered_actions:
             try:
                 # check the export items are available
@@ -2993,31 +3157,93 @@ class WF:
                 # check whether plugin is available
                 # TODO: Should we include mechanism to reuse a PID
                 # already used in a previous export?
-                export_p = self.wfexs.instantiateExportPlugin(
-                    self,
-                    action.plugin_id,
+                preferred_id: "Optional[str]" = None
+                if action.preferred_id is not None:
+                    if action.preferred_scheme is not None:
+                        preferred_id = (
+                            action.preferred_scheme + ":" + action.preferred_id
+                        )
+                    else:
+                        preferred_id = action.preferred_id
+
+                expanded_licences = self._curate_licence_list(the_licences)
+                curated_orcids = self._curate_orcid_list(the_orcids)
+
+                export_p = self._instantiate_export_plugin(
+                    action=action,
                     sec_context=a_setup_block,
-                    licences=the_licences,
-                    orcids=the_orcids,
-                    preferred_id=action.preferred_id,
+                    default_licences=expanded_licences,
+                    default_orcids=curated_orcids,
+                    default_preferred_id=preferred_id,
                 )
 
                 # This booked pid could differ from the preferred one
-                # as it could not be reused due some constraints
-                booked_pid = export_p.book_pid()
+                # as it could not be reused due some constraints.
+                # Also, we need to know the internal_pid associated to
+                # the booked one, so we can handle drafts
+                booked_entry = export_p.book_pid(
+                    licences=expanded_licences,
+                    resolved_orcids=curated_orcids,
+                    preferred_id=preferred_id,
+                    initially_required_metadata=action.custom_metadata,
+                    initially_required_community_specific_metadata=action.community_custom_metadata,
+                )
+
+                if booked_entry is None:
+                    raise ExportActionException(
+                        f"Unable to book a PID for dataset export using export plugin with id {action.plugin_id}"
+                    )
 
                 elems = self.locateExportItems(
                     action.what,
-                    licences=the_licences,
-                    orcids=the_orcids,
-                    crate_pid=booked_pid,
+                    licences=expanded_licences,
+                    resolved_orcids=curated_orcids,
+                    crate_pid=booked_entry.pid,
+                )
+
+                placeholders: "Mapping[str, str]" = {
+                    "instance_id": self.staged_setup.instance_id,
+                    "nickname": self.staged_setup.nickname
+                    if self.staged_setup.nickname is not None
+                    else self.staged_setup.instance_id,
+                    "wfexs_verstr": verstr,
+                    "wfexs_backend_name": wfexs_backend_name,
+                    "wfexs_backend_url": wfexs_backend_url,
+                }
+
+                if action.title is None:
+                    title = "Dataset pushed from staged WfExS working directory {instance_id} ({nickname})"
+                else:
+                    title = action.title
+                title = self._formatStringFromPlaceHolders(title, placeholders)
+
+                if action.description is None:
+                    description = """\
+This dataset has been created and uploaded using {wfexs_backend_name} {wfexs_verstr},
+whose sources are available at {wfexs_backend_url}.
+
+The contents come from staged WfExS working directory {instance_id} ({nickname}).
+This is an enumeration of the types of collected contents:
+
+"""
+                    for e_item in action.what:
+                        description += f" * {e_item.name} ({e_item.type.value})\n"
+                else:
+                    description = action.description
+                description = self._formatStringFromPlaceHolders(
+                    description, placeholders
                 )
 
                 # Export the contents and obtain a PID
                 new_pids = export_p.push(
                     elems,
-                    preferred_scheme=action.preferred_scheme,
-                    preferred_id=booked_pid,
+                    title=title,
+                    description=description,
+                    licences=expanded_licences,
+                    resolved_orcids=curated_orcids,
+                    preferred_id=booked_entry.draft_id,
+                    metadata=action.custom_metadata,
+                    community_specific_metadata=action.community_custom_metadata,
                 )
 
                 # Last, register the PID
@@ -3406,7 +3632,9 @@ class WF:
                             ].type
 
                         self.container_type_str = guessed_container_type.value
-                        self.stagedSetup._replace(container_type=guessed_container_type)
+                        self.staged_setup = self.staged_setup._replace(
+                            container_type=guessed_container_type
+                        )
 
                     self.containerEngineVersion = stage.get("containerEngineVersion")
                     self.containerEngineOs = stage.get("containerEngineOs")
@@ -3424,7 +3652,7 @@ class WF:
                         self.setupEngine(offline=True)
                     elif self.engineDesc is not None:
                         self.engine = self.wfexs.instantiateEngine(
-                            self.engineDesc, self.stagedSetup
+                            self.engineDesc, self.staged_setup
                         )
             except Exception as e:
                 errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(
@@ -3777,8 +4005,8 @@ class WF:
     def locateExportItems(
         self,
         items: "Sequence[ExportItem]",
-        licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "Sequence[AnyContent]":
         """
@@ -3794,11 +4022,11 @@ class WF:
             if item.type == ExportItemType.Param:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
                     raise WFException(
-                        f"Cannot export inputs from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                        f"Cannot export inputs from {self.staged_setup.instance_id} until the workflow has been properly staged"
                     )
 
                 assert self.materializedParams is not None
-                assert self.stagedSetup.inputs_dir is not None
+                assert self.staged_setup.inputs_dir is not None
                 if item.name is not None:
                     if not materializedParamsDict:
                         materializedParamsDict = dict(
@@ -3827,16 +4055,16 @@ class WF:
                     # and / or directories references from environment
                     # variables
                     prettyFilename = cast(
-                        "RelPath", os.path.basename(self.stagedSetup.inputs_dir)
+                        "RelPath", os.path.basename(self.staged_setup.inputs_dir)
                     )
                     retval.append(
                         MaterializedContent(
-                            local=self.stagedSetup.inputs_dir,
+                            local=self.staged_setup.inputs_dir,
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
                                     "wfexs:"
-                                    + self.stagedSetup.instance_id
+                                    + self.staged_setup.instance_id
                                     + "/"
                                     + prettyFilename,
                                 )
@@ -3848,11 +4076,11 @@ class WF:
             elif item.type == ExportItemType.Environment:
                 if not isinstance(self.getMarshallingStatus().stage, datetime.datetime):
                     raise WFException(
-                        f"Cannot export environment from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                        f"Cannot export environment from {self.staged_setup.instance_id} until the workflow has been properly staged"
                     )
 
                 assert self.materializedEnvironment is not None
-                assert self.stagedSetup.inputs_dir is not None
+                assert self.staged_setup.inputs_dir is not None
                 if item.name is not None:
                     if not materializedEnvironmentDict:
                         materializedEnvironmentDict = dict(
@@ -3883,14 +4111,14 @@ class WF:
                     self.getMarshallingStatus().execution, datetime.datetime
                 ):
                     raise WFException(
-                        f"Cannot export outputs from {self.stagedSetup.instance_id} until the workflow has been executed at least once"
+                        f"Cannot export outputs from {self.staged_setup.instance_id} until the workflow has been executed at least once"
                     )
 
                 assert (
                     isinstance(self.stagedExecutions, list)
                     and len(self.stagedExecutions) > 0
                 )
-                assert self.stagedSetup.outputs_dir is not None
+                assert self.staged_setup.outputs_dir is not None
                 # TODO: select which of the executions export
                 stagedExec = self.stagedExecutions[-1]
                 # if item.block:
@@ -3919,7 +4147,7 @@ class WF:
                         )
                     )
                 else:
-                    assert self.stagedSetup.work_dir is not None
+                    assert self.staged_setup.work_dir is not None
                     # The whole output directory
                     prettyFilename = cast("RelPath", stagedExec.outputsDir)
                     retval.append(
@@ -3927,14 +4155,14 @@ class WF:
                             local=cast(
                                 "AbsPath",
                                 os.path.join(
-                                    self.stagedSetup.work_dir, stagedExec.outputsDir
+                                    self.staged_setup.work_dir, stagedExec.outputsDir
                                 ),
                             ),
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
                                     "wfexs:"
-                                    + self.stagedSetup.instance_id
+                                    + self.staged_setup.instance_id
                                     + "/"
                                     + prettyFilename,
                                 )
@@ -3947,9 +4175,11 @@ class WF:
                 # The whole working directory
                 retval.append(
                     MaterializedContent(
-                        local=cast("AbsPath", self.stagedSetup.work_dir),
+                        local=cast("AbsPath", self.staged_setup.work_dir),
                         licensed_uri=LicensedURI(
-                            uri=cast("URIType", "wfexs:" + self.stagedSetup.instance_id)
+                            uri=cast(
+                                "URIType", "wfexs:" + self.staged_setup.instance_id
+                            )
                         ),
                         prettyFilename=prettyFilename,
                         kind=ContentKind.Directory,
@@ -3959,19 +4189,24 @@ class WF:
                 ExportItemType.StageCrate,
                 ExportItemType.ProvenanceCrate,
             ):
-                if item.block not in self.ExportROCrate2Payloads:
-                    raise KeyError(
-                        f"'{item.block}' is not a valid variant for {item.type.value} ('"
-                        + "', '".join(self.ExportROCrate2Payloads.keys())
-                        + "')"
-                    )
+                assert item.block is not None
+                item_blocks = item.block.split(",")
+                payloads_param = NoCratableItem
+                for item_block in item_blocks:
+                    if item_block not in self.ExportROCrate2Payloads:
+                        raise KeyError(
+                            f"'{item_block}' is not a valid variant for {item.type.value} ('"
+                            + "', '".join(self.ExportROCrate2Payloads.keys())
+                            + "')"
+                        )
+                    payloads_param |= self.ExportROCrate2Payloads[item_block]
 
                 if item.type == ExportItemType.StageCrate:
                     if not isinstance(
                         self.getMarshallingStatus().stage, datetime.datetime
                     ):
                         raise WFException(
-                            f"Cannot export the prospective provenance crate from {self.stagedSetup.instance_id} until the workflow has been properly staged"
+                            f"Cannot export the prospective provenance crate from {self.staged_setup.instance_id} until the workflow has been properly staged"
                         )
 
                     create_rocrate = self.createStageResearchObject
@@ -3982,7 +4217,7 @@ class WF:
                         self.getMarshallingStatus().execution, datetime.datetime
                     ):
                         raise WFException(
-                            f"Cannot export the restrospective provenance crate from {self.stagedSetup.instance_id} until the workflow has been executed at least once"
+                            f"Cannot export the restrospective provenance crate from {self.staged_setup.instance_id} until the workflow has been executed at least once"
                         )
 
                     create_rocrate = self.createResultsResearchObject
@@ -4000,12 +4235,11 @@ class WF:
                 os.close(temp_handle)
                 atexit.register(os.unlink, temp_rocrate_file)
 
-                assert item.block is not None
                 create_rocrate(
                     filename=cast("AbsPath", temp_rocrate_file),
-                    payloads=self.ExportROCrate2Payloads[item.block],
+                    payloads=payloads_param,
                     licences=licences,
-                    orcids=orcids,
+                    resolved_orcids=resolved_orcids,
                     crate_pid=crate_pid,
                 )
                 retval.append(
@@ -4015,7 +4249,7 @@ class WF:
                             uri=cast(
                                 "URIType",
                                 "wfexs:"
-                                + self.stagedSetup.instance_id
+                                + self.staged_setup.instance_id
                                 + "/"
                                 + pretty_relname,
                             )
@@ -4035,8 +4269,8 @@ class WF:
         self,
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
         """
@@ -4051,14 +4285,25 @@ class WF:
         assert self.remote_repo.tag is not None
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
-        assert self.stagedSetup.work_dir is not None
-        assert self.stagedSetup.inputs_dir is not None
-        assert self.stagedSetup.outputs_dir is not None
+        assert self.staged_setup.work_dir is not None
+        assert self.staged_setup.inputs_dir is not None
+        assert self.staged_setup.outputs_dir is not None
 
-        the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
-        for orcid in orcids:
-            if orcid not in the_orcids:
-                the_orcids.append(orcid)
+        the_orcid_ids = set(
+            map(lambda resolved_orcid: resolved_orcid.orcid, resolved_orcids)
+        )
+        raw_orcids: "MutableSequence[str]" = []
+        for raw_orcid in self.orcids:
+            if raw_orcid not in the_orcid_ids:
+                raw_orcids.append(raw_orcid)
+        the_orcids: "Sequence[ResolvedORCID]"
+        if len(raw_orcids) > 0:
+            the_orcids = [
+                *self._curate_orcid_list(raw_orcids, fail_ok=False),
+                *resolved_orcids,
+            ]
+        else:
+            the_orcids = resolved_orcids
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
             self.getPID(),
@@ -4068,7 +4313,7 @@ class WF:
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            staged_setup=self.stagedSetup,
+            staged_setup=self.staged_setup,
             payloads=payloads,
             licences=licences,
             orcids=the_orcids,
@@ -4105,8 +4350,8 @@ class WF:
         self,
         filename: "Optional[AnyPath]" = None,
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[str]" = [],
-        orcids: "Sequence[str]" = [],
+        licences: "Sequence[LicenceDescription]" = [],
+        resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
     ) -> "AnyPath":
         """
@@ -4118,15 +4363,26 @@ class WF:
         assert self.materializedEngine is not None
         assert self.remote_repo is not None
         assert self.remote_repo.tag is not None
-        assert self.stagedSetup.work_dir is not None
+        assert self.staged_setup.work_dir is not None
         assert (
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
         )
 
-        the_orcids = cast("MutableSequence[str]", copy.copy(self.orcids))
-        for orcid in orcids:
-            if orcid not in the_orcids:
-                the_orcids.append(orcid)
+        the_orcid_ids = set(
+            map(lambda resolved_orcid: resolved_orcid.orcid, resolved_orcids)
+        )
+        raw_orcids: "MutableSequence[str]" = []
+        for raw_orcid in self.orcids:
+            if raw_orcid not in the_orcid_ids:
+                raw_orcids.append(raw_orcid)
+        the_orcids: "Sequence[ResolvedORCID]"
+        if len(raw_orcids) > 0:
+            the_orcids = [
+                *self._curate_orcid_list(raw_orcids, fail_ok=False),
+                *resolved_orcids,
+            ]
+        else:
+            the_orcids = resolved_orcids
         wrroc = WorkflowRunROCrate(
             self.remote_repo,
             self.getPID(),
@@ -4136,7 +4392,7 @@ class WF:
             self.containerEngineVersion,
             self.containerEngineOs,
             self.arch,
-            staged_setup=self.stagedSetup,
+            staged_setup=self.staged_setup,
             payloads=payloads,
             licences=licences,
             orcids=the_orcids,
@@ -4163,3 +4419,13 @@ class WF:
         self.logger.info("Execution RO-Crate created: {}".format(filename))
 
         return filename
+
+    _LicenceMatcher: "ClassVar[Optional[LicenceMatcher]]" = None
+
+    @classmethod
+    def GetLicenceMatcher(cls) -> "LicenceMatcher":
+        if cls._LicenceMatcher is None:
+            cls._LicenceMatcher = LicenceMatcherSingleton()
+            assert cls._LicenceMatcher is not None
+
+        return cls._LicenceMatcher

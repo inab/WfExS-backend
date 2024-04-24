@@ -27,7 +27,10 @@ from typing import (
 
 if TYPE_CHECKING:
     from typing import (
+        ClassVar,
         Mapping,
+        MutableMapping,
+        Optional,
         Sequence,
         Set,
     )
@@ -37,22 +40,31 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
+        AbsPath,
         URIType,
     )
 
-from ..common import (
-    NoLicence,
+import copy
+import inspect
+import json
+import logging
+import os.path
+import urllib.parse
+
+import xdg.BaseDirectory
+
+from ..cache_handler import (
+    CacheHandlerException,
+    SchemeHandlerCacheHandler,
 )
 
+from ..common import (
+    CC_BY_40_LicenceDescription,
+    LicenceDescription,
+    NoLicenceDescription,
+)
 
-class LicenceDescription(NamedTuple):
-    """
-    This tuple is used to describe licences
-    """
-
-    short: "str"
-    uri: "str"
-    description: "str"
+from ..fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
 
 
 # Licences
@@ -63,361 +75,566 @@ AcceptableLicenceSchemes: "Final[Set[str]]" = {
     "data",
 }
 
-# According to Workflow RO-Crate, this is the term for no license (or not specified)
-NoLicenceShort: "Final[str]" = "notspecified"
-CC_BY_40_LICENCE: "Final[str]" = "CC-BY-4.0"
-
 # The correspondence from short Workflow RO-Crate licences and their URIs
 # taken from https://about.workflowhub.eu/Workflow-RO-Crate/#supported-licenses
-ROCrateShortLicencesList: "Final[Sequence[LicenceDescription]]" = [
+WorkflowHubShortLicencesList: "Final[Sequence[LicenceDescription]]" = [
     LicenceDescription(
-        "AFL-3.0",
-        "https://opensource.org/licenses/AFL-3.0",
-        "Academic Free License 3.0",
+        short="AFL-3.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/AFL-3.0")],
+        description="Academic Free License 3.0",
     ),
     LicenceDescription(
-        "APL-1.0",
-        "https://opensource.org/licenses/APL-1.0",
-        "Adaptive Public License 1.0",
+        short="APL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/APL-1.0")],
+        description="Adaptive Public License 1.0",
     ),
     LicenceDescription(
-        "Apache-1.1",
-        "https://opensource.org/licenses/Apache-1.1",
-        "Apache Software License 1.1",
+        short="Apache-1.1",
+        uris=[cast("URIType", "https://opensource.org/licenses/Apache-1.1")],
+        description="Apache Software License 1.1",
     ),
     LicenceDescription(
-        "Apache-2.0",
-        "https://opensource.org/licenses/Apache-2.0",
-        "Apache Software License 2.0",
+        short="Apache-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/Apache-2.0")],
+        description="Apache Software License 2.0",
     ),
     LicenceDescription(
-        "APSL-2.0",
-        "https://opensource.org/licenses/APSL-2.0",
-        "Apple Public Source License 2.0",
+        short="APSL-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/APSL-2.0")],
+        description="Apple Public Source License 2.0",
     ),
     LicenceDescription(
-        "Artistic-2.0",
-        "https://opensource.org/licenses/Artistic-2.0",
-        "Artistic License 2.0",
+        short="Artistic-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/Artistic-2.0")],
+        description="Artistic License 2.0",
     ),
     LicenceDescription(
-        "AAL", "https://opensource.org/licenses/AAL", "Attribution Assurance Licenses"
+        short="AAL",
+        uris=[cast("URIType", "https://opensource.org/licenses/AAL")],
+        description="Attribution Assurance Licenses",
     ),
     LicenceDescription(
-        "BSD-2-Clause",
-        "https://opensource.org/licenses/BSD-2-Clause",
-        "BSD 2-Clause “Simplified” or “FreeBSD” License (BSD-2-Clause)",
+        short="BSD-2-Clause",
+        uris=[cast("URIType", "https://opensource.org/licenses/BSD-2-Clause")],
+        description="BSD 2-Clause “Simplified” or “FreeBSD” License (BSD-2-Clause)",
     ),
     LicenceDescription(
-        "BSD-3-Clause",
-        "https://opensource.org/licenses/BSD-3-Clause",
-        "BSD 3-Clause “New” or “Revised” License (BSD-3-Clause)",
+        short="BSD-3-Clause",
+        uris=[cast("URIType", "https://opensource.org/licenses/BSD-3-Clause")],
+        description="BSD 3-Clause “New” or “Revised” License (BSD-3-Clause)",
     ),
     LicenceDescription(
-        "BitTorrent-1.1",
-        "https://spdx.org/licenses/BitTorrent-1.1",
-        "BitTorrent Open Source License 1.1",
+        short="BitTorrent-1.1",
+        uris=[cast("URIType", "https://spdx.org/licenses/BitTorrent-1.1")],
+        description="BitTorrent Open Source License 1.1",
     ),
     LicenceDescription(
-        "BSL-1.0",
-        "https://opensource.org/licenses/BSL-1.0",
-        "Boost Software License 1.0",
+        short="BSL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/BSL-1.0")],
+        description="Boost Software License 1.0",
     ),
+    CC_BY_40_LicenceDescription,
     LicenceDescription(
-        CC_BY_40_LICENCE,
-        "https://creativecommons.org/licenses/by/4.0/",
-        "Creative Commons Attribution 4.0 International",
+        short="CC0-1.0",
+        uris=[cast("URIType", "https://creativecommons.org/publicdomain/zero/1.0/")],
+        description="CC0 1.0",
     ),
     LicenceDescription(
-        "CC0-1.0", "https://creativecommons.org/publicdomain/zero/1.0/", "CC0 1.0"
+        short="CNRI-Python",
+        uris=[cast("URIType", "https://opensource.org/licenses/CNRI-Python")],
+        description="CNRI Python License",
     ),
     LicenceDescription(
-        "CNRI-Python",
-        "https://opensource.org/licenses/CNRI-Python",
-        "CNRI Python License",
+        short="CUA-OPL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/CUA-OPL-1.0")],
+        description="CUA Office Public License 1.0",
     ),
     LicenceDescription(
-        "CUA-OPL-1.0",
-        "https://opensource.org/licenses/CUA-OPL-1.0",
-        "CUA Office Public License 1.0",
+        short="CECILL-2.1",
+        uris=[cast("URIType", "https://opensource.org/licenses/CECILL-2.1")],
+        description="CeCILL License 2.1",
     ),
     LicenceDescription(
-        "CECILL-2.1", "https://opensource.org/licenses/CECILL-2.1", "CeCILL License 2.1"
+        short="CDDL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/CDDL-1.0")],
+        description="Common Development and Distribution License 1.0",
     ),
     LicenceDescription(
-        "CDDL-1.0",
-        "https://opensource.org/licenses/CDDL-1.0",
-        "Common Development and Distribution License 1.0",
+        short="CPAL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/CPAL-1.0")],
+        description="Common Public Attribution License 1.0",
     ),
     LicenceDescription(
-        "CPAL-1.0",
-        "https://opensource.org/licenses/CPAL-1.0",
-        "Common Public Attribution License 1.0",
+        short="CATOSL-1.1",
+        uris=[cast("URIType", "https://opensource.org/licenses/CATOSL-1.1")],
+        description="Computer Associates Trusted Open Source License 1.1 (CATOSL-1.1)",
     ),
     LicenceDescription(
-        "CATOSL-1.1",
-        "https://opensource.org/licenses/CATOSL-1.1",
-        "Computer Associates Trusted Open Source License 1.1 (CATOSL-1.1)",
+        short="EUDatagrid",
+        uris=[cast("URIType", "https://opensource.org/licenses/EUDatagrid")],
+        description="EU DataGrid Software License",
     ),
     LicenceDescription(
-        "EUDatagrid",
-        "https://opensource.org/licenses/EUDatagrid",
-        "EU DataGrid Software License",
+        short="EPL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/EPL-1.0")],
+        description="Eclipse Public License 1.0",
     ),
     LicenceDescription(
-        "EPL-1.0",
-        "https://opensource.org/licenses/EPL-1.0",
-        "Eclipse Public License 1.0",
+        short="ECL-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/ECL-2.0")],
+        description="Educational Community License 2.0",
     ),
     LicenceDescription(
-        "ECL-2.0",
-        "https://opensource.org/licenses/ECL-2.0",
-        "Educational Community License 2.0",
+        short="EFL-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/EFL-2.0")],
+        description="Eiffel Forum License 2.0",
     ),
     LicenceDescription(
-        "EFL-2.0", "https://opensource.org/licenses/EFL-2.0", "Eiffel Forum License 2.0"
+        short="Entessa",
+        uris=[cast("URIType", "https://opensource.org/licenses/Entessa")],
+        description="Entessa Public License",
     ),
     LicenceDescription(
-        "Entessa", "https://opensource.org/licenses/Entessa", "Entessa Public License"
+        short="EUPL-1.1",
+        uris=[cast("URIType", "https://opensource.org/licenses/EUPL-1.1")],
+        description="European Union Public License 1.1",
     ),
     LicenceDescription(
-        "EUPL-1.1",
-        "https://opensource.org/licenses/EUPL-1.1",
-        "European Union Public License 1.1",
+        short="Fair",
+        uris=[cast("URIType", "https://opensource.org/licenses/Fair")],
+        description="Fair License",
     ),
-    LicenceDescription("Fair", "https://opensource.org/licenses/Fair", "Fair License"),
     LicenceDescription(
-        "Frameworx-1.0",
-        "https://opensource.org/licenses/Frameworx-1.0",
-        "Frameworx License 1.0",
+        short="Frameworx-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/Frameworx-1.0")],
+        description="Frameworx License 1.0",
     ),
     LicenceDescription(
-        "AGPL-3.0",
-        "https://opensource.org/licenses/AGPL-3.0",
-        "GNU Affero General Public License v3",
+        short="AGPL-3.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/AGPL-3.0")],
+        description="GNU Affero General Public License v3",
     ),
     LicenceDescription(
-        "GPL-2.0",
-        "https://opensource.org/licenses/GPL-2.0",
-        "GNU General Public License 2.0",
+        short="GPL-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/GPL-2.0")],
+        description="GNU General Public License 2.0",
     ),
     LicenceDescription(
-        "GPL-3.0",
-        "https://opensource.org/licenses/GPL-3.0",
-        "GNU General Public License 3.0",
+        short="GPL-3.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/GPL-3.0")],
+        description="GNU General Public License 3.0",
     ),
     LicenceDescription(
-        "LGPL-2.1",
-        "https://opensource.org/licenses/LGPL-2.1",
-        "GNU Lesser General Public License 2.1",
+        short="LGPL-2.1",
+        uris=[cast("URIType", "https://opensource.org/licenses/LGPL-2.1")],
+        description="GNU Lesser General Public License 2.1",
     ),
     LicenceDescription(
-        "LGPL-3.0",
-        "https://opensource.org/licenses/LGPL-3.0",
-        "GNU Lesser General Public License 3.0",
+        short="LGPL-3.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/LGPL-3.0")],
+        description="GNU Lesser General Public License 3.0",
     ),
     LicenceDescription(
-        "HPND",
-        "https://opensource.org/licenses/HPND",
-        "Historical Permission Notice and Disclaimer",
+        short="HPND",
+        uris=[cast("URIType", "https://opensource.org/licenses/HPND")],
+        description="Historical Permission Notice and Disclaimer",
     ),
     LicenceDescription(
-        "IPL-1.0", "https://opensource.org/licenses/IPL-1.0", "IBM Public License 1.0"
+        short="IPL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/IPL-1.0")],
+        description="IBM Public License 1.0",
     ),
     LicenceDescription(
-        "IPA", "https://opensource.org/licenses/IPA", "IPA Font License"
+        short="IPA",
+        uris=[cast("URIType", "https://opensource.org/licenses/IPA")],
+        description="IPA Font License",
     ),
-    LicenceDescription("ISC", "https://opensource.org/licenses/ISC", "ISC License"),
     LicenceDescription(
-        "Intel", "https://opensource.org/licenses/Intel", "Intel Open Source License"
+        short="ISC",
+        uris=[cast("URIType", "https://opensource.org/licenses/ISC")],
+        description="ISC License",
     ),
     LicenceDescription(
-        "LPPL-1.3c",
-        "https://opensource.org/licenses/LPPL-1.3c",
-        "LaTeX Project Public License 1.3c",
+        short="Intel",
+        uris=[cast("URIType", "https://opensource.org/licenses/Intel")],
+        description="Intel Open Source License",
     ),
     LicenceDescription(
-        "LPL-1.0",
-        "https://opensource.org/licenses/LPL-1.0",
-        "Lucent Public License (“Plan9”) 1.0",
+        short="LPPL-1.3c",
+        uris=[cast("URIType", "https://opensource.org/licenses/LPPL-1.3c")],
+        description="LaTeX Project Public License 1.3c",
     ),
     LicenceDescription(
-        "LPL-1.02",
-        "https://opensource.org/licenses/LPL-1.02",
-        "Lucent Public License 1.02",
+        short="LPL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/LPL-1.0")],
+        description="Lucent Public License (“Plan9”) 1.0",
     ),
-    LicenceDescription("MIT", "https://opensource.org/licenses/MIT", "MIT License"),
     LicenceDescription(
-        "mitre",
-        "https://opensource.org/licenses/CVW",
-        "MITRE Collaborative Virtual Workspace License (CVW License)",
+        short="LPL-1.02",
+        uris=[cast("URIType", "https://opensource.org/licenses/LPL-1.02")],
+        description="Lucent Public License 1.02",
     ),
     LicenceDescription(
-        "MS-PL", "https://opensource.org/licenses/MS-PL", "Microsoft Public License"
+        short="MIT",
+        uris=[cast("URIType", "https://opensource.org/licenses/MIT")],
+        description="MIT License",
     ),
     LicenceDescription(
-        "MS-RL", "https://opensource.org/licenses/MS-RL", "Microsoft Reciprocal License"
+        short="mitre",
+        uris=[cast("URIType", "https://opensource.org/licenses/CVW")],
+        description="MITRE Collaborative Virtual Workspace License (CVW License)",
+        is_spdx=False,
     ),
     LicenceDescription(
-        "MirOS", "https://opensource.org/licenses/MirOS", "MirOS Licence"
+        short="MS-PL",
+        uris=[cast("URIType", "https://opensource.org/licenses/MS-PL")],
+        description="Microsoft Public License",
     ),
     LicenceDescription(
-        "Motosoto", "https://opensource.org/licenses/Motosoto", "Motosoto License"
+        short="MS-RL",
+        uris=[cast("URIType", "https://opensource.org/licenses/MS-RL")],
+        description="Microsoft Reciprocal License",
     ),
     LicenceDescription(
-        "MPL-1.0",
-        "https://opensource.org/licenses/MPL-1.0",
-        "Mozilla Public License 1.0",
+        short="MirOS",
+        uris=[cast("URIType", "https://opensource.org/licenses/MirOS")],
+        description="MirOS Licence",
     ),
     LicenceDescription(
-        "MPL-1.1",
-        "https://opensource.org/licenses/MPL-1.1",
-        "Mozilla Public License 1.1",
+        short="Motosoto",
+        uris=[cast("URIType", "https://opensource.org/licenses/Motosoto")],
+        description="Motosoto License",
     ),
     LicenceDescription(
-        "MPL-2.0",
-        "https://opensource.org/licenses/MPL-2.0",
-        "Mozilla Public License 2.0",
+        short="MPL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/MPL-1.0")],
+        description="Mozilla Public License 1.0",
     ),
     LicenceDescription(
-        "Multics", "https://opensource.org/licenses/Multics", "Multics License"
+        short="MPL-1.1",
+        uris=[cast("URIType", "https://opensource.org/licenses/MPL-1.1")],
+        description="Mozilla Public License 1.1",
     ),
     LicenceDescription(
-        "NASA-1.3",
-        "https://opensource.org/licenses/NASA-1.3",
-        "NASA Open Source Agreement 1.3",
+        short="MPL-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/MPL-2.0")],
+        description="Mozilla Public License 2.0",
     ),
-    LicenceDescription("NTP", "https://opensource.org/licenses/NTP", "NTP License"),
     LicenceDescription(
-        "Naumen", "https://opensource.org/licenses/Naumen", "Naumen Public License"
+        short="Multics",
+        uris=[cast("URIType", "https://opensource.org/licenses/Multics")],
+        description="Multics License",
     ),
     LicenceDescription(
-        "NGPL", "https://opensource.org/licenses/NGPL", "Nethack General Public License"
+        short="NASA-1.3",
+        uris=[cast("URIType", "https://opensource.org/licenses/NASA-1.3")],
+        description="NASA Open Source Agreement 1.3",
     ),
     LicenceDescription(
-        "Nokia", "https://opensource.org/licenses/Nokia", "Nokia Open Source License"
+        short="NTP",
+        uris=[cast("URIType", "https://opensource.org/licenses/NTP")],
+        description="NTP License",
     ),
     LicenceDescription(
-        "NPOSL-3.0",
-        "https://opensource.org/licenses/NPOSL-3.0",
-        "Non-Profit Open Software License 3.0",
+        short="Naumen",
+        uris=[cast("URIType", "https://opensource.org/licenses/Naumen")],
+        description="Naumen Public License",
     ),
     LicenceDescription(
-        "OCLC-2.0",
-        "https://opensource.org/licenses/OCLC-2.0",
-        "OCLC Research Public License 2.0",
+        short="NGPL",
+        uris=[cast("URIType", "https://opensource.org/licenses/NGPL")],
+        description="Nethack General Public License",
     ),
     LicenceDescription(
-        "OFL-1.1", "https://opensource.org/licenses/OFL-1.1", "Open Font License 1.1"
+        short="Nokia",
+        uris=[cast("URIType", "https://opensource.org/licenses/Nokia")],
+        description="Nokia Open Source License",
     ),
     LicenceDescription(
-        "OGL-UK-1.0",
-        "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/1/",
-        "Open Government Licence 1.0 (United Kingdom)",
+        short="NPOSL-3.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/NPOSL-3.0")],
+        description="Non-Profit Open Software License 3.0",
     ),
     LicenceDescription(
-        "OGL-UK-2.0",
-        "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/2/",
-        "Open Government Licence 2.0 (United Kingdom)",
+        short="OCLC-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/OCLC-2.0")],
+        description="OCLC Research Public License 2.0",
     ),
     LicenceDescription(
-        "OGL-UK-3.0",
-        "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
-        "Open Government Licence 3.0 (United Kingdom)",
+        short="OFL-1.1",
+        uris=[cast("URIType", "https://opensource.org/licenses/OFL-1.1")],
+        description="Open Font License 1.1",
     ),
     LicenceDescription(
-        "OGTSL",
-        "https://opensource.org/licenses/OGTSL",
-        "Open Group Test Suite License",
+        short="OGL-UK-1.0",
+        uris=[
+            cast(
+                "URIType",
+                "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/1/",
+            )
+        ],
+        description="Open Government Licence 1.0 (United Kingdom)",
     ),
     LicenceDescription(
-        "OSL-3.0",
-        "https://opensource.org/licenses/OSL-3.0",
-        "Open Software License 3.0",
+        short="OGL-UK-2.0",
+        uris=[
+            cast(
+                "URIType",
+                "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/2/",
+            )
+        ],
+        description="Open Government Licence 2.0 (United Kingdom)",
     ),
     LicenceDescription(
-        "PHP-3.0", "https://opensource.org/licenses/PHP-3.0", "PHP License 3.0"
+        short="OGL-UK-3.0",
+        uris=[
+            cast(
+                "URIType",
+                "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+            )
+        ],
+        description="Open Government Licence 3.0 (United Kingdom)",
     ),
     LicenceDescription(
-        "PostgreSQL", "https://opensource.org/licenses/PostgreSQL", "PostgreSQL License"
+        short="OGTSL",
+        uris=[cast("URIType", "https://opensource.org/licenses/OGTSL")],
+        description="Open Group Test Suite License",
     ),
     LicenceDescription(
-        "Python-2.0", "https://opensource.org/licenses/Python-2.0", "Python License 2.0"
+        short="OSL-3.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/OSL-3.0")],
+        description="Open Software License 3.0",
     ),
     LicenceDescription(
-        "QPL-1.0", "https://opensource.org/licenses/QPL-1.0", "Q Public License 1.0"
+        short="PHP-3.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/PHP-3.0")],
+        description="PHP License 3.0",
     ),
     LicenceDescription(
-        "RPSL-1.0",
-        "https://opensource.org/licenses/RPSL-1.0",
-        "RealNetworks Public Source License 1.0",
+        short="PostgreSQL",
+        uris=[cast("URIType", "https://opensource.org/licenses/PostgreSQL")],
+        description="PostgreSQL License",
     ),
     LicenceDescription(
-        "RPL-1.5",
-        "https://opensource.org/licenses/RPL-1.5",
-        "Reciprocal Public License 1.5",
+        short="Python-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/Python-2.0")],
+        description="Python License 2.0",
     ),
     LicenceDescription(
-        "RSCPL",
-        "https://opensource.org/licenses/RSCPL",
-        "Ricoh Source Code Public License",
+        short="QPL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/QPL-1.0")],
+        description="Q Public License 1.0",
     ),
     LicenceDescription(
-        "SimPL-2.0",
-        "https://opensource.org/licenses/SimPL-2.0",
-        "Simple Public License 2.0",
+        short="RPSL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/RPSL-1.0")],
+        description="RealNetworks Public Source License 1.0",
     ),
     LicenceDescription(
-        "Sleepycat", "https://opensource.org/licenses/Sleepycat", "Sleepycat License"
+        short="RPL-1.5",
+        uris=[cast("URIType", "https://opensource.org/licenses/RPL-1.5")],
+        description="Reciprocal Public License 1.5",
     ),
     LicenceDescription(
-        "SISSL",
-        "https://opensource.org/licenses/SISSL",
-        "Sun Industry Standards Source License 1.1",
+        short="RSCPL",
+        uris=[cast("URIType", "https://opensource.org/licenses/RSCPL")],
+        description="Ricoh Source Code Public License",
     ),
     LicenceDescription(
-        "SPL-1.0", "https://opensource.org/licenses/SPL-1.0", "Sun Public License 1.0"
+        short="SimPL-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/SimPL-2.0")],
+        description="Simple Public License 2.0",
     ),
     LicenceDescription(
-        "Watcom-1.0",
-        "https://opensource.org/licenses/Watcom-1.0",
-        "Sybase Open Watcom Public License 1.0",
+        short="Sleepycat",
+        uris=[cast("URIType", "https://opensource.org/licenses/Sleepycat")],
+        description="Sleepycat License",
     ),
     LicenceDescription(
-        "NCSA",
-        "https://opensource.org/licenses/NCSA",
-        "University of Illinois/NCSA Open Source License",
+        short="SISSL",
+        uris=[cast("URIType", "https://opensource.org/licenses/SISSL")],
+        description="Sun Industry Standards Source License 1.1",
     ),
-    LicenceDescription("Unlicense", "https://unlicense.org/", "Unlicense"),
     LicenceDescription(
-        "VSL-1.0",
-        "https://opensource.org/licenses/VSL-1.0",
-        "Vovida Software License 1.0",
+        short="SPL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/SPL-1.0")],
+        description="Sun Public License 1.0",
     ),
-    LicenceDescription("W3C", "https://opensource.org/licenses/W3C", "W3C License"),
-    LicenceDescription("Xnet", "https://opensource.org/licenses/Xnet", "X.Net License"),
     LicenceDescription(
-        "ZPL-2.0", "https://opensource.org/licenses/ZPL-2.0", "Zope Public License 2.0"
+        short="Watcom-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/Watcom-1.0")],
+        description="Sybase Open Watcom Public License 1.0",
     ),
     LicenceDescription(
-        "WXwindows",
-        "https://opensource.org/licenses/WXwindows",
-        "wxWindows Library License",
+        short="NCSA",
+        uris=[cast("URIType", "https://opensource.org/licenses/NCSA")],
+        description="University of Illinois/NCSA Open Source License",
     ),
     LicenceDescription(
-        "Zlib", "https://opensource.org/licenses/Zlib", "zlib/libpng license"
+        short="Unlicense",
+        uris=[cast("URIType", "https://unlicense.org/")],
+        description="Unlicense",
     ),
     LicenceDescription(
-        NoLicenceShort,
-        NoLicence,
-        "No license - no permission to use unless the owner grants a licence",
+        short="VSL-1.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/VSL-1.0")],
+        description="Vovida Software License 1.0",
     ),
+    LicenceDescription(
+        short="W3C",
+        uris=[cast("URIType", "https://opensource.org/licenses/W3C")],
+        description="W3C License",
+    ),
+    LicenceDescription(
+        short="Xnet",
+        uris=[cast("URIType", "https://opensource.org/licenses/Xnet")],
+        description="X.Net License",
+    ),
+    LicenceDescription(
+        short="ZPL-2.0",
+        uris=[cast("URIType", "https://opensource.org/licenses/ZPL-2.0")],
+        description="Zope Public License 2.0",
+    ),
+    LicenceDescription(
+        short="WXwindows",
+        uris=[cast("URIType", "https://opensource.org/licenses/WXwindows")],
+        description="wxWindows Library License",
+        is_spdx=False,
+    ),
+    LicenceDescription(
+        short="Zlib",
+        uris=[cast("URIType", "https://opensource.org/licenses/Zlib")],
+        description="zlib/libpng license",
+    ),
+    NoLicenceDescription,
 ]
 
-ROCrateShortLicences: "Final[Mapping[str, LicenceDescription]]" = {
-    lictup[0]: lictup for lictup in ROCrateShortLicencesList
-}
 
-ROCrateLongLicences: "Final[Mapping[str, LicenceDescription]]" = {
-    lictup[1]: lictup for lictup in ROCrateShortLicencesList
-}
+class LicenceMatcher:
+    DEFAULT_SPDX_VERSION: "Final[str]" = "3.23"
+
+    SPDX_JSON_URL_TEMPLATE: "Final[str]" = "https://raw.githubusercontent.com/spdx/license-list-data/v{}/json/licenses.json"
+
+    def __init__(
+        self,
+        cacheHandler: "SchemeHandlerCacheHandler",
+        cacheDir: "Optional[AbsPath]" = None,
+        spdx_version: "str" = DEFAULT_SPDX_VERSION,
+    ):
+        # Getting a logger focused on specific classes
+        from inspect import getmembers as inspect_getmembers
+
+        self.logger = logging.getLogger(
+            dict(inspect_getmembers(self))["__module__"]
+            + "::"
+            + self.__class__.__name__
+        )
+
+        # The cache is an integral part, as it is where the
+        # different components are going to be fetched
+        self.cacheHandler = cacheHandler
+        self.cacheDir = cacheDir
+        dict_short_licences: "MutableMapping[str, LicenceDescription]" = {
+            lictup.short: lictup for lictup in WorkflowHubShortLicencesList
+        }
+        dict_long_licences: "MutableMapping[str, LicenceDescription]" = {
+            uri: lictup
+            for lictup in WorkflowHubShortLicencesList
+            for uri in lictup.uris
+        }
+
+        spdx_source = cast("URIType", self.SPDX_JSON_URL_TEMPLATE.format(spdx_version))
+        try:
+            cached_content = self.cacheHandler.fetch(
+                spdx_source, destdir=self.cacheDir, offline=False
+            )
+
+            # This it should be superfluous
+            if os.path.exists(cached_content.path):
+                with open(cached_content.path, mode="r", encoding="utf-8") as lH:
+                    spdx_licences = json.load(lH)
+
+                if isinstance(spdx_licences, dict):
+                    spdx_lic_list = spdx_licences.get("licenses", [])
+                    for spdx_lic in spdx_lic_list:
+                        short_lic = spdx_lic.get("licenseId")
+                        desc_lic = spdx_lic.get("name")
+
+                        # Giving precedence to the original source
+                        uri_lics = spdx_lic.get("seeAlso", [])
+                        uri_lic = spdx_lic.get("reference")
+                        if uri_lic is not None:
+                            uri_lics.append(uri_lic)
+
+                        if (
+                            short_lic is not None
+                            and desc_lic is not None
+                            and len(uri_lics) > 0
+                        ):
+                            lic = LicenceDescription(
+                                short=short_lic,
+                                uris=uri_lics,
+                                description=desc_lic,
+                            )
+                            dict_short_licences[short_lic] = lic
+                            for the_long_lic in uri_lics:
+                                dict_long_licences[the_long_lic] = lic
+
+        except CacheHandlerException as che:
+            self.logger.debug(
+                f"Error while fetching or parsing version {spdx_version} of SPDX from {spdx_source}"
+            )
+            pass
+
+        self.dict_short_licences = dict_short_licences
+        self.dict_long_licences = dict_long_licences
+
+    def match_ShortLicence(
+        self, short_licence: "str"
+    ) -> "Optional[LicenceDescription]":
+        return self.dict_short_licences.get(short_licence)
+
+    def match_LongLicence(self, long_licence: "str") -> "Optional[LicenceDescription]":
+        return self.dict_long_licences.get(long_licence)
+
+    def matchLicence(self, licence: "str") -> "Optional[LicenceDescription]":
+        resolved_licence = self.match_ShortLicence(licence)
+        if resolved_licence is None:
+            resolved_licence = self.match_LongLicence(licence)
+        if resolved_licence is None:
+            if urllib.parse.urlparse(licence).scheme in AcceptableLicenceSchemes:
+                resolved_licence = LicenceDescription(
+                    short=licence,
+                    uris=[
+                        cast("URIType", licence),
+                    ],
+                    description=f"Custom licence {licence} . Please visit the link to learn more details",
+                    is_spdx=False,
+                )
+        return resolved_licence
+
+    def describeDocumentedLicences(self) -> "Sequence[LicenceDescription]":
+        return list(self.dict_short_licences.values())
+
+
+class LicenceMatcherSingleton(LicenceMatcher):
+    __instance: "ClassVar[Optional[LicenceMatcher]]" = None
+
+    def __new__(cls) -> "LicenceMatcher":  # type: ignore
+        if cls.__instance is None:
+            cachePath = cast(
+                "AbsPath",
+                xdg.BaseDirectory.save_cache_path("es.elixir.WfExSLicenceMatcher"),
+            )
+
+            # Private cache handler instance
+            # with LicenceMatcher
+            cacheHandler = SchemeHandlerCacheHandler(
+                cachePath, schemeHandlers=HTTP_SCHEME_HANDLERS
+            )
+            cls.__instance = LicenceMatcher(cacheHandler)
+
+        return cls.__instance
+
+    def __init__(self) -> None:
+        pass
