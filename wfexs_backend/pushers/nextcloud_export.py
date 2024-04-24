@@ -611,8 +611,8 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
             mappings.append(
                 ExportMapping(
                     local_filename=cast("AbsPath", items[0].local),
-                    remote_dirname=cast("RelPath", ""),
-                    remote_basename=prefname,
+                    remote_dirname=cast("RelPath", os.path.dirname(prefname)),
+                    remote_basename=cast("RelPath", os.path.basename(prefname)),
                 )
             )
 
@@ -738,76 +738,13 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
         self,
         draft_entry: "DraftEntry",
     ) -> "Mapping[str, Any]":
-        self._create_share_links(draft_entry.draft_id)
+        # Avoid create duplicated share links
+        server_draft_entry = self.get_pid_draftentry(draft_entry.pid)
+        if (
+            server_draft_entry is None
+            or server_draft_entry.draft_id != draft_entry.draft_id
+        ):
+            self._create_share_links(draft_entry.draft_id)
 
         # TODO: improve this (if it makes sense!)
         return {}
-
-    def push(
-        self,
-        items: "Sequence[AnyContent]",
-        preferred_id: "Optional[str]" = None,
-        title: "Optional[str]" = None,
-        description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
-        metadata: "Optional[Mapping[str, Any]]" = None,
-        community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
-    ) -> "Sequence[URIWithMetadata]":
-        """
-        These contents will be included in the Nextcloud share
-        """
-        if len(items) == 0:
-            raise ValueError(
-                "This plugin requires at least one element to be processed"
-            )
-
-        # We are starting to learn whether we already have a PID
-        preferred_id = (
-            self.default_preferred_id if preferred_id is None else preferred_id
-        )
-        if (preferred_id is not None) and len(preferred_id) > 0:
-            self.logger.debug(f"Ignoring preferred PID {preferred_id}")
-
-        # Generate mappings
-        mappings = self._prepare_upload_mappings(items)
-
-        # Now, upload the contents
-        retvals, remote_path, remote_relpath = self.ce.mappings_uploader(mappings)
-
-        # And check errors
-        failed = False
-        for retval in retvals:
-            if not retval:
-                failed = True
-                self.logger.error(f"There was some problem uploading to {remote_path}")
-
-        if failed:
-            raise ExportPluginException(
-                f"Some contents could not be uploaded to {remote_path}"
-            )
-
-        assert remote_relpath is not None
-
-        # Generate the share link(s) once all the contents are there
-        shared_links, email_addresses, expire_in = self._create_share_links(
-            remote_relpath
-        )
-
-        shared_uris = []
-        for i_share, shared_link in enumerate(shared_links):
-            self.logger.debug(f"Generated share link {shared_link}")
-            shared_uris.append(
-                URIWithMetadata(
-                    uri=shared_link.uri,
-                    # TODO: Add meaninful metadata
-                    metadata={
-                        "shared-with": email_addresses[i_share]
-                        if len(email_addresses) > 0
-                        else None,
-                        "expires-in": expire_in,
-                    },
-                )
-            )
-
-        return shared_uris

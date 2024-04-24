@@ -171,18 +171,20 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
         failed = False
         relitems: "Set[str]" = set()
         for i_item, item in enumerate(items):
-            relitem = os.path.relpath(item.local, self.refdir)
             # Outside the relative directory
-            if relitem.startswith(os.path.pardir):
-                # This is needed to avoid collisions
-                prefname: "Optional[RelPath]"
-                if isinstance(item, MaterializedContent):
-                    prefname = item.prettyFilename
-                else:
-                    prefname = item.preferredFilename
+            prefname: "Optional[RelPath]" = None
+            if isinstance(item, MaterializedContent):
+                prefname = item.prettyFilename
+            else:
+                prefname = item.preferredFilename
 
-                if prefname is None:
-                    prefname = cast("RelPath", os.path.basename(item.local))
+            if prefname is None:
+                relitem = os.path.relpath(item.local, self.refdir)
+                prefname = cast("RelPath", relitem)
+
+            assert prefname is not None
+            # Relative must remain relative!
+            prefname = cast("RelPath", prefname.lstrip("/"))
 
             while prefname in relitems:
                 baserelitem = cast(
@@ -195,13 +197,11 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
                     else baserelitem
                 )
 
-            assert prefname is not None
-            relitem = prefname
-            relitems.add(relitem)
+            relitems.add(prefname)
 
             try:
                 upload_response = self.upload_file_to_draft(
-                    booked_entry, item.local, relitem
+                    booked_entry, item.local, prefname
                 )
             except urllib.error.HTTPError as he:
                 failed = True

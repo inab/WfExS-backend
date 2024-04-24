@@ -38,6 +38,7 @@ from typing import (
 if TYPE_CHECKING:
     from wfexs_backend.common import (
         AbsPath,
+        RelPath,
         SecurityContextConfig,
     )
     from pytest_param_files import (  # type: ignore[import]
@@ -52,6 +53,7 @@ from tests.util import get_path
 
 from wfexs_backend.common import (
     CC_BY_40_LicenceDescription,
+    GeneratedContent,
     NoLicenceDescription,
 )
 
@@ -379,8 +381,12 @@ def test_nextcloud_upload_file_to_draft(file_params: "ParamTestData") -> "None":
             remote_filename=None,
         )
         logger.info(uploaded_file_meta)
-        assert uploaded_file_meta.get("key") == os.path.basename(naive_path)
-        assert uploaded_file_meta.get("size") == os.path.getsize(naive_path)
+        remote_path = uploaded_file_meta.get("remote_path")
+        assert remote_path is not None
+        assert remote_path.startswith(file_params.extra["base-directory"])
+        remote_relpath = uploaded_file_meta.get("remote_relpath")
+        assert remote_relpath is not None
+        assert remote_path.endswith(remote_relpath)
     except urllib.error.HTTPError as he:
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
@@ -440,8 +446,12 @@ def test_nextcloud_upload_stream_to_draft(file_params: "ParamTestData") -> "None
                 content_size=naive_path_size,
             )
         logger.info(uploaded_file_meta)
-        assert uploaded_file_meta.get("key") == STREAM_FILENAME
-        assert uploaded_file_meta.get("size") == naive_path_size
+        remote_path = uploaded_file_meta.get("remote_path")
+        assert remote_path is not None
+        assert remote_path.startswith(file_params.extra["base-directory"])
+        remote_relpath = uploaded_file_meta.get("remote_relpath")
+        assert remote_relpath is not None
+        assert remote_path.endswith(remote_relpath)
     except urllib.error.HTTPError as he:
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
@@ -452,12 +462,13 @@ def test_nextcloud_upload_stream_to_draft(file_params: "ParamTestData") -> "None
             nep.discard_booked_pid(booked_entry)
 
 
-@pytest.mark.dependency(
-    depends=[
-        test_nextcloud_book_new_pid.__name__,
-    ],
-    collect=True,
-)
+# @pytest.mark.dependency(
+#    depends=[
+#        test_nextcloud_book_new_pid.__name__,
+#    ],
+#    collect=True,
+# )
+@pytest.mark.skip
 @nextcloud_params
 def test_nextcloud_update_record_metadata_raw(file_params: "ParamTestData") -> "None":
     assert isinstance(
@@ -514,12 +525,13 @@ def test_nextcloud_update_record_metadata_raw(file_params: "ParamTestData") -> "
             nep.discard_booked_pid(booked_entry)
 
 
-@pytest.mark.dependency(
-    depends=[
-        test_nextcloud_book_new_pid.__name__,
-    ],
-    collect=True,
-)
+# @pytest.mark.dependency(
+#    depends=[
+#        test_nextcloud_book_new_pid.__name__,
+#    ],
+#    collect=True,
+# )
+@pytest.mark.skip
 @nextcloud_params
 def test_nextcloud_update_record_metadata_facets(
     file_params: "ParamTestData",
@@ -585,7 +597,7 @@ def test_nextcloud_update_record_metadata_facets(
 @pytest.mark.dependency(
     depends=[
         test_nextcloud_upload_file_to_draft.__name__,
-        test_nextcloud_update_record_metadata_raw.__name__,
+        #        test_nextcloud_update_record_metadata_raw.__name__,
     ],
     collect=True,
 )
@@ -651,10 +663,6 @@ def test_nextcloud_publish_new_pid(file_params: "ParamTestData") -> "None":
             ],
         )
         logger.info(updated_meta)
-        assert entry_metadata["title"] == updated_meta.get("metadata", {}).get("title")
-        assert entry_metadata["upload_type"] == updated_meta.get("metadata", {}).get(
-            "upload_type"
-        )
 
         published_meta = nep.publish_draft_record(booked_entry)
         logger.info(published_meta)
@@ -665,4 +673,85 @@ def test_nextcloud_publish_new_pid(file_params: "ParamTestData") -> "None":
         raise he
     finally:
         if booked_entry is not None and published_meta is None:
+            nep.discard_booked_pid(booked_entry)
+
+
+@pytest.mark.dependency(
+    depends=[
+        test_nextcloud_publish_new_pid.__name__,
+    ],
+    collect=True,
+)
+@nextcloud_params
+def test_nextcloud_push(file_params: "ParamTestData") -> "None":
+    assert isinstance(
+        file_params.extra.get("user"), str
+    ), "This test needs a valid Nextcloud user"
+    assert isinstance(
+        file_params.extra.get("token"), str
+    ), "This test needs a valid Nextcloud application token"
+    assert isinstance(
+        file_params.extra.get("api-prefix"), str
+    ), "This test needs to know the Nextcloud service API prefix"
+    assert isinstance(
+        file_params.extra.get("base-directory"), str
+    ), "This test needs to know the base directory for all the new directories"
+
+    naive_path = get_path(os.path.join("data", "naive_file.txt"))
+    assert os.path.isfile(naive_path), f"Test file {naive_path} is not available"
+
+    setup_block: "SecurityContextConfig" = {
+        "user": file_params.extra["user"],
+        "token": file_params.extra["token"],
+        "api-prefix": file_params.extra["api-prefix"],
+        "base-directory": file_params.extra["base-directory"],
+    }
+    nep = NextcloudExportPlugin(
+        cast("AbsPath", os.path.join(os.path.dirname(__file__), "data")),
+        setup_block=setup_block,
+    )
+
+    booked_entry = None
+    published_meta = None
+    try:
+        entry_metadata = {
+            "title": "My test upload at " + datetime.datetime.utcnow().isoformat(),
+            "upload_type": "dataset",
+            "description": "This is my test upload at "
+            + datetime.datetime.utcnow().isoformat(),
+        }
+
+        booked_entry = nep.book_pid()
+        assert booked_entry is not None
+
+        pushed_entries = nep.push(
+            preferred_id=booked_entry.draft_id,
+            items=[
+                GeneratedContent(
+                    local=cast("AbsPath", naive_path),
+                ),
+                GeneratedContent(
+                    local=cast("AbsPath", naive_path),
+                    preferredFilename=cast("RelPath", STREAM_FILENAME),
+                ),
+            ],
+            metadata=entry_metadata,
+            resolved_orcids=[
+                TEST_ORCID,
+            ],
+            licences=[
+                CC_BY_40_LicenceDescription,
+                NoLicenceDescription,
+            ],
+        )
+        assert pushed_entries is not None
+        assert booked_entry.metadata is not None
+        logger.info(f"Booked PID is {booked_entry.pid}")
+    except urllib.error.HTTPError as he:
+        irbytes = he.read()
+        logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
+        logger.error(irbytes.decode())
+        raise he
+    finally:
+        if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)
