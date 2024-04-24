@@ -35,6 +35,8 @@ from extended_nc_client.extended_nc_client import (
     ExtendedNextcloudClient,
 )
 
+import nextcloud_client.nextcloud_client  # type: ignore[import-untyped]
+
 from ..common import (
     ContentKind,
     LicensedURI,
@@ -45,11 +47,14 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        ClassVar,
         IO,
         Mapping,
+        MutableSequence,
         MutableSet,
         Optional,
         Sequence,
+        Set,
         Tuple,
         Union,
     )
@@ -72,9 +77,12 @@ if TYPE_CHECKING:
     from ..workflow import WF
 
 from . import (
-    AbstractExportPlugin,
     DraftEntry,
     ExportPluginException,
+)
+
+from .abstract_token_export import (
+    AbstractTokenExportPlugin,
 )
 
 
@@ -167,6 +175,30 @@ class NextcloudContentExporter:
                 rslash = retval.rfind("/", 0, rslash)
 
         return retvalobj, retval, relretval
+
+    def remove_remote_path(
+        self,
+        name: "RelPath",
+        reldir: "Optional[RelPath]" = None,
+    ) -> "bool":
+        if reldir:
+            relretval = cast("RelPath", reldir + "/" + name)
+        else:
+            relretval = name
+
+        retval = cast("AbsPath", self.base_directory + "/" + relretval)
+        retvalobj = None
+
+        try:
+            return bool(self.enc.delete(retval))
+        except nextcloud_client.nextcloud_client.HTTPResponseError as nce:
+            if nce.status_code == 404:
+                return False
+            raise nce
+        except urllib.error.HTTPError as he:
+            if he.code == 404:
+                return False
+            raise he
 
     def _chunked_uploader(self, fmapping: "ExportMapping") -> "DAVRequestResponse":
         local_file, uplodir, destname = fmapping
@@ -344,13 +376,45 @@ class NextcloudContentExporter:
 
         return retvals
 
+    def get_share_link_info(
+        self, share_link: "str"
+    ) -> "Sequence[nextcloud_client.nextcloud_client.ShareInfo]":
+        # First, realize whether this is either an internal
+        # or an "permanent" external (URI)
+        p_shared = urllib.parse.urlparse(share_link)
+        # It is not
+        if p_shared.scheme == "":
+            if share_link.startswith("/"):
+                # Absolute one
+                internal_path = share_link
+            else:
+                internal_path = self.base_directory + "/" + share_link
+                if not self.base_directory.startswith("/"):
+                    internal_path = "/" + internal_path
+            share_path = None
+        else:
+            internal_path = None
+            share_path = share_link
 
-class NextcloudExportPlugin(AbstractExportPlugin):
+        shared_infos = []
+        for share_info in self.enc.get_shares():
+            if internal_path is not None and share_info.get_path() == internal_path:
+                shared_infos.append(share_info)
+            elif share_path is not None and share_info.get_link() == share_path:
+                shared_infos.append(share_info)
+
+        return shared_infos
+
+
+class NextcloudExportPlugin(AbstractTokenExportPlugin):
     """
     Class to model exporting results to a Nextcloud instance
     """
 
     PLUGIN_NAME = cast("SymbolicName", "nextcloud")
+
+    # Is this implementation ready?
+    ENABLED: "ClassVar[bool]" = True
 
     def __init__(
         self,
@@ -368,12 +432,12 @@ class NextcloudExportPlugin(AbstractExportPlugin):
             default_preferred_id=default_preferred_id,
         )
 
-        for conf_key in ("server", "base-directory"):
+        for conf_key in ("base-directory",):
             if conf_key not in self.setup_block:
                 raise ExportPluginException(
                     f"Key {conf_key} was not found in setup block"
                 )
-        for conf_key in ("user", "token"):
+        for conf_key in ("user",):
             if conf_key not in self.setup_block:
                 raise ExportPluginException(
                     f"Key {conf_key} was not found in security context block"
@@ -381,9 +445,9 @@ class NextcloudExportPlugin(AbstractExportPlugin):
 
         # Setting up the instance
         self.ce = NextcloudContentExporter(
-            self.setup_block["server"],
+            cast("URIType", self.api_prefix),
             self.setup_block["user"],
-            self.setup_block["token"],
+            self.api_token,
             self.setup_block["base-directory"],
             retention_tag_name=self.setup_block.get("retention-tag-name"),
         )
@@ -400,6 +464,15 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
     ) -> "Optional[DraftEntry]":
+        if preferred_id is None:
+            preferred_id = self.default_preferred_id
+
+        # Maybe the pid already exists
+        if preferred_id is not None:
+            pid_draftentry = self.get_pid_draftentry(preferred_id)
+            if pid_draftentry is not None:
+                return pid_draftentry
+
         _, retpath, relretpath = self.ce.create_remote_path(
             name=cast("RelPath", preferred_id)
         )
@@ -409,6 +482,8 @@ class NextcloudExportPlugin(AbstractExportPlugin):
             return None
 
         draftentry_metadata: "Mapping[str, Any]" = {
+            "internal_path": relretpath,
+            "pid": share_links[0].uri,
             "share_links": share_links,
             "email_addresses": email_addresses,
             "expire_in": expire_in,
@@ -430,12 +505,77 @@ class NextcloudExportPlugin(AbstractExportPlugin):
         provided id did exist, but it was not a draft
         """
 
+        if isinstance(pid_or_draft, DraftEntry):
+            internal = pid_or_draft.draft_id
+        else:
+            internal = pid_or_draft
+
         self.cached_remote_relpath = None
-        return False
+        return self.ce.remove_remote_path(cast("RelPath", internal))
 
     def get_pid_metadata(self, pid: "str") -> "Optional[Mapping[str, Any]]":
         # TODO: implement get_pid_metadata, as it might be useful
+        shared_infos = self.ce.get_share_link_info(pid)
+        if len(shared_infos) > 0:
+            share_links: "MutableSequence[str]" = []
+            expire_in = None
+            shared_with: "Set[str]" = set()
+            internal_path = shared_infos[0].get_path()
+            for shared_info in shared_infos:
+                share_links.append(shared_info.get_link())
+
+                if shared_info.get_path() != internal_path:
+                    self.logger.warning(
+                        f"Found more than one share link for {pid} in Nextcloud service at {self.api_prefix} using user {self.ce.nextcloud_user}"
+                    )
+
+                # Setting the soonest expiration as the one reported
+                # (in some scenarios they could expire)
+                this_expiration = shared_info.get_expiration()
+                if this_expiration is not None:
+                    if expire_in is None or expire_in > this_expiration:
+                        expire_in = this_expiration
+
+                this_shared_with = shared_info.get_share_with()
+                if this_shared_with is not None:
+                    shared_with.add(this_shared_with)
+
+            return {
+                "internal_path": internal_path,
+                "pid": share_links[0],
+                "share_links": share_links,
+                "email_addresses": list(shared_with),
+                "expire_in": expire_in,
+            }
+
         return None
+
+    def get_pid_draftentry(self, pid: "str") -> "Optional[DraftEntry]":
+        """
+        This method is used to obtained the metadata associated to a PID,
+        in case the destination allows it.
+        """
+
+        pid_metadata = self.get_pid_metadata(pid)
+
+        if pid_metadata is None:
+            return None
+
+        internal_path = pid_metadata["internal_path"]
+        base_directory: "str" = self.ce.base_directory
+        if not base_directory.startswith("/"):
+            base_directory = "/" + base_directory
+        if not base_directory.endswith("/"):
+            base_directory += "/"
+        if internal_path.startswith(base_directory):
+            internal_path = internal_path[len(base_directory) :]
+        return DraftEntry(
+            draft_id=internal_path,
+            pid=pid_metadata["pid"],
+            metadata=pid_metadata,
+            # TODO: hook raw metadata
+            raw_metadata=None,
+        )
 
     def _prepare_upload_mappings(
         self,
@@ -480,6 +620,16 @@ class NextcloudExportPlugin(AbstractExportPlugin):
             )
 
         return mappings
+
+    def get_file_bucket_prefix(
+        self,
+        draft_entry: "DraftEntry",
+    ) -> "str":
+        """
+        This is an accessory method which is used to build upload paths
+        """
+
+        return draft_entry.draft_id
 
     def upload_file_to_draft(
         self,

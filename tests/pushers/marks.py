@@ -47,4 +47,12 @@ MARKERS = [
         param_description="This parameter provides the Dataverse config filename for the tests involving authentication",
         mark_description="mark test to run only when a configuration file with Dataverse credentials is provided",
     ),
+    MarkDetails(
+        acronym="Nextcloud",
+        name="nextcloud_params",
+        param="nextcloud_config_filename",
+        option="--nextcloud-config",
+        param_description="This parameter provides the Nextcloud config filename for the tests involving authentication",
+        mark_description="mark test to run only when a configuration file with Nextcloud credentials is provided",
+    ),
 ]
