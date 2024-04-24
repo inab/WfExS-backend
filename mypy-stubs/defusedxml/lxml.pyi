@@ -30,7 +30,9 @@ class GlobalParserTLS(threading.local):
 
 getDefaultParser: Incomplete
 
-def check_docinfo(elementtree, forbid_dtd: bool = ..., forbid_entities: bool = ...) -> None: ...
+def check_docinfo(
+    elementtree, forbid_dtd: bool = ..., forbid_entities: bool = ...
+) -> None: ...
 def parse(
     source,
     parser: Incomplete | None = ...,
@@ -39,7 +41,11 @@ def parse(
     forbid_entities: bool = ...,
 ): ...
 def fromstring(
-    text, parser: Incomplete | None = ..., base_url: Incomplete | None = ..., forbid_dtd: bool = ..., forbid_entities: bool = ...
+    text,
+    parser: Incomplete | None = ...,
+    base_url: Incomplete | None = ...,
+    forbid_dtd: bool = ...,
+    forbid_entities: bool = ...,
 ): ...
 
 XML = fromstring

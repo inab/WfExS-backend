@@ -6,4 +6,10 @@ from .common import (
     NotSupportedError as NotSupportedError,
 )
 
-__all__ = ["DefusedXmlException", "DTDForbidden", "EntitiesForbidden", "ExternalReferenceForbidden", "NotSupportedError"]
+__all__ = [
+    "DefusedXmlException",
+    "DTDForbidden",
+    "EntitiesForbidden",
+    "ExternalReferenceForbidden",
+    "NotSupportedError",
+]
