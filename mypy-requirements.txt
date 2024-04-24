@@ -3,7 +3,6 @@ mypy-extensions
 # typing libraries, needed by mypy
 types-boto3
 types-certifi
-types-defusedxml
 types-jsonschema
 types-mypy-extensions
 types-openpyxl
