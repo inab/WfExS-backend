@@ -35,7 +35,7 @@ from extended_nc_client.extended_nc_client import (
     ExtendedNextcloudClient,
 )
 
-import nextcloud_client.nextcloud_client  # type: ignore[import-untyped]
+import nextcloud_client.nextcloud_client  # type: ignore[import, import-untyped]
 
 from ..common import (
     ContentKind,
