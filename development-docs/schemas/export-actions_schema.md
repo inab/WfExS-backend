@@ -47,4 +47,4 @@
 | **Same definition as**    | [defs_ExportsBlock_items](#defs_ExportsBlock_items)                       |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2023-09-23 at 01:39:57 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2024-04-24 at 16:05:50 +0000
