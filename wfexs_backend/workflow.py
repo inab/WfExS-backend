@@ -214,12 +214,17 @@ from .utils.licences import (
     AcceptableLicenceSchemes,
     LicenceMatcherSingleton,
 )
+from .utils.misc import (
+    lazy_import,
+)
 
 from .security_context import (
     SecurityContextVault,
 )
 import bagit
-import magic
+
+magic = lazy_import("magic")
+# import magic
 
 from . import __url__ as wfexs_backend_url
 from . import __official_name__ as wfexs_backend_name
