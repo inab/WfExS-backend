@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -147,7 +147,7 @@ def downloadContentFrom_gs(
     )
 
 
-GS_SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
     "gs": DocumentedProtocolFetcher(
         fetcher=downloadContentFrom_gs,
         description="Google Cloud Storage resource path scheme, whose downloads are delegated on Google Cloud Storage libraries",

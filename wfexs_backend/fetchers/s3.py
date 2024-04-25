@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -145,7 +145,7 @@ def downloadContentFrom_s3(
     )
 
 
-S3_SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
+SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
     "s3": DocumentedProtocolFetcher(
         fetcher=downloadContentFrom_s3,
         description="Amazon S3 resource path scheme, whose downloads are delegated on libraries implementing its support",
