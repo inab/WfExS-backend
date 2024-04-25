@@ -689,6 +689,10 @@ class WfExSBackend:
                     # Now, let's learn whether the class is enabled
                     if getattr(obj, "ENABLED", False):
                         self.addExportPlugin(obj)
+                    else:
+                        self.logger.debug(
+                            f"Export class {name} from module {named_module} was not eligible"
+                        )
 
     def addExportPlugin(self, exportClazz: "Type[AbstractExportPlugin]") -> None:
         self._export_plugins[exportClazz.PluginName()] = exportClazz
@@ -734,6 +738,7 @@ class WfExSBackend:
             # First, try locating a variable named SCHEME_HANDLERS
             # then, the different class declarations inheriting
             # from AbstractStatefulFetcher
+            skipit = True
             for name, obj in inspect.getmembers(named_module):
                 if name == "SCHEME_HANDLERS":
                     if isinstance(obj, dict):
@@ -741,6 +746,7 @@ class WfExSBackend:
                             obj,
                             fetchers_setup_block=fetchers_setup_block,
                         )
+                        skipit = False
                 elif (
                     inspect.isclass(obj)
                     and not inspect.isabstract(obj)
@@ -752,6 +758,12 @@ class WfExSBackend:
                             obj,
                             fetchers_setup_block=fetchers_setup_block,
                         )
+                        skipit = False
+
+            if skipit:
+                self.logger.debug(
+                    f"Fetch module {named_module} was not eligible (no SCHEME_HANDLERS dictionary or subclass of {AbstractStatefulFetcher.__name__})"
+                )
 
     def addStatefulSchemeHandlers(
         self,
