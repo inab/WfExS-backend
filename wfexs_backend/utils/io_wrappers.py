@@ -30,7 +30,12 @@ from typing import (
 import urllib.parse
 import uuid
 
-import magic
+from .misc import (
+    lazy_import,
+)
+
+magic = lazy_import("magic")
+# import magic
 
 if TYPE_CHECKING:
     from typing import (
