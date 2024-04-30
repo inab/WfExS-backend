@@ -235,6 +235,8 @@ from . import common as common_defs_module
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
 
+# Needed by pyld to detect it
+import aiohttp
 import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
@@ -1373,30 +1375,40 @@ WHERE   {
         graph from the read JSON-LD, which should allow exploring it.
         """
         jsonld_obj = cast("MutableMapping[str, Any]", copy.deepcopy(jsonld))
-        # Let's load it using RDFLib tricks
-        context: "MutableSequence[Union[str, Mapping[str, str]]]"
-        got_context = jsonld_obj.get("@context")
-        if got_context is None:
-            context = []
-        elif isinstance(got_context, (str, dict)):
-            context = [got_context]
-        elif isinstance(got_context, list):
-            context = got_context
 
-        # Setting the augmented context with the trick
-        context.append(
-            {
-                "@base": cls.WFEXS_TRICK_SPARQL_BASE,
-            }
-        )
-
-        if context != got_context:
-            jsonld_obj["@context"] = context
+        # # Let's load it using RDFLib tricks
+        # context: "MutableSequence[Union[str, Mapping[str, str]]]"
+        # got_context = jsonld_obj.get("@context")
+        # if got_context is None:
+        #     context = []
+        # elif isinstance(got_context, (str, dict)):
+        #     context = [got_context]
+        # elif isinstance(got_context, list):
+        #     context = got_context
+        #
+        # # Setting the augmented context with the trick
+        # context.append(
+        #     {
+        #         "@base": cls.WFEXS_TRICK_SPARQL_BASE,
+        #     }
+        # )
+        #
+        # if context != got_context:
+        #     jsonld_obj["@context"] = context
 
         # Now, let's load it in RDFLib, in order learn
         g = rdflib.Graph()
+        # expand a document, removing its context
+        # see: https://json-ld.org/spec/latest/json-ld/#expanded-document-form
+        # which is the issue RDFLib 7.0.0 has
+
+        # jsonld_obj_ser = jsonld_obj
+        jsonld_obj_ser = {
+            "@graph": pyld.jsonld.expand(jsonld_obj, {"keepFreeFloatingNodes": True})
+        }
+        jsonld_str = json.dumps(jsonld_obj_ser)
         parsed = g.parse(
-            data=json.dumps(jsonld_obj),
+            data=jsonld_str,
             format="json-ld",
             base=cls.WFEXS_TRICK_SPARQL_PRE_PREFIX,
         )
@@ -1508,13 +1520,11 @@ WHERE   {
         if matched_crate.wrwfprofile is None:
             raise WFException(f"JSON-LD from {public_name} is not a WRROC Workflow")
 
-        # TODO
-        assert False, "The implementation of this method has to be finished"
+        raise NotImplementedError(
+            "The implementation of this method has to be finished"
+        )
 
-        pyld.jsonld.set_document_loader(pyld.jsonld.aiohttp_document_loader(timeout=10))
-        # expand a document, removing its context
-        # see: https://json-ld.org/spec/latest/json-ld/#expanded-document-form
-        expanded = pyld.jsonld.expand(jsonld_obj)
+        # TODO
         workflow_meta = {}
 
         return cls.FromStagedRecipe(

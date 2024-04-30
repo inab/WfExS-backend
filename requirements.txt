@@ -27,4 +27,7 @@ groovy-parser == 0.1.1
 data-url
 pgzip
 defusedxml
+# Needed for proper JSON-LD parsing + SPARQL query
+aiohttp
+pyld
 rdflib >= 7.0.0
