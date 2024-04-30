@@ -1343,7 +1343,7 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-    elif not args.workflowConfigFilename:
+    elif command != WfExS_Commands.Import and not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
     elif command == WfExS_Commands.ConfigValidate:
