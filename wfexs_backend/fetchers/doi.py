@@ -58,6 +58,7 @@ DOI_RA_REST = "https://doi.org/doiRA/"
 DOI_HANDLE_REST = "https://doi.org/api/handles/"
 
 ZENODO_RECORD_PREFIX = "/record/"
+ZENODO_NEW_RECORD_PREFIX = "/doi/10.5281/zenodo."
 B2SHARE_RECORD_PREFIX = "/records/"
 OSF_IO_RECORD_PREFIX = "/"
 WORKFLOWHUB_RECORD_PREFIX = "/workflows/"
@@ -180,6 +181,7 @@ def fetchDOI(
     doi_resolved_parsed = parse.urlparse(doi_resolved_url)
     if doi_resolved_parsed.scheme in ("http", "https"):
         # If it is from zenodo, let's delegate on zenodo pseudo-CURIE
+        append_fragment = False
         if (
             doi_resolved_parsed.netloc == "zenodo.org"
             and doi_resolved_parsed.path.startswith(ZENODO_RECORD_PREFIX)
@@ -187,6 +189,15 @@ def fetchDOI(
             doi_resolved_url = (
                 "zenodo:" + doi_resolved_parsed.path[len(ZENODO_RECORD_PREFIX) :]
             )
+            append_fragment = True
+        elif (
+            doi_resolved_parsed.netloc == "zenodo.org"
+            and doi_resolved_parsed.path.startswith(ZENODO_NEW_RECORD_PREFIX)
+        ):
+            doi_resolved_url = (
+                "zenodo:" + doi_resolved_parsed.path[len(ZENODO_NEW_RECORD_PREFIX) :]
+            )
+            append_fragment = True
         elif (
             doi_resolved_parsed.netloc == "b2share.eudat.eu"
             and doi_resolved_parsed.path.startswith(B2SHARE_RECORD_PREFIX)
@@ -194,6 +205,7 @@ def fetchDOI(
             doi_resolved_url = (
                 "b2share:" + doi_resolved_parsed.path[len(B2SHARE_RECORD_PREFIX) :]
             )
+            append_fragment = True
         elif (
             doi_resolved_parsed.netloc == "osf.io"
             and doi_resolved_parsed.path.startswith(OSF_IO_RECORD_PREFIX)
@@ -202,6 +214,7 @@ def fetchDOI(
                 "osf.io:"
                 + doi_resolved_parsed.path[len(OSF_IO_RECORD_PREFIX) :].split("/")[0]
             )
+            append_fragment = True
         elif (
             doi_resolved_parsed.netloc == "workflowhub.eu"
             and doi_resolved_parsed.path.startswith(WORKFLOWHUB_RECORD_PREFIX)
@@ -217,6 +230,9 @@ def fetchDOI(
                 version_a = query_d.get("version", [])
                 if len(version_a) > 0:
                     doi_resolved_url += "/" + parse.quote(version_a[0], safe="")
+
+        if append_fragment and len(parsedInputURL.fragment) > 0:
+            doi_resolved_url += "/" + parsedInputURL.fragment
 
     return ProtocolFetcherReturn(
         kind_or_resolved=cast("URIType", doi_resolved_url),
