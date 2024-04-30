@@ -1103,8 +1103,8 @@ class WfExSBackend:
                 cast("URIType", workflowROCrateFilenameOrURI),
                 cacheType=CacheType.ROCrate,
                 offline=False,
-                ignoreCache=True,
-                registerInCache=False,
+                ignoreCache=paranoidMode,
+                registerInCache=not paranoidMode,
             )
 
             workflowROCrateFilename = local_content.path
