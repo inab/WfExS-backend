@@ -235,6 +235,10 @@ from . import common as common_defs_module
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
 
+import pyld  # type: ignore[import, import-untyped]
+import rdflib
+import rdflib.plugins.sparql
+
 import yaml
 
 YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
@@ -1307,6 +1311,124 @@ class WF:
             paranoidMode=paranoidMode,
         )
 
+    # This is needed due limitations from rdflib mangling relative ids
+    WFEXS_TRICK_SPARQL_PRE_PREFIX: "Final[str]" = "shttp:"
+    WFEXS_TRICK_SPARQL_BASE: "Final[str]" = f"{WFEXS_TRICK_SPARQL_PRE_PREFIX}///"
+    WFEXS_TRICK_SPARQL_NS: "Final[str]" = "wfexs"
+
+    SPARQL_NS = {
+        "dc": "http://purl.org/dc/elements/1.1/",
+        "dcterms": "http://purl.org/dc/terms/",
+        "s": "http://schema.org/",
+        "rocrate": "https://w3id.org/ro/crate/",
+        "wfcrate": "https://w3id.org/workflowhub/workflow-ro-crate/",
+        "wfhprofile": "https://about.workflowhub.eu/Workflow-RO-Crate/",
+        "wrprocess": "https://w3id.org/ro/wfrun/process/",
+        "wrwf": "https://w3id.org/ro/wfrun/workflow/",
+        WFEXS_TRICK_SPARQL_NS: WFEXS_TRICK_SPARQL_BASE,
+    }
+
+    IS_ROCRATE_SPARQL: "Final[str]" = """\
+SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?wrprocessprofile ?wrwfprofile
+WHERE   {
+    ?rocratejson
+        a s:CreativeWork ;
+        dcterms:conformsTo ?rocrateprofile ;
+        s:about ?rootdataset .
+    ?rootdataset a s:Dataset .
+    FILTER (
+        STRSTARTS(str(?rocrateprofile), str(rocrate:))
+    ) .
+    OPTIONAL {
+        ?rocratejson dcterms:conformsTo ?wfcrateprofile .
+        FILTER (
+            ?wfcrateprofile = wfhprofile: || STRSTARTS(str(?wfcrateprofile), str(wfcrate:))
+        ) .
+        OPTIONAL  {
+            ?rootdataset
+                dcterms:conformsTo ?wfcrateprofile ;
+                dcterms:conformsTo ?wrprocessprofile ;
+                dcterms:conformsTo ?wrwfprofile .
+            FILTER (
+                STRSTARTS(str(?wrprocessprofile), str(wrprocess:)) &&
+                STRSTARTS(str(?wrwfprofile), str(wrwf:))
+            ) .
+        }
+    }
+}
+"""
+
+    @classmethod
+    def IdentifyROCrate(
+        cls, jsonld: "Mapping[str, Any]", public_name: "str"
+    ) -> "Tuple[Optional[rdflib.query.ResultRow], rdflib.graph.Graph]":
+        """
+        This method is used to identify where the input JSON is a
+        JSON-LD related to RO-Crate.
+
+        The returned value is a tuple, where the first element is the
+        result row giving the QName of the root dataset, and the different
+        profiles being matched: RO-Crate, Workflow RO-Crate, WRROC process and WRROC workflow.
+        The second element of the returned tuple is the rdflib RDF
+        graph from the read JSON-LD, which should allow exploring it.
+        """
+        jsonld_obj = cast("MutableMapping[str, Any]", copy.deepcopy(jsonld))
+        # Let's load it using RDFLib tricks
+        context: "MutableSequence[Union[str, Mapping[str, str]]]"
+        got_context = jsonld_obj.get("@context")
+        if got_context is None:
+            context = []
+        elif isinstance(got_context, (str, dict)):
+            context = [got_context]
+        elif isinstance(got_context, list):
+            context = got_context
+
+        # Setting the augmented context with the trick
+        context.append(
+            {
+                "@base": cls.WFEXS_TRICK_SPARQL_BASE,
+            }
+        )
+
+        if context != got_context:
+            jsonld_obj["@context"] = context
+
+        # Now, let's load it in RDFLib, in order learn
+        g = rdflib.Graph()
+        parsed = g.parse(
+            data=json.dumps(jsonld_obj),
+            format="json-ld",
+            base=cls.WFEXS_TRICK_SPARQL_PRE_PREFIX,
+        )
+
+        # This query will tell us whether the JSON-LD is about an RO-Crate 1.1
+        q = rdflib.plugins.sparql.prepareQuery(
+            cls.IS_ROCRATE_SPARQL,
+            initNs=cls.SPARQL_NS,
+        )
+
+        # TODO: cache resolution of contexts
+        # TODO: disallow network access for context resolution
+        # when not in right phase
+        try:
+            qres = g.query(q)
+        except Exception as e:
+            raise WFException(
+                f"Unable to perform JSON-LD check query over {public_name} (see cascading exceptions)"
+            ) from e
+
+        resrow: "Optional[rdflib.query.ResultRow]" = None
+        # In the future, there could be more than one match, when
+        # nested RO-Crate scenarios happen
+        for row in qres:
+            assert isinstance(
+                row, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+            resrow = row
+            break
+
+        return (resrow, g)
+
     @classmethod
     def FromPreviousROCrate(
         cls,
@@ -1343,9 +1465,11 @@ class WF:
 
         jsonld_bin: "Optional[bytes]" = None
         putative_mime = magic.from_file(jsonld_filename, mime=True)
+        # Bare possible RO-Crate
         if putative_mime == "application/json":
             with open(jsonld_filename, mode="rb") as jdf:
                 jsonld_bin = jdf.read()
+        # Archived possible RO-Crate
         elif putative_mime == "application/zip":
             with zipfile.ZipFile(workflowROCrateFilename, mode="r") as zf:
                 try:
@@ -1365,6 +1489,7 @@ class WF:
                 f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
             )
 
+        # Let's parse the JSON (in order to check whether it is valid)
         try:
             jsonld_obj = json.loads(jsonld_bin)
         except json.JSONDecodeError as jde:
@@ -1372,8 +1497,24 @@ class WF:
                 f"Content from {public_name} is not a valid JSON"
             ) from jde
 
+        matched_crate, g = cls.IdentifyROCrate(jsonld_obj, public_name)
+        # Is it an RO-Crate?
+        if matched_crate is None:
+            raise WFException(f"JSON-LD from {public_name} is not an RO-Crate")
+
+        if matched_crate.wfcrateprofile is None:
+            raise WFException(f"JSON-LD from {public_name} is not a Workflow RO-Crate")
+
+        if matched_crate.wrwfprofile is None:
+            raise WFException(f"JSON-LD from {public_name} is not a WRROC Workflow")
+
         # TODO
         assert False, "The implementation of this method has to be finished"
+
+        pyld.jsonld.set_document_loader(pyld.jsonld.aiohttp_document_loader(timeout=10))
+        # expand a document, removing its context
+        # see: https://json-ld.org/spec/latest/json-ld/#expanded-document-form
+        expanded = pyld.jsonld.expand(jsonld_obj)
         workflow_meta = {}
 
         return cls.FromStagedRecipe(
