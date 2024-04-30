@@ -1479,7 +1479,7 @@ WHERE   {
                         f"Unable to locate {ROCRATE_JSONLD_FILENAME} within {public_name}"
                     ) from e
 
-                putative_mime_ld = magic.from_buffer(jsonld_bin)
+                putative_mime_ld = magic.from_buffer(jsonld_bin, mime=True)
                 if putative_mime_ld != "application/json":
                     raise WFException(
                         f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
