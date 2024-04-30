@@ -57,7 +57,8 @@ if TYPE_CHECKING:
 # See https://developers.zenodo.org/#retrieve37
 ZENODO_SCHEME = "zenodo"
 ZENODO_RECORD_REST = "https://zenodo.org/api/records/"
-ZENODO_LICENSE_REST = "https://zenodo.org/api/licenses/"
+ZENODO_OLD_LICENSE_REST = "https://zenodo.org/api/licenses/"
+ZENODO_LICENSE_REST = "https://zenodo.org/api/vocabularies/licenses/"
 
 
 def fetchZenodo(
@@ -132,10 +133,14 @@ def fetchZenodo(
         metadata_array.extend(metametalicio)
     except FetcherException as fe:
         raise FetcherException(
-            f"Error fetching Zenodo licence metadata {zenodo_lic_id} for {zenodo_id} : {fe.code} {fe.reason}"
+            f"Error fetching Zenodo licence metadata {zenodo_lic_id} for {zenodo_id} using {licence_meta_url} : {fe.code} {fe.reason}"
         ) from fe
 
-    licence_url = l_metadata.get("metadata", {}).get("url")
+    # New style
+    licence_url = l_metadata.get("props", {}).get("url")
+    if licence_url is None:
+        # Old style
+        licence_url = l_metadata.get("metadata", {}).get("url")
     if licence_url is None:
         raise FetcherException(
             f"Zenodo licence metadata {zenodo_lic_id} needed to describe {zenodo_id} is inconsistent: {l_metadata}"
@@ -143,7 +148,10 @@ def fetchZenodo(
 
     # When no URL, then the text should suffice
     if licence_url == "":
-        licence_url = l_metadata["metadata"].get("title", zenodo_lic_id)
+        licence_url = l_metadata.get("title", {}).get("en", "")
+        # Old style
+        if licence_url == "":
+            licence_url = l_metadata["metadata"].get("title", zenodo_lic_id)
 
     # Let's select the contents
     kind: "Optional[ContentKind]" = None
