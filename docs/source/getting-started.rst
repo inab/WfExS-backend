@@ -1,11 +1,15 @@
 Getting Started
 ===============
 
-WfExS-backend is a Python application and set of libraries acting through a command line 
-program, which fetches and materialize all the elements needed to instantiate a workflow:
+WfExS-backend is a high-level workflow execution orchestrator able to secure workflow executions 
+in isolated environments using containers. It also ensures reproducible executions by making use of 
+Workflow Run RO-Crate representations.
+
+WfExS is a Python application and set of libraries acting through a command line program, 
+which fetches and materialize all the elements needed to instantiate a workflow:
 publically available workflow, workflow engine, software containers and reachable inputs 
-(either public or under controlled access).
-Elements need to be identified either by URL or a stable permanent identifier (CURIE). 
+(either public or under controlled access). Elements need to be identified either by URL or 
+a stable permanent identifier (CURIE). 
 
 WfExS currently supports only workflows which are written in either Nextflow or CWL.
 The workflows you want to use can be fetched from one of these places: 
