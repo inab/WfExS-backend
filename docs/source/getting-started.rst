@@ -20,12 +20,6 @@ This document will give you more information about the installation of the
 software to get it running.
 
 
-.. note:: 
-   In this document there is a small section with :ref:`gearshift specific installation
-   instructions<installation_gearshift>`. If you want to install WfExS on gearshift please 
-   first read that part and then proceed to the :ref:`general installation<installation_wfexs>` 
-   of WfExS.
-
 .. index::
    single: getting-started; sys-requirments
 
@@ -54,6 +48,13 @@ Installation
 
 This workflow execution service backend is written for Python 3.7 and later.
 Follow the installation instructions to get WfExS running in your system. 
+
+.. note:: 
+   In this document there is a small section with :ref:`gearshift specific installation
+   instructions<installation_gearshift>`. If you want to install WfExS on gearshift please 
+   first read that part and then proceed to the :ref:`general installation<installation_wfexs>` 
+   of WfExS.
+
 
 .. index::
    single: getting-started; installation; prerequisites
