@@ -316,6 +316,10 @@ from .cwl_engine import CWLWorkflowEngine
 if TYPE_CHECKING:
     from .wfexs_backend import WfExSBackend
 
+# This code needs exception groups
+if sys.version_info[:2] < (3, 11):
+    from exceptiongroup import ExceptionGroup
+
 
 # Related export namedtuples
 class ExportItem(NamedTuple):
@@ -378,6 +382,7 @@ WORKFLOW_ENGINE_CLASSES: "Final[Sequence[Type[WorkflowEngine]]]" = [
 ]
 
 ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
+LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
 
 
 def _wakeupEncDir(
@@ -434,6 +439,10 @@ class WF:
         map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES)
     )
 
+    RECOGNIZED_SHORTNAME_DESCRIPTORS: "Final[Mapping[TRS_Workflow_Descriptor, WorkflowType]]" = dict(
+        map(lambda t: (t.shortname, t), WORKFLOW_ENGINES)
+    )
+
     def __init__(
         self,
         wfexs: "WfExSBackend",
@@ -470,6 +479,7 @@ class WF:
         versioning, providing an UUID, etc.
         :param descriptor_type: The type of descriptor that represents this version of the workflow
         (e.g. CWL, WDL, NFL, or GALAXY). It is optional, so it is guessed from the calls to the API.
+        It can be either the short name of the workflow engine, or the name used by GA4GH TRS.
         :param trs_endpoint: The TRS endpoint used to find the workflow.
         :param params: Optional params for the workflow execution.
         :param outputs:
@@ -547,9 +557,17 @@ class WF:
                 workflow_meta["nickname"] = nickname
             if descriptor_type is not None:
                 descriptor = self.RECOGNIZED_TRS_DESCRIPTORS.get(descriptor_type)
+                if descriptor is None:
+                    descriptor = self.RECOGNIZED_SHORTNAME_DESCRIPTORS.get(
+                        descriptor_type
+                    )
+
                 if descriptor is not None:
                     workflow_meta["workflow_type"] = descriptor.shortname
                 else:
+                    self.logger.warning(
+                        f"This instance of WfExS backend does not recognize workflows of type {descriptor_type}"
+                    )
                     workflow_meta["workflow_type"] = descriptor_type
             if trs_endpoint is not None:
                 workflow_meta["trs_endpoint"] = trs_endpoint
@@ -1591,12 +1609,19 @@ WHERE   {
         # Is it a bare file or an archive?
         jsonld_filename: "Optional[str]" = None
         if os.path.isdir(workflowROCrateFilename):
-            jsonld_filename = os.path.join(
+            possible_jsonld_filename = os.path.join(
                 workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
             )
-            if not os.path.exists(jsonld_filename):
+            legacy_jsonld_filename = os.path.join(
+                workflowROCrateFilename, LEGACY_ROCRATE_JSONLD_FILENAME
+            )
+            if os.path.exists(possible_jsonld_filename):
+                jsonld_filename = possible_jsonld_filename
+            elif os.path.exists(legacy_jsonld_filename):
+                jsonld_filename = legacy_jsonld_filename
+            else:
                 raise WFException(
-                    f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME}"
+                    f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
                 )
         elif os.path.isfile(workflowROCrateFilename):
             jsonld_filename = workflowROCrateFilename
@@ -1615,9 +1640,15 @@ WHERE   {
                 try:
                     jsonld_bin = zf.read(ROCRATE_JSONLD_FILENAME)
                 except Exception as e:
-                    raise WFException(
-                        f"Unable to locate {ROCRATE_JSONLD_FILENAME} within {public_name}"
-                    ) from e
+                    try:
+                        jsonld_bin = zf.read(LEGACY_ROCRATE_JSONLD_FILENAME)
+                    except Exception as e2:
+                        raise WFException(
+                            f"Unable to locate RO-Crate metadata descriptor within {public_name}"
+                        ) from ExceptionGroup(
+                            f"Both {ROCRATE_JSONLD_FILENAME} and {LEGACY_ROCRATE_JSONLD_FILENAME} tried",
+                            [e, e2],
+                        )
 
                 putative_mime_ld = magic.from_buffer(jsonld_bin, mime=True)
                 if putative_mime_ld != "application/json":
@@ -1785,7 +1816,7 @@ WHERE   {
             engineDesc = engineDescByUrl
         else:
             raise WFException(
-                "Found programming language {} (url {}) in RO-Crate manifest is not among the acknowledged ones".format(
+                "Found programming language {} (url {}) in RO-Crate manifest is not among the supported ones by WfExS-backend".format(
                     mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
                 )
             )
@@ -1796,7 +1827,7 @@ WHERE   {
             and engineDescById != engineDescByUrl
         ):
             warnings.warn(
-                "Queried programming language {} (url {}) leads to different engines".format(
+                "Queried programming language {} and its url {} lead to different engines".format(
                     mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
                 ),
                 WFWarning,

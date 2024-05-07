@@ -1696,6 +1696,24 @@ class WfExSBackend:
         and the version will represent either the branch, tag or specific commit.
         So, the whole TRS fetching machinery is bypassed.
         """
+
+        requested_workflow_type: "Optional[WorkflowType]" = None
+        if descriptor_type is not None:
+            # First, try with the workflow type shortname
+            requested_workflow_type = WF.RECOGNIZED_SHORTNAME_DESCRIPTORS.get(
+                descriptor_type
+            )
+            if requested_workflow_type is None:
+                # then, with the workflow type TRS name
+                requested_workflow_type = WF.RECOGNIZED_TRS_DESCRIPTORS.get(
+                    descriptor_type
+                )
+
+            if requested_workflow_type is None:
+                self.logger.warning(
+                    f"Workflow of type {descriptor_type} is not supported by this version of WfExS-backend"
+                )
+
         putative_repo_url = str(workflow_id)
         parsedRepoURL = urllib.parse.urlparse(putative_repo_url)
 
@@ -1796,6 +1814,14 @@ class WfExSBackend:
 
         # This can be incorrect, but let it be for now
         if i_workflow is not None:
+            if (
+                requested_workflow_type is not None
+                and requested_workflow_type != i_workflow.workflow_type
+            ):
+                message = f"Fetched workflow is of type {i_workflow.workflow_type.shortname} , but it was explicitly requested to be of type {requested_workflow_type.shortname}"
+                self.logger.error(message)
+                raise WfExSBackendException(message)
+
             guessedRepo = i_workflow.remote_repo
             engineDesc = i_workflow.workflow_type
             if cached_putative_path is not None:
@@ -2294,6 +2320,8 @@ class WfExSBackend:
         :return:
         """
         roCrateObj = FixedROCrate(roCrateFile)
+        # roCrateJSON = roCrateObj.metadata.generate()
+        # WF.IdentifyROCrate(roCrateJON, roCrateFile)
 
         # TODO: get roCrateObj mainEntity programming language
         # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
