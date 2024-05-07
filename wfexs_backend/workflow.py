@@ -404,6 +404,10 @@ class ExportActionException(AbstractWfExSException):
     pass
 
 
+class WFWarning(UserWarning):
+    pass
+
+
 class WF:
     """
     Workflow enaction class
@@ -1322,6 +1326,8 @@ class WF:
         "dc": "http://purl.org/dc/elements/1.1/",
         "dcterms": "http://purl.org/dc/terms/",
         "s": "http://schema.org/",
+        "bs": "https://bioschemas.org/",
+        "bsworkflow": "https://bioschemas.org/profiles/ComputationalWorkflow/",
         "rocrate": "https://w3id.org/ro/crate/",
         "wfcrate": "https://w3id.org/workflowhub/workflow-ro-crate/",
         "wfhprofile": "https://about.workflowhub.eu/Workflow-RO-Crate/",
@@ -1331,7 +1337,7 @@ class WF:
     }
 
     IS_ROCRATE_SPARQL: "Final[str]" = """\
-SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?wrprocessprofile ?wrwfprofile
+SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?mainentity ?bsworkflowprofile ?wrprocessprofile ?wrwfprofile
 WHERE   {
     ?rocratejson
         a s:CreativeWork ;
@@ -1346,6 +1352,16 @@ WHERE   {
         FILTER (
             ?wfcrateprofile = wfhprofile: || STRSTARTS(str(?wfcrateprofile), str(wfcrate:))
         ) .
+        OPTIONAL  {
+            ?rootdataset
+                s:mainEntity ?mainentity .
+            ?mainentity
+                a bs:ComputationalWorkflow ;
+                dcterms:conformsTo ?bsworkflowprofile .
+            FILTER (
+                STRSTARTS(str(?bsworkflowprofile), str(bsworkflow:))
+            ) .
+        }
         OPTIONAL  {
             ?rootdataset
                 dcterms:conformsTo ?wfcrateprofile ;
@@ -1441,6 +1457,118 @@ WHERE   {
 
         return (resrow, g)
 
+    OBTAIN_WORKFLOW_PID_SPARQL: "Final[str]" = """\
+SELECT  ?identifier ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version
+WHERE   {
+    ?mainentity s:programmingLanguage ?programminglanguage .
+    ?programminglanguage
+        a s:ComputerLanguage ;
+        s:url ?programminglanguage_url .
+    OPTIONAL {
+        ?mainentity s:identifier ?identifier .
+    }
+    OPTIONAL {
+        ?programminglanguage
+            s:version ?programminglanguage_version .
+    }
+    OPTIONAL {
+        ?programminglanguage
+            s:identifier ?programminglanguage_identifier .
+    }
+}
+"""
+
+    @classmethod
+    def GenerateWorkflowMetaFromJSONLD(
+        cls,
+        jsonld_obj: "Mapping[str, Any]",
+        public_name: "str",
+        retrospective_first: "bool" = True,
+    ) -> "WritableWorkflowMetaConfigBlock":
+        matched_crate, g = cls.IdentifyROCrate(jsonld_obj, public_name)
+        # Is it an RO-Crate?
+        if matched_crate is None:
+            raise WFException(f"JSON-LD from {public_name} is not an RO-Crate")
+
+        if matched_crate.wfcrateprofile is None:
+            raise WFException(f"JSON-LD from {public_name} is not a Workflow RO-Crate")
+
+        if matched_crate.mainentity is None:
+            raise WFException(
+                f"Unable to find the main entity workflow at {public_name} Workflow RO-Crate"
+            )
+
+        if matched_crate.wrwfprofile is None:
+            raise WFException(f"JSON-LD from {public_name} is not a WRROC Workflow")
+
+        # This query will tell us where the original workflow was located,
+        # its language and version
+        qlang = rdflib.plugins.sparql.prepareQuery(
+            cls.OBTAIN_WORKFLOW_PID_SPARQL,
+            initNs=cls.SPARQL_NS,
+        )
+
+        # TODO: cache resolution of contexts
+        # TODO: disallow network access for context resolution
+        # when not in right phase
+        try:
+            qlangres = g.query(
+                qlang,
+                initBindings={
+                    "mainentity": matched_crate.mainentity,
+                },
+            )
+        except Exception as e:
+            raise WFException(
+                f"Unable to perform JSON-LD workflow details query over {public_name} (see cascading exceptions)"
+            ) from e
+
+        langrow: "Optional[rdflib.query.ResultRow]" = None
+        # In the future, there could be more than one match, when
+        # nested RO-Crate scenarios happen
+        for row in qlangres:
+            assert isinstance(
+                row, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+            langrow = row
+            break
+
+        if langrow is None:
+            raise WFException(
+                f"Unable to get workflow engine details from {public_name}"
+            )
+
+        programminglanguage_url = (
+            None
+            if langrow.programminglanguage_url is None
+            else str(langrow.programminglanguage_url)
+        )
+        programminglanguage_identifier = (
+            None
+            if langrow.programminglanguage_identifier is None
+            else str(langrow.programminglanguage_identifier)
+        )
+        # Getting the workflow type
+        workflow_type = cls.MatchWorkflowType(
+            programminglanguage_url, programminglanguage_identifier
+        )
+
+        # At this point we know the workflow engine is supported
+        # but we need to be sure the container solution is also supported
+
+        # TODO: finish
+
+        workflow_meta: "WritableWorkflowMetaConfigBlock" = {
+            "workflow_id": {},
+            "workflow_type": workflow_type.shortname,
+            "environment": {},
+            "params": {},
+            "outputs": {},
+            "workflow_config": {},
+        }
+
+        return workflow_meta
+
     @classmethod
     def FromPreviousROCrate(
         cls,
@@ -1509,23 +1637,16 @@ WHERE   {
                 f"Content from {public_name} is not a valid JSON"
             ) from jde
 
-        matched_crate, g = cls.IdentifyROCrate(jsonld_obj, public_name)
-        # Is it an RO-Crate?
-        if matched_crate is None:
-            raise WFException(f"JSON-LD from {public_name} is not an RO-Crate")
+        workflow_meta = cls.GenerateWorkflowMetaFromJSONLD(jsonld_obj, public_name)
 
-        if matched_crate.wfcrateprofile is None:
-            raise WFException(f"JSON-LD from {public_name} is not a Workflow RO-Crate")
-
-        if matched_crate.wrwfprofile is None:
-            raise WFException(f"JSON-LD from {public_name} is not a WRROC Workflow")
+        if wfexs.validateConfigFiles(workflow_meta, securityContextsConfigFilename) > 0:
+            raise WFException(
+                f"Generated WfExS description from {public_name} fails (have a look at the log messages for details)"
+            )
 
         raise NotImplementedError(
             "The implementation of this method has to be finished"
         )
-
-        # TODO
-        workflow_meta = {}
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -1630,6 +1751,58 @@ WHERE   {
             private_key_passphrase=private_key_passphrase,
             paranoid_mode=paranoidMode,
         )
+
+    @classmethod
+    def MatchWorkflowType(
+        cls,
+        mainEntityProgrammingLanguageUrl: "str",
+        mainEntityProgrammingLanguageId: "Optional[str]",
+    ) -> "WorkflowType":
+        # Now, it is time to match the language id
+        engineDescById: "Optional[WorkflowType]" = None
+        engineDescByUrl: "Optional[WorkflowType]" = None
+        for possibleEngineDesc in cls.WORKFLOW_ENGINES:
+            if (engineDescById is None) and (
+                mainEntityProgrammingLanguageId is not None
+            ):
+                for pat in possibleEngineDesc.uriMatch:
+                    if isinstance(pat, Pattern):
+                        match = pat.search(mainEntityProgrammingLanguageId)
+                        if match:
+                            engineDescById = possibleEngineDesc
+                    elif pat == mainEntityProgrammingLanguageId:
+                        engineDescById = possibleEngineDesc
+
+            if (engineDescByUrl is None) and (
+                mainEntityProgrammingLanguageUrl == possibleEngineDesc.url
+            ):
+                engineDescByUrl = possibleEngineDesc
+
+        engineDesc: "WorkflowType"
+        if engineDescById is not None:
+            engineDesc = engineDescById
+        elif engineDescByUrl is not None:
+            engineDesc = engineDescByUrl
+        else:
+            raise WFException(
+                "Found programming language {} (url {}) in RO-Crate manifest is not among the acknowledged ones".format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
+                )
+            )
+
+        if (
+            (engineDescById is not None)
+            and (engineDescByUrl is not None)
+            and engineDescById != engineDescByUrl
+        ):
+            warnings.warn(
+                "Queried programming language {} (url {}) leads to different engines".format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
+                ),
+                WFWarning,
+            )
+
+        return engineDesc
 
     def fetchWorkflow(
         self,

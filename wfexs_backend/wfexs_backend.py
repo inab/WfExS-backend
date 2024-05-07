@@ -1143,17 +1143,23 @@ class WfExSBackend:
 
     def validateConfigFiles(
         self,
-        workflowMetaFilename: "AnyPath",
+        workflowMetaFilename: "Union[AnyPath, WorkflowMetaConfigBlock]",
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
     ) -> "ExitVal":
         numErrors = 0
-        self.logger.info(f"Validating {workflowMetaFilename}")
+        workflow_meta: "WorkflowMetaConfigBlock"
 
-        with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+        if isinstance(workflowMetaFilename, str):
+            self.logger.info(f"Validating {workflowMetaFilename}")
 
-        if not isinstance(workflow_meta, dict):
-            workflow_meta = {}
+            with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
+                workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+
+            if not isinstance(workflow_meta, dict):
+                workflow_meta = {}
+        else:
+            self.logger.info(f"Validating inline configuration")
+            workflow_meta = workflowMetaFilename
 
         valErrors = config_validate(workflow_meta, WF.STAGE_DEFINITION_SCHEMA)
         if len(valErrors) == 0:
@@ -2291,8 +2297,8 @@ class WfExSBackend:
 
         # TODO: get roCrateObj mainEntity programming language
         # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
-        mainEntityProgrammingLanguageId = None
-        mainEntityProgrammingLanguageUrl = None
+        mainEntityProgrammingLanguageId: "Optional[str]" = None
+        mainEntityProgrammingLanguageUrl: "Optional[str]" = None
         mainEntityIdHolder: "Optional[str]" = None
         mainEntityId = None
         workflowPID = None
@@ -2321,48 +2327,21 @@ class WfExSBackend:
                 mainEntityProgrammingLanguageId = eAsLD.get("identifier", {}).get("@id")
                 mainEntityProgrammingLanguageUrl = eAsLD.get("url", {}).get("@id")
 
-        # Now, it is time to match the language id
-        engineDescById: "Optional[WorkflowType]" = None
-        engineDescByUrl: "Optional[WorkflowType]" = None
-        for possibleEngineDesc in WF.WORKFLOW_ENGINES:
-            if (engineDescById is None) and (
-                mainEntityProgrammingLanguageId is not None
-            ):
-                for pat in possibleEngineDesc.uriMatch:
-                    if isinstance(pat, Pattern):
-                        match = pat.search(mainEntityProgrammingLanguageId)
-                        if match:
-                            engineDescById = possibleEngineDesc
-                    elif pat == mainEntityProgrammingLanguageId:
-                        engineDescById = possibleEngineDesc
-
-            if (engineDescByUrl is None) and (
-                mainEntityProgrammingLanguageUrl == possibleEngineDesc.url
-            ):
-                engineDescByUrl = possibleEngineDesc
-
-        engineDesc: "WorkflowType"
-        if engineDescById is not None:
-            engineDesc = engineDescById
-        elif engineDescByUrl is not None:
-            engineDesc = engineDescByUrl
-        else:
+        if mainEntityProgrammingLanguageUrl is None:
             raise WfExSBackendException(
-                "Found programming language {} (url {}) in RO-Crate manifest is not among the acknowledged ones".format(
-                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
-                )
+                "Workflow RO-Crate manifest does not describe the workflow language"
             )
 
-        if (
-            (engineDescById is not None)
-            and (engineDescByUrl is not None)
-            and engineDescById != engineDescByUrl
-        ):
-            self.logger.warning(
-                "Found programming language {} (url {}) leads to different engines".format(
-                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
-                )
+        with warnings.catch_warnings(record=True) as rec_w:
+            warnings.simplefilter("always")
+
+            engineDesc = WF.MatchWorkflowType(
+                mainEntityProgrammingLanguageUrl, mainEntityProgrammingLanguageId
             )
+
+            # Logging possibly emitted warnings
+            for w in rec_w:
+                self.logger.warning(w.message)
 
         if (expectedEngineDesc is not None) and engineDesc != expectedEngineDesc:
             raise WfExSBackendException(
