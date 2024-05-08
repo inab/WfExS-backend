@@ -19,12 +19,14 @@ from __future__ import absolute_import
 
 import abc
 import copy
+import enum
 import inspect
 import json
 import logging
 
 from typing import (
     cast,
+    NamedTuple,
     TYPE_CHECKING,
 )
 
@@ -55,6 +57,57 @@ import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
 
+from ..common import (
+    ContainerType,
+)
+
+
+class ContainerTypeMetadata(NamedTuple):
+    sa_id: "str"
+    applicationCategory: "str"
+    ct_applicationCategory: "str"
+
+
+ContainerTypeMetadataDetails: "Final[Mapping[ContainerType, ContainerTypeMetadata]]" = {
+    ContainerType.Singularity: ContainerTypeMetadata(
+        sa_id="https://apptainer.org/",
+        applicationCategory="https://www.wikidata.org/wiki/Q51294208",
+        ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
+    ),
+    ContainerType.Docker: ContainerTypeMetadata(
+        sa_id="https://www.docker.com/",
+        applicationCategory="https://www.wikidata.org/wiki/Q15206305",
+        ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
+    ),
+    ContainerType.Podman: ContainerTypeMetadata(
+        sa_id="https://podman.io/",
+        applicationCategory="https://www.wikidata.org/wiki/Q70876440",
+        ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
+    ),
+    ContainerType.Conda: ContainerTypeMetadata(
+        sa_id="https://conda.io/",
+        applicationCategory="https://www.wikidata.org/wiki/Q22907431",
+        ct_applicationCategory="https://www.wikidata.org/wiki/Q98400282",
+    ),
+}
+
+WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
+WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
+
+
+class ContainerImageAdditionalType(enum.Enum):
+    Docker = WORKFLOW_RUN_NAMESPACE + "DockerImage"
+    Singularity = WORKFLOW_RUN_NAMESPACE + "SIFImage"
+    # No one is available for Conda yet
+
+
+ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
+    ContainerType.Docker: ContainerImageAdditionalType.Docker,
+    ContainerType.Singularity: ContainerImageAdditionalType.Singularity,
+    ContainerType.Podman: ContainerImageAdditionalType.Docker,
+    # No one is available for Conda yet
+}
+
 
 class ROCrateToolboxException(Exception):
     pass
@@ -77,7 +130,7 @@ class ROCrateToolbox(abc.ABC):
         "wfhprofile": "https://about.workflowhub.eu/Workflow-RO-Crate/",
         "wrprocess": "https://w3id.org/ro/wfrun/process/",
         "wrwf": "https://w3id.org/ro/wfrun/workflow/",
-        "wrterm": "https://w3id.org/ro/terms/workflow-run#",
+        "wrterm": WORKFLOW_RUN_NAMESPACE,
         "wikidata": "https://www.wikidata.org/wiki/",
         WFEXS_TRICK_SPARQL_NS: WFEXS_TRICK_SPARQL_BASE,
     }

@@ -19,7 +19,6 @@ from __future__ import absolute_import
 
 import atexit
 import copy
-import enum
 import inspect
 import logging
 import os
@@ -95,6 +94,12 @@ import urllib.parse
 import uuid
 
 from .utils.misc import lazy_import
+from .utils.rocrate import (
+    ContainerType2AdditionalType,
+    ContainerTypeMetadata,
+    ContainerTypeMetadataDetails,
+    WORKFLOW_RUN_CONTEXT,
+)
 
 magic = lazy_import("magic")
 # import magic
@@ -345,21 +350,6 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
 
 class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
     pass
-
-
-WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
-
-
-class ContainerImageAdditionalType(enum.Enum):
-    Docker = WORKFLOW_RUN_CONTEXT + "#DockerImage"
-    Singularity = WORKFLOW_RUN_CONTEXT + "#SIFImage"
-
-
-ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
-    ContainerType.Docker: ContainerImageAdditionalType.Docker,
-    ContainerType.Singularity: ContainerImageAdditionalType.Singularity,
-    ContainerType.Podman: ContainerImageAdditionalType.Docker,
-}
 
 
 class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
@@ -686,39 +676,10 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         return cast("FixedWorkflow", workflow)
 
 
-class ContainerTypeMetadata(NamedTuple):
-    sa_id: "str"
-    applicationCategory: "str"
-    ct_applicationCategory: "str"
-
-
 class WorkflowRunROCrate:
     """
     This class rules the generation of an RO-Crate
     """
-
-    ContainerTypeMetadataDetails: "Final[Mapping[ContainerType, ContainerTypeMetadata]]" = {
-        ContainerType.Singularity: ContainerTypeMetadata(
-            sa_id="https://apptainer.org/",
-            applicationCategory="https://www.wikidata.org/wiki/Q51294208",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
-        ),
-        ContainerType.Docker: ContainerTypeMetadata(
-            sa_id="https://www.docker.com/",
-            applicationCategory="https://www.wikidata.org/wiki/Q15206305",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
-        ),
-        ContainerType.Podman: ContainerTypeMetadata(
-            sa_id="https://podman.io/",
-            applicationCategory="https://www.wikidata.org/wiki/Q70876440",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
-        ),
-        ContainerType.Conda: ContainerTypeMetadata(
-            sa_id="https://conda.io/",
-            applicationCategory="https://www.wikidata.org/wiki/Q22907431",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q98400282",
-        ),
-    }
 
     def __init__(
         self,
@@ -1156,9 +1117,7 @@ you can find here an almost complete list of the possible ones:
                 if container in self._added_containers:
                     continue
 
-                container_type_metadata = self.ContainerTypeMetadataDetails[
-                    container.type
-                ]
+                container_type_metadata = ContainerTypeMetadataDetails[container.type]
                 crate_cont_type = self.cached_cts.get(container.type)
                 if crate_cont_type is None:
                     container_type = (
@@ -1192,7 +1151,7 @@ you can find here an almost complete list of the possible ones:
                     crate_source_cont_type = crate_cont_type
                     container_source_type_metadata = container_type_metadata
                 else:
-                    container_source_type_metadata = self.ContainerTypeMetadataDetails[
+                    container_source_type_metadata = ContainerTypeMetadataDetails[
                         container.source_type
                     ]
                     crate_source_cont_type = self.cached_cts.get(container.source_type)
