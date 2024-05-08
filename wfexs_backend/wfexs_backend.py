@@ -86,7 +86,11 @@ from .cache_handler import (
     SchemeHandlerCacheHandler,
 )
 
-from .engine import (
+from .container_factories import (
+    ContainerFactory,
+)
+
+from .workflow_engines import (
     WORKDIR_META_RELDIR,
     WORKDIR_PASSPHRASE_FILE,
     WORKDIR_WORKFLOW_META_FILE,
@@ -111,6 +115,10 @@ from .utils.passphrase_wrapper import (
     WfExSPassGenSingleton,
 )
 
+from .utils.rocrate import (
+    ROCrateToolbox,
+)
+
 from .fetchers import (
     AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
@@ -132,6 +140,10 @@ from .pushers import AbstractExportPlugin
 from .workflow import (
     WF,
     WFException,
+)
+
+from .workflow_engines import (
+    WorkflowEngine,
 )
 
 from .fetchers.trs_files import (
@@ -166,6 +178,7 @@ if TYPE_CHECKING:
     from .common import (
         AbsPath,
         AnyPath,
+        ContainerType,
         EnvironmentBlock,
         ExitVal,
         ExportActionBlock,
@@ -189,7 +202,7 @@ if TYPE_CHECKING:
         WritableWfExSConfigBlock,
     )
 
-    from .engine import (
+    from .workflow_engines import (
         AbstractWorkflowEngineType,
         WorkflowType,
     )
@@ -612,6 +625,36 @@ class WfExSBackend:
         # All the export plugins should be added here
         self.findAndAddExportPluginsFromModuleName()
 
+        # Registry of workflow engines is created here
+        self._workflow_engines: "MutableMapping[str, Type[WorkflowEngine]]" = dict()
+
+        # All the workflow engines should be added here
+        self.findAndAddWorkflowEnginesFromModuleName()
+
+        self.WORKFLOW_ENGINES: "Sequence[WorkflowType]" = sorted(
+            map(lambda clazz: clazz.MyWorkflowType(), self._workflow_engines.values()),
+            key=lambda clz: (-clz.priority, clz.shortname),
+        )
+
+        self.RECOGNIZED_TRS_DESCRIPTORS: "Mapping[TRS_Workflow_Descriptor, WorkflowType]" = dict(
+            map(lambda t: (t.trs_descriptor, t), self.WORKFLOW_ENGINES)
+        )
+
+        self.RECOGNIZED_SHORTNAME_DESCRIPTORS: "Mapping[TRS_Workflow_Descriptor, WorkflowType]" = dict(
+            map(lambda t: (t.shortname, t), self.WORKFLOW_ENGINES)
+        )
+
+        # Registry of container factories is created here
+        self._container_factories: "MutableMapping[ContainerType, Type[ContainerFactory]]" = (
+            dict()
+        )
+
+        # All the container factories should be added here
+        self.findAndAddContainerFactoriesFromModuleName()
+
+        # The toolbox to be shared with others
+        self.rocrate_toolbox = ROCrateToolbox(self)
+
     @property
     def cacheWorkflowDir(self) -> "AbsPath":
         return self.cachePathMap[CacheType.Workflow]
@@ -654,6 +697,165 @@ class WfExSBackend:
             self._sngltn[statefulFetcher] = instStatefulFetcher
 
         return cast("StatefulFetcher", instStatefulFetcher)
+
+    def findAndAddWorkflowEnginesFromModuleName(
+        self,
+        the_module_name: "str" = "wfexs_backend.workflow_engines",
+    ) -> None:
+        try:
+            the_module = importlib.import_module(the_module_name)
+            self.findAndAddWorkflowEnginesFromModule(the_module)
+        except Exception as e:
+            errmsg = f"Unable to import module {the_module_name} in order to gather workflow engines, due errors:"
+            self.logger.exception(errmsg)
+            raise WfExSBackendException(errmsg) from e
+
+    def findAndAddWorkflowEnginesFromModule(
+        self,
+        the_module: "ModuleType",
+    ) -> None:
+        for finder, module_name, ispkg in iter_namespace(the_module):
+            try:
+                named_module = importlib.import_module(module_name)
+            except:
+                self.logger.exception(
+                    f"Skipping module {module_name} in order to gather workflow engines, due errors:"
+                )
+                continue
+
+            for name, obj in inspect.getmembers(named_module):
+                if (
+                    inspect.isclass(obj)
+                    and not inspect.isabstract(obj)
+                    and issubclass(obj, WorkflowEngine)
+                ):
+                    # Now, let's learn whether the class is enabled
+                    if obj.MyWorkflowType().enabled:
+                        self.addWorkflowEngine(obj)
+                    else:
+                        self.logger.debug(
+                            f"Workflow engine class {name} from module {named_module} was not eligible"
+                        )
+
+    def addWorkflowEngine(self, workflowEngineClazz: "Type[WorkflowEngine]") -> None:
+        self._workflow_engines[
+            workflowEngineClazz.MyWorkflowType().shortname
+        ] = workflowEngineClazz
+
+    def listWorkflowEngines(self) -> "Sequence[str]":
+        return list(self._workflow_engines.keys())
+
+    def getWorkflowEngineClass(
+        self, engine_shortname: "str"
+    ) -> "Optional[Type[WorkflowEngine]]":
+        return self._workflow_engines.get(engine_shortname)
+
+    def matchWorkflowType(
+        self,
+        mainEntityProgrammingLanguageUrl: "str",
+        mainEntityProgrammingLanguageId: "Optional[str]",
+    ) -> "WorkflowType":
+        # Now, it is time to match the language id
+        engineDescById: "Optional[WorkflowType]" = None
+        engineDescByUrl: "Optional[WorkflowType]" = None
+        for possibleEngineDesc in self.WORKFLOW_ENGINES:
+            if (engineDescById is None) and (
+                mainEntityProgrammingLanguageId is not None
+            ):
+                for pat in possibleEngineDesc.uriMatch:
+                    if isinstance(pat, Pattern):
+                        match = pat.search(mainEntityProgrammingLanguageId)
+                        if match:
+                            engineDescById = possibleEngineDesc
+                    elif pat == mainEntityProgrammingLanguageId:
+                        engineDescById = possibleEngineDesc
+
+            if (engineDescByUrl is None) and (
+                mainEntityProgrammingLanguageUrl == possibleEngineDesc.url
+            ):
+                engineDescByUrl = possibleEngineDesc
+
+        engineDesc: "WorkflowType"
+        if engineDescById is not None:
+            engineDesc = engineDescById
+        elif engineDescByUrl is not None:
+            engineDesc = engineDescByUrl
+        else:
+            raise WfExSBackendException(
+                "Found programming language {} (url {}) in RO-Crate manifest is not among the supported ones by WfExS-backend".format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
+                )
+            )
+
+        if (
+            (engineDescById is not None)
+            and (engineDescByUrl is not None)
+            and engineDescById != engineDescByUrl
+        ):
+            self.logger.warning(
+                "Queried programming language {} and its url {} lead to different engines".format(
+                    mainEntityProgrammingLanguageId, mainEntityProgrammingLanguageUrl
+                )
+            )
+
+        return engineDesc
+
+    def findAndAddContainerFactoriesFromModuleName(
+        self,
+        the_module_name: "str" = "wfexs_backend.container_factories",
+    ) -> None:
+        try:
+            the_module = importlib.import_module(the_module_name)
+            self.findAndAddContainerFactoriesFromModule(the_module)
+        except Exception as e:
+            errmsg = f"Unable to import module {the_module_name} in order to gather container factories, due errors:"
+            self.logger.exception(errmsg)
+            raise WfExSBackendException(errmsg) from e
+
+    def findAndAddContainerFactoriesFromModule(
+        self,
+        the_module: "ModuleType",
+    ) -> None:
+        for finder, module_name, ispkg in iter_namespace(the_module):
+            try:
+                named_module = importlib.import_module(module_name)
+            except:
+                self.logger.exception(
+                    f"Skipping module {module_name} in order to gather container factories, due errors:"
+                )
+                continue
+
+            for name, obj in inspect.getmembers(named_module):
+                if (
+                    inspect.isclass(obj)
+                    and not inspect.isabstract(obj)
+                    and issubclass(obj, ContainerFactory)
+                ):
+                    # Now, let's learn whether the class is enabled
+                    if getattr(obj, "ENABLED", False):
+                        self.addContainerFactory(obj)
+                    else:
+                        self.logger.debug(
+                            f"Container factory class {name} from module {named_module} was not eligible"
+                        )
+
+    def addContainerFactory(
+        self, containerFactoryClazz: "Type[ContainerFactory]"
+    ) -> None:
+        self._container_factories[
+            containerFactoryClazz.ContainerType()
+        ] = containerFactoryClazz
+
+    def listImplementedContainerTypes(self) -> "Sequence[ContainerType]":
+        return list(self._container_factories.keys())
+
+    def listContainerFactoryClasses(self) -> "Sequence[Type[ContainerFactory]]":
+        return list(self._container_factories.values())
+
+    def getContainerFactoryClass(
+        self, container_type: "ContainerType"
+    ) -> "Optional[Type[ContainerFactory]]":
+        return self._container_factories.get(container_type)
 
     def findAndAddExportPluginsFromModuleName(
         self,
@@ -1649,6 +1851,7 @@ class WfExSBackend:
     ) -> "AbstractWorkflowEngineType":
         return engineDesc.clazz.FromStagedSetup(
             staged_setup=stagedSetup,
+            container_factory_classes=self.listContainerFactoryClasses(),
             cache_dir=self.cacheDir,
             cache_workflow_dir=self.cacheWorkflowDir,
             cache_workflow_inputs_dir=self.cacheWorkflowInputsDir,
@@ -1700,12 +1903,12 @@ class WfExSBackend:
         requested_workflow_type: "Optional[WorkflowType]" = None
         if descriptor_type is not None:
             # First, try with the workflow type shortname
-            requested_workflow_type = WF.RECOGNIZED_SHORTNAME_DESCRIPTORS.get(
+            requested_workflow_type = self.RECOGNIZED_SHORTNAME_DESCRIPTORS.get(
                 descriptor_type
             )
             if requested_workflow_type is None:
                 # then, with the workflow type TRS name
-                requested_workflow_type = WF.RECOGNIZED_TRS_DESCRIPTORS.get(
+                requested_workflow_type = self.RECOGNIZED_TRS_DESCRIPTORS.get(
                     descriptor_type
                 )
 
@@ -2016,7 +2219,7 @@ class WfExSBackend:
         # Now, realize whether it matches
         chosenDescriptorType = descriptor_type
         if chosenDescriptorType is None:
-            for candidateDescriptorType in WF.RECOGNIZED_TRS_DESCRIPTORS.keys():
+            for candidateDescriptorType in self.RECOGNIZED_TRS_DESCRIPTORS.keys():
                 if candidateDescriptorType in toolDescriptorTypes:
                     chosenDescriptorType = candidateDescriptorType
                     break
@@ -2036,7 +2239,7 @@ class WfExSBackend:
                     rawToolDesc,
                 )
             )
-        elif chosenDescriptorType not in WF.RECOGNIZED_TRS_DESCRIPTORS:
+        elif chosenDescriptorType not in self.RECOGNIZED_TRS_DESCRIPTORS:
             raise WFException(
                 "Descriptor type {} is not among the acknowledged ones by this backend. Version {} of workflow {} from {} . Raw answer:\n{}".format(
                     descriptor_type,
@@ -2071,7 +2274,9 @@ class WfExSBackend:
                 metadata_array,
             ) = self.getWorkflowBundleFromURI(
                 roCrateURL,
-                expectedEngineDesc=WF.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType],
+                expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
+                    chosenDescriptorType
+                ],
                 offline=offline,
                 ignoreCache=ignoreCache,
             )
@@ -2088,7 +2293,7 @@ class WfExSBackend:
                 ignoreCache=ignoreCache,
             )
 
-            expectedEngineDesc = WF.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
+            expectedEngineDesc = self.RECOGNIZED_TRS_DESCRIPTORS[chosenDescriptorType]
             trs_meta = cached_trs_files.metadata_array[0]
             remote_workflow_entrypoint = trs_meta.metadata.get(
                 "remote_workflow_entrypoint"
@@ -2321,7 +2526,7 @@ class WfExSBackend:
         """
         roCrateObj = FixedROCrate(roCrateFile)
         # roCrateJSON = roCrateObj.metadata.generate()
-        # WF.IdentifyROCrate(roCrateJON, roCrateFile)
+        # self.rocrate_toolbox.IdentifyROCrate(roCrateJON, roCrateFile)
 
         # TODO: get roCrateObj mainEntity programming language
         # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
@@ -2360,16 +2565,9 @@ class WfExSBackend:
                 "Workflow RO-Crate manifest does not describe the workflow language"
             )
 
-        with warnings.catch_warnings(record=True) as rec_w:
-            warnings.simplefilter("always")
-
-            engineDesc = WF.MatchWorkflowType(
-                mainEntityProgrammingLanguageUrl, mainEntityProgrammingLanguageId
-            )
-
-            # Logging possibly emitted warnings
-            for w in rec_w:
-                self.logger.warning(w.message)
+        engineDesc = self.matchWorkflowType(
+            mainEntityProgrammingLanguageUrl, mainEntityProgrammingLanguageId
+        )
 
         if (expectedEngineDesc is not None) and engineDesc != expectedEngineDesc:
             raise WfExSBackendException(

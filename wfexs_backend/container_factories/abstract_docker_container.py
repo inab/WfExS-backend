@@ -34,14 +34,14 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .utils.misc import lazy_import
+from ..utils.misc import lazy_import
 
 magic = lazy_import("magic")
 # import magic
 
 import pgzip
 
-from .common import (
+from ..common import (
     AbstractWfExSException,
 )
 
@@ -69,7 +69,7 @@ if TYPE_CHECKING:
         Final,
     )
 
-    from .common import (
+    from ..common import (
         AbsPath,
         AnyPath,
         ContainerEngineVersionStr,
@@ -83,7 +83,7 @@ if TYPE_CHECKING:
         RelPath,
     )
 
-    from .container import (
+    from . import (
         Container,
     )
 
@@ -97,13 +97,13 @@ if TYPE_CHECKING:
         manifests: "Sequence[DockerLikeManifest]"
 
 
-from . import common
-from .container import (
+from .. import common
+from . import (
     ContainerFactory,
     ContainerFactoryException,
     DOCKER_URI_PREFIX,
 )
-from .utils.digests import ComputeDigestFromObject
+from ..utils.digests import ComputeDigestFromObject
 
 
 DOCKER_PROTO = DOCKER_URI_PREFIX + "//"

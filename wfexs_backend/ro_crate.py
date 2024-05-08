@@ -78,11 +78,11 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
-    from .container import (
+    from .container_factories import (
         Container,
     )
 
-    from .engine import (
+    from .workflow_engines import (
         MaterializedWorkflowEngine,
         WorkflowType,
     )

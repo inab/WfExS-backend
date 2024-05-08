@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
         Final,
     )
 
-    from .common import (
+    from ..common import (
         AbsPath,
         AnyPath,
         ContainerFileNamingMethod,
@@ -51,16 +51,16 @@ if TYPE_CHECKING:
         URIType,
     )
 
-    from .container import (
+    from . import (
         DockerManifestMetadata,
     )
 
-from .common import (
+from ..common import (
     ContainerType,
     DEFAULT_PODMAN_CMD,
     META_JSON_POSTFIX,
 )
-from .container import (
+from . import (
     Container,
     ContainerEngineException,
     ContainerFactoryException,
@@ -70,11 +70,11 @@ from .abstract_docker_container import (
     AbstractDockerContainerFactory,
     DOCKER_PROTO,
 )
-from .utils.contents import (
+from ..utils.contents import (
     link_or_copy,
     real_unlink_if_exists,
 )
-from .utils.digests import ComputeDigestFromFile
+from ..utils.digests import ComputeDigestFromFile
 
 
 class PodmanContainerFactory(AbstractDockerContainerFactory):

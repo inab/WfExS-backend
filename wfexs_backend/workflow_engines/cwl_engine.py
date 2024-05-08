@@ -35,7 +35,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .common import (
+from ..common import (
     ContainerTaggedName,
     ContainerType,
     ContentKind,
@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         Sequence,
         Set,
         Tuple,
+        Type,
         Union,
     )
 
@@ -63,7 +64,7 @@ if TYPE_CHECKING:
         TypeAlias,
     )
 
-    from .common import (
+    from ..common import (
         AbsPath,
         AnyPath,
         EngineLocalConfig,
@@ -77,6 +78,10 @@ if TYPE_CHECKING:
         SymbolicParamName,
         URIType,
         WorkflowEngineVersionStr,
+    )
+
+    from ..container_factories import (
+        ContainerFactory,
     )
 
     ExecInputVal: TypeAlias = Union[
@@ -99,7 +104,8 @@ import jsonpath_ng
 import jsonpath_ng.ext
 import yaml
 
-from .engine import (
+from . import (
+    DEFAULT_PRIORITY,
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
@@ -110,7 +116,11 @@ from .engine import (
     WorkflowType,
 )
 
-from .utils.contents import (
+from ..container_factories.no_container import (
+    NoContainerFactory,
+)
+
+from ..utils.contents import (
     CWLClass2WfExS,
     link_or_copy,
 )
@@ -184,7 +194,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     def __init__(
         self,
-        container_type: "ContainerType" = ContainerType.NoContainer,
+        container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
         cacheDir: "Optional[AnyPath]" = None,
         workflow_config: "Optional[Mapping[str, Any]]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
@@ -202,7 +212,7 @@ class CWLWorkflowEngine(WorkflowEngine):
         config_directory: "Optional[AnyPath]" = None,
     ):
         super().__init__(
-            container_type=container_type,
+            container_factory_clazz=container_factory_clazz,
             cacheDir=cacheDir,
             workflow_config=workflow_config,
             local_config=local_config,
@@ -285,6 +295,7 @@ class CWLWorkflowEngine(WorkflowEngine):
             url=cast("URIType", "https://www.commonwl.org/"),
             trs_descriptor="CWL",
             rocrate_programming_language="https://w3id.org/workflowhub/workflow-ro-crate#cwl",
+            priority=DEFAULT_PRIORITY + 10,
         )
 
     @classmethod

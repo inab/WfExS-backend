@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .common import (
+from ..common import (
     AbstractWfExSException,
     ContainerTaggedName,
     ContainerType,
@@ -44,6 +44,7 @@ from .common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        ClassVar,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -61,7 +62,7 @@ if TYPE_CHECKING:
         Final,
     )
 
-    from .common import (
+    from ..common import (
         AbsPath,
         AnyPath,
         ContainerEngineVersionStr,
@@ -88,7 +89,7 @@ if TYPE_CHECKING:
 
     YAMLLoader: TypeAlias = Union[yaml.Loader, yaml.CLoader]
 
-from . import common
+from .. import common
 
 # A couple of constants needed for several fixes
 DOCKER_SCHEME: "Final[str]" = "docker"
@@ -225,6 +226,9 @@ class ContainerNotFoundException(ContainerFactoryException):
 
 
 class ContainerFactory(abc.ABC):
+    # Is this implementation enabled?
+    ENABLED: "ClassVar[bool]" = True
+
     def __init__(
         self,
         cacheDir: "Optional[AnyPath]" = None,
@@ -489,54 +493,3 @@ STDERR
         factory in this installation. Currently userns
         """
         return feat in self._features
-
-
-class NoContainerFactory(ContainerFactory):
-    """
-    The 'no container approach', for development and local installed software
-    """
-
-    # def __init__(self, cacheDir=None, local_config=None, engine_name='unset'):
-    #    super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name)
-    AcceptedContainerTypes = set([common.ContainerType.NoContainer])
-
-    @classmethod
-    def ContainerType(cls) -> "common.ContainerType":
-        return common.ContainerType.NoContainer
-
-    @classmethod
-    def AcceptsContainerType(
-        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
-    ) -> "bool":
-        return not cls.AcceptedContainerTypes.isdisjoint(
-            container_type if isinstance(container_type, set) else (container_type,)
-        )
-
-    def engine_version(self) -> "ContainerEngineVersionStr":
-        """No container engine, empty version"""
-        return cast("ContainerEngineVersionStr", "")
-
-    def materializeSingleContainer(
-        self,
-        tag: "ContainerTaggedName",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
-        offline: "bool" = False,
-        force: "bool" = False,
-    ) -> "Optional[Container]":
-        """
-        This is a no-op
-        """
-        return None
-
-    def deploySingleContainer(
-        self,
-        container: "Container",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[AnyPath]" = None,
-        force: "bool" = False,
-    ) -> "bool":
-        """
-        This is a no-op
-        """
-        return False

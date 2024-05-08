@@ -37,7 +37,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .common import (
+from ..common import (
     ContainerTaggedName,
     ContainerType,
     ContentKind,
@@ -61,12 +61,13 @@ if TYPE_CHECKING:
         Sequence,
         Set,
         Tuple,
+        Type,
         Union,
     )
 
     from typing_extensions import Final
 
-    from .common import (
+    from ..common import (
         AbsPath,
         AnyPath,
         EngineLocalConfig,
@@ -83,7 +84,11 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
-    from .utils.groovy_parsing import (
+    from ..container_factories import (
+        ContainerFactory,
+    )
+
+    from ..utils.groovy_parsing import (
         ContextAssignments,
         NfInclude,
         NfIncludeConfig,
@@ -91,8 +96,8 @@ if TYPE_CHECKING:
         NfWorkflow,
     )
 
-from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import (
+from . import WorkflowEngine, WorkflowEngineException
+from . import (
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
@@ -100,11 +105,16 @@ from .engine import (
     WORKDIR_STDERR_FILE,
     WorkflowType,
 )
-from .fetchers.http import fetchClassicURL
-from .utils.contents import (
+
+from ..container_factories.no_container import (
+    NoContainerFactory,
+)
+
+from ..fetchers.http import fetchClassicURL
+from ..utils.contents import (
     copy2_nofollow,
 )
-from .utils.groovy_parsing import (
+from ..utils.groovy_parsing import (
     analyze_nf_content,
     ERROR_PROCESS_NAME,
 )
@@ -167,7 +177,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     def __init__(
         self,
-        container_type: "ContainerType" = ContainerType.NoContainer,
+        container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
         cacheDir: "Optional[AnyPath]" = None,
         workflow_config: "Optional[Mapping[str, Any]]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
@@ -185,7 +195,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         config_directory: "Optional[AnyPath]" = None,
     ):
         super().__init__(
-            container_type=container_type,
+            container_factory_clazz=container_factory_clazz,
             cacheDir=cacheDir,
             workflow_config=workflow_config,
             local_config=local_config,

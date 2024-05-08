@@ -105,6 +105,14 @@ class WfExS_Commands(StrDocEnum):
         "list-licences",
         f"List the documented licences, both embedded and fetched from SPDX release {LicenceMatcherSingleton.DEFAULT_SPDX_VERSION}",
     )
+    ListContainerFactories = (
+        "list-container-factories",
+        "List the supported container factories",
+    )
+    ListWorkflowEngines = (
+        "list-workflow-engines",
+        "List the supported workflow engines",
+    )
     Stage = (
         "stage",
         "Prepare the staging (working) directory for workflow execution, fetching dependencies and contents",
@@ -399,6 +407,29 @@ def processListPushersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "in
     print(f"{len(export_plugin_names)} supported export plugins")
     for export_plugin_name in export_plugin_names:
         print(f"\t{export_plugin_name}")
+    return 0
+
+
+def processListContainerFactoriesCommand(
+    wfBackend: "WfExSBackend", logLevel: "int"
+) -> "int":
+    container_types = wfBackend.listImplementedContainerTypes()
+    print(f"{len(container_types)} supported container factories")
+    for container_type in container_types:
+        print(f"\t{container_type.value}")
+
+    return 0
+
+
+def processListWorkflowEnginesCommand(
+    wfBackend: "WfExSBackend", logLevel: "int"
+) -> "int":
+    print(f"{len(wfBackend.WORKFLOW_ENGINES)} supported workflow engines")
+    for workflow_type in wfBackend.WORKFLOW_ENGINES:
+        print(
+            f"\t{workflow_type.shortname} => {workflow_type.name} (priority {workflow_type.priority})"
+        )
+
     return 0
 
 
@@ -1098,6 +1129,8 @@ def _get_wfexs_argparse_internal(
 
     ap_lf = genParserSub(sp, WfExS_Commands.ListFetchers)
     ap_lp = genParserSub(sp, WfExS_Commands.ListPushers)
+    ap_lc = genParserSub(sp, WfExS_Commands.ListContainerFactories)
+    ap_lw = genParserSub(sp, WfExS_Commands.ListWorkflowEngines)
     ap_ll = genParserSub(sp, WfExS_Commands.ListLicences)
     ap_cv = genParserSub(sp, WfExS_Commands.ConfigValidate, preStageParams=True)
 
@@ -1259,6 +1292,12 @@ def main() -> None:
 
     if command == WfExS_Commands.ListPushers:
         sys.exit(processListPushersCommand(wfBackend, logLevel))
+
+    if command == WfExS_Commands.ListContainerFactories:
+        sys.exit(processListContainerFactoriesCommand(wfBackend, logLevel))
+
+    if command == WfExS_Commands.ListWorkflowEngines:
+        sys.exit(processListWorkflowEnginesCommand(wfBackend, logLevel))
 
     if command == WfExS_Commands.ListLicences:
         sys.exit(processListLicencesCommand(wfBackend, logLevel))
