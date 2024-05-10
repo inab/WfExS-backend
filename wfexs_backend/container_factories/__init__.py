@@ -94,6 +94,8 @@ from .. import common
 # A couple of constants needed for several fixes
 DOCKER_SCHEME: "Final[str]" = "docker"
 DOCKER_URI_PREFIX: "Final[str]" = DOCKER_SCHEME + ":"
+# This string is a repetition from what it is in the helper
+DEFAULT_DOCKER_REGISTRY: "Final[str]" = "docker.io"
 
 
 @dataclass
@@ -162,7 +164,7 @@ class Container(ContainerTaggedName):
                 registry = tagged_name[0:left_slash_pos]
                 tagged_name = tagged_name[left_slash_pos + 1 :]
             else:
-                registry = "docker.io"
+                registry = DEFAULT_DOCKER_REGISTRY
 
             # Now, the tag label
             right_colon_pos = tagged_name.rfind(":")
