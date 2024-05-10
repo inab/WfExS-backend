@@ -30,12 +30,16 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import warnings
+
 if TYPE_CHECKING:
     from typing import (
         Any,
         Mapping,
         MutableMapping,
+        MutableSequence,
         Optional,
+        Sequence,
         Tuple,
     )
 
@@ -44,6 +48,10 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
+        ContainerOperatingSystem,
+        Fingerprint,
+        ProcessorArchitecture,
+        URIType,
         WritableWorkflowMetaConfigBlock,
     )
 
@@ -59,6 +67,15 @@ import rdflib.plugins.sparql
 
 from ..common import (
     ContainerType,
+)
+
+from ..container_factories import (
+    DEFAULT_DOCKER_REGISTRY,
+    Container,
+)
+
+from .digests import (
+    stringifyDigest,
 )
 
 
@@ -91,6 +108,11 @@ ContainerTypeMetadataDetails: "Final[Mapping[ContainerType, ContainerTypeMetadat
     ),
 }
 
+ApplicationCategory2ContainerType: "Final[Mapping[str, ContainerType]]" = {
+    container_type_metadata.applicationCategory: container_type
+    for container_type, container_type_metadata in ContainerTypeMetadataDetails.items()
+}
+
 WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
 WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
 
@@ -101,11 +123,16 @@ class ContainerImageAdditionalType(enum.Enum):
     # No one is available for Conda yet
 
 
-ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
+ContainerType2AdditionalType: "Final[Mapping[ContainerType, ContainerImageAdditionalType]]" = {
     ContainerType.Docker: ContainerImageAdditionalType.Docker,
     ContainerType.Singularity: ContainerImageAdditionalType.Singularity,
     ContainerType.Podman: ContainerImageAdditionalType.Docker,
     # No one is available for Conda yet
+}
+
+AdditionalType2ContainerType: "Final[Mapping[ContainerImageAdditionalType, ContainerType]]" = {
+    ContainerImageAdditionalType.Docker: ContainerType.Docker,
+    ContainerImageAdditionalType.Singularity: ContainerType.Singularity,
 }
 
 
@@ -232,9 +259,18 @@ WHERE   {
         # which is the issue RDFLib 7.0.0 has
 
         # jsonld_obj_ser = jsonld_obj
-        jsonld_obj_ser = {
-            "@graph": pyld.jsonld.expand(jsonld_obj, {"keepFreeFloatingNodes": True})
-        }
+        with warnings.catch_warnings():
+            # Disable possible warnings emitted by pyld library
+            # when it is not run in debug mode
+            if self.logger.getEffectiveLevel() > logging.DEBUG:
+                warnings.filterwarnings(
+                    "ignore", category=SyntaxWarning, module="^pyld\.jsonld$"
+                )
+            jsonld_obj_ser = {
+                "@graph": pyld.jsonld.expand(
+                    jsonld_obj, {"keepFreeFloatingNodes": True}
+                )
+            }
         jsonld_str = json.dumps(jsonld_obj_ser)
         parsed = g.parse(
             data=jsonld_str,
@@ -350,7 +386,7 @@ WHERE   {
         jsonld_obj: "Mapping[str, Any]",
         public_name: "str",
         retrospective_first: "bool" = True,
-    ) -> "WritableWorkflowMetaConfigBlock":
+    ) -> "Tuple[WritableWorkflowMetaConfigBlock, Sequence[Container]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -420,7 +456,9 @@ WHERE   {
             if langrow.programminglanguage_identifier is None
             else str(langrow.programminglanguage_identifier)
         )
-        # Getting the workflow type
+        # Getting the workflow type.
+        # This call will raise an exception in case the workflow type
+        # is not supported by this implementation.
         workflow_type = self.wfexs.matchWorkflowType(
             programminglanguage_url, programminglanguage_identifier
         )
@@ -429,6 +467,9 @@ WHERE   {
         # Now it is the moment to choose whether to use one of the stored
         # executions as template (retrospective provenance)
         # or delegate on the prospective one.
+        container_type: "Optional[ContainerType]" = None
+        additional_container_type: "Optional[ContainerType]" = None
+        the_containers: "MutableSequence[Container]" = []
         if retrospective_first:
             # For the retrospective provenance at least an execution must
             # be described in the RO-Crate. Once one is chosen,
@@ -464,11 +505,74 @@ WHERE   {
                             "execution": execrow.execution,
                         },
                     )
+
+                    # This is the first pass, to learn about the kind of
+                    # container factory to use
                     for containerrow in qcontainersres:
                         assert isinstance(
                             containerrow, rdflib.query.ResultRow
                         ), "Check the SPARQL code, as it should be a SELECT query"
-                        print(
+                        # These hints were left by WfExS, but they are not expected
+                        # from other implementations.
+                        if containerrow.type_of_container is not None:
+                            putative_container_type = (
+                                ApplicationCategory2ContainerType.get(
+                                    str(containerrow.type_of_container)
+                                )
+                            )
+                            if container_type is None:
+                                container_type = putative_container_type
+                            elif (
+                                putative_container_type is not None
+                                and putative_container_type != container_type
+                            ):
+                                self.logger.warning(
+                                    f"Not all the containers of execution {str(matched_crate.mainentity)} were materialized with {container_type} factory (also found {putative_container_type})"
+                                )
+
+                        # These hints should be left by any compliant WRROC
+                        # implementation
+                        if containerrow.container_additional_type is not None:
+                            try:
+                                putative_additional_container_type = (
+                                    AdditionalType2ContainerType.get(
+                                        ContainerImageAdditionalType(
+                                            str(containerrow.container_additional_type)
+                                        )
+                                    )
+                                )
+                                if additional_container_type is None:
+                                    additional_container_type = (
+                                        putative_additional_container_type
+                                    )
+                                elif (
+                                    putative_additional_container_type is not None
+                                    and putative_additional_container_type
+                                    not in (container_type, additional_container_type)
+                                ):
+                                    self.logger.warning(
+                                        f"Not all the containers of execution {str(matched_crate.mainentity)} were labelled with {additional_container_type} factory (also found {putative_additional_container_type})"
+                                    )
+                            except Exception as e:
+                                self.logger.error(
+                                    f"Unable to map additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
+                                )
+
+                    # Assigning this, as it is going to be used later to
+                    # build the list of containers
+                    if container_type is None and additional_container_type is not None:
+                        container_type = additional_container_type
+
+                    if container_type is None:
+                        continue
+
+                    # This is the second pass, to generate the list of
+                    # containers described in the RO-Crate
+                    for containerrow in qcontainersres:
+                        assert isinstance(
+                            containerrow, rdflib.query.ResultRow
+                        ), "Check the SPARQL code, as it should be a SELECT query"
+                        self.logger.debug(
                             f"""\
 Container {containerrow.container}
 {containerrow.container_additional_type}
@@ -482,6 +586,86 @@ Container {containerrow.container}
 {containerrow.container_arch}
 """
                         )
+
+                        if (
+                            containerrow.container_additional_type is not None
+                            and containerrow.container_name is not None
+                        ):
+                            try:
+                                putative_additional_container_type = (
+                                    AdditionalType2ContainerType.get(
+                                        ContainerImageAdditionalType(
+                                            str(containerrow.container_additional_type)
+                                        )
+                                    )
+                                )
+                                registries: "Optional[Mapping[ContainerType, str]]" = (
+                                    None
+                                )
+                                fingerprint = None
+                                origTaggedName = ""
+                                taggedName = ""
+                                image_signature = None
+                                if (
+                                    putative_additional_container_type
+                                    == ContainerType.Docker
+                                ):
+                                    the_registry = (
+                                        str(containerrow.container_registry)
+                                        if containerrow.container_registry is not None
+                                        else DEFAULT_DOCKER_REGISTRY
+                                    )
+                                    registries = {
+                                        ContainerType.Docker: the_registry,
+                                    }
+                                    container_identifier = str(
+                                        containerrow.container_name
+                                    )
+                                    assert containerrow.container_sha256 is not None
+                                    fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.container_sha256)}"
+                                    assert containerrow.container_tag is not None
+                                    origTaggedName = f"{container_identifier}:{str(containerrow.container_tag)}"
+                                    taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
+                                    # Disable for now
+                                    # image_signature = stringifyDigest("sha256", bytes.fromhex(str(containerrow.container_sha256)))
+                                elif (
+                                    putative_additional_container_type
+                                    == ContainerType.Singularity
+                                ):
+                                    origTaggedName = str(containerrow.container_name)
+                                    taggedName = origTaggedName
+                                    fingerprint = origTaggedName
+
+                                the_containers.append(
+                                    Container(
+                                        origTaggedName=origTaggedName,
+                                        type=container_type,
+                                        registries=registries,
+                                        taggedName=cast("URIType", taggedName),
+                                        architecture=None
+                                        if containerrow.container_arch is None
+                                        else cast(
+                                            "ProcessorArchitecture",
+                                            str(containerrow.container_arch),
+                                        ),
+                                        operatingSystem=None
+                                        if containerrow.container_platform is None
+                                        else cast(
+                                            "ContainerOperatingSystem",
+                                            str(containerrow.container_platform),
+                                        ),
+                                        fingerprint=cast("Fingerprint", fingerprint),
+                                        source_type=putative_additional_container_type,
+                                        image_signature=image_signature,
+                                    )
+                                )
+                            except Exception as e:
+                                self.logger.exception(
+                                    f"Unable to assign from additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
+                                )
+
+                    # TODO: deal with more than one execution
+                    break
             except Exception as e:
                 raise ROCrateToolboxException(
                     f"Unable to perform JSON-LD workflow execution details query over {public_name} (see cascading exceptions)"
@@ -489,6 +673,9 @@ Container {containerrow.container}
 
         # TODO: finish
 
+        self.logger.info(
+            f"Workflow type {workflow_type} container factory {container_type} {additional_container_type}"
+        )
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
             "workflow_id": {},
             "workflow_type": workflow_type.shortname,
@@ -497,5 +684,9 @@ Container {containerrow.container}
             "outputs": {},
             "workflow_config": {},
         }
+        if container_type is not None:
+            workflow_meta["workflow_config"]["containerType"] = container_type.value
 
-        return workflow_meta
+        self.logger.info(f"{json.dumps(workflow_meta, indent=4)}")
+
+        return workflow_meta, the_containers

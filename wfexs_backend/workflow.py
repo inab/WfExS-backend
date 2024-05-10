@@ -1388,7 +1388,10 @@ class WF:
                 f"Content from {public_name} is not a valid JSON"
             ) from jde
 
-        workflow_meta = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
+        (
+            workflow_meta,
+            the_containers,
+        ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
             jsonld_obj, public_name
         )
 
