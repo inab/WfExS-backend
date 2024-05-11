@@ -337,7 +337,7 @@ WHERE   {
 }
 """
 
-    OBTAIN_RUN_CONTAINERS: "Final[str]" = """\
+    OBTAIN_RUN_CONTAINERS_SPARQL: "Final[str]" = """\
 SELECT ?container ?container_additional_type ?type_of_container ?type_of_container_type ?container_registry ?container_name ?container_tag ?container_sha256 ?container_platform ?container_arch
 WHERE   {
     ?execution wrterm:containerImage ?container .
@@ -380,6 +380,264 @@ WHERE   {
     }
 }
 """
+
+    # This compound query is much faster when each of the UNION components
+    # is evaluated separatedly
+    OBTAIN_INPUTS_SPARQL: "Final[str]" = """\
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?inputcol ?component ?leaf_type
+WHERE   {
+    ?execution s:object ?input .
+    {
+        # A file, which is a schema.org MediaObject
+        VALUES (?additional_type) { ( "File" ) }
+        ?input
+            a s:MediaObject ;
+            s:contentUrl ?fileuri ;
+            s:exampleOfWork ?inputfp .
+        ?inputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+    } UNION {
+        # A directory, which is a schema.org Dataset
+        VALUES (?additional_type) { ( "Dataset" ) }
+        ?input
+            a s:Dataset ;
+            s:contentUrl ?fileuri ;
+            s:exampleOfWork ?inputfp ;
+            s:hasPart+ ?component .
+        ?inputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+        ?component
+            a s:MediaObject .
+    } UNION {
+        # A single property value, which can be either Integer, Text, Boolean or Float
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
+        ?input
+            a s:PropertyValue ;
+            s:exampleOfWork ?inputfp ;
+            s:value ?value .
+        ?inputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+    } UNION {
+        # A combination of files or directories or property values
+        VALUES (?leaf_type ?additional_type) { ( s:Integer "Collection" ) ( s:Text "Collection" ) ( s:Boolean "Collection" ) ( s:Float "Collection" ) ( s:MediaObject "Collection" ) ( s:Dataset "Collection" ) }
+        ?input
+            a s:Collection ;
+            s:exampleOfWork ?inputfp ;
+            s:hasPart+ ?component .
+        ?inputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+        ?component
+            a ?leaf_type .
+        OPTIONAL {
+            ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:value ?value .
+        }
+    }
+}
+"""
+
+    def _parseContainersFromExecution(
+        self,
+        g: "rdflib.graph.Graph",
+        execution: "rdflib.term.Identifier",
+        main_entity: "rdflib.term.Identifier",
+    ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
+        # Get the list of containers
+        qcontainers = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_RUN_CONTAINERS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qcontainersres = g.query(
+            qcontainers,
+            initBindings={
+                "execution": execution,
+            },
+        )
+
+        container_type: "Optional[ContainerType]" = None
+        additional_container_type: "Optional[ContainerType]" = None
+        the_containers: "MutableSequence[Container]" = []
+        # This is the first pass, to learn about the kind of
+        # container factory to use
+        for containerrow in qcontainersres:
+            assert isinstance(
+                containerrow, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+            # These hints were left by WfExS, but they are not expected
+            # from other implementations.
+            if containerrow.type_of_container is not None:
+                putative_container_type = ApplicationCategory2ContainerType.get(
+                    str(containerrow.type_of_container)
+                )
+                if container_type is None:
+                    container_type = putative_container_type
+                elif (
+                    putative_container_type is not None
+                    and putative_container_type != container_type
+                ):
+                    self.logger.warning(
+                        f"Not all the containers of execution {main_entity} were materialized with {container_type} factory (also found {putative_container_type})"
+                    )
+
+            # These hints should be left by any compliant WRROC
+            # implementation
+            if containerrow.container_additional_type is not None:
+                try:
+                    putative_additional_container_type = (
+                        AdditionalType2ContainerType.get(
+                            ContainerImageAdditionalType(
+                                str(containerrow.container_additional_type)
+                            )
+                        )
+                    )
+                    if additional_container_type is None:
+                        additional_container_type = putative_additional_container_type
+                    elif (
+                        putative_additional_container_type is not None
+                        and putative_additional_container_type
+                        not in (container_type, additional_container_type)
+                    ):
+                        self.logger.warning(
+                            f"Not all the containers of execution {main_entity} were labelled with {additional_container_type} factory (also found {putative_additional_container_type})"
+                        )
+                except Exception as e:
+                    self.logger.error(
+                        f"Unable to map additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
+                    )
+
+        # Assigning this, as it is going to be used later to
+        # build the list of containers
+        if container_type is None and additional_container_type is not None:
+            container_type = additional_container_type
+
+        if container_type is None:
+            return None
+
+        # This is the second pass, to generate the list of
+        # containers described in the RO-Crate
+        for containerrow in qcontainersres:
+            assert isinstance(
+                containerrow, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+            self.logger.debug(
+                f"""\
+Container {containerrow.container}
+{containerrow.container_additional_type}
+{containerrow.type_of_container}
+{containerrow.type_of_container_type}
+{containerrow.container_registry}
+{containerrow.container_name}
+{containerrow.container_tag}
+{containerrow.container_sha256}
+{containerrow.container_platform}
+{containerrow.container_arch}
+"""
+            )
+
+            if (
+                containerrow.container_additional_type is not None
+                and containerrow.container_name is not None
+            ):
+                try:
+                    putative_additional_container_type = (
+                        AdditionalType2ContainerType.get(
+                            ContainerImageAdditionalType(
+                                str(containerrow.container_additional_type)
+                            )
+                        )
+                    )
+                    registries: "Optional[Mapping[ContainerType, str]]" = None
+                    fingerprint = None
+                    origTaggedName = ""
+                    taggedName = ""
+                    image_signature = None
+                    if putative_additional_container_type == ContainerType.Docker:
+                        the_registry = (
+                            str(containerrow.container_registry)
+                            if containerrow.container_registry is not None
+                            else DEFAULT_DOCKER_REGISTRY
+                        )
+                        registries = {
+                            ContainerType.Docker: the_registry,
+                        }
+                        container_identifier = str(containerrow.container_name)
+                        assert containerrow.container_sha256 is not None
+                        fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.container_sha256)}"
+                        assert containerrow.container_tag is not None
+                        origTaggedName = (
+                            f"{container_identifier}:{str(containerrow.container_tag)}"
+                        )
+                        taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
+                        # Disable for now
+                        # image_signature = stringifyDigest("sha256", bytes.fromhex(str(containerrow.container_sha256)))
+                    elif (
+                        putative_additional_container_type == ContainerType.Singularity
+                    ):
+                        origTaggedName = str(containerrow.container_name)
+                        taggedName = origTaggedName
+                        fingerprint = origTaggedName
+
+                    the_containers.append(
+                        Container(
+                            origTaggedName=origTaggedName,
+                            type=container_type,
+                            registries=registries,
+                            taggedName=cast("URIType", taggedName),
+                            architecture=None
+                            if containerrow.container_arch is None
+                            else cast(
+                                "ProcessorArchitecture",
+                                str(containerrow.container_arch),
+                            ),
+                            operatingSystem=None
+                            if containerrow.container_platform is None
+                            else cast(
+                                "ContainerOperatingSystem",
+                                str(containerrow.container_platform),
+                            ),
+                            fingerprint=cast("Fingerprint", fingerprint),
+                            source_type=putative_additional_container_type,
+                            image_signature=image_signature,
+                        )
+                    )
+                except Exception as e:
+                    self.logger.exception(
+                        f"Unable to assign from additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
+                    )
+
+        return container_type, the_containers
+
+    def _parseInputsFromExecution(
+        self,
+        g: "rdflib.graph.Graph",
+        execution: "rdflib.term.Identifier",
+        main_entity: "rdflib.term.Identifier",
+    ) -> "None":
+        # Get the list of inputs
+        qinputs = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_INPUTS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qinputsres = g.query(
+            qinputs,
+            initBindings={
+                "execution": execution,
+            },
+        )
+
+        # TODO: implement this
+
+        return None
 
     def generateWorkflowMetaFromJSONLD(
         self,
@@ -469,7 +727,7 @@ WHERE   {
         # or delegate on the prospective one.
         container_type: "Optional[ContainerType]" = None
         additional_container_type: "Optional[ContainerType]" = None
-        the_containers: "MutableSequence[Container]" = []
+        the_containers: "Sequence[Container]" = []
         if retrospective_first:
             # For the retrospective provenance at least an execution must
             # be described in the RO-Crate. Once one is chosen,
@@ -495,176 +753,23 @@ WHERE   {
                         execrow, rdflib.query.ResultRow
                     ), "Check the SPARQL code, as it should be a SELECT query"
                     print(f"\tExecution {execrow.execution}")
-                    qcontainers = rdflib.plugins.sparql.prepareQuery(
-                        self.OBTAIN_RUN_CONTAINERS,
-                        initNs=self.SPARQL_NS,
+
+                    contresult = self._parseContainersFromExecution(
+                        g, execrow.execution, main_entity=matched_crate.mainentity
                     )
-                    qcontainersres = g.query(
-                        qcontainers,
-                        initBindings={
-                            "execution": execrow.execution,
-                        },
-                    )
-
-                    # This is the first pass, to learn about the kind of
-                    # container factory to use
-                    for containerrow in qcontainersres:
-                        assert isinstance(
-                            containerrow, rdflib.query.ResultRow
-                        ), "Check the SPARQL code, as it should be a SELECT query"
-                        # These hints were left by WfExS, but they are not expected
-                        # from other implementations.
-                        if containerrow.type_of_container is not None:
-                            putative_container_type = (
-                                ApplicationCategory2ContainerType.get(
-                                    str(containerrow.type_of_container)
-                                )
-                            )
-                            if container_type is None:
-                                container_type = putative_container_type
-                            elif (
-                                putative_container_type is not None
-                                and putative_container_type != container_type
-                            ):
-                                self.logger.warning(
-                                    f"Not all the containers of execution {str(matched_crate.mainentity)} were materialized with {container_type} factory (also found {putative_container_type})"
-                                )
-
-                        # These hints should be left by any compliant WRROC
-                        # implementation
-                        if containerrow.container_additional_type is not None:
-                            try:
-                                putative_additional_container_type = (
-                                    AdditionalType2ContainerType.get(
-                                        ContainerImageAdditionalType(
-                                            str(containerrow.container_additional_type)
-                                        )
-                                    )
-                                )
-                                if additional_container_type is None:
-                                    additional_container_type = (
-                                        putative_additional_container_type
-                                    )
-                                elif (
-                                    putative_additional_container_type is not None
-                                    and putative_additional_container_type
-                                    not in (container_type, additional_container_type)
-                                ):
-                                    self.logger.warning(
-                                        f"Not all the containers of execution {str(matched_crate.mainentity)} were labelled with {additional_container_type} factory (also found {putative_additional_container_type})"
-                                    )
-                            except Exception as e:
-                                self.logger.error(
-                                    f"Unable to map additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
-                                )
-
-                    # Assigning this, as it is going to be used later to
-                    # build the list of containers
-                    if container_type is None and additional_container_type is not None:
-                        container_type = additional_container_type
-
-                    if container_type is None:
+                    # TODO: deal with more than one execution
+                    if contresult is None:
                         continue
 
-                    # This is the second pass, to generate the list of
-                    # containers described in the RO-Crate
-                    for containerrow in qcontainersres:
-                        assert isinstance(
-                            containerrow, rdflib.query.ResultRow
-                        ), "Check the SPARQL code, as it should be a SELECT query"
-                        self.logger.debug(
-                            f"""\
-Container {containerrow.container}
-{containerrow.container_additional_type}
-{containerrow.type_of_container}
-{containerrow.type_of_container_type}
-{containerrow.container_registry}
-{containerrow.container_name}
-{containerrow.container_tag}
-{containerrow.container_sha256}
-{containerrow.container_platform}
-{containerrow.container_arch}
-"""
-                        )
+                    container_type, the_containers = contresult
 
-                        if (
-                            containerrow.container_additional_type is not None
-                            and containerrow.container_name is not None
-                        ):
-                            try:
-                                putative_additional_container_type = (
-                                    AdditionalType2ContainerType.get(
-                                        ContainerImageAdditionalType(
-                                            str(containerrow.container_additional_type)
-                                        )
-                                    )
-                                )
-                                registries: "Optional[Mapping[ContainerType, str]]" = (
-                                    None
-                                )
-                                fingerprint = None
-                                origTaggedName = ""
-                                taggedName = ""
-                                image_signature = None
-                                if (
-                                    putative_additional_container_type
-                                    == ContainerType.Docker
-                                ):
-                                    the_registry = (
-                                        str(containerrow.container_registry)
-                                        if containerrow.container_registry is not None
-                                        else DEFAULT_DOCKER_REGISTRY
-                                    )
-                                    registries = {
-                                        ContainerType.Docker: the_registry,
-                                    }
-                                    container_identifier = str(
-                                        containerrow.container_name
-                                    )
-                                    assert containerrow.container_sha256 is not None
-                                    fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.container_sha256)}"
-                                    assert containerrow.container_tag is not None
-                                    origTaggedName = f"{container_identifier}:{str(containerrow.container_tag)}"
-                                    taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
-                                    # Disable for now
-                                    # image_signature = stringifyDigest("sha256", bytes.fromhex(str(containerrow.container_sha256)))
-                                elif (
-                                    putative_additional_container_type
-                                    == ContainerType.Singularity
-                                ):
-                                    origTaggedName = str(containerrow.container_name)
-                                    taggedName = origTaggedName
-                                    fingerprint = origTaggedName
+                    # TODO: which are the needed inputs, to be integrated
+                    # into the latter workflow_meta?
+                    self._parseInputsFromExecution(
+                        g, execrow.execution, main_entity=matched_crate.mainentity
+                    )
 
-                                the_containers.append(
-                                    Container(
-                                        origTaggedName=origTaggedName,
-                                        type=container_type,
-                                        registries=registries,
-                                        taggedName=cast("URIType", taggedName),
-                                        architecture=None
-                                        if containerrow.container_arch is None
-                                        else cast(
-                                            "ProcessorArchitecture",
-                                            str(containerrow.container_arch),
-                                        ),
-                                        operatingSystem=None
-                                        if containerrow.container_platform is None
-                                        else cast(
-                                            "ContainerOperatingSystem",
-                                            str(containerrow.container_platform),
-                                        ),
-                                        fingerprint=cast("Fingerprint", fingerprint),
-                                        source_type=putative_additional_container_type,
-                                        image_signature=image_signature,
-                                    )
-                                )
-                            except Exception as e:
-                                self.logger.exception(
-                                    f"Unable to assign from additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
-                                )
-
-                    # TODO: deal with more than one execution
+                    # Now, let's get the list of input parameters
                     break
             except Exception as e:
                 raise ROCrateToolboxException(
