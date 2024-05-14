@@ -13,7 +13,6 @@ from typing import (
 LOG: Logger
 DEFAULT_SK: Optional[str]
 DEFAULT_LOG: Optional[str]
-__doc__: str
 
 def parse_args(argv: Sequence[str] = ...) -> Mapping[str, Any]: ...
 def output(args: Mapping[str, Any]) -> None: ...

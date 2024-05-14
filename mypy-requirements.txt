@@ -3,6 +3,7 @@ mypy-extensions
 # typing libraries, needed by mypy
 types-boto3
 types-certifi
+types-cryptography
 types-jsonschema
 types-mypy-extensions
 types-openpyxl
@@ -13,4 +14,3 @@ types-PyYAML
 types-requests
 types-setuptools
 # We do not use this directly, but the crypt4gh stubs embedded in the repo
-cryptography >= 41.0.0

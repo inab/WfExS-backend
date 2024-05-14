@@ -7,6 +7,5 @@ from typing import (
 )
 
 LOG: Logger
-__doc__: str
 
 def main(argv: Sequence[str] = ...) -> None: ...

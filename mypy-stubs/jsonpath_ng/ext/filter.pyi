@@ -1,5 +1,7 @@
 from typing import (
     Any,
+    Callable,
+    Mapping,
     Sequence,
 )
 from .. import DatumInContext as DatumInContext, Index as Index, JSONPath as JSONPath

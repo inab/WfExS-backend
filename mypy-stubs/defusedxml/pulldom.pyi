@@ -1,3 +1,5 @@
+from _typeshed import SupportsRead
+
 from xml.dom.pulldom import DOMEventStream
 
 from .expatreader import DefusedExpatParser
@@ -5,7 +7,7 @@ from .expatreader import DefusedExpatParser
 __origin__: str
 
 def parse(
-    stream_or_string,
+    stream_or_string: str | SupportsRead[bytes | str],
     parser: DefusedExpatParser | None = None,
     bufsize: int | None = None,
     forbid_dtd: bool = False,

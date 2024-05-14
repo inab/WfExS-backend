@@ -1,10 +1,11 @@
 from _typeshed import Incomplete
+from _typeshed import SupportsRead
 from xml.dom.minidom import Document
 
 __origin__: str
 
 def parse(
-    file,
+    file: str | SupportsRead[bytes | str],
     parser: Incomplete | None = None,
     bufsize: int | None = None,
     forbid_dtd: bool = False,
