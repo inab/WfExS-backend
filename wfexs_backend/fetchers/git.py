@@ -209,6 +209,9 @@ class GitFetcher(AbstractRepoFetcher):
                 gitcheckout_params.extend(["origin", repoTag])
         else:
             doRepoUpdate = False
+            # These are needed to remove a pylint complaint
+            gitclone_params = None
+            gitcheckout_params = None
 
         if doRepoUpdate:
             with tempfile.NamedTemporaryFile() as git_stdout, tempfile.NamedTemporaryFile() as git_stderr:
@@ -345,13 +348,12 @@ class GitFetcher(AbstractRepoFetcher):
             repoTag = None
 
         # Getting the repoRelPath (if available)
+        repoRelPath: "Optional[str]" = None
         if len(parsedInputURL.fragment) > 0:
             frag_qs = parse.parse_qs(parsedInputURL.fragment)
             subDirArr = frag_qs.get("subdirectory", [])
             if len(subDirArr) > 0:
                 repoRelPath = subDirArr[0]
-        else:
-            repoRelPath = None
 
         # Now, reassemble the repoURL, to be used by git client
         repoURL = cast(
@@ -362,7 +364,8 @@ class GitFetcher(AbstractRepoFetcher):
         repo_tag_destdir, repo_desc, metadata_array = self.doMaterializeRepo(
             repoURL, repoTag=repoTag
         )
-        repo_desc["relpath"] = cast("RelPath", repoRelPath)
+        if repoRelPath is not None:
+            repo_desc["relpath"] = cast("RelPath", repoRelPath)
 
         preferredName: "Optional[RelPath]"
         if repoRelPath is not None:

@@ -2202,7 +2202,7 @@ you can find here an almost complete list of the possible ones:
             # when it is not run in debug mode
             if self.logger.getEffectiveLevel() > logging.DEBUG:
                 warnings.filterwarnings(
-                    "ignore", category=UserWarning, module="^rocrate\.model\.file$"
+                    "ignore", category=UserWarning, module=r"^rocrate\.model\.file$"
                 )
             self.crate.write_zip(filename)
 

@@ -1683,6 +1683,8 @@ class WfExSBackend:
                 # state unmarshalling and validations
                 if wfInstance is not None:
                     mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
+                else:
+                    mStatus = None
 
                 yield instance_id, nickname, creation, wfSetup, mStatus
 
@@ -2705,8 +2707,11 @@ class WfExSBackend:
         assert firstParsedURI is not None
 
         # Assure workflow inputs directory exists before the next step
+        workflowInputs_destdir: "AbsPath"
         if isinstance(dest, CacheType):
             workflowInputs_destdir = self.cachePathMap[dest]
+        else:
+            workflowInputs_destdir = dest
 
         self.logger.info(
             "downloading workflow input: {}".format(" or ".join(remote_uris))

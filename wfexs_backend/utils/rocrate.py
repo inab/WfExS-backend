@@ -264,7 +264,7 @@ WHERE   {
             # when it is not run in debug mode
             if self.logger.getEffectiveLevel() > logging.DEBUG:
                 warnings.filterwarnings(
-                    "ignore", category=SyntaxWarning, module="^pyld\.jsonld$"
+                    "ignore", category=SyntaxWarning, module=r"^pyld\.jsonld$"
                 )
             jsonld_obj_ser = {
                 "@graph": pyld.jsonld.expand(

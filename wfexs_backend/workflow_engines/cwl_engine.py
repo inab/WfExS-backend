@@ -1224,6 +1224,7 @@ STDERR
                 else:
                     retVal = -1
                     matOutputs = []
+                    started = ended = datetime.datetime.min
 
                 # Create augmentedInputs properly
                 augmentedInputs = self.augmentCWLInputs(matInputs, cwl_dict_inputs)

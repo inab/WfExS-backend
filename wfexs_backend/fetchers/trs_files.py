@@ -168,6 +168,8 @@ def fetchTRSFiles(
                 fragment="",
             )
         )
+    else:
+        raise FetcherException(f"FIXME: Unhandled scheme {parsedInputURL.scheme}")
 
     topMeta = {
         "fetched": metadata_url,
