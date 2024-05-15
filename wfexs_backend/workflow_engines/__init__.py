@@ -253,7 +253,10 @@ class AbstractWorkflowEngineType(abc.ABC):
 
     @abc.abstractmethod
     def materializeEngine(
-        self, localWf: "LocalWorkflow", engineVersion: "Optional[EngineVersion]" = None
+        self,
+        localWf: "LocalWorkflow",
+        engineVersion: "Optional[EngineVersion]" = None,
+        do_identify: "bool" = False,
     ) -> "Optional[MaterializedWorkflowEngine]":
         pass
 
@@ -672,7 +675,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         return matWfEng.instance._get_engine_version_str(matWfEng)
 
     def materializeEngine(
-        self, localWf: "LocalWorkflow", engineVersion: "Optional[EngineVersion]" = None
+        self,
+        localWf: "LocalWorkflow",
+        engineVersion: "Optional[EngineVersion]" = None,
+        do_identify: "bool" = False,
     ) -> "Optional[MaterializedWorkflowEngine]":
         """
         Method to ensure the required engine version is materialized
@@ -681,7 +687,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
 
         # This method can be forced to materialize an specific engine version
-        if engineVersion is None:
+        if do_identify or engineVersion is None:
             # The identification could return an augmented LocalWorkflow instance
             resLocalWf: "Optional[LocalWorkflow]"
             engineVersion, resLocalWf = self.identifyWorkflow(localWf, engineVersion)
