@@ -6,6 +6,8 @@ repos:
     hooks:
       - id: check-json
       - id: check-yaml
+        types: [file]
+        files: \.(yaml|yml|wfex\.(stage|export|ctxt))$
   - repo: local
     hooks:
       - id: pylint
@@ -14,29 +16,38 @@ repos:
         require_serial: true
         types:
           - python
-        exclude: "^[^/]*env/|dev-[^/]*/"
-        entry: pylint -j 4 --source-roots .
+        exclude: "^[^/]*env/|dev-[^/]*/|docs/"
+        entry: pylint
+        args: [-j , "4", --source-roots, .]
       - id: mypy
         name: Local MyPy
         language: system
-        types:
+        types_or:
           - python
+          - pyi
         exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
         require_serial: true
         entry: mypy
         args: [--strict, --show-error-codes, --no-warn-unused-ignores]
 
-# Main problem: python executable path, used to find the environment, is hardcoded
-  - repo: https://github.com/pre-commit/mirrors-mypy.git
-    rev: v1.10.0
-    hooks:
-      - id: mypy
-        alias: mirrormypy
-        exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
-        require_serial: true
-        entry: env PYTHONPATH=. mypy
-        args: [--strict, --show-error-codes, --no-warn-unused-ignores, --python-executable, .full/bin/python]
-        stages: [manual]
+## Main problem: python executable path, used to find the environment, is hardcoded
+#  - repo: https://github.com/pre-commit/mirrors-mypy.git
+#    rev: v1.10.0
+#    hooks:
+#      - id: mypy
+#        alias: mirrormypy
+#        exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
+#        require_serial: true
+#        entry: env PYTHONPATH=. mypy
+#        args: [--strict, --show-error-codes, --no-warn-unused-ignores, --python-executable, .full/bin/python]
+#        stages: [manual]
+#  - repo: meta
+#    hooks:
+#      - id: identity
+#        types:
+#          - python
+#        exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
+#        stages: [manual]
 #  - repo: https://github.com/pylint-dev/pylint.git
 #    rev: v3.2.0
 #    hooks:
