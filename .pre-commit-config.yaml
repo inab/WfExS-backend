@@ -8,6 +8,12 @@ repos:
       - id: check-yaml
         types: [file]
         files: \.(yaml|yml|wfex\.(stage|export|ctxt))$
+  - repo: https://github.com/koalaman/shellcheck-precommit.git
+    rev: v0.10.0
+    hooks:
+      - id: shellcheck
+        #args: [--format,json]
+        stages: [manual]
   - repo: local
     hooks:
       - id: pylint

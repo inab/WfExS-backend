@@ -18,7 +18,7 @@ done
 
 set -e
 singCommand="$(type -P singularity || true)"
-if [ -n "$singCommand"] ; then
+if [ -n "$singCommand" ] ; then
 	NODEWRAPPERSIFDIR="$(realpath "$(dirname "$0")" 2> /dev/null)"/../share
 	if [ ! -d "$NODEWRAPPERSIFDIR" ] ; then
 		mkdir -p "$NODEWRAPPERSIFDIR"
