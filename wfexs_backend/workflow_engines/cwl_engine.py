@@ -341,9 +341,6 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         # TODO: select the minimum cwltool version based on cwlVersion
         # TODO: Check best version of the engine
-        if localWf.relPath is not None:
-            engineVer = self.cwltool_version
-
         if engineVer is None:
             engineVer = self.cwltool_version
 

@@ -452,7 +452,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # Let's record all the configuration files
         nxfScripts: "MutableSequence[RelPath]" = []
         absolutePutativeCandidateNf: "Optional[AbsPath]" = None
-        engineVer = None
         minimalEngineVer = None
         kw_20_04_Pat: "Optional[Pattern[str]]" = re.compile(
             r"\$(?:(?:launchDir|moduleDir|projectDir)|\{(?:launchDir|moduleDir|projectDir)\})"
@@ -533,7 +532,16 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                     putativeEngineVerVal[1]
                                 )
                                 if matched:
-                                    engineVer = cast("EngineVersion", matched.group(1))
+                                    if engineVer is None or engineVer < matched.group(
+                                        1
+                                    ):
+                                        engineVer = cast(
+                                            "EngineVersion", matched.group(1)
+                                        )
+                                    else:
+                                        self.logger.info(
+                                            f"Manifest reports version {matched.group(1)}, but version {engineVer} was requested"
+                                        )
                                     break
                                 else:
                                     self.logger.debug(
