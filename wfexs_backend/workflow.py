@@ -1723,6 +1723,7 @@ class WF:
             "injectInputs is being deprecated", PendingDeprecationWarning, stacklevel=2
         )
         if workflowInputs_destdir is None:
+            assert self.inputsDir is not None
             workflowInputs_destdir = self.inputsDir
         if workflowInputs_cacheDir is None:
             workflowInputs_cacheDir = CacheType.Input
@@ -1734,8 +1735,6 @@ class WF:
             raise WFException(
                 "Cannot inject inputs as the store directory is undefined"
             )
-
-        assert workflowInputs_destdir is not None
 
         for path in paths:
             # We are sending the context name thinking in the future,
