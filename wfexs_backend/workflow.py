@@ -1389,11 +1389,29 @@ class WF:
             ) from jde
 
         (
-            workflow_meta,
+            repo,
+            workflow_type,
+            container_type,
             the_containers,
+            params,
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
             jsonld_obj, public_name
         )
+        logging.info(
+            f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
+        )
+        workflow_meta: "WritableWorkflowMetaConfigBlock" = {
+            "workflow_id": {},
+            "workflow_type": workflow_type.shortname,
+            "environment": {},
+            "params": params,
+            "outputs": {},
+            "workflow_config": {},
+        }
+        if container_type is not None:
+            workflow_meta["workflow_config"]["containerType"] = container_type.value
+
+        logging.info(f"{json.dumps(workflow_meta, indent=4)}")
 
         # Last, be sure that what it has been generated is correct
         if wfexs.validateConfigFiles(workflow_meta, securityContextsConfigFilename) > 0:
@@ -1637,7 +1655,12 @@ class WF:
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
 
-    def setupEngine(self, offline: "bool" = False, ignoreCache: "bool" = False) -> None:
+    def setupEngine(
+        self,
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        initial_engine_version: "Optional[EngineVersion]" = None,
+    ) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
             assert self.id is not None
@@ -1654,13 +1677,26 @@ class WF:
             self.engine is not None
         ), "Workflow engine not properly identified or set up"
 
+        engine_version: "Optional[EngineVersion]"
         if self.materializedEngine is None:
             assert self.localWorkflow is not None
             localWorkflow = self.localWorkflow
+            do_identify = True
+            if self.engineVer is not None:
+                engine_version = self.engineVer
+            else:
+                engine_version = initial_engine_version
         else:
             localWorkflow = self.materializedEngine.workflow
+            engine_version = self.materializedEngine.version
+            do_identify = False
 
-        matWfEngV2 = self.engine.materializeEngine(localWorkflow, self.engineVer)
+        # This is to avoid double initialization
+        matWfEngV2 = self.engine.materializeEngine(
+            localWorkflow,
+            engineVersion=engine_version,
+            do_identify=do_identify,
+        )
 
         # At this point, there can be uninitialized elements
         if matWfEngV2 is not None:

@@ -41,6 +41,7 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Tuple,
+        Union,
     )
 
     from typing_extensions import (
@@ -50,13 +51,22 @@ if TYPE_CHECKING:
     from ..common import (
         ContainerOperatingSystem,
         Fingerprint,
+        MutableParamsBlock,
+        ParamsBlock,
         ProcessorArchitecture,
+        RelPath,
+        RepoURL,
+        RepoTag,
         URIType,
         WritableWorkflowMetaConfigBlock,
     )
 
     from ..wfexs_backend import (
         WfExSBackend,
+    )
+
+    from ..workflow_engines import (
+        WorkflowType,
     )
 
 # Needed by pyld to detect it
@@ -67,6 +77,8 @@ import rdflib.plugins.sparql
 
 from ..common import (
     ContainerType,
+    ContentKind,
+    RemoteRepo,
 )
 
 from ..container_factories import (
@@ -146,10 +158,12 @@ class ROCrateToolbox(abc.ABC):
     WFEXS_TRICK_SPARQL_BASE: "Final[str]" = f"{WFEXS_TRICK_SPARQL_PRE_PREFIX}///"
     WFEXS_TRICK_SPARQL_NS: "Final[str]" = "wfexs"
 
+    SCHEMA_ORG_PREFIX: "Final[str]" = "http://schema.org/"
+
     SPARQL_NS = {
         "dc": "http://purl.org/dc/elements/1.1/",
         "dcterms": "http://purl.org/dc/terms/",
-        "s": "http://schema.org/",
+        "s": SCHEMA_ORG_PREFIX,
         "bs": "https://bioschemas.org/",
         "bsworkflow": "https://bioschemas.org/profiles/ComputationalWorkflow/",
         "rocrate": "https://w3id.org/ro/crate/",
@@ -160,6 +174,15 @@ class ROCrateToolbox(abc.ABC):
         "wrterm": WORKFLOW_RUN_NAMESPACE,
         "wikidata": "https://www.wikidata.org/wiki/",
         WFEXS_TRICK_SPARQL_NS: WFEXS_TRICK_SPARQL_BASE,
+    }
+
+    LEAF_TYPE_2_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = {
+        SCHEMA_ORG_PREFIX + "Integer": "Integer",
+        SCHEMA_ORG_PREFIX + "Text": "Text",
+        SCHEMA_ORG_PREFIX + "Boolean": "Boolean",
+        SCHEMA_ORG_PREFIX + "Float": "Float",
+        SCHEMA_ORG_PREFIX + "MediaObject": "File",
+        SCHEMA_ORG_PREFIX + "Dataset": "Directory",
     }
 
     def __init__(self, wfexs: "WfExSBackend"):
@@ -214,6 +237,13 @@ WHERE   {
             ) .
         }
     }
+}
+"""
+
+    GET_LICENCES_SPARQL: "Final[str]" = """\
+SELECT  ?license
+WHERE {
+    ?entity s:license ?license .
 }
 """
 
@@ -307,7 +337,7 @@ WHERE   {
         return (resrow, g)
 
     OBTAIN_WORKFLOW_PID_SPARQL: "Final[str]" = """\
-SELECT  ?identifier ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version
+SELECT  ?identifier ?workflow_repository ?workflow_version ?workflow_url ?workflow_alternate_name ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version
 WHERE   {
     ?mainentity s:programmingLanguage ?programminglanguage .
     ?programminglanguage
@@ -315,6 +345,18 @@ WHERE   {
         s:url ?programminglanguage_url .
     OPTIONAL {
         ?mainentity s:identifier ?identifier .
+    }
+    OPTIONAL {
+        ?mainentity s:codeRepository ?workflow_repository .
+    }
+    OPTIONAL {
+        ?mainentity s:version ?workflow_version .
+    }
+    OPTIONAL {
+        ?mainentity s:url ?workflow_url .
+    }
+    OPTIONAL {
+        ?mainentity s:alternateName ?workflow_alternate_name .
     }
     OPTIONAL {
         ?programminglanguage
@@ -389,7 +431,7 @@ WHERE   {
     ?execution s:object ?input .
     {
         # A file, which is a schema.org MediaObject
-        VALUES (?additional_type) { ( "File" ) }
+        BIND ( "File" AS ?additional_type )
         ?input
             a s:MediaObject ;
             s:contentUrl ?fileuri ;
@@ -400,18 +442,25 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A directory, which is a schema.org Dataset
-        VALUES (?additional_type) { ( "Dataset" ) }
+        BIND ( "Dataset" AS ?additional_type )
         ?input
             a s:Dataset ;
             s:contentUrl ?fileuri ;
-            s:exampleOfWork ?inputfp ;
-            s:hasPart+ ?component .
+            s:exampleOfWork ?inputfp .
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
             s:additionalType ?additional_type .
-        ?component
-            a s:MediaObject .
+        FILTER EXISTS { 
+            # subquery to determine it is not an empty Dataset
+            SELECT ?dircomp
+            WHERE { 
+                ?input
+                    s:hasPart+ ?dircomp .
+                ?dircomp
+                    a s:MediaObject .
+            }
+        }
     } UNION {
         # A single property value, which can be either Integer, Text, Boolean or Float
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
@@ -425,7 +474,8 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
-        VALUES (?leaf_type ?additional_type) { ( s:Integer "Collection" ) ( s:Text "Collection" ) ( s:Boolean "Collection" ) ( s:Float "Collection" ) ( s:MediaObject "Collection" ) ( s:Dataset "Collection" ) }
+        BIND ( "Collection" AS ?additional_type )
+        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
         ?input
             a s:Collection ;
             s:exampleOfWork ?inputfp ;
@@ -622,7 +672,9 @@ Container {containerrow.container}
         g: "rdflib.graph.Graph",
         execution: "rdflib.term.Identifier",
         main_entity: "rdflib.term.Identifier",
-    ) -> "None":
+        default_licences: "Sequence[str]",
+        public_name: "str",
+    ) -> "ParamsBlock":
         # Get the list of inputs
         qinputs = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_INPUTS_SPARQL,
@@ -636,15 +688,240 @@ Container {containerrow.container}
         )
 
         # TODO: implement this
+        params: "MutableParamsBlock" = {}
+        for inputrow in qinputsres:
+            assert isinstance(
+                inputrow, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
 
-        return None
+            base = params
+            param_path = str(inputrow.name).split(".")
+            param_last = param_path[-1]
+
+            # Reaching the relative position
+            if len(param_path) > 1:
+                for param_step in param_path[0:-1]:
+                    base = base.setdefault(param_step, {})
+
+            # Now, fill in the values
+            additional_type = str(inputrow.additional_type)
+            valarr: "Optional[MutableSequence[Any]]" = None
+            valobj: "Optional[MutableMapping[str, Any]]" = None
+            # Is it a nested one?
+            if additional_type == "Collection":
+                leaf_type = str(inputrow.leaf_type)
+                leaf_additional_type = self.LEAF_TYPE_2_ADDITIONAL_TYPE.get(leaf_type)
+                if leaf_additional_type is None:
+                    raise ROCrateToolboxException(
+                        f"Unable to handle contents of type {leaf_type} in input Collection {str(inputrow.name)}"
+                    )
+                additional_type = leaf_additional_type
+                if leaf_additional_type not in ("File", "Dataset"):
+                    valarr = base.setdefault(param_last, [])
+
+            # Is it a file or a directory?
+            if additional_type in ("File", "Dataset"):
+                valobj = base.setdefault(
+                    param_last,
+                    {
+                        "c-l-a-s-s": ContentKind.Directory.name
+                        if additional_type == "Dataset"
+                        else ContentKind.File.name,
+                    },
+                )
+
+            if isinstance(valobj, dict):
+                licences = self._getLicences(g, inputrow.input, public_name)
+                if len(licences) == 0:
+                    licences = default_licences
+                the_url: "Union[str, Mapping[str, Any]]"
+                if len(licences) == 0:
+                    the_url = str(inputrow.fileuri)
+                else:
+                    the_url = {
+                        "uri": str(inputrow.fileuri),
+                        "licences": licences,
+                    }
+
+                valurl = valobj.get("url")
+                if isinstance(valurl, (str, dict)):
+                    valurl = [valurl]
+                    valobj["url"] = valurl
+
+                if isinstance(valurl, list):
+                    valurl.append(the_url)
+                else:
+                    valobj["url"] = the_url
+            else:
+                the_value_node: "rdflib.term.Identifier" = inputrow.value
+                the_value: "Union[str, int, float, bool]"
+                if isinstance(the_value_node, rdflib.term.Literal):
+                    the_value = the_value_node.value
+                else:
+                    the_value = str(the_value_node)
+
+                if additional_type == "Integer":
+                    try:
+                        the_value = int(the_value)
+                    except:
+                        self.logger.exception(
+                            f"Expected type {additional_type} for value {the_value}"
+                        )
+                elif additional_type == "Boolean":
+                    the_value = bool(the_value)
+                elif additional_type == "Float":
+                    the_value = float(the_value)
+                elif additional_type == "Text":
+                    the_value = str(the_value)
+                else:
+                    raise ROCrateToolboxException(
+                        f"Unable to handle additional type {additional_type} for input {str(inputrow.name)}"
+                    )
+
+                if isinstance(valarr, list):
+                    valarr.append(the_value)
+                else:
+                    base[param_last] = the_value
+
+        return params
+
+    def _getLicences(
+        self,
+        g: "rdflib.graph.Graph",
+        entity: "rdflib.term.Identifier",
+        public_name: "str",
+    ) -> "Sequence[str]":
+        # This query will return the list of licences associated to the
+        # input entity
+        qlic = rdflib.plugins.sparql.prepareQuery(
+            self.GET_LICENCES_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        # TODO: cache resolution of contexts
+        # TODO: disallow network access for context resolution
+        # when not in right phase
+        try:
+            qlicres = g.query(
+                qlic,
+                initBindings={
+                    "entity": entity,
+                },
+            )
+        except Exception as e:
+            raise ROCrateToolboxException(
+                f"Unable to perform JSON-LD workflow details query over {public_name} (see cascading exceptions)"
+            ) from e
+
+        licences: "MutableSequence[str]" = []
+        for licrow in qlicres:
+            assert isinstance(
+                licrow, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+            licences.append(str(licrow.license))
+
+        return licences
+
+    def _extractWorkflowMetadata(
+        self,
+        g: "rdflib.graph.Graph",
+        main_entity: "rdflib.term.Identifier",
+        public_name: "str",
+    ) -> "Tuple[RemoteRepo, WorkflowType]":
+        # This query will tell us where the original workflow was located,
+        # its language and version
+        qlang = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_WORKFLOW_PID_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+
+        # TODO: cache resolution of contexts
+        # TODO: disallow network access for context resolution
+        # when not in right phase
+        try:
+            qlangres = g.query(
+                qlang,
+                initBindings={
+                    "mainentity": main_entity,
+                },
+            )
+        except Exception as e:
+            raise ROCrateToolboxException(
+                f"Unable to perform JSON-LD workflow details query over {public_name} (see cascading exceptions)"
+            ) from e
+
+        langrow: "Optional[rdflib.query.ResultRow]" = None
+        # In the future, there could be more than one match, when
+        # nested RO-Crate scenarios happen
+        for row in qlangres:
+            assert isinstance(
+                row, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+            langrow = row
+            break
+
+        if langrow is None:
+            raise ROCrateToolboxException(
+                f"Unable to get workflow PID and engine details from {public_name}"
+            )
+
+        # Creating the workflow permanent identifier
+        repo_pid: "str"
+        if langrow.workflow_repository is not None:
+            repo_pid = str(langrow.workflow_repository)
+
+        elif langrow.identifier is not None:
+            repo_pid = str(langrow.identifier)
+        elif langrow.workflow_url is not None:
+            repo_pid = str(langrow.workflow_url)
+        else:
+            raise ROCrateToolboxException(
+                f"Unable to infer the permanent identifier from the workflow at {public_name}"
+            )
+
+        repo_version: "Optional[str]" = None
+        if langrow.workflow_version:
+            repo_version = str(langrow.workflow_version)
+
+        repo_relpath: "Optional[str]" = None
+        if langrow.workflow_alternate_name is not None:
+            repo_relpath = str(langrow.workflow_alternate_name)
+
+        repo_web_url: "Optional[str]" = None
+        if langrow.workflow_url is not None:
+            repo_web_url = str(langrow.workflow_url)
+
+        repo = RemoteRepo(
+            repo_url=cast("RepoURL", repo_pid),
+            tag=cast("Optional[RepoTag]", repo_version),
+            rel_path=cast("Optional[RelPath]", repo_relpath),
+            web_url=cast("Optional[URIType]", repo_web_url),
+        )
+
+        programminglanguage_url = (
+            None
+            if langrow.programminglanguage_url is None
+            else str(langrow.programminglanguage_url)
+        )
+        programminglanguage_identifier = (
+            None
+            if langrow.programminglanguage_identifier is None
+            else str(langrow.programminglanguage_identifier)
+        )
+        # Getting the workflow type.
+        # This call will raise an exception in case the workflow type
+        # is not supported by this implementation.
+        workflow_type = self.wfexs.matchWorkflowType(
+            programminglanguage_url, programminglanguage_identifier
+        )
+
+        return repo, workflow_type
 
     def generateWorkflowMetaFromJSONLD(
         self,
         jsonld_obj: "Mapping[str, Any]",
         public_name: "str",
         retrospective_first: "bool" = True,
-    ) -> "Tuple[WritableWorkflowMetaConfigBlock, Sequence[Container]]":
+    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, Sequence[Container], ParamsBlock]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -667,58 +944,11 @@ Container {containerrow.container}
                 f"JSON-LD from {public_name} is not a WRROC Workflow"
             )
 
-        # This query will tell us where the original workflow was located,
-        # its language and version
-        qlang = rdflib.plugins.sparql.prepareQuery(
-            self.OBTAIN_WORKFLOW_PID_SPARQL,
-            initNs=self.SPARQL_NS,
-        )
+        # The default crate licences
+        crate_licences = self._getLicences(g, matched_crate.mainentity, public_name)
 
-        # TODO: cache resolution of contexts
-        # TODO: disallow network access for context resolution
-        # when not in right phase
-        try:
-            qlangres = g.query(
-                qlang,
-                initBindings={
-                    "mainentity": matched_crate.mainentity,
-                },
-            )
-        except Exception as e:
-            raise ROCrateToolboxException(
-                f"Unable to perform JSON-LD workflow details query over {public_name} (see cascading exceptions)"
-            ) from e
-
-        langrow: "Optional[rdflib.query.ResultRow]" = None
-        # In the future, there could be more than one match, when
-        # nested RO-Crate scenarios happen
-        for row in qlangres:
-            assert isinstance(
-                row, rdflib.query.ResultRow
-            ), "Check the SPARQL code, as it should be a SELECT query"
-            langrow = row
-            break
-
-        if langrow is None:
-            raise ROCrateToolboxException(
-                f"Unable to get workflow engine details from {public_name}"
-            )
-
-        programminglanguage_url = (
-            None
-            if langrow.programminglanguage_url is None
-            else str(langrow.programminglanguage_url)
-        )
-        programminglanguage_identifier = (
-            None
-            if langrow.programminglanguage_identifier is None
-            else str(langrow.programminglanguage_identifier)
-        )
-        # Getting the workflow type.
-        # This call will raise an exception in case the workflow type
-        # is not supported by this implementation.
-        workflow_type = self.wfexs.matchWorkflowType(
-            programminglanguage_url, programminglanguage_identifier
+        repo, workflow_type = self._extractWorkflowMetadata(
+            g, matched_crate.mainentity, public_name
         )
 
         # At this point we know WfExS supports the workflow engine.
@@ -728,6 +958,7 @@ Container {containerrow.container}
         container_type: "Optional[ContainerType]" = None
         additional_container_type: "Optional[ContainerType]" = None
         the_containers: "Sequence[Container]" = []
+        params: "ParamsBlock" = {}
         if retrospective_first:
             # For the retrospective provenance at least an execution must
             # be described in the RO-Crate. Once one is chosen,
@@ -765,8 +996,12 @@ Container {containerrow.container}
 
                     # TODO: which are the needed inputs, to be integrated
                     # into the latter workflow_meta?
-                    self._parseInputsFromExecution(
-                        g, execrow.execution, main_entity=matched_crate.mainentity
+                    params = self._parseInputsFromExecution(
+                        g,
+                        execrow.execution,
+                        main_entity=matched_crate.mainentity,
+                        default_licences=crate_licences,
+                        public_name=public_name,
                     )
 
                     # Now, let's get the list of input parameters
@@ -777,21 +1012,6 @@ Container {containerrow.container}
                 ) from e
 
         # TODO: finish
+        assert container_type is not None
 
-        self.logger.info(
-            f"Workflow type {workflow_type} container factory {container_type} {additional_container_type}"
-        )
-        workflow_meta: "WritableWorkflowMetaConfigBlock" = {
-            "workflow_id": {},
-            "workflow_type": workflow_type.shortname,
-            "environment": {},
-            "params": {},
-            "outputs": {},
-            "workflow_config": {},
-        }
-        if container_type is not None:
-            workflow_meta["workflow_config"]["containerType"] = container_type.value
-
-        self.logger.info(f"{json.dumps(workflow_meta, indent=4)}")
-
-        return workflow_meta, the_containers
+        return repo, workflow_type, container_type, the_containers, params
