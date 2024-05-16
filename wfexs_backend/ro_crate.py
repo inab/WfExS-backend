@@ -185,7 +185,7 @@ class FormalParameter(rocrate.model.entity.Entity):  # type: ignore[misc]
             "name": name,
             # As of https://www.researchobject.org/ro-crate/1.1/workflows.html#describing-inputs-and-outputs
             "conformsTo": {
-                "@id": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE/",
+                "@id": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE",
             },
         }
 
