@@ -1377,7 +1377,8 @@ you can find here an almost complete list of the possible ones:
                 # inputs and environment variables in an standardized way
                 self.wf_file.append_to(fp_dest, formal_parameter, compact=True)
                 value_required = not in_item.implicit
-                formal_parameter["valueRequired"] = str(value_required)
+                # This one must be a real boolean, as of schema.org
+                formal_parameter["valueRequired"] = value_required
 
             item_signature = cast(
                 "bytes",
@@ -1545,7 +1546,12 @@ you can find here an almost complete list of the possible ones:
 
                     if some_not_null:
                         if in_item.implicit and len(in_item.values) == 1:
-                            formal_parameter["defaultValue"] = str(in_item.values[0])
+                            the_default_value: "Union[bool,str,float,int]"
+                            if isinstance(in_item.values[0], (bool, int, float)):
+                                the_default_value = in_item.values[0]
+                            else:
+                                the_default_value = str(in_item.values[0])
+                            formal_parameter["defaultValue"] = the_default_value
 
                         for itemInAtomicValues in cast(
                             "Sequence[Union[bool,str,float,int]]", in_item.values
@@ -1563,8 +1569,13 @@ you can find here an almost complete list of the possible ones:
                                     )
                                 else:
                                     fixedAtomicValue = itemInAtomicValues
+                                the_value: "Union[bool,str,float,int]"
+                                if isinstance(fixedAtomicValue, (bool, int, float)):
+                                    the_value = fixedAtomicValue
+                                else:
+                                    the_value = str(fixedAtomicValue)
                                 parameter_value = PropertyValue(
-                                    self.crate, in_item.name, str(fixedAtomicValue)
+                                    self.crate, in_item.name, value=the_value
                                 )
                                 crate_pv = self.crate.add(parameter_value)
                                 if isinstance(crate_coll, Collection):
