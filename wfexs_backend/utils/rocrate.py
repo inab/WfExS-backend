@@ -129,10 +129,23 @@ WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
 WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
 
 
+CONTAINER_DOCKERIMAGE_SHORT: "Final[str]" = "DockerImage"
+CONTAINER_SIFIMAGE_SHORT: "Final[str]" = "SIFImage"
+
+
 class ContainerImageAdditionalType(enum.Enum):
-    Docker = WORKFLOW_RUN_NAMESPACE + "DockerImage"
-    Singularity = WORKFLOW_RUN_NAMESPACE + "SIFImage"
+    Docker = WORKFLOW_RUN_NAMESPACE + CONTAINER_DOCKERIMAGE_SHORT
+    Singularity = WORKFLOW_RUN_NAMESPACE + CONTAINER_SIFIMAGE_SHORT
     # No one is available for Conda yet
+
+
+# This is needed to match ill implementations
+StrContainerAdditionalType2ContainerImageAdditionalType: "Final[Mapping[str, ContainerImageAdditionalType]]" = {
+    ContainerImageAdditionalType.Docker.value: ContainerImageAdditionalType.Docker,
+    CONTAINER_DOCKERIMAGE_SHORT: ContainerImageAdditionalType.Docker,
+    ContainerImageAdditionalType.Singularity.value: ContainerImageAdditionalType.Singularity,
+    CONTAINER_SIFIMAGE_SHORT: ContainerImageAdditionalType.Singularity,
+}
 
 
 ContainerType2AdditionalType: "Final[Mapping[ContainerType, ContainerImageAdditionalType]]" = {
@@ -165,7 +178,8 @@ class ROCrateToolbox(abc.ABC):
         "dcterms": "http://purl.org/dc/terms/",
         "s": SCHEMA_ORG_PREFIX,
         "bs": "https://bioschemas.org/",
-        "bsworkflow": "https://bioschemas.org/profiles/ComputationalWorkflow/",
+        "bswfprofile": "https://bioschemas.org/profiles/ComputationalWorkflow/",
+        "bsworkflow": "https://bioschemas.org/ComputationalWorkflow#",
         "rocrate": "https://w3id.org/ro/crate/",
         "wfcrate": "https://w3id.org/workflowhub/workflow-ro-crate/",
         "wfhprofile": "https://about.workflowhub.eu/Workflow-RO-Crate/",
@@ -223,7 +237,7 @@ WHERE   {
                 a bs:ComputationalWorkflow ;
                 dcterms:conformsTo ?bsworkflowprofile .
             FILTER (
-                STRSTARTS(str(?bsworkflowprofile), str(bsworkflow:))
+                STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
             ) .
         }
         OPTIONAL  {
@@ -347,15 +361,6 @@ WHERE   {
         ?mainentity s:identifier ?identifier .
     }
     OPTIONAL {
-        ?mainentity s:codeRepository ?workflow_repository .
-    }
-    OPTIONAL {
-        ?mainentity s:version ?workflow_version .
-    }
-    OPTIONAL {
-        ?mainentity s:url ?workflow_url .
-    }
-    OPTIONAL {
         ?mainentity s:alternateName ?workflow_alternate_name .
     }
     OPTIONAL {
@@ -365,6 +370,45 @@ WHERE   {
     OPTIONAL {
         ?programminglanguage
             s:identifier ?programminglanguage_identifier .
+    }
+    {
+        {
+            FILTER NOT EXISTS {
+                ?mainentity s:isBasedOn ?origmainentity .
+                ?origmainentity
+                    a bs:ComputationalWorkflow ;
+                    dcterms:conformsTo ?bsworkflowprofile .
+                FILTER (
+                    STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
+                ) .
+            }
+            OPTIONAL {
+                ?mainentity s:codeRepository ?workflow_repository .
+            }
+            OPTIONAL {
+                ?mainentity s:version ?workflow_version .
+            }
+            OPTIONAL {
+                ?mainentity s:url ?workflow_url .
+            }
+        } UNION {
+            ?mainentity s:isBasedOn ?origmainentity .
+            ?origmainentity
+                a bs:ComputationalWorkflow ;
+                dcterms:conformsTo ?bsworkflowprofile .
+            OPTIONAL {
+                ?origmainentity s:codeRepository ?workflow_repository .
+            }
+            OPTIONAL {
+                ?origmainentity s:version ?workflow_version .
+            }
+            OPTIONAL {
+                ?origmainentity s:url ?workflow_url .
+            }
+            FILTER (
+                STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
+            ) .
+        }
     }
 }
 """
@@ -382,7 +426,55 @@ WHERE   {
     OBTAIN_RUN_CONTAINERS_SPARQL: "Final[str]" = """\
 SELECT ?container ?container_additional_type ?type_of_container ?type_of_container_type ?container_registry ?container_name ?container_tag ?container_sha256 ?container_platform ?container_arch
 WHERE   {
-    ?execution wrterm:containerImage ?container .
+    {
+        ?execution wrterm:containerImage ?container .
+    } UNION {
+        ?entity s:softwareAddOn ?container.
+    }
+    ?container
+        a wrterm:ContainerImage ;
+        s:additionalType ?container_additional_type .
+    OPTIONAL {
+        ?container
+            s:softwareRequirements ?container_type ;
+            s:applicationCategory ?type_of_container .
+        ?container_type
+            a s:SoftwareApplication ;
+            s:applicationCategory ?type_of_container_type .
+        FILTER(
+            STRSTARTS(str(?type_of_container), str(wikidata:)) &&
+            STRSTARTS(str(?type_of_container_type), str(wikidata:))
+        ) .
+    }
+    OPTIONAL {
+        ?container wrterm:registry ?container_registry .
+    }
+    OPTIONAL {
+        ?container s:name ?container_name .
+    }
+    OPTIONAL {
+        ?container wrterm:tag ?container_tag .
+    }
+    OPTIONAL {
+        ?container wrterm:sha256 ?container_sha256 .
+    }
+    OPTIONAL {
+        ?container
+            a s:SoftwareApplication ;
+            s:operatingSystem ?container_platform .
+    }
+    OPTIONAL {
+        ?container
+            a s:SoftwareApplication ;
+            s:processorRequirements ?container_arch .
+    }
+}
+"""
+
+    OBTAIN_WF_CONTAINERS_SPARQL: "Final[str]" = """\
+SELECT ?container ?container_additional_type ?type_of_container ?type_of_container_type ?container_registry ?container_name ?container_tag ?container_sha256 ?container_platform ?container_arch
+WHERE   {
+    ?entity s:softwareAddOn ?container.
     ?container
         a wrterm:ContainerImage ;
         s:additionalType ?container_additional_type .
@@ -425,8 +517,62 @@ WHERE   {
 
     # This compound query is much faster when each of the UNION components
     # is evaluated separatedly
-    OBTAIN_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?inputcol ?component ?leaf_type
+    OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
+WHERE   {
+    ?main_entity bsworkflow:input ?inputfp .
+    ?inputfp
+        a bs:FormalParameter ;
+        s:name ?name ;
+        s:additionalType ?additional_type ;
+        s:workExample ?input .
+    {
+        # A file, which is a schema.org MediaObject
+        ?input
+            a s:MediaObject ;
+            s:contentUrl ?fileuri .
+    } UNION {
+        # A directory, which is a schema.org Dataset
+        ?input
+            a s:Dataset ;
+            s:contentUrl ?fileuri .
+        FILTER EXISTS { 
+            # subquery to determine it is not an empty Dataset
+            SELECT ?dircomp
+            WHERE { 
+                ?input
+                    s:hasPart+ ?dircomp .
+                ?dircomp
+                    a s:MediaObject .
+            }
+        }
+    } UNION {
+        # A single property value, which can be either Integer, Text, Boolean or Float
+        ?input
+            a s:PropertyValue ;
+            s:value ?value .
+    } UNION {
+        # A combination of files or directories or property values
+        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        ?input
+            a s:Collection ;
+            s:hasPart+ ?component .
+        ?component
+            a ?leaf_type .
+        OPTIONAL {
+            ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:value ?value .
+        }
+    }
+}
+"""
+
+    # This compound query is much faster when each of the UNION components
+    # is evaluated separatedly
+    OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
 WHERE   {
     ?execution s:object ?input .
     {
@@ -496,6 +642,26 @@ WHERE   {
 }
 """
 
+    def _parseContainersFromWorkflow(
+        self,
+        g: "rdflib.graph.Graph",
+        main_entity: "rdflib.term.Identifier",
+    ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
+        # Get the list of containers
+        qcontainers = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_RUN_CONTAINERS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qcontainersres = g.query(
+            qcontainers,
+            initBindings={
+                "execution": rdflib.term.Literal(None),
+                "entity": main_entity,
+            },
+        )
+
+        return self.__parseContainersResults(qcontainersres, main_entity)
+
     def _parseContainersFromExecution(
         self,
         g: "rdflib.graph.Graph",
@@ -511,9 +677,17 @@ WHERE   {
             qcontainers,
             initBindings={
                 "execution": execution,
+                "entity": rdflib.term.Literal(None),
             },
         )
 
+        return self.__parseContainersResults(qcontainersres, main_entity)
+
+    def __parseContainersResults(
+        self,
+        qcontainersres: "rdflib.query.Result",
+        main_entity: "rdflib.term.Identifier",
+    ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         container_type: "Optional[ContainerType]" = None
         additional_container_type: "Optional[ContainerType]" = None
         the_containers: "MutableSequence[Container]" = []
@@ -543,10 +717,17 @@ WHERE   {
             # implementation
             if containerrow.container_additional_type is not None:
                 try:
+                    putative_additional_container_image_additional_type = (
+                        StrContainerAdditionalType2ContainerImageAdditionalType.get(
+                            str(containerrow.container_additional_type)
+                        )
+                    )
                     putative_additional_container_type = (
-                        AdditionalType2ContainerType.get(
-                            ContainerImageAdditionalType(
-                                str(containerrow.container_additional_type)
+                        None
+                        if putative_additional_container_image_additional_type is None
+                        else (
+                            AdditionalType2ContainerType.get(
+                                putative_additional_container_image_additional_type
                             )
                         )
                     )
@@ -599,10 +780,17 @@ Container {containerrow.container}
                 and containerrow.container_name is not None
             ):
                 try:
+                    putative_additional_container_image_additional_type = (
+                        StrContainerAdditionalType2ContainerImageAdditionalType.get(
+                            str(containerrow.container_additional_type)
+                        )
+                    )
                     putative_additional_container_type = (
-                        AdditionalType2ContainerType.get(
-                            ContainerImageAdditionalType(
-                                str(containerrow.container_additional_type)
+                        None
+                        if putative_additional_container_image_additional_type is None
+                        else (
+                            AdditionalType2ContainerType.get(
+                                putative_additional_container_image_additional_type
                             )
                         )
                     )
@@ -621,9 +809,11 @@ Container {containerrow.container}
                             ContainerType.Docker: the_registry,
                         }
                         container_identifier = str(containerrow.container_name)
-                        assert containerrow.container_sha256 is not None
-                        fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.container_sha256)}"
                         assert containerrow.container_tag is not None
+                        if containerrow.container_sha256 is not None:
+                            fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.container_sha256)}"
+                        else:
+                            fingerprint = f"{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
                         origTaggedName = (
                             f"{container_identifier}:{str(containerrow.container_tag)}"
                         )
@@ -677,7 +867,7 @@ Container {containerrow.container}
     ) -> "ParamsBlock":
         # Get the list of inputs
         qinputs = rdflib.plugins.sparql.prepareQuery(
-            self.OBTAIN_INPUTS_SPARQL,
+            self.OBTAIN_EXECUTION_INPUTS_SPARQL,
             initNs=self.SPARQL_NS,
         )
         qinputsres = g.query(
@@ -687,6 +877,36 @@ Container {containerrow.container}
             },
         )
 
+        return self.__parseInputsResults(qinputsres, g, default_licences, public_name)
+
+    def _parseInputsFromMainEntity(
+        self,
+        g: "rdflib.graph.Graph",
+        main_entity: "rdflib.term.Identifier",
+        default_licences: "Sequence[str]",
+        public_name: "str",
+    ) -> "ParamsBlock":
+        # Get the list of inputs
+        qwinputs = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_WORKFLOW_INPUTS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qwinputsres = g.query(
+            qwinputs,
+            initBindings={
+                "main_entity": main_entity,
+            },
+        )
+
+        return self.__parseInputsResults(qwinputsres, g, default_licences, public_name)
+
+    def __parseInputsResults(
+        self,
+        qinputsres: "rdflib.query.Result",
+        g: "rdflib.graph.Graph",
+        default_licences: "Sequence[str]",
+        public_name: "str",
+    ) -> "ParamsBlock":
         # TODO: implement this
         params: "MutableParamsBlock" = {}
         for inputrow in qinputsres:
@@ -1010,6 +1230,23 @@ Container {containerrow.container}
                 raise ROCrateToolboxException(
                     f"Unable to perform JSON-LD workflow execution details query over {public_name} (see cascading exceptions)"
                 ) from e
+
+        # Following the prospective path
+        if len(params) == 0:
+            contresult = self._parseContainersFromWorkflow(
+                g,
+                main_entity=matched_crate.mainentity,
+            )
+            # TODO: deal with more than one execution
+            if contresult is not None:
+                container_type, the_containers = contresult
+
+            params = self._parseInputsFromMainEntity(
+                g,
+                main_entity=matched_crate.mainentity,
+                default_licences=crate_licences,
+                public_name=public_name,
+            )
 
         # TODO: finish
         assert container_type is not None
