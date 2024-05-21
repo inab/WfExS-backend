@@ -44,6 +44,7 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        Callable,
         ClassVar,
         Mapping,
         MutableMapping,
@@ -66,8 +67,6 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         ContainerEngineVersionStr,
-        ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
         Fingerprint,
@@ -75,6 +74,12 @@ if TYPE_CHECKING:
         RelPath,
         URIType,
     )
+
+    # As each workflow engine can have its own naming convention, leave them to
+    # provide it
+    ContainerFileNamingMethod: TypeAlias = Callable[[URIType], RelPath]
+
+    ContainerLocalConfig: TypeAlias = Mapping[str, Any]
 
     DockerLikeManifest: TypeAlias = Mapping[str, Any]
     MutableDockerLikeManifest: TypeAlias = MutableMapping[str, Any]

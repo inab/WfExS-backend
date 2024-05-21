@@ -64,7 +64,6 @@ if TYPE_CHECKING:
         Fingerprint,
         ProgsMapping,
         RelPath,
-        SecurityContextConfig,
         WritableSecurityContextConfig,
         URIType,
     )

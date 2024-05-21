@@ -41,8 +41,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
-        ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
         Fingerprint,
@@ -52,6 +50,8 @@ if TYPE_CHECKING:
     )
 
     from . import (
+        ContainerFileNamingMethod,
+        ContainerLocalConfig,
         DockerManifestMetadata,
     )
 

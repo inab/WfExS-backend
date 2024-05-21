@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         Callable,
         Mapping,
         MutableSequence,
+        NewType,
         Optional,
         Pattern,
         Sequence,
@@ -63,6 +64,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
+        TypeAlias,
     )
 
     from ..common import (
@@ -72,8 +74,6 @@ if TYPE_CHECKING:
         ContainerEngineVersionStr,
         ContainerOperatingSystem,
         ContainerTaggedName,
-        EngineLocalConfig,
-        EnginePath,
         EngineVersion,
         ExitVal,
         ExpectedOutput,
@@ -90,13 +90,19 @@ if TYPE_CHECKING:
         TRS_Workflow_Descriptor,
         URIType,
         WFLangVersion,
-        WorkflowEngineVersionStr,
     )
 
     from ..container_factories import (
         Container,
         ContainerFactory,
     )
+
+    EngineLocalConfig: TypeAlias = Mapping[str, Any]
+
+    # This is also an absolute path
+    EnginePath = NewType("EnginePath", AbsPath)
+
+    WorkflowEngineVersionStr = NewType("WorkflowEngineVersionStr", str)
 
 from ..container_factories.no_container import (
     NoContainerFactory,

@@ -67,8 +67,6 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
-        EngineLocalConfig,
-        EnginePath,
         EngineVersion,
         ExitVal,
         ExpectedOutput,
@@ -77,7 +75,6 @@ if TYPE_CHECKING:
         RelPath,
         SymbolicParamName,
         URIType,
-        WorkflowEngineVersionStr,
     )
 
     from ..container_factories import (
@@ -98,6 +95,12 @@ if TYPE_CHECKING:
     ]
 
     from jsonpath_ng.jsonpath import JSONVal
+
+    from . import (
+        EngineLocalConfig,
+        EnginePath,
+        WorkflowEngineVersionStr,
+    )
 
 
 import jsonpath_ng

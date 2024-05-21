@@ -73,8 +73,6 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         ContainerEngineVersionStr,
-        ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
         ExitVal,

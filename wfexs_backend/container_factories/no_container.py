@@ -40,8 +40,6 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         ContainerEngineVersionStr,
-        ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ContainerOperatingSystem,
         ContainerTaggedName,
         Fingerprint,
@@ -50,6 +48,9 @@ if TYPE_CHECKING:
         URIType,
     )
 
+    from . import (
+        ContainerFileNamingMethod,
+    )
 
 from . import (
     Container,

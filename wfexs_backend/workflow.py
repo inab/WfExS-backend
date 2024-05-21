@@ -84,6 +84,7 @@ if TYPE_CHECKING:
     from typing_extensions import (
         Final,
         Literal,
+        TypeAlias,
         TypedDict,
         Required,
         NotRequired,
@@ -96,31 +97,20 @@ if TYPE_CHECKING:
         ContainerEngineVersionStr,
         ContainerOperatingSystem,
         EngineVersion,
-        EnvironmentBlock,
         ExitVal,
-        ExportActionBlock,
         LicenceDescription,
         MaterializedOutput,
-        MutableParamsBlock,
-        OutputsBlock,
-        ParamsBlock,
-        PlaceHoldersBlock,
         ProcessorArchitecture,
         RelPath,
         RepoTag,
         RepoURL,
         SecurityContextConfig,
-        SecurityContextConfigBlock,
         SymbolicName,
         SymbolicParamName,
         SymbolicOutputName,
         TRS_Workflow_Descriptor,
         WfExSInstanceId,
-        WorkflowConfigBlock,
-        WorkflowEngineVersionStr,
-        WorkflowMetaConfigBlock,
         WritableSecurityContextConfig,
-        WritableWorkflowMetaConfigBlock,
         URIType,
         URIWithMetadata,
     )
@@ -131,6 +121,7 @@ if TYPE_CHECKING:
 
     from .workflow_engines import (
         AbstractWorkflowEngineType,
+        WorkflowEngineVersionStr,
     )
 
     from .pushers import (
@@ -186,8 +177,25 @@ if TYPE_CHECKING:
         total=False,
     )
 
-    WFVersionId = Union[str, int]
-    WorkflowId = Union[str, int]
+    WFVersionId: TypeAlias = Union[str, int]
+    WorkflowId: TypeAlias = Union[str, int]
+
+    ExportActionBlock: TypeAlias = Mapping[str, Any]
+
+    MutableParamsBlock: TypeAlias = MutableMapping[str, Any]
+    ParamsBlock: TypeAlias = Mapping[str, Any]
+
+    PlaceHoldersBlock: TypeAlias = Mapping[str, Union[int, float, str]]
+
+    EnvironmentBlock: TypeAlias = Mapping[str, Any]
+
+    MutableOutputsBlock: TypeAlias = MutableMapping[str, Any]
+    OutputsBlock: TypeAlias = Mapping[str, Any]
+
+    WorkflowConfigBlock: TypeAlias = Mapping[str, Any]
+
+    WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
+    WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
 
 import urllib.parse
 
@@ -1394,18 +1402,20 @@ class WF:
             container_type,
             the_containers,
             params,
+            outputs,
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
             jsonld_obj, public_name
         )
         logging.info(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
         )
+        logging.info(f"Containers {the_containers}")
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
             "workflow_id": {},
             "workflow_type": workflow_type.shortname,
             "environment": {},
             "params": params,
-            "outputs": {},
+            "outputs": outputs,
             "workflow_config": {},
         }
         if container_type is not None:

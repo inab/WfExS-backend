@@ -59,13 +59,16 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
-        ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ContainerTaggedName,
         Fingerprint,
         ProcessorArchitecture,
         RelPath,
         URIType,
+    )
+
+    from . import (
+        ContainerFileNamingMethod,
+        ContainerLocalConfig,
     )
 
     class SingularityManifest(TypedDict):

@@ -51,18 +51,22 @@ if TYPE_CHECKING:
     from ..common import (
         ContainerOperatingSystem,
         Fingerprint,
-        MutableParamsBlock,
-        ParamsBlock,
         ProcessorArchitecture,
         RelPath,
         RepoURL,
         RepoTag,
         URIType,
-        WritableWorkflowMetaConfigBlock,
     )
 
     from ..wfexs_backend import (
         WfExSBackend,
+    )
+
+    from ..workflow import (
+        MutableParamsBlock,
+        ParamsBlock,
+        MutableOutputsBlock,
+        OutputsBlock,
     )
 
     from ..workflow_engines import (
@@ -195,6 +199,13 @@ class ROCrateToolbox(abc.ABC):
         SCHEMA_ORG_PREFIX + "Text": "Text",
         SCHEMA_ORG_PREFIX + "Boolean": "Boolean",
         SCHEMA_ORG_PREFIX + "Float": "Float",
+        SCHEMA_ORG_PREFIX + "MediaObject": "File",
+        SCHEMA_ORG_PREFIX + "Dataset": "Directory",
+    }
+
+    # WfExS-backend is not able to deal with collections of atomic values
+    # (yet)
+    LEAF_TYPE_2_OUTPUT_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = {
         SCHEMA_ORG_PREFIX + "MediaObject": "File",
         SCHEMA_ORG_PREFIX + "Dataset": "Directory",
     }
@@ -571,6 +582,23 @@ WHERE   {
 
     # This compound query is much faster when each of the UNION components
     # is evaluated separatedly
+    OBTAIN_WORKFLOW_OUTPUTS_SPARQL: "Final[str]" = """\
+SELECT  ?name ?outputfp ?additional_type ?default_value
+WHERE   {
+    ?main_entity bsworkflow:output ?outputfp .
+    ?outputfp
+        a bs:FormalParameter ;
+        s:name ?name ;
+        s:additionalType ?additional_type .
+    OPTIONAL {
+        ?ouputfp
+            s:defaultValue ?default_value .
+    }
+}
+"""
+
+    # This compound query is much faster when each of the UNION components
+    # is evaluated separatedly
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
 SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
 WHERE   {
@@ -638,6 +666,93 @@ WHERE   {
         OPTIONAL {
             ?component s:value ?value .
         }
+    }
+}
+"""
+
+    # This compound query is much faster when each of the UNION components
+    # is evaluated separatedly
+    OBTAIN_EXECUTION_OUTPUTS_SPARQL: "Final[str]" = """\
+SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?value ?component ?leaf_type
+WHERE   {
+    ?execution s:result ?output .
+    {
+        # A file, which is a schema.org MediaObject
+        BIND ( "File" AS ?additional_type )
+        ?output
+            a s:MediaObject ;
+            s:exampleOfWork ?outputfp .
+        ?outputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+        OPTIONAL {
+            ?output
+                s:contentUrl ?fileuri .
+        }
+    } UNION {
+        # A directory, which is a schema.org Dataset
+        BIND ( "Dataset" AS ?additional_type )
+        ?output
+            a s:Dataset ;
+            s:exampleOfWork ?outputfp .
+        ?outputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+        FILTER EXISTS { 
+            # subquery to determine it is not an empty Dataset
+            SELECT ?dircomp
+            WHERE { 
+                ?output
+                    s:hasPart+ ?dircomp .
+                ?dircomp
+                    a s:MediaObject .
+            }
+        }
+        OPTIONAL {
+            ?output
+                s:contentUrl ?fileuri .
+        }
+    } UNION {
+        # A single property value, which can be either Integer, Text, Boolean or Float
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
+        ?output
+            a s:PropertyValue ;
+            s:exampleOfWork ?outputfp ;
+            s:value ?value .
+        ?outputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+    } UNION {
+        # A combination of files or directories or property values
+        BIND ( "Collection" AS ?additional_type )
+        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        ?output
+            a s:Collection ;
+            s:exampleOfWork ?outputfp ;
+            s:hasPart+ ?component .
+        ?outputfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+        ?component
+            a ?leaf_type .
+        OPTIONAL {
+            ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:value ?value .
+        }
+    }
+    OPTIONAL {
+        ?ouputfp
+            s:defaultValue ?default_value .
+    }
+    OPTIONAL {
+        ?output
+            s:alternateName ?alternate_name .
     }
 }
 """
@@ -856,6 +971,119 @@ Container {containerrow.container}
                     )
 
         return container_type, the_containers
+
+    def _parseOutputsFromExecution(
+        self,
+        g: "rdflib.graph.Graph",
+        execution: "rdflib.term.Identifier",
+        main_entity: "rdflib.term.Identifier",
+        public_name: "str",
+    ) -> "OutputsBlock":
+        # Get the list of outputs
+        qoutputs = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_EXECUTION_OUTPUTS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qoutputsres = g.query(
+            qoutputs,
+            initBindings={
+                "execution": execution,
+            },
+        )
+
+        return self.__parseOutputsResults(qoutputsres, g, public_name)
+
+    def _parseOutputsFromMainEntity(
+        self,
+        g: "rdflib.graph.Graph",
+        main_entity: "rdflib.term.Identifier",
+        public_name: "str",
+    ) -> "OutputsBlock":
+        # Get the list of outputs
+        qwoutputs = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_WORKFLOW_OUTPUTS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qwoutputsres = g.query(
+            qwoutputs,
+            initBindings={
+                "main_entity": main_entity,
+            },
+        )
+
+        return self.__parseOutputsResults(qwoutputsres, g, public_name)
+
+    def __parseOutputsResults(
+        self,
+        qoutputsres: "rdflib.query.Result",
+        g: "rdflib.graph.Graph",
+        public_name: "str",
+    ) -> "OutputsBlock":
+        # TODO: implement this
+        outputs: "MutableOutputsBlock" = {}
+        for outputrow in qoutputsres:
+            assert isinstance(
+                outputrow, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+
+            base = outputs
+            output_path = str(outputrow.name).split(".")
+            output_last = output_path[-1]
+
+            # Reaching the relative position
+            if len(output_path) > 1:
+                for output_step in output_path[0:-1]:
+                    base = base.setdefault(output_step, {})
+
+            # Now, fill in the values
+            additional_type = str(outputrow.additional_type)
+            # Is it a nested one?
+            cardinality = "1"
+            if additional_type == "Collection":
+                if not hasattr(outputrow, "leaf_type"):
+                    raise ROCrateToolboxException(
+                        f"Unable to handle Collections of unknown type in output {str(outputrow.name)}"
+                    )
+
+                cardinality = "+"
+                leaf_output_type = str(outputrow.leaf_type)
+                leaf_output_additional_type = (
+                    self.LEAF_TYPE_2_OUTPUT_ADDITIONAL_TYPE.get(leaf_output_type)
+                )
+                if leaf_output_additional_type is None:
+                    raise ROCrateToolboxException(
+                        f"Unable to handle contents of type {leaf_output_type} in output Collection {str(outputrow.name)}"
+                    )
+                additional_type = leaf_output_additional_type
+
+            # Is it a file or a directory?
+            if additional_type not in ("File", "Dataset"):
+                raise ROCrateToolboxException(
+                    f"Unable to handle contents of additional type {additional_type} in output Collection {str(outputrow.name)}"
+                )
+
+            preferred_name: "Optional[str]" = (
+                None
+                if outputrow.default_value is None
+                else str(outputrow.default_value)
+            )
+            if hasattr(outputrow, "alternate_name"):
+                preferred_name = str(outputrow.alternate_name)
+
+            valobj: "MutableMapping[str, Any]" = base.setdefault(
+                output_last,
+                {
+                    "c-l-a-s-s": ContentKind.Directory.name
+                    if additional_type == "Dataset"
+                    else ContentKind.File.name,
+                    "cardinality": cardinality,
+                },
+            )
+
+            if preferred_name is not None:
+                valobj["preferredName"] = preferred_name
+
+        return outputs
 
     def _parseInputsFromExecution(
         self,
@@ -1141,7 +1369,7 @@ Container {containerrow.container}
         jsonld_obj: "Mapping[str, Any]",
         public_name: "str",
         retrospective_first: "bool" = True,
-    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, Sequence[Container], ParamsBlock]":
+    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, Sequence[Container], ParamsBlock, OutputsBlock]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -1179,6 +1407,7 @@ Container {containerrow.container}
         additional_container_type: "Optional[ContainerType]" = None
         the_containers: "Sequence[Container]" = []
         params: "ParamsBlock" = {}
+        outputs: "OutputsBlock" = {}
         if retrospective_first:
             # For the retrospective provenance at least an execution must
             # be described in the RO-Crate. Once one is chosen,
@@ -1224,6 +1453,13 @@ Container {containerrow.container}
                         public_name=public_name,
                     )
 
+                    outputs = self._parseOutputsFromExecution(
+                        g,
+                        execrow.execution,
+                        main_entity=matched_crate.mainentity,
+                        public_name=public_name,
+                    )
+
                     # Now, let's get the list of input parameters
                     break
             except Exception as e:
@@ -1248,7 +1484,14 @@ Container {containerrow.container}
                 public_name=public_name,
             )
 
+        if len(outputs) == 0:
+            outputs = self._parseOutputsFromMainEntity(
+                g,
+                main_entity=matched_crate.mainentity,
+                public_name=public_name,
+            )
+
         # TODO: finish
         assert container_type is not None
 
-        return repo, workflow_type, container_type, the_containers, params
+        return repo, workflow_type, container_type, the_containers, params, outputs

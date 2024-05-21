@@ -171,7 +171,10 @@ if TYPE_CHECKING:
         Union,
     )
 
-    from typing_extensions import Final
+    from typing_extensions import (
+        Final,
+        TypeAlias,
+    )
 
     from crypt4gh.header import CompoundKey
 
@@ -179,27 +182,18 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         ContainerType,
-        EnvironmentBlock,
         ExitVal,
-        ExportActionBlock,
         MarshallingStatus,
-        OutputsBlock,
-        ParamsBlock,
         ProgsMapping,
         RelPath,
         RepoTag,
         RepoURL,
         SecurityContextConfig,
-        SecurityContextConfigBlock,
         StagedSetup,
         SymbolicName,
         TRS_Workflow_Descriptor,
         URIType,
-        WfExSConfigBlock,
         WfExSInstanceId,
-        WorkflowConfigBlock,
-        WorkflowMetaConfigBlock,
-        WritableWfExSConfigBlock,
     )
 
     from .workflow_engines import (
@@ -216,9 +210,20 @@ if TYPE_CHECKING:
     )
 
     from .workflow import (
+        EnvironmentBlock,
+        ExportActionBlock,
+        OutputsBlock,
+        ParamsBlock,
         WFVersionId,
+        WorkflowConfigBlock,
         WorkflowId,
+        WorkflowMetaConfigBlock,
     )
+
+    SecurityContextConfigBlock: TypeAlias = Mapping[str, SecurityContextConfig]
+
+    WfExSConfigBlock: TypeAlias = Mapping[str, Any]
+    WritableWfExSConfigBlock: TypeAlias = MutableMapping[str, Any]
 
 
 class IdentifiedWorkflow(NamedTuple):

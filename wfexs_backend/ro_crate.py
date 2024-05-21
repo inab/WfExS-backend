@@ -74,7 +74,6 @@ if TYPE_CHECKING:
         SymbolicOutputName,
         URIType,
         WFLangVersion,
-        WorkflowEngineVersionStr,
     )
 
     from .container_factories import (
@@ -84,6 +83,7 @@ if TYPE_CHECKING:
     from .workflow_engines import (
         MaterializedWorkflowEngine,
         WorkflowType,
+        WorkflowEngineVersionStr,
     )
 
     from .utils.licences import (

@@ -133,12 +133,9 @@ if TYPE_CHECKING:
     RepoURL = NewType("RepoURL", URIType)
     # The tag, branch or hash of a workflow in a git repository
     RepoTag = NewType("RepoTag", str)
-    # This is also an absolute path
-    EnginePath = NewType("EnginePath", AbsPath)
 
     # This is a container engine version
     ContainerEngineVersionStr = NewType("ContainerEngineVersionStr", str)
-    WorkflowEngineVersionStr = NewType("WorkflowEngineVersionStr", str)
     ContainerOperatingSystem = NewType("ContainerOperatingSystem", str)
     ProcessorArchitecture = NewType("ProcessorArchitecture", str)
 
@@ -160,27 +157,6 @@ if TYPE_CHECKING:
 
     SecurityContextConfig: TypeAlias = Mapping[str, Any]
     WritableSecurityContextConfig: TypeAlias = MutableMapping[str, Any]
-    SecurityContextConfigBlock: TypeAlias = Mapping[str, SecurityContextConfig]
-
-    # TODO: study using TypedDict
-    LocalConfig: TypeAlias = Mapping[str, Any]
-    ContainerLocalConfig: TypeAlias = Mapping[str, Any]
-    EngineLocalConfig: TypeAlias = Mapping[str, Any]
-    WorkflowConfigBlock: TypeAlias = Mapping[str, Any]
-    WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
-    WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
-    WfExSConfigBlock: TypeAlias = Mapping[str, Any]
-    WritableWfExSConfigBlock: TypeAlias = MutableMapping[str, Any]
-    ExportActionBlock: TypeAlias = Mapping[str, Any]
-    ParamsBlock: TypeAlias = Mapping[str, Any]
-    EnvironmentBlock: TypeAlias = Mapping[str, Any]
-    MutableParamsBlock: TypeAlias = MutableMapping[str, Any]
-    OutputsBlock: TypeAlias = Mapping[str, Any]
-    PlaceHoldersBlock: TypeAlias = Mapping[str, Union[int, float, str]]
-
-    # As each workflow engine can have its own naming convention, leave them to
-    # provide it
-    ContainerFileNamingMethod: TypeAlias = Callable[[URIType], RelPath]
 
 
 ## BEWARE!!!! The names of these keys MUST NOT CHANGE

@@ -48,6 +48,9 @@ if TYPE_CHECKING:
         AnyPath,
         RelPath,
         SecurityContextConfig,
+    )
+
+    from .wfexs_backend import (
         SecurityContextConfigBlock,
     )
 

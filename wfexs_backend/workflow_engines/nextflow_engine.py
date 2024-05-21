@@ -70,9 +70,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
-        EngineLocalConfig,
         EngineMode,
-        EnginePath,
         EngineVersion,
         ExitVal,
         ExpectedOutput,
@@ -81,7 +79,6 @@ if TYPE_CHECKING:
         RelPath,
         SymbolicParamName,
         URIType,
-        WorkflowEngineVersionStr,
     )
 
     from ..container_factories import (
@@ -94,6 +91,12 @@ if TYPE_CHECKING:
         NfIncludeConfig,
         NfProcess,
         NfWorkflow,
+    )
+
+    from . import (
+        EngineLocalConfig,
+        EnginePath,
+        WorkflowEngineVersionStr,
     )
 
 from . import WorkflowEngine, WorkflowEngineException
