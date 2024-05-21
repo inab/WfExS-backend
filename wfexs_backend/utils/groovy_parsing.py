@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Parts of this module are inspired on translated-groovy3-parser.py
 # from groovy-parser module
-# Copyright (C) 2023 Barcelona Supercomputing Center, José M. Fernández
+# Copyright (C) 2024 Barcelona Supercomputing Center, José M. Fernández
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
