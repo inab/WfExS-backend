@@ -61,7 +61,6 @@ if TYPE_CHECKING:
         AnyPath,
         ContainerTaggedName,
         Fingerprint,
-        ProcessorArchitecture,
         RelPath,
         URIType,
     )
@@ -69,6 +68,7 @@ if TYPE_CHECKING:
     from . import (
         ContainerFileNamingMethod,
         ContainerLocalConfig,
+        ProcessorArchitecture,
     )
 
     class SingularityManifest(TypedDict):

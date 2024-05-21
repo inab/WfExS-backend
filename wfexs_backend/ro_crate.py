@@ -55,15 +55,12 @@ if TYPE_CHECKING:
         AbsPath,
         AbstractGeneratedContent,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         EngineVersion,
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
         MaterializedInput,
         MaterializedOutput,
-        ProcessorArchitecture,
         ProgsMapping,
         RelPath,
         RemoteRepo,
@@ -78,6 +75,9 @@ if TYPE_CHECKING:
 
     from .container_factories import (
         Container,
+        ContainerEngineVersionStr,
+        ContainerOperatingSystem,
+        ProcessorArchitecture,
     )
 
     from .workflow_engines import (
@@ -2217,6 +2217,23 @@ you can find here an almost complete list of the possible ones:
                 )
             self.crate.write_zip(filename)
 
+    def addStagedWorkflowDetails(
+        self,
+        inputs: "Sequence[MaterializedInput]",
+        environment: "Sequence[MaterializedInput]",
+        outputs: "Optional[Sequence[ExpectedOutput]]",
+    ) -> None:
+        """
+        This method is used for WRROCs with only prospective provenance
+        """
+        self.addWorkflowInputs(inputs, are_envvars=False)
+
+        if len(environment) > 0:
+            self.addWorkflowInputs(environment, are_envvars=True)
+
+        if outputs is not None:
+            self.addWorkflowExpectedOutputs(outputs)
+
     def addWorkflowExecution(
         self,
         stagedExec: "StagedExecution",
@@ -2263,11 +2280,15 @@ you can find here an almost complete list of the possible ones:
             stagedExec.augmentedInputs,
             are_envvars=False,
         )
-        crate_envvars = self.addWorkflowInputs(
-            stagedExec.environment,
-            are_envvars=True,
-        )
-        crate_action["object"] = [*crate_inputs, *crate_envvars]
+        crate_action["object"] = crate_inputs
+
+        # Add environment, according to WRROC 0.4
+        if len(stagedExec.environment) > 0:
+            crate_envvars = self.addWorkflowInputs(
+                stagedExec.environment,
+                are_envvars=True,
+            )
+            crate_action["environment"] = crate_envvars
 
         # TODO: Add engine specific traces
         # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces

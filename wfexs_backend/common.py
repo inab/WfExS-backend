@@ -134,11 +134,6 @@ if TYPE_CHECKING:
     # The tag, branch or hash of a workflow in a git repository
     RepoTag = NewType("RepoTag", str)
 
-    # This is a container engine version
-    ContainerEngineVersionStr = NewType("ContainerEngineVersionStr", str)
-    ContainerOperatingSystem = NewType("ContainerOperatingSystem", str)
-    ProcessorArchitecture = NewType("ProcessorArchitecture", str)
-
     # This is a workflow engine version
     EngineVersion = NewType("EngineVersion", str)
 

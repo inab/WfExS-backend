@@ -39,16 +39,14 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         ContainerTaggedName,
         Fingerprint,
-        ProcessorArchitecture,
         RelPath,
         URIType,
     )
 
     from . import (
+        ContainerEngineVersionStr,
         ContainerFileNamingMethod,
     )
 

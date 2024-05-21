@@ -94,13 +94,10 @@ if TYPE_CHECKING:
         AbsPath,
         AnyContent,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         EngineVersion,
         ExitVal,
         LicenceDescription,
         MaterializedOutput,
-        ProcessorArchitecture,
         RelPath,
         RepoTag,
         RepoURL,
@@ -113,6 +110,12 @@ if TYPE_CHECKING:
         WritableSecurityContextConfig,
         URIType,
         URIWithMetadata,
+    )
+
+    from .container_factories import (
+        ContainerEngineVersionStr,
+        ContainerOperatingSystem,
+        ProcessorArchitecture,
     )
 
     from .encrypted_fs import (
@@ -1402,6 +1405,7 @@ class WF:
             container_type,
             the_containers,
             params,
+            environment,
             outputs,
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
             jsonld_obj, public_name
@@ -1413,7 +1417,7 @@ class WF:
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
             "workflow_id": {},
             "workflow_type": workflow_type.shortname,
-            "environment": {},
+            "environment": environment,
             "params": params,
             "outputs": outputs,
             "workflow_config": {},
@@ -4487,16 +4491,11 @@ This is an enumeration of the types of collected contents:
             crate_pid=crate_pid,
         )
 
-        wrroc.addWorkflowInputs(
+        wrroc.addStagedWorkflowDetails(
             self.materializedParams,
-            are_envvars=False,
-        )
-        wrroc.addWorkflowInputs(
             self.materializedEnvironment,
-            are_envvars=True,
+            self.outputs,
         )
-        if self.outputs is not None:
-            wrroc.addWorkflowExpectedOutputs(self.outputs)
 
         # Save RO-crate as execution.crate.zip
         if filename is None:

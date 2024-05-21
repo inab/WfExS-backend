@@ -71,8 +71,6 @@ if TYPE_CHECKING:
         AbstractGeneratedContent,
         AbsPath,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         ContainerTaggedName,
         EngineVersion,
         ExitVal,
@@ -81,7 +79,6 @@ if TYPE_CHECKING:
         LocalWorkflow,
         MaterializedInput,
         MaterializedContent,
-        ProcessorArchitecture,
         RelPath,
         StagedExecution,
         StagedSetup,
@@ -94,7 +91,10 @@ if TYPE_CHECKING:
 
     from ..container_factories import (
         Container,
+        ContainerEngineVersionStr,
         ContainerFactory,
+        ContainerOperatingSystem,
+        ProcessorArchitecture,
     )
 
     EngineLocalConfig: TypeAlias = Mapping[str, Any]

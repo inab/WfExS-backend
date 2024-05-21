@@ -72,12 +72,9 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         ContainerTaggedName,
         ExitVal,
         Fingerprint,
-        ProcessorArchitecture,
         RelPath,
     )
 

@@ -49,6 +49,7 @@ if TYPE_CHECKING:
         Mapping,
         MutableMapping,
         MutableSequence,
+        NewType,
         Optional,
         Sequence,
         Set,
@@ -66,11 +67,8 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         ContainerTaggedName,
         Fingerprint,
-        ProcessorArchitecture,
         RelPath,
         URIType,
     )
@@ -80,6 +78,11 @@ if TYPE_CHECKING:
     ContainerFileNamingMethod: TypeAlias = Callable[[URIType], RelPath]
 
     ContainerLocalConfig: TypeAlias = Mapping[str, Any]
+
+    # This is a container engine version
+    ContainerEngineVersionStr = NewType("ContainerEngineVersionStr", str)
+    ContainerOperatingSystem = NewType("ContainerOperatingSystem", str)
+    ProcessorArchitecture = NewType("ProcessorArchitecture", str)
 
     DockerLikeManifest: TypeAlias = Mapping[str, Any]
     MutableDockerLikeManifest: TypeAlias = MutableMapping[str, Any]

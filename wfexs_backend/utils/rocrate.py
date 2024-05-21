@@ -49,13 +49,16 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        ContainerOperatingSystem,
         Fingerprint,
-        ProcessorArchitecture,
         RelPath,
         RepoURL,
         RepoTag,
         URIType,
+    )
+
+    from ..container_factories import (
+        ContainerOperatingSystem,
+        ProcessorArchitecture,
     )
 
     from ..wfexs_backend import (
@@ -63,6 +66,7 @@ if TYPE_CHECKING:
     )
 
     from ..workflow import (
+        EnvironmentBlock,
         MutableParamsBlock,
         ParamsBlock,
         MutableOutputsBlock,
@@ -527,7 +531,7 @@ WHERE   {
 """
 
     # This compound query is much faster when each of the UNION components
-    # is evaluated separatedly
+    # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
 SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
 WHERE   {
@@ -581,7 +585,65 @@ WHERE   {
 """
 
     # This compound query is much faster when each of the UNION components
-    # is evaluated separatedly
+    # is evaluated separately
+    OBTAIN_WORKFLOW_ENV_SPARQL: "Final[str]" = """\
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?value ?component ?leaf_type
+WHERE   {
+    ?main_entity wrterm:environment ?envfp .
+    ?envfp
+        a bs:FormalParameter ;
+        s:name ?name ;
+        s:additionalType ?additional_type ;
+        s:workExample ?env .
+    {
+        # A file, which is a schema.org MediaObject
+        ?env
+            a s:MediaObject ;
+            s:name ?name_env ;
+            s:contentUrl ?fileuri .
+    } UNION {
+        # A directory, which is a schema.org Dataset
+        ?env
+            a s:Dataset ;
+            s:name ?name_env ;
+            s:contentUrl ?fileuri .
+        FILTER EXISTS { 
+            # subquery to determine it is not an empty Dataset
+            SELECT ?dircomp
+            WHERE { 
+                ?env
+                    s:hasPart+ ?dircomp .
+                ?dircomp
+                    a s:MediaObject .
+            }
+        }
+    } UNION {
+        # A single property value, which can be either Integer, Text, Boolean or Float
+        ?env
+            a s:PropertyValue ;
+            s:name ?name_env ;
+            s:value ?value .
+    } UNION {
+        # A combination of files or directories or property values
+        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        ?env
+            a s:Collection ;
+            s:name ?name_env ;
+            s:hasPart+ ?component .
+        ?component
+            a ?leaf_type .
+        OPTIONAL {
+            ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:value ?value .
+        }
+    }
+}
+"""
+
+    # This compound query is much faster when each of the UNION components
+    # is evaluated separately
     OBTAIN_WORKFLOW_OUTPUTS_SPARQL: "Final[str]" = """\
 SELECT  ?name ?outputfp ?additional_type ?default_value
 WHERE   {
@@ -598,7 +660,7 @@ WHERE   {
 """
 
     # This compound query is much faster when each of the UNION components
-    # is evaluated separatedly
+    # is evaluated separately
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
 SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
 WHERE   {
@@ -671,7 +733,84 @@ WHERE   {
 """
 
     # This compound query is much faster when each of the UNION components
-    # is evaluated separatedly
+    # is evaluated separately
+    OBTAIN_EXECUTION_ENV_SPARQL: "Final[str]" = """\
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?value ?component ?leaf_type
+WHERE   {
+    ?execution wrterm:environment ?env .
+    {
+        # A file, which is a schema.org MediaObject
+        BIND ( "File" AS ?additional_type )
+        ?env
+            a s:MediaObject ;
+            s:name ?name_env ;
+            s:contentUrl ?fileuri ;
+            s:exampleOfWork ?envfp .
+        ?envfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+    } UNION {
+        # A directory, which is a schema.org Dataset
+        BIND ( "Dataset" AS ?additional_type )
+        ?env
+            a s:Dataset ;
+            s:name ?name_env ;
+            s:contentUrl ?fileuri ;
+            s:exampleOfWork ?envfp .
+        ?envfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+        FILTER EXISTS { 
+            # subquery to determine it is not an empty Dataset
+            SELECT ?dircomp
+            WHERE { 
+                ?input
+                    s:hasPart+ ?dircomp .
+                ?dircomp
+                    a s:MediaObject .
+            }
+        }
+    } UNION {
+        # A single property value, which can be either Integer, Text, Boolean or Float
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
+        ?env
+            a s:PropertyValue ;
+            s:name ?name_env ;
+            s:exampleOfWork ?envfp ;
+            s:value ?value .
+        ?envfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+    } UNION {
+        # A combination of files or directories or property values
+        BIND ( "Collection" AS ?additional_type )
+        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        ?env
+            a s:Collection ;
+            s:name ?name_env ;
+            s:exampleOfWork ?envfp ;
+            s:hasPart+ ?component .
+        ?envfp
+            a bs:FormalParameter ;
+            s:name ?name ;
+            s:additionalType ?additional_type .
+        ?component
+            a ?leaf_type .
+        OPTIONAL {
+            ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:value ?value .
+        }
+    }
+}
+"""
+
+    # This compound query is much faster when each of the UNION components
+    # is evaluated separately
     OBTAIN_EXECUTION_OUTPUTS_SPARQL: "Final[str]" = """\
 SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?value ?component ?leaf_type
 WHERE   {
@@ -1233,6 +1372,150 @@ Container {containerrow.container}
 
         return params
 
+    def _parseEnvFromExecution(
+        self,
+        g: "rdflib.graph.Graph",
+        execution: "rdflib.term.Identifier",
+        main_entity: "rdflib.term.Identifier",
+        default_licences: "Sequence[str]",
+        public_name: "str",
+    ) -> "EnvironmentBlock":
+        # Get the list of inputs
+        qenv = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_EXECUTION_ENV_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qenvres = g.query(
+            qenv,
+            initBindings={
+                "execution": execution,
+            },
+        )
+
+        return self.__parseEnvResults(qenvres, g, default_licences, public_name)
+
+    def _parseEnvFromMainEntity(
+        self,
+        g: "rdflib.graph.Graph",
+        main_entity: "rdflib.term.Identifier",
+        default_licences: "Sequence[str]",
+        public_name: "str",
+    ) -> "EnvironmentBlock":
+        # Get the list of inputs
+        qwenv = rdflib.plugins.sparql.prepareQuery(
+            self.OBTAIN_WORKFLOW_ENV_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        qwenvres = g.query(
+            qwenv,
+            initBindings={
+                "main_entity": main_entity,
+            },
+        )
+
+        return self.__parseEnvResults(qwenvres, g, default_licences, public_name)
+
+    def __parseEnvResults(
+        self,
+        qenvres: "rdflib.query.Result",
+        g: "rdflib.graph.Graph",
+        default_licences: "Sequence[str]",
+        public_name: "str",
+    ) -> "EnvironmentBlock":
+        """
+        This method is (almost) identical to __parseInputsResults
+        """
+        # TODO: implement this
+        environment: "MutableMapping[str, Any]" = {}
+        for envrow in qenvres:
+            assert isinstance(
+                envrow, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+
+            env_name = str(envrow.name)
+
+            # Now, fill in the values
+            additional_type = str(envrow.additional_type)
+            valarr: "Optional[MutableSequence[Any]]" = None
+            valobj: "Optional[MutableMapping[str, Any]]" = None
+            # Is it a nested one?
+            if additional_type == "Collection":
+                leaf_type = str(envrow.leaf_type)
+                leaf_additional_type = self.LEAF_TYPE_2_ADDITIONAL_TYPE.get(leaf_type)
+                if leaf_additional_type is None:
+                    raise ROCrateToolboxException(
+                        f"Unable to handle contents of type {leaf_type} in Collection reflecting contents pointed by environment variable {env_name}"
+                    )
+                additional_type = leaf_additional_type
+                if leaf_additional_type not in ("File", "Dataset"):
+                    valarr = environment.setdefault(env_name, [])
+
+            # Is it a file or a directory?
+            if additional_type in ("File", "Dataset"):
+                valobj = environment.setdefault(
+                    env_name,
+                    {
+                        "c-l-a-s-s": ContentKind.Directory.name
+                        if additional_type == "Dataset"
+                        else ContentKind.File.name,
+                    },
+                )
+
+            if isinstance(valobj, dict):
+                licences = self._getLicences(g, envrow.env, public_name)
+                if len(licences) == 0:
+                    licences = default_licences
+                the_url: "Union[str, Mapping[str, Any]]"
+                if len(licences) == 0:
+                    the_url = str(envrow.fileuri)
+                else:
+                    the_url = {
+                        "uri": str(envrow.fileuri),
+                        "licences": licences,
+                    }
+
+                valurl = valobj.get("url")
+                if isinstance(valurl, (str, dict)):
+                    valurl = [valurl]
+                    valobj["url"] = valurl
+
+                if isinstance(valurl, list):
+                    valurl.append(the_url)
+                else:
+                    valobj["url"] = the_url
+            else:
+                the_value_node: "rdflib.term.Identifier" = envrow.value
+                the_value: "Union[str, int, float, bool]"
+                if isinstance(the_value_node, rdflib.term.Literal):
+                    the_value = the_value_node.value
+                else:
+                    the_value = str(the_value_node)
+
+                if additional_type == "Integer":
+                    try:
+                        the_value = int(the_value)
+                    except:
+                        self.logger.exception(
+                            f"Expected type {additional_type} for value {the_value} in environment variable {env_name}"
+                        )
+                elif additional_type == "Boolean":
+                    the_value = bool(the_value)
+                elif additional_type == "Float":
+                    the_value = float(the_value)
+                elif additional_type == "Text":
+                    the_value = str(the_value)
+                else:
+                    raise ROCrateToolboxException(
+                        f"Unable to handle additional type {additional_type} for environment variable {env_name}"
+                    )
+
+                if isinstance(valarr, list):
+                    valarr.append(the_value)
+                else:
+                    environment[env_name] = the_value
+
+        return environment
+
     def _getLicences(
         self,
         g: "rdflib.graph.Graph",
@@ -1369,7 +1652,7 @@ Container {containerrow.container}
         jsonld_obj: "Mapping[str, Any]",
         public_name: "str",
         retrospective_first: "bool" = True,
-    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, Sequence[Container], ParamsBlock, OutputsBlock]":
+    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, Sequence[Container], ParamsBlock, EnvironmentBlock, OutputsBlock]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -1407,6 +1690,7 @@ Container {containerrow.container}
         additional_container_type: "Optional[ContainerType]" = None
         the_containers: "Sequence[Container]" = []
         params: "ParamsBlock" = {}
+        environment: "EnvironmentBlock" = {}
         outputs: "OutputsBlock" = {}
         if retrospective_first:
             # For the retrospective provenance at least an execution must
@@ -1453,6 +1737,14 @@ Container {containerrow.container}
                         public_name=public_name,
                     )
 
+                    environment = self._parseEnvFromExecution(
+                        g,
+                        execrow.execution,
+                        main_entity=matched_crate.mainentity,
+                        default_licences=crate_licences,
+                        public_name=public_name,
+                    )
+
                     outputs = self._parseOutputsFromExecution(
                         g,
                         execrow.execution,
@@ -1484,6 +1776,13 @@ Container {containerrow.container}
                 public_name=public_name,
             )
 
+            environment = self._parseEnvFromMainEntity(
+                g,
+                main_entity=matched_crate.mainentity,
+                default_licences=crate_licences,
+                public_name=public_name,
+            )
+
         if len(outputs) == 0:
             outputs = self._parseOutputsFromMainEntity(
                 g,
@@ -1494,4 +1793,12 @@ Container {containerrow.container}
         # TODO: finish
         assert container_type is not None
 
-        return repo, workflow_type, container_type, the_containers, params, outputs
+        return (
+            repo,
+            workflow_type,
+            container_type,
+            the_containers,
+            params,
+            environment,
+            outputs,
+        )
