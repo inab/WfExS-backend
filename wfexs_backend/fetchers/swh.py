@@ -116,6 +116,110 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
     def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return tuple()
 
+    @classmethod
+    def _resolve_swh_id(
+        cls,
+        the_id: "URIType",
+    ) -> "Tuple[Mapping[str, Any], MutableSequence[URIWithMetadata]]":
+        # ## Use the resolver, see https://archive.softwareheritage.org/api/1/resolve/doc/
+        # curl -H "Accept: application/json" https://archive.softwareheritage.org/api/1/resolve/swh:1:rev:31348ed533961f84cf348bf1af660ad9de6f870c/
+        # The service does not work with quoted identifiers, neither with
+        # fully unquoted identifiers. Only the semicolons have to be
+        # substituted
+        swh_quoted_id = the_id.replace(";", parse.quote(";"))
+        resio = io.BytesIO()
+        # urljoin cannot be used due working with URIs
+        resolve_uri = cast("URIType", cls.SWH_API_REST_RESOLVE + swh_quoted_id + "/")
+        try:
+            _, metaresio, _ = fetchClassicURL(
+                resolve_uri,
+                resio,
+                secContext={
+                    "headers": {
+                        "Accept": "application/json",
+                    },
+                },
+            )
+            res_doc = json.loads(resio.getvalue().decode("utf-8"))
+        except Exception as e:
+            raise FetcherException(f"HTTP REST call {resolve_uri} failed") from e
+
+        if not isinstance(res_doc, dict):
+            raise FetcherException(f"{the_id} is not valid. Message: {res_doc}")
+
+        gathered_meta = {
+            "fetched": resolve_uri,
+            "payload": res_doc,
+        }
+        metadata_array = [
+            URIWithMetadata(
+                uri=the_id,
+                metadata=gathered_meta,
+            )
+        ]
+        metadata_array.extend(metaresio)
+
+        return res_doc, metadata_array
+
+    @classmethod
+    def GuessRepoParams(
+        cls,
+        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        logger: "Optional[logging.Logger]" = None,
+        fail_ok: "bool" = False,
+    ) -> "Optional[RemoteRepo]":
+        # Deciding which is the input
+        wf_url: "RepoURL"
+        parsed_wf_url: "parse.ParseResult"
+        if isinstance(orig_wf_url, parse.ParseResult):
+            parsed_wf_url = orig_wf_url
+            wf_url = cast("RepoURL", parse.urlunparse(orig_wf_url))
+        else:
+            wf_url = cast("RepoURL", orig_wf_url)
+            parsed_wf_url = parse.urlparse(orig_wf_url)
+
+        if parsed_wf_url.scheme not in cls.GetSchemeHandlers():
+            return None
+
+        # ## Check against Software Heritage the validity of the id
+        # echo '["swh:1:rev:31348ed533961f84cf348bf1af660ad9de6f870c"]' | curl -H "Content-Type: application/json" -T - -X POST https://archive.softwareheritage.org/api/1/known/
+        putative_core_swhid = wf_url.split(";", 1)[0]
+        try:
+            valio = io.BytesIO()
+            _, metavalio, _ = fetchClassicURL(
+                cls.SWH_API_REST_KNOWN,
+                valio,
+                secContext={
+                    "headers": {
+                        "Content-Type": "application/json",
+                    },
+                    "method": "POST",
+                    # Only core SWHids are accepted
+                    "data": json.dumps([putative_core_swhid]).encode("utf-8"),
+                },
+            )
+            val_doc = json.loads(valio.getvalue().decode("utf-8"))
+        except Exception as e:
+            if fail_ok:
+                return None
+            raise
+
+        # It could be a valid swh identifier, but it is not registered
+        if not isinstance(val_doc, dict) or not val_doc.get(
+            putative_core_swhid, {}
+        ).get("known", False):
+            return None
+
+        # Now we are sure it is known, let's learn the web url to browse it
+        resolved_payload, _ = cls._resolve_swh_id(wf_url)
+        web_url = resolved_payload["browse_url"]
+        return RemoteRepo(
+            repo_url=wf_url,
+            tag=cast("RepoTag", putative_core_swhid),
+            repo_type=RepoType.SoftwareHeritage,
+            web_url=web_url,
+        )
+
     def materialize_repo(
         self,
         repoURL: "RepoURL",
@@ -125,14 +229,14 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         doUpdate: "Optional[bool]" = True,
     ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
         # If we are here is because the repo is valid
-        # as it should have been checked by guess_swh_repo_params
+        # as it should have been checked by GuessRepoParams
 
         # ## Use the resolver, see https://archive.softwareheritage.org/api/1/resolve/doc/
         # curl -H "Accept: application/json" https://archive.softwareheritage.org/api/1/resolve/swh:1:rev:31348ed533961f84cf348bf1af660ad9de6f870c/
         # The service does not work with quoted identifiers, neither with
         # fully unquoted identifiers. Only the semicolons have to be
         # substituted
-        res_doc, metadata_array = resolve_swh_id(repoURL)
+        res_doc, metadata_array = self._resolve_swh_id(repoURL)
 
         # Error handling
         if "exception" in res_doc:
@@ -146,7 +250,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         if object_type == "content":
             anchor = res_doc.get("metadata", {}).get("anchor")
             if anchor is not None:
-                anc_res_doc, anchor_metadata_array = resolve_swh_id(anchor)
+                anc_res_doc, anchor_metadata_array = self._resolve_swh_id(anchor)
                 metadata_array.extend(anchor_metadata_array)
 
                 # Now, truly yes the context
@@ -559,107 +663,3 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             # TODO: Integrate licences from swh report??
             licences=None,
         )
-
-
-def resolve_swh_id(
-    the_id: "URIType",
-) -> "Tuple[Mapping[str, Any], MutableSequence[URIWithMetadata]]":
-    # ## Use the resolver, see https://archive.softwareheritage.org/api/1/resolve/doc/
-    # curl -H "Accept: application/json" https://archive.softwareheritage.org/api/1/resolve/swh:1:rev:31348ed533961f84cf348bf1af660ad9de6f870c/
-    # The service does not work with quoted identifiers, neither with
-    # fully unquoted identifiers. Only the semicolons have to be
-    # substituted
-    swh_quoted_id = the_id.replace(";", parse.quote(";"))
-    resio = io.BytesIO()
-    # urljoin cannot be used due working with URIs
-    resolve_uri = cast(
-        "URIType", SoftwareHeritageFetcher.SWH_API_REST_RESOLVE + swh_quoted_id + "/"
-    )
-    try:
-        _, metaresio, _ = fetchClassicURL(
-            resolve_uri,
-            resio,
-            secContext={
-                "headers": {
-                    "Accept": "application/json",
-                },
-            },
-        )
-        res_doc = json.loads(resio.getvalue().decode("utf-8"))
-    except Exception as e:
-        raise FetcherException(f"HTTP REST call {resolve_uri} failed") from e
-
-    if not isinstance(res_doc, dict):
-        raise FetcherException(f"{the_id} is not valid. Message: {res_doc}")
-
-    gathered_meta = {
-        "fetched": resolve_uri,
-        "payload": res_doc,
-    }
-    metadata_array = [
-        URIWithMetadata(
-            uri=the_id,
-            metadata=gathered_meta,
-        )
-    ]
-    metadata_array.extend(metaresio)
-
-    return res_doc, metadata_array
-
-
-def guess_swh_repo_params(
-    orig_wf_url: "Union[URIType, parse.ParseResult]",
-    logger: "logging.Logger",
-    fail_ok: "bool" = False,
-) -> "Optional[RemoteRepo]":
-    # Deciding which is the input
-    wf_url: "RepoURL"
-    parsed_wf_url: "parse.ParseResult"
-    if isinstance(orig_wf_url, parse.ParseResult):
-        parsed_wf_url = orig_wf_url
-        wf_url = cast("RepoURL", parse.urlunparse(orig_wf_url))
-    else:
-        wf_url = cast("RepoURL", orig_wf_url)
-        parsed_wf_url = parse.urlparse(orig_wf_url)
-
-    if parsed_wf_url.scheme not in SoftwareHeritageFetcher.GetSchemeHandlers():
-        return None
-
-    # ## Check against Software Heritage the validity of the id
-    # echo '["swh:1:rev:31348ed533961f84cf348bf1af660ad9de6f870c"]' | curl -H "Content-Type: application/json" -T - -X POST https://archive.softwareheritage.org/api/1/known/
-    putative_core_swhid = wf_url.split(";", 1)[0]
-    try:
-        valio = io.BytesIO()
-        _, metavalio, _ = fetchClassicURL(
-            SoftwareHeritageFetcher.SWH_API_REST_KNOWN,
-            valio,
-            secContext={
-                "headers": {
-                    "Content-Type": "application/json",
-                },
-                "method": "POST",
-                # Only core SWHids are accepted
-                "data": json.dumps([putative_core_swhid]).encode("utf-8"),
-            },
-        )
-        val_doc = json.loads(valio.getvalue().decode("utf-8"))
-    except Exception as e:
-        if fail_ok:
-            return None
-        raise
-
-    # It could be a valid swh identifier, but it is not registered
-    if not isinstance(val_doc, dict) or not val_doc.get(putative_core_swhid, {}).get(
-        "known", False
-    ):
-        return None
-
-    # Now we are sure it is known, let's learn the web url to browse it
-    resolved_payload, _ = resolve_swh_id(wf_url)
-    web_url = resolved_payload["browse_url"]
-    return RemoteRepo(
-        repo_url=wf_url,
-        tag=cast("RepoTag", putative_core_swhid),
-        repo_type=RepoType.SoftwareHeritage,
-        web_url=web_url,
-    )

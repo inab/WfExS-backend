@@ -39,7 +39,7 @@ from wfexs_backend.fetchers import (
     RepoGuessFlavor,
     RepoType,
 )
-from wfexs_backend.fetchers.git import guess_git_repo_params
+from wfexs_backend.fetchers.git import GitFetcher
 
 WfExS_basedir = Path(__file__).parent.parent
 WfExS_basedir_file_uri = WfExS_basedir.as_uri()
@@ -194,7 +194,7 @@ WfExS_git_basedir_file_uri = WfExS_git_basedir.as_uri()
 )
 def test_guess_git_repo_params(url: "str", expected: "RemoteRepo") -> "None":
     logger = logging.Logger("name")
-    output = guess_git_repo_params(cast("URIType", url), logger=logger)
+    output = GitFetcher.GuessRepoParams(cast("URIType", url), logger=logger)
 
     # When no tag is given, ignore what it was discovered
     if output is not None and expected is not None and expected.tag is None:

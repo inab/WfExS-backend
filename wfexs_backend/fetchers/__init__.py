@@ -306,6 +306,16 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
     ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
         pass
 
+    @classmethod
+    @abc.abstractmethod
+    def GuessRepoParams(
+        cls,
+        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        logger: "Optional[logging.Logger]" = None,
+        fail_ok: "bool" = False,
+    ) -> "Optional[RemoteRepo]":
+        pass
+
 
 class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
     def fetch(

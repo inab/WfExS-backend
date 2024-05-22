@@ -127,11 +127,9 @@ from .fetchers import (
 
 from .fetchers.git import (
     GitFetcher,
-    guess_git_repo_params,
 )
 
 from .fetchers.swh import (
-    guess_swh_repo_params,
     SoftwareHeritageFetcher,
 )
 
@@ -1876,12 +1874,12 @@ class WfExSBackend:
         else:
             parsedRepoURL = urllib.parse.urlparse(wf_url)
 
-        remote_repo = guess_swh_repo_params(
+        remote_repo = SoftwareHeritageFetcher.GuessRepoParams(
             parsedRepoURL, logger=self.logger, fail_ok=fail_ok
         )
         if remote_repo is None:
             # Assume it might be a git repo or a link to a git repo
-            remote_repo = guess_git_repo_params(
+            remote_repo = GitFetcher.GuessRepoParams(
                 parsedRepoURL, logger=self.logger, fail_ok=fail_ok
             )
 
