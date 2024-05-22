@@ -67,8 +67,6 @@ from .common import (
     DEFAULT_PROGS,
     LicensedURI,
     MaterializedContent,
-    RemoteRepo,
-    RepoType,
     URIWithMetadata,
 )
 
@@ -123,6 +121,8 @@ from .fetchers import (
     AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
+    RemoteRepo,
+    RepoType,
 )
 
 from .fetchers.git import (
@@ -2393,7 +2393,7 @@ class WfExSBackend:
         :return:
         """
         gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
-        repoDir, repo_desc, metadata_array = gitFetcherInst.doMaterializeRepo(
+        repoDir, materialized_repo, metadata_array = gitFetcherInst.materialize_repo(
             repo.repo_url,
             repoTag=repo.tag,
             doUpdate=doUpdate,
@@ -2410,6 +2410,9 @@ class WfExSBackend:
         if repo.tag is not None:
             remote_url += "@" + repo.tag
 
+        repo_desc: "Optional[Mapping[str, Any]]" = materialized_repo.gen_repo_desc()
+        if repo_desc is None:
+            repo_desc = {}
         augmented_metadata_array = [
             URIWithMetadata(
                 uri=cast("URIType", remote_url),
@@ -2419,7 +2422,7 @@ class WfExSBackend:
         ]
         return (
             cast("URIType", remote_url),
-            repo_desc["checkout"],
+            materialized_repo.get_checkout(),
             repoDir,
             augmented_metadata_array,
         )
@@ -2437,12 +2440,15 @@ class WfExSBackend:
         :return:
         """
         swhFetcherInst = self.instantiateStatefulFetcher(SoftwareHeritageFetcher)
-        repoDir, repo_desc, metadata_array = swhFetcherInst.doMaterializeRepo(
+        repoDir, materialized_repo, metadata_array = swhFetcherInst.materialize_repo(
             cast("RepoURL", repo.tag) if repo.tag is not None else repo.repo_url,
             doUpdate=doUpdate,
             base_repo_destdir=self.cacheWorkflowDir,
         )
 
+        repo_desc: "Optional[Mapping[str, Any]]" = materialized_repo.gen_repo_desc()
+        if repo_desc is None:
+            repo_desc = {}
         augmented_metadata_array = [
             URIWithMetadata(
                 uri=cast("URIType", repo.repo_url),
@@ -2452,7 +2458,7 @@ class WfExSBackend:
         ]
         return (
             repo.repo_url,
-            repo_desc["checkout"],
+            materialized_repo.get_checkout(),
             repoDir,
             augmented_metadata_array,
         )

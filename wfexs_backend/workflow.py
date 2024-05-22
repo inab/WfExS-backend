@@ -57,6 +57,9 @@ from .common import (
 
 from .fetchers import (
     FetcherException,
+    # Next ones are needed for correct unmarshalling
+    RemoteRepo,
+    RepoType,
 )
 
 from .utils.orcid import (
@@ -276,7 +279,6 @@ from .common import (
     MarshallingStatus,
     MaterializedContent,
     MaterializedInput,
-    RemoteRepo,
     StagedSetup,
 )
 

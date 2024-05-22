@@ -60,7 +60,6 @@ if TYPE_CHECKING:
 
     from . import (
         AbstractStatefulFetcher,
-        RepoDesc,
     )
 
 
@@ -73,14 +72,14 @@ from . import (
     DocumentedStatefulProtocolFetcher,
     FetcherException,
     ProtocolFetcherReturn,
+    RemoteRepo,
     RepoGuessException,
+    RepoGuessFlavor,
+    RepoType,
 )
 
 from ..common import (
     ContentKind,
-    RemoteRepo,
-    RepoGuessFlavor,
-    RepoType,
     URIWithMetadata,
 )
 
@@ -128,14 +127,14 @@ class GitFetcher(AbstractRepoFetcher):
     def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return (cls.DEFAULT_GIT_CMD,)
 
-    def doMaterializeRepo(
+    def materialize_repo(
         self,
         repoURL: "RepoURL",
         repoTag: "Optional[RepoTag]" = None,
         repo_tag_destdir: "Optional[AbsPath]" = None,
         base_repo_destdir: "Optional[AbsPath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RepoDesc, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
         """
 
         :param repoURL: The URL to the repository.
@@ -267,6 +266,7 @@ class GitFetcher(AbstractRepoFetcher):
         gitrevparse_params = [self.git_cmd, "rev-parse", "--verify", "HEAD"]
 
         self.logger.debug(f'Running "{" ".join(gitrevparse_params)}"')
+        repo_effective_checkout: "Optional[RepoTag]" = None
         with subprocess.Popen(
             gitrevparse_params,
             stdout=subprocess.PIPE,
@@ -278,15 +278,16 @@ class GitFetcher(AbstractRepoFetcher):
                     "RepoTag", revproc.stdout.read().rstrip()
                 )
 
-        repo_desc: "RepoDesc" = {
-            "repo": repoURL,
-            "tag": repoTag,
-            "checkout": repo_effective_checkout,
-        }
+        remote_repo = RemoteRepo(
+            repo_url=repoURL,
+            tag=repoTag,
+            repo_type=RepoType.Git,
+            checkout=repo_effective_checkout,
+        )
 
         return (
             repo_tag_destdir,
-            repo_desc,
+            remote_repo,
             [],
         )
 
@@ -361,11 +362,11 @@ class GitFetcher(AbstractRepoFetcher):
             parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, "", "", "")),
         )
 
-        repo_tag_destdir, repo_desc, metadata_array = self.doMaterializeRepo(
+        repo_tag_destdir, remote_repo, metadata_array = self.materialize_repo(
             repoURL, repoTag=repoTag
         )
         if repoRelPath is not None:
-            repo_desc["relpath"] = cast("RelPath", repoRelPath)
+            remote_repo = remote_repo._replace(rel_path=cast("RelPath", repoRelPath))
 
         preferredName: "Optional[RelPath]"
         if repoRelPath is not None:
@@ -387,6 +388,9 @@ class GitFetcher(AbstractRepoFetcher):
         # shutil.move(cachedContentPath, cachedFilename)
         link_or_copy(cast("AnyPath", cachedContentPath), cachedFilename)
 
+        repo_desc: "Optional[Mapping[str, Any]]" = remote_repo.gen_repo_desc()
+        if repo_desc is None:
+            repo_desc = {}
         augmented_metadata_array = [
             URIWithMetadata(
                 uri=remote_file, metadata=repo_desc, preferredName=preferredName

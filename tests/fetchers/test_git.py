@@ -34,9 +34,9 @@ if TYPE_CHECKING:
         URIType,
     )
 
-from wfexs_backend.common import (
-    RepoGuessFlavor,
+from wfexs_backend.fetchers import (
     RemoteRepo,
+    RepoGuessFlavor,
     RepoType,
 )
 from wfexs_backend.fetchers.git import guess_git_repo_params

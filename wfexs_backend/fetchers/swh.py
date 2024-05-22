@@ -50,10 +50,6 @@ if TYPE_CHECKING:
         Final,
     )
 
-    from . import (
-        RepoDesc,
-    )
-
     from ..common import (
         AbsPath,
         AnyPath,
@@ -71,15 +67,15 @@ from . import (
     DocumentedStatefulProtocolFetcher,
     FetcherException,
     ProtocolFetcherReturn,
+    RemoteRepo,
     RepoGuessException,
+    RepoType,
 )
 
 from .http import fetchClassicURL
 
 from ..common import (
     ContentKind,
-    RemoteRepo,
-    RepoType,
     URIWithMetadata,
 )
 
@@ -120,14 +116,14 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
     def GetNeededPrograms(cls) -> "Sequence[SymbolicName]":
         return tuple()
 
-    def doMaterializeRepo(
+    def materialize_repo(
         self,
         repoURL: "RepoURL",
         repoTag: "Optional[RepoTag]" = None,
         repo_tag_destdir: "Optional[AbsPath]" = None,
         base_repo_destdir: "Optional[AbsPath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RepoDesc, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
         # If we are here is because the repo is valid
         # as it should have been checked by guess_swh_repo_params
 
@@ -480,15 +476,16 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                 f"Unexpected Software Heritage object type {object_type} for {repoURL}"
             )
 
-        repo_desc: "RepoDesc" = {
-            "repo": repoURL,
-            "tag": repoTag,
-            "checkout": cast("RepoTag", repo_effective_checkout),
-        }
+        remote_repo = RemoteRepo(
+            repo_url=repoURL,
+            tag=repoTag,
+            repo_type=RepoType.SoftwareHeritage,
+            checkout=cast("RepoTag", repo_effective_checkout),
+        )
 
         return (
             repo_tag_destdir,
-            repo_desc,
+            remote_repo,
             metadata_array,
         )
 
@@ -517,7 +514,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             repoRelPath = None
 
         # It is materialized in a temporary location
-        repo_tag_destdir, repo_desc, metadata_array = self.doMaterializeRepo(
+        repo_tag_destdir, remote_repo, metadata_array = self.materialize_repo(
             cast("RepoURL", remote_file)
         )
 
@@ -533,7 +530,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             # This is to remove spurious detections
             repoRelPath = None
 
-        repo_desc["relpath"] = cast("RelPath", repoRelPath)
+        remote_repo = remote_repo._replace(rel_path=cast("RelPath", repoRelPath))
 
         if os.path.isdir(cachedContentPath):
             kind = ContentKind.Directory
@@ -547,6 +544,9 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         # shutil.move(cachedContentPath, cachedFilename)
         link_or_copy(cast("AnyPath", cachedContentPath), cachedFilename)
 
+        repo_desc: "Optional[Mapping[str, Any]]" = remote_repo.gen_repo_desc()
+        if repo_desc is None:
+            repo_desc = {}
         augmented_metadata_array = [
             URIWithMetadata(
                 uri=remote_file, metadata=repo_desc, preferredName=preferredName

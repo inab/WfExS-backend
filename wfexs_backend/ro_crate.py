@@ -63,7 +63,6 @@ if TYPE_CHECKING:
         MaterializedOutput,
         ProgsMapping,
         RelPath,
-        RemoteRepo,
         RepoTag,
         RepoURL,
         StagedExecution,
@@ -78,6 +77,10 @@ if TYPE_CHECKING:
         ContainerEngineVersionStr,
         ContainerOperatingSystem,
         ProcessorArchitecture,
+    )
+
+    from .fetchers import (
+        RemoteRepo,
     )
 
     from .workflow_engines import (

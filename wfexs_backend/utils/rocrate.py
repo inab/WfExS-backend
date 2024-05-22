@@ -86,7 +86,6 @@ import rdflib.plugins.sparql
 from ..common import (
     ContainerType,
     ContentKind,
-    RemoteRepo,
 )
 
 from ..container_factories import (
@@ -96,6 +95,10 @@ from ..container_factories import (
 
 from .digests import (
     stringifyDigest,
+)
+
+from ..fetchers import (
+    RemoteRepo,
 )
 
 
