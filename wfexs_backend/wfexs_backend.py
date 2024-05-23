@@ -118,6 +118,7 @@ from .utils.rocrate import (
 )
 
 from .fetchers import (
+    AbstractRepoFetcher,
     AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
@@ -200,6 +201,7 @@ if TYPE_CHECKING:
     )
 
     from .fetchers import (
+        RepoFetcher,
         StatefulFetcher,
     )
 
@@ -607,10 +609,11 @@ class WfExSBackend:
         self.baseWorkDir = baseWorkDir
         self.defaultParanoidMode = False
 
-        # cacheHandler is created on first use
         self._sngltn: "MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher]" = (
             dict()
         )
+        self.repo_fetchers: "MutableSequence[AbstractRepoFetcher]" = list()
+        # cacheHandler is created on first use
         self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir)
 
         fetchers_setup_block = local_config.get("fetchers-setup")
@@ -701,6 +704,16 @@ class WfExSBackend:
 
         return cast("StatefulFetcher", instStatefulFetcher)
 
+    def instantiateRepoFetcher(
+        self,
+        repoFetcher: "Type[RepoFetcher]",
+        setup_block: "Optional[Mapping[str, Any]]" = None,
+    ) -> "RepoFetcher":
+        """
+        Method to instantiate repo fetchers once
+        """
+        return self.instantiateStatefulFetcher(repoFetcher, setup_block=setup_block)
+
     def findAndAddWorkflowEnginesFromModuleName(
         self,
         the_module_name: "str" = "wfexs_backend.workflow_engines",
@@ -747,6 +760,9 @@ class WfExSBackend:
 
     def listWorkflowEngines(self) -> "Sequence[str]":
         return list(self._workflow_engines.keys())
+
+    def listWorkflowEngineClasses(self) -> "Sequence[Type[WorkflowEngine]]":
+        return list(self._workflow_engines.values())
 
     def getWorkflowEngineClass(
         self, engine_shortname: "str"
@@ -1028,6 +1044,10 @@ class WfExSBackend:
                             else schemeHandler.description,
                             priority=schemeHandler.priority,
                         )
+
+                        # Also, if it is a repository fetcher, record it separately
+                        if isinstance(instSchemeInstance, AbstractRepoFetcher):
+                            self.repo_fetchers.append(instSchemeInstance)
                 elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
                     schemeHandler.fetcher
                 ):
@@ -1040,6 +1060,22 @@ class WfExSBackend:
                     instSchemeHandlers[lScheme] = instSchemeHandler
 
             self.cacheHandler.addRawSchemeHandlers(instSchemeHandlers)
+
+    def gen_workflow_pid(self, remote_repo: "RemoteRepo") -> "str":
+        """
+        This method tries generating the workflow pid passing the remote
+        repo to each one of the registered repo fetchers. The contract
+        is that BuildPIDFromRepo should return None if it does not
+        recognize the repo_url as usable.
+        """
+        retval: "Optional[str]" = None
+
+        for fetcher in self.repo_fetchers:
+            retval = fetcher.build_pid_from_repo(remote_repo)
+            if retval is not None:
+                break
+
+        return remote_repo.repo_url if retval is None else retval
 
     def describeFetchableSchemes(self) -> "Sequence[Tuple[str, str, int]]":
         return self.cacheHandler.describeRegisteredSchemes()
@@ -1272,6 +1308,7 @@ class WfExSBackend:
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        secure: "bool" = True,
         paranoidMode: "bool" = False,
     ) -> "WF":
         return WF.FromPreviousInstanceDeclaration(
@@ -1283,6 +1320,7 @@ class WfExSBackend:
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
+            secure=secure,
             paranoidMode=paranoidMode,
         )
 
@@ -1295,6 +1333,7 @@ class WfExSBackend:
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        secure: "bool" = True,
         paranoidMode: "bool" = False,
     ) -> "WF":
         # Let's check whether it is a local file
@@ -1324,6 +1363,7 @@ class WfExSBackend:
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
+            secure=secure,
             paranoidMode=paranoidMode,
         )
 
@@ -2390,7 +2430,7 @@ class WfExSBackend:
         :param doUpdate:
         :return:
         """
-        gitFetcherInst = self.instantiateStatefulFetcher(GitFetcher)
+        gitFetcherInst = self.instantiateRepoFetcher(GitFetcher)
         repoDir, materialized_repo, metadata_array = gitFetcherInst.materialize_repo(
             repo.repo_url,
             repoTag=repo.tag,
@@ -2437,7 +2477,7 @@ class WfExSBackend:
         :param doUpdate:
         :return:
         """
-        swhFetcherInst = self.instantiateStatefulFetcher(SoftwareHeritageFetcher)
+        swhFetcherInst = self.instantiateRepoFetcher(SoftwareHeritageFetcher)
         repoDir, materialized_repo, metadata_array = swhFetcherInst.materialize_repo(
             cast("RepoURL", repo.tag) if repo.tag is not None else repo.repo_url,
             doUpdate=doUpdate,

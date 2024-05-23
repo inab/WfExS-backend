@@ -254,6 +254,23 @@ def genParserSub(
                 help="Workflow Run RO-Crate describing a previous workflow execution. It can be either a local path or an URI resolvable from WfExS with no authentication",
             )
 
+        if command in (WfExS_Commands.Import, WfExS_Commands.ReStage):
+            ap_.add_argument(
+                "-s",
+                "--no-secure",
+                dest="secure",
+                action="store_false",
+                default=True,
+                help="Make unsecured working directory",
+            )
+            ap_.add_argument(
+                "-S",
+                "--secure",
+                dest="secure",
+                action="store_true",
+                help="Make secured working directory (default)",
+            )
+
     if preStageParams or exportParams or command == WfExS_Commands.ReStage:
         ap_.add_argument(
             "-Z",
@@ -1409,6 +1426,7 @@ def main() -> None:
             private_key_filename=args.private_key_file,
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
+            secure=args.secure,
         )
     else:
         print(
@@ -1443,6 +1461,7 @@ def main() -> None:
             private_key_filename=args.private_key_file,
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
+            secure=args.secure,
         )
 
     wfSetup = wfInstance.getStagedSetup()
@@ -1455,6 +1474,7 @@ def main() -> None:
 
     if command in (
         WfExS_Commands.Stage,
+        WfExS_Commands.Import,
         WfExS_Commands.ReStage,
         WfExS_Commands.Execute,
     ):

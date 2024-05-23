@@ -1289,6 +1289,7 @@ class WF:
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        secure: "bool" = True,
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -1307,6 +1308,9 @@ class WF:
         for k_name in ("nickname", "paranoid_mode"):
             if k_name in workflow_meta:
                 del workflow_meta[k_name]
+
+        # We also have to reset the secure mode
+        workflow_meta.setdefault("workflow_config", {})["secure"] = secure
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -1332,6 +1336,7 @@ class WF:
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        secure: "bool" = True,
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -1412,32 +1417,31 @@ class WF:
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
             jsonld_obj, public_name
         )
-        logging.info(
+        workflow_pid = wfexs.gen_workflow_pid(repo)
+        logging.debug(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
         )
-        logging.info(f"Containers {the_containers}")
+        logging.debug(f"Containers {the_containers}")
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
-            "workflow_id": {},
+            "workflow_id": workflow_pid,
             "workflow_type": workflow_type.shortname,
             "environment": environment,
             "params": params,
             "outputs": outputs,
-            "workflow_config": {},
+            "workflow_config": {
+                "secure": secure,
+            },
         }
         if container_type is not None:
             workflow_meta["workflow_config"]["containerType"] = container_type.value
 
-        logging.info(f"{json.dumps(workflow_meta, indent=4)}")
+        logging.debug(f"{json.dumps(workflow_meta, indent=4)}")
 
         # Last, be sure that what it has been generated is correct
         if wfexs.validateConfigFiles(workflow_meta, securityContextsConfigFilename) > 0:
             raise WFException(
                 f"Generated WfExS description from {public_name} fails (have a look at the log messages for details)"
             )
-
-        raise NotImplementedError(
-            "The implementation of this method has to be finished"
-        )
 
         return cls.FromStagedRecipe(
             wfexs,
