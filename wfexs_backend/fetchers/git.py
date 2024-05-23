@@ -495,6 +495,160 @@ class GitFetcher(AbstractRepoFetcher):
             web_url=web_url,
         )
 
+    def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
+        """
+        This method is required to generate a PID which usually
+        represents an element (usually a workflow) in a repository.
+        If the fetcher does not recognize the type of repo, it should
+        return None
+        """
+        parsed_wf_url = parse.urlparse(remote_repo.repo_url)
+
+        retval: "Optional[str]" = None
+        if parsed_wf_url.scheme == "":
+            # It could be a checkout uri in the form of 'git@github.com:inab/WfExS-backend.git'
+            if (
+                parsed_wf_url.netloc == ""
+                and ("@" in parsed_wf_url.path)
+                and (":" in parsed_wf_url.path)
+            ):
+                parsed_wf_url = parse.urlparse("ssh://" + remote_repo.repo_url)
+            else:
+                return None
+
+        if parsed_wf_url.scheme == self.GITHUB_SCHEME:
+            gh_path_split = parsed_wf_url.path.split("/")
+            gh_path = "/".join(gh_path_split[:2])
+
+            if not gh_path.endswith(".git"):
+                gh_path += ".git"
+            checkout = remote_repo.get_checkout()
+            if len(checkout) > 0:
+                gh_path += "@" + checkout
+            if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
+                fragment = parse.urlencode(
+                    [("subdirectory", remote_repo.rel_path)],
+                    safe="/",
+                    quote_via=parse.quote,
+                )
+            else:
+                fragment = ""
+
+            retval = parse.urlunparse(
+                parse.ParseResult(
+                    scheme="git+https",
+                    netloc=GITHUB_NETLOC,
+                    path=gh_path,
+                    params="",
+                    query="",
+                    fragment=fragment,
+                )
+            )
+        elif parsed_wf_url.scheme in ("http", "https"):
+            if (
+                parsed_wf_url.netloc == GITHUB_NETLOC
+                and "@" not in parsed_wf_url.path
+                and parsed_wf_url.fragment == ""
+            ):
+                gh_path_split = parsed_wf_url.path.split("/")
+                gh_path = "/".join(gh_path_split[:3])
+
+                if not gh_path.endswith(".git"):
+                    gh_path += ".git"
+                checkout = remote_repo.get_checkout()
+                if len(checkout) > 0:
+                    gh_path += "@" + checkout
+                if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
+                    fragment = parse.urlencode(
+                        [("subdirectory", remote_repo.rel_path)],
+                        safe="/",
+                        quote_via=parse.quote,
+                    )
+                else:
+                    fragment = ""
+
+                retval = parse.urlunparse(
+                    parse.ParseResult(
+                        scheme="git+" + parsed_wf_url.scheme,
+                        netloc=GITHUB_NETLOC,
+                        path=gh_path,
+                        params="",
+                        query="",
+                        fragment=fragment,
+                    )
+                )
+            else:
+                # Default
+                retval = "git+" + remote_repo.repo_url
+                checkout = remote_repo.get_checkout()
+                if len(checkout) > 0:
+                    retval += "@" + checkout
+                if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
+                    fragment = parse.urlencode(
+                        [("subdirectory", remote_repo.rel_path)],
+                        safe="/",
+                        quote_via=parse.quote,
+                    )
+                    retval += "#" + fragment
+
+        elif (parsed_wf_url.scheme in self.GetSchemeHandlers()) or (
+            parsed_wf_url.scheme in self.GIT_SCHEMES
+        ):
+            # Getting the scheme git is going to understand
+            if parsed_wf_url.scheme.startswith(self.GIT_PROTO_PREFIX):
+                gitScheme = parsed_wf_url.scheme[len(self.GIT_PROTO_PREFIX) :]
+                denorm_parsed_wf_url = parsed_wf_url._replace(scheme=gitScheme)
+                parsed_wf_url = parse.urlparse(parse.urlunparse(denorm_parsed_wf_url))
+            else:
+                gitScheme = parsed_wf_url.scheme
+
+            if gitScheme not in self.GIT_SCHEMES:
+                self.logger.debug(
+                    f"Unknown scheme {gitScheme} in repo URL. Choices are: {', '.join(self.GIT_SCHEMES)}"
+                )
+                return None
+
+            # Beware ssh protocol!!!! I has a corner case with URLs like
+            # ssh://git@github.com:inab/WfExS-backend.git'
+            if parsed_wf_url.scheme == "ssh":
+                if ":" in parsed_wf_url.netloc:
+                    new_netloc = parsed_wf_url.netloc
+                    # Translating it to something better
+                    colon_pos = new_netloc.rfind(":")
+                    new_netloc = (
+                        new_netloc[:colon_pos] + "/" + new_netloc[colon_pos + 1 :]
+                    )
+                    denorm_parsed_wf_url = parsed_wf_url._replace(netloc=new_netloc)
+                    parsed_wf_url = parse.urlparse(
+                        parse.urlunparse(denorm_parsed_wf_url)
+                    )
+
+                newpath = parsed_wf_url.path
+                if newpath[0] == "/":
+                    newpath = ":" + newpath[1:]
+            else:
+                newpath = parsed_wf_url.path
+
+            if parsed_wf_url.netloc.endswith(GITHUB_NETLOC) and not newpath.endswith(
+                ".git"
+            ):
+                newpath += ".git"
+            retval = (
+                "git+" + parsed_wf_url.scheme + "://" + parsed_wf_url.netloc + newpath
+            )
+            checkout = remote_repo.get_checkout()
+            if len(checkout) > 0:
+                retval += "@" + checkout
+            if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
+                fragment = parse.urlencode(
+                    [("subdirectory", remote_repo.rel_path)],
+                    safe="/",
+                    quote_via=parse.quote,
+                )
+                retval += "#" + fragment
+
+        return retval
+
     def materialize_repo(
         self,
         repoURL: "RepoURL",

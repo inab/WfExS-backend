@@ -306,6 +306,16 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
     ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
         pass
 
+    @abc.abstractmethod
+    def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
+        """
+        This method is required to generate a PID which usually
+        represents an element (usually a workflow) in a repository.
+        If the fetcher does not recognize the type of repo, it should
+        return None
+        """
+        pass
+
     @classmethod
     @abc.abstractmethod
     def GuessRepoParams(
@@ -315,6 +325,10 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
         fail_ok: "bool" = False,
     ) -> "Optional[RemoteRepo]":
         pass
+
+
+if TYPE_CHECKING:
+    RepoFetcher = TypeVar("RepoFetcher", bound=AbstractRepoFetcher)
 
 
 class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):

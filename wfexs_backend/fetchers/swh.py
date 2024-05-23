@@ -216,9 +216,24 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         return RemoteRepo(
             repo_url=wf_url,
             tag=cast("RepoTag", putative_core_swhid),
+            checkout=cast("RepoTag", putative_core_swhid),
             repo_type=RepoType.SoftwareHeritage,
             web_url=web_url,
         )
+
+    def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
+        """
+        This method is required to generate a PID which usually
+        represents an element (usually a workflow) in a repository.
+        If the fetcher does not recognize the type of repo, it should
+        return None
+        """
+        parsed_wf_url = parse.urlparse(remote_repo.repo_url)
+        if parsed_wf_url.scheme not in self.GetSchemeHandlers():
+            return None
+
+        # FIXME: improve this
+        return remote_repo.repo_url
 
     def materialize_repo(
         self,
