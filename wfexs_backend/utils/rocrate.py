@@ -376,12 +376,6 @@ WHERE   {
         a s:ComputerLanguage ;
         s:url ?programminglanguage_url .
     OPTIONAL {
-        ?mainentity s:identifier ?identifier .
-    }
-    OPTIONAL {
-        ?mainentity s:alternateName ?workflow_alternate_name .
-    }
-    OPTIONAL {
         ?programminglanguage
             s:version ?programminglanguage_version .
     }
@@ -409,6 +403,12 @@ WHERE   {
             OPTIONAL {
                 ?mainentity s:url ?workflow_url .
             }
+            OPTIONAL {
+                ?mainentity s:identifier ?identifier .
+            }
+            OPTIONAL {
+                ?mainentity s:alternateName ?workflow_alternate_name .
+            }
         } UNION {
             ?mainentity s:isBasedOn ?origmainentity .
             ?origmainentity
@@ -426,6 +426,12 @@ WHERE   {
             FILTER (
                 STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
             ) .
+            OPTIONAL {
+                ?origmainentity s:identifier ?identifier .
+            }
+            OPTIONAL {
+                ?origmainentity s:alternateName ?workflow_alternate_name .
+            }
         }
     }
 }
@@ -1719,7 +1725,7 @@ Container {containerrow.container}
                     assert isinstance(
                         execrow, rdflib.query.ResultRow
                     ), "Check the SPARQL code, as it should be a SELECT query"
-                    print(f"\tExecution {execrow.execution}")
+                    self.logger.debug(f"\tExecution {execrow.execution}")
 
                     contresult = self._parseContainersFromExecution(
                         g, execrow.execution, main_entity=matched_crate.mainentity
