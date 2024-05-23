@@ -1439,7 +1439,7 @@ class WF:
                     except Exception as e2:
                         raise WFException(
                             f"Unable to locate RO-Crate metadata descriptor within {public_name}"
-                        ) from ExceptionGroup(
+                        ) from ExceptionGroup(  # pylint: disable=possibly-used-before-assignment
                             f"Both {ROCRATE_JSONLD_FILENAME} and {LEGACY_ROCRATE_JSONLD_FILENAME} tried",
                             [e, e2],
                         )
