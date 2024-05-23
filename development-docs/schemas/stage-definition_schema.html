@@ -15,9 +15,9 @@
     
     <title>WfExS-backend stage definition</title>
 </head>
-<body onload="anchorOnLoad();" id="root"><h1>WfExS-backend stage definition</h1>
+<body onload="anchorOnLoad();" id="root">
 
-    <div class="breadcrumbs"></div><span class="badge badge-dark value-type">Type: object</span><br/>
+    <div class="breadcrumbs"></div> <h1>WfExS-backend stage definition</h1><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>WfExS-backend stage definition file (EOSC-Life Demonstrator 7 JSON Schemas)</p>
 </span> <span class="badge badge-info no-additional">No Additional Properties</span>
         
@@ -47,7 +47,7 @@
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#trs_endpoint" onclick="anchorLink('trs_endpoint')">trs_endpoint</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#trs_endpoint" onclick="anchorLink('trs_endpoint')">trs_endpoint</a></div><h4>The optional TRS endpoing</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>If this key is set, it will tell the GA4GH TRS service where to look for the workflow_id (and optional version)</p>
 </span>
 
@@ -83,7 +83,7 @@
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#version" onclick="anchorLink('version')">version</a></div><span class="badge badge-dark value-type">Type: string or integer</span><br/>
+    <a href="#version" onclick="anchorLink('version')">version</a></div><h4>Workflow version</h4><span class="badge badge-dark value-type">Type: string or integer</span><br/>
 <span class="description"><p>If trs<em>enpoint key is set, it will tell the version of the workflow</em>id to look for at GA4GH TRS</p>
 </span>
         
@@ -261,7 +261,7 @@
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#nickname" onclick="anchorLink('nickname')">nickname</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#nickname" onclick="anchorLink('nickname')">nickname</a></div><h4>A friendly nickname (prefix) for the instances</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 
         
 
@@ -327,12 +327,9 @@
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#workflow_type" onclick="anchorLink('workflow_type')">workflow_type</a></div><span class="badge badge-dark value-type">Type: enum (of string)</span><br/>
+    <a href="#workflow_type" onclick="anchorLink('workflow_type')">workflow_type</a></div><h4>The optional, forced workflow type</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>When this key is set, it is forcing the workflow type. WfExS-backend is usually able to identify the workflow type, unless there are two intertwined workflows in the same location</p>
-</span><div class="enum-value" id="workflow_type_enum">
-            <h4>Must be one of:</h4>
-            <ul class="list-group"><li class="list-group-item enum-item">"nextflow"</li><li class="list-group-item enum-item">"cwl"</li></ul>
-            </div>
+</span>
         
 
         
@@ -440,7 +437,7 @@
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#workflow_config_containerType" onclick="anchorLink('workflow_config_containerType')">containerType</a></div><span class="badge badge-dark value-type">Type: enum (of string)</span><br/>
+    <a href="#workflow_config_containerType" onclick="anchorLink('workflow_config_containerType')">containerType</a></div><h4>Container technology type to be used for this workflow</h4><span class="badge badge-dark value-type">Type: enum (of string)</span><br/>
 <span class="description"><p>Type of container technology to be used when this staging scenario is instantiated. Supported types are:<br />
 - Singularity (default).<br />
 - Docker.<br />
@@ -619,7 +616,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#workflow_config_nextflow_maxRetries" onclick="anchorLink('workflow_config_nextflow_maxRetries')">maxRetries</a></div><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 5</span><br/>
+    <a href="#workflow_config_nextflow_maxRetries" onclick="anchorLink('workflow_config_nextflow_maxRetries')">maxRetries</a></div><h4>Retries in docker mode</h4><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 5</span><br/>
 <span class="description"><p>Retries when <code>engineMode</code> is <code>docker</code>.<br />
 Retries system was introduced when using docker-in-docker pattern because an insidious<br />
 bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-symlinks-on-bind-mounts/32138</p>
@@ -669,7 +666,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#workflow_config_nextflow_maxProcesses" onclick="anchorLink('workflow_config_nextflow_maxProcesses')">maxProcesses</a></div><br/>
+    <a href="#workflow_config_nextflow_maxProcesses" onclick="anchorLink('workflow_config_nextflow_maxProcesses')">maxProcesses</a></div><h4>Max number of CPUs</h4><br/>
 <span class="description"><p>Number of CPUs to be used by Nextflow. When this key has an explicit value of <code>null</code>, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes</p>
 </span><div class="one-of-value" id="workflow_config_nextflow_maxProcesses_oneOf"><h2 class="handle">
   <label>One of</label>
@@ -5106,7 +5103,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
             />
         </svg>
     <a href="#params_pattern1_pattern1_i4_value" onclick="anchorLink('params_pattern1_pattern1_i4_value')">value</a></div><br/>
-<span class="description"><p>When 'c-l-a-s-s' is a single file or a value, the assigned value</p>
+<span class="description"><p>When &#39;c-l-a-s-s&#39; is a single file or a value, the assigned value</p>
 </span><div class="one-of-value" id="params_pattern1_pattern1_i4_value_oneOf"><h2 class="handle">
   <label>One of</label>
 </h2><ul class="nav nav-tabs" id="tabsparams_pattern1_pattern1_i4_value_oneOf_oneOf" role="tablist"><li class="nav-item">
@@ -6379,7 +6376,15 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
         </svg>
     <a href="#params_pattern1_pattern1_i4_url_oneOf_i2_licences_items" onclick="anchorLink('params_pattern1_pattern1_i4_url_oneOf_i2_licences_items')">PlainURI</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "https://choosealicense.com/no-permission/"</span><br/>
 <span class="description"><p>URL to the description of the licence of the data. And by default, no permission to use or distribute it</p>
-</span><a href="#trs_endpoint" onclick="anchorLink('trs_endpoint')" class="ref-link">Same definition as trs_endpoint</a>
+</span>
+
+    
+        
+
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="trs_endpoint_minLength">Must be at least <code>1</code> characters long</span></p>
+
+        
         </div>
     </div>
             </div>
@@ -8679,7 +8684,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#outputs_pattern1_cardinality" onclick="anchorLink('outputs_pattern1_cardinality')">cardinality</a></div> <span class="badge badge-success default-value">Default: 1</span><br/>
+    <a href="#outputs_pattern1_cardinality" onclick="anchorLink('outputs_pattern1_cardinality')">cardinality</a></div><h4>Output cardinality</h4> <span class="badge badge-success default-value">Default: 1</span><br/>
 <span class="description"><p>Expected cardinality of this output</p>
 </span><div class="one-of-value" id="outputs_pattern1_cardinality_oneOf"><h2 class="handle">
   <label>One of</label>
@@ -9158,6 +9163,6 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 </div>
 
     <footer>
-        <p class="generated-by-footer">Generated using <a href="https://github.com/coveooss/json-schema-for-humans">json-schema-for-humans</a> on 2023-09-23 at 01:39:56 +0000</p>
+        <p class="generated-by-footer">Generated using <a href="https://github.com/coveooss/json-schema-for-humans">json-schema-for-humans</a> on 2024-05-23 at 21:08:25 +0000</p>
     </footer></body>
 </html>
