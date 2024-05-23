@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 from __future__ import absolute_import
 
 import abc
+import enum
 import logging
 
 from typing import (
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
         tag: Required[Optional[RepoTag]]
         checkout: Required[RepoTag]
         relpath: NotRequired[RelPath]
+        repotype: NotRequired[str]
 
 
 class ProtocolFetcherReturn(NamedTuple):
@@ -231,19 +233,102 @@ class RepoGuessException(FetcherException):
     pass
 
 
+class RepoType(enum.Enum):
+    Git = "git"
+    Raw = "raw"
+    Other = "other"
+    SoftwareHeritage = "swh"
+    TRS = "trs"
+
+    @classmethod
+    def _undeprecate_table(cls) -> "Mapping[str, str]":
+        # These fixes are needed to map deprecated values
+        # to the most approximate ones
+        return {
+            "github": "git",
+            "gitlab": "git",
+            "bitbucket": "git",
+        }
+
+
+class RepoGuessFlavor(enum.Enum):
+    GitHub = "github"
+    GitLab = "gitlab"
+    BitBucket = "bitbucket"
+
+
+class RemoteRepo(NamedTuple):
+    """
+    Remote repository description
+    """
+
+    repo_url: "RepoURL"
+    tag: "Optional[RepoTag]" = None
+    rel_path: "Optional[RelPath]" = None
+    repo_type: "Optional[RepoType]" = None
+    web_url: "Optional[URIType]" = None
+    guess_flavor: "Optional[RepoGuessFlavor]" = None
+    checkout: "Optional[RepoTag]" = None
+
+    def gen_repo_desc(self) -> "Optional[RepoDesc]":
+        retval: "RepoDesc" = {
+            "repo": self.repo_url,
+            "tag": self.tag,
+            "checkout": self.get_checkout(),
+        }
+
+        if self.repo_type is not None:
+            retval["repotype"] = self.repo_type.value
+
+        return retval
+
+    def get_checkout(self) -> "RepoTag":
+        return (
+            self.checkout
+            if self.checkout is not None
+            else self.tag
+            if self.tag is not None
+            else cast("RepoTag", "")
+        )
+
+
 class AbstractRepoFetcher(AbstractStatefulFetcher):
     PRIORITY: "ClassVar[int]" = DEFAULT_PRIORITY + 10
 
     @abc.abstractmethod
-    def doMaterializeRepo(
+    def materialize_repo(
         self,
         repoURL: "RepoURL",
         repoTag: "Optional[RepoTag]" = None,
         repo_tag_destdir: "Optional[AbsPath]" = None,
         base_repo_destdir: "Optional[AbsPath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RepoDesc, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
         pass
+
+    @abc.abstractmethod
+    def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
+        """
+        This method is required to generate a PID which usually
+        represents an element (usually a workflow) in a repository.
+        If the fetcher does not recognize the type of repo, it should
+        return None
+        """
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def GuessRepoParams(
+        cls,
+        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        logger: "Optional[logging.Logger]" = None,
+        fail_ok: "bool" = False,
+    ) -> "Optional[RemoteRepo]":
+        pass
+
+
+if TYPE_CHECKING:
+    RepoFetcher = TypeVar("RepoFetcher", bound=AbstractRepoFetcher)
 
 
 class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):

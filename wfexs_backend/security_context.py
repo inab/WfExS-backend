@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,6 +48,9 @@ if TYPE_CHECKING:
         AnyPath,
         RelPath,
         SecurityContextConfig,
+    )
+
+    from .wfexs_backend import (
         SecurityContextConfigBlock,
     )
 

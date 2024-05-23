@@ -19,7 +19,6 @@ from __future__ import absolute_import
 
 import atexit
 import copy
-import enum
 import inspect
 import logging
 import os
@@ -56,18 +55,14 @@ if TYPE_CHECKING:
         AbsPath,
         AbstractGeneratedContent,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         EngineVersion,
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
         MaterializedInput,
         MaterializedOutput,
-        ProcessorArchitecture,
         ProgsMapping,
         RelPath,
-        RemoteRepo,
         RepoTag,
         RepoURL,
         StagedExecution,
@@ -75,16 +70,23 @@ if TYPE_CHECKING:
         SymbolicOutputName,
         URIType,
         WFLangVersion,
-        WorkflowEngineVersionStr,
     )
 
-    from .container import (
+    from .container_factories import (
         Container,
+        ContainerEngineVersionStr,
+        ContainerOperatingSystem,
+        ProcessorArchitecture,
     )
 
-    from .engine import (
+    from .fetchers import (
+        RemoteRepo,
+    )
+
+    from .workflow_engines import (
         MaterializedWorkflowEngine,
         WorkflowType,
+        WorkflowEngineVersionStr,
     )
 
     from .utils.licences import (
@@ -95,6 +97,12 @@ import urllib.parse
 import uuid
 
 from .utils.misc import lazy_import
+from .utils.rocrate import (
+    ContainerType2AdditionalType,
+    ContainerTypeMetadata,
+    ContainerTypeMetadataDetails,
+    WORKFLOW_RUN_CONTEXT,
+)
 
 magic = lazy_import("magic")
 # import magic
@@ -180,7 +188,7 @@ class FormalParameter(rocrate.model.entity.Entity):  # type: ignore[misc]
             "name": name,
             # As of https://www.researchobject.org/ro-crate/1.1/workflows.html#describing-inputs-and-outputs
             "conformsTo": {
-                "@id": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE/",
+                "@id": "https://bioschemas.org/profiles/FormalParameter/1.0-RELEASE",
             },
         }
 
@@ -345,21 +353,6 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
 
 class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
     pass
-
-
-WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
-
-
-class ContainerImageAdditionalType(enum.Enum):
-    Docker = WORKFLOW_RUN_CONTEXT + "#DockerImage"
-    Singularity = WORKFLOW_RUN_CONTEXT + "#SIFImage"
-
-
-ContainerType2AdditionalType: "Mapping[ContainerType, ContainerImageAdditionalType]" = {
-    ContainerType.Docker: ContainerImageAdditionalType.Docker,
-    ContainerType.Singularity: ContainerImageAdditionalType.Singularity,
-    ContainerType.Podman: ContainerImageAdditionalType.Docker,
-}
 
 
 class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
@@ -686,39 +679,10 @@ class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
         return cast("FixedWorkflow", workflow)
 
 
-class ContainerTypeMetadata(NamedTuple):
-    sa_id: "str"
-    applicationCategory: "str"
-    ct_applicationCategory: "str"
-
-
 class WorkflowRunROCrate:
     """
     This class rules the generation of an RO-Crate
     """
-
-    ContainerTypeMetadataDetails: "Final[Mapping[ContainerType, ContainerTypeMetadata]]" = {
-        ContainerType.Singularity: ContainerTypeMetadata(
-            sa_id="https://apptainer.org/",
-            applicationCategory="https://www.wikidata.org/wiki/Q51294208",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
-        ),
-        ContainerType.Docker: ContainerTypeMetadata(
-            sa_id="https://www.docker.com/",
-            applicationCategory="https://www.wikidata.org/wiki/Q15206305",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
-        ),
-        ContainerType.Podman: ContainerTypeMetadata(
-            sa_id="https://podman.io/",
-            applicationCategory="https://www.wikidata.org/wiki/Q70876440",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q7935198",
-        ),
-        ContainerType.Conda: ContainerTypeMetadata(
-            sa_id="https://conda.io/",
-            applicationCategory="https://www.wikidata.org/wiki/Q22907431",
-            ct_applicationCategory="https://www.wikidata.org/wiki/Q98400282",
-        ),
-    }
 
     def __init__(
         self,
@@ -1156,9 +1120,7 @@ you can find here an almost complete list of the possible ones:
                 if container in self._added_containers:
                     continue
 
-                container_type_metadata = self.ContainerTypeMetadataDetails[
-                    container.type
-                ]
+                container_type_metadata = ContainerTypeMetadataDetails[container.type]
                 crate_cont_type = self.cached_cts.get(container.type)
                 if crate_cont_type is None:
                     container_type = (
@@ -1192,7 +1154,7 @@ you can find here an almost complete list of the possible ones:
                     crate_source_cont_type = crate_cont_type
                     container_source_type_metadata = container_type_metadata
                 else:
-                    container_source_type_metadata = self.ContainerTypeMetadataDetails[
+                    container_source_type_metadata = ContainerTypeMetadataDetails[
                         container.source_type
                     ]
                     crate_source_cont_type = self.cached_cts.get(container.source_type)
@@ -1418,7 +1380,8 @@ you can find here an almost complete list of the possible ones:
                 # inputs and environment variables in an standardized way
                 self.wf_file.append_to(fp_dest, formal_parameter, compact=True)
                 value_required = not in_item.implicit
-                formal_parameter["valueRequired"] = str(value_required)
+                # This one must be a real boolean, as of schema.org
+                formal_parameter["valueRequired"] = value_required
 
             item_signature = cast(
                 "bytes",
@@ -1586,7 +1549,12 @@ you can find here an almost complete list of the possible ones:
 
                     if some_not_null:
                         if in_item.implicit and len(in_item.values) == 1:
-                            formal_parameter["defaultValue"] = str(in_item.values[0])
+                            the_default_value: "Union[bool,str,float,int]"
+                            if isinstance(in_item.values[0], (bool, int, float)):
+                                the_default_value = in_item.values[0]
+                            else:
+                                the_default_value = str(in_item.values[0])
+                            formal_parameter["defaultValue"] = the_default_value
 
                         for itemInAtomicValues in cast(
                             "Sequence[Union[bool,str,float,int]]", in_item.values
@@ -1604,8 +1572,13 @@ you can find here an almost complete list of the possible ones:
                                     )
                                 else:
                                     fixedAtomicValue = itemInAtomicValues
+                                the_value: "Union[bool,str,float,int]"
+                                if isinstance(fixedAtomicValue, (bool, int, float)):
+                                    the_value = fixedAtomicValue
+                                else:
+                                    the_value = str(fixedAtomicValue)
                                 parameter_value = PropertyValue(
-                                    self.crate, in_item.name, str(fixedAtomicValue)
+                                    self.crate, in_item.name, value=the_value
                                 )
                                 crate_pv = self.crate.add(parameter_value)
                                 if isinstance(crate_coll, Collection):
@@ -2243,9 +2216,26 @@ you can find here an almost complete list of the possible ones:
             # when it is not run in debug mode
             if self.logger.getEffectiveLevel() > logging.DEBUG:
                 warnings.filterwarnings(
-                    "ignore", category=UserWarning, module="^rocrate\.model\.file$"
+                    "ignore", category=UserWarning, module=r"^rocrate\.model\.file$"
                 )
             self.crate.write_zip(filename)
+
+    def addStagedWorkflowDetails(
+        self,
+        inputs: "Sequence[MaterializedInput]",
+        environment: "Sequence[MaterializedInput]",
+        outputs: "Optional[Sequence[ExpectedOutput]]",
+    ) -> None:
+        """
+        This method is used for WRROCs with only prospective provenance
+        """
+        self.addWorkflowInputs(inputs, are_envvars=False)
+
+        if len(environment) > 0:
+            self.addWorkflowInputs(environment, are_envvars=True)
+
+        if outputs is not None:
+            self.addWorkflowExpectedOutputs(outputs)
 
     def addWorkflowExecution(
         self,
@@ -2293,11 +2283,15 @@ you can find here an almost complete list of the possible ones:
             stagedExec.augmentedInputs,
             are_envvars=False,
         )
-        crate_envvars = self.addWorkflowInputs(
-            stagedExec.environment,
-            are_envvars=True,
-        )
-        crate_action["object"] = [*crate_inputs, *crate_envvars]
+        crate_action["object"] = crate_inputs
+
+        # Add environment, according to WRROC 0.4
+        if len(stagedExec.environment) > 0:
+            crate_envvars = self.addWorkflowInputs(
+                stagedExec.environment,
+                are_envvars=True,
+            )
+            crate_action["environment"] = crate_envvars
 
         # TODO: Add engine specific traces
         # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces

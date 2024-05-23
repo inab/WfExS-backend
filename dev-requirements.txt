@@ -15,4 +15,5 @@ mccabe >= 0.7.0
 mypy >= 1.1.1
 json-schema-for-humans >= 0.45.1
 pre-commit >= 2.17.0
+# This is the last version of black supporting Python 3.7
 black == 23.3.0

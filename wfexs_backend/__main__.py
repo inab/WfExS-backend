@@ -105,6 +105,14 @@ class WfExS_Commands(StrDocEnum):
         "list-licences",
         f"List the documented licences, both embedded and fetched from SPDX release {LicenceMatcherSingleton.DEFAULT_SPDX_VERSION}",
     )
+    ListContainerFactories = (
+        "list-container-factories",
+        "List the supported container factories",
+    )
+    ListWorkflowEngines = (
+        "list-workflow-engines",
+        "List the supported workflow engines",
+    )
     Stage = (
         "stage",
         "Prepare the staging (working) directory for workflow execution, fetching dependencies and contents",
@@ -120,6 +128,10 @@ class WfExS_Commands(StrDocEnum):
     StagedWorkDir = (
         "staged-workdir",
         "Staged working directories handling subcommands",
+    )
+    Import = (
+        "import",
+        "Workflow Run RO-Crate import into a new staged working directory",
     )
     Export = ("export", "Staged working directories export subcommands")
     ExportStage = ("export-stage", "Export the staging directory as an RO-Crate")
@@ -225,13 +237,42 @@ def genParserSub(
     )
 
     if preStageParams:
+        if command == WfExS_Commands.Import:
+            ap_.add_argument(
+                "-R",
+                "--workflow-rocrate",
+                dest="workflowROCrateFilenameOrURI",
+                required=True,
+                help="Workflow Run RO-Crate describing a previous workflow execution. It can be either a local path or an URI resolvable from WfExS with no authentication",
+            )
+
+        not_restage = command not in (WfExS_Commands.Import, WfExS_Commands.ReStage)
         ap_.add_argument(
             "-W",
             "--workflow-config",
             dest="workflowConfigFilename",
-            required=True,
-            help="Configuration file, describing workflow and inputs",
+            required=not_restage,
+            help="Configuration file, describing workflow and inputs"
+            if not_restage
+            else "Optional configuration file, describing some inputs which will replace the base, original ones",
         )
+
+        if not not_restage:
+            ap_.add_argument(
+                "-s",
+                "--no-secure",
+                dest="secure",
+                action="store_false",
+                default=True,
+                help="Make unsecured working directory",
+            )
+            ap_.add_argument(
+                "-S",
+                "--secure",
+                dest="secure",
+                action="store_true",
+                help="Make secured working directory (default)",
+            )
 
     if preStageParams or exportParams or command == WfExS_Commands.ReStage:
         ap_.add_argument(
@@ -275,7 +316,12 @@ def genParserSub(
 
     if (
         command
-        in (WfExS_Commands.Stage, WfExS_Commands.ReStage, WfExS_Commands.Execute)
+        in (
+            WfExS_Commands.Stage,
+            WfExS_Commands.ReStage,
+            WfExS_Commands.Import,
+            WfExS_Commands.Execute,
+        )
         or exportParams
     ):
         ap_.add_argument(
@@ -288,7 +334,12 @@ def genParserSub(
 
     if (
         command
-        in (WfExS_Commands.Stage, WfExS_Commands.StagedWorkDir, WfExS_Commands.Execute)
+        in (
+            WfExS_Commands.Stage,
+            WfExS_Commands.StagedWorkDir,
+            WfExS_Commands.Import,
+            WfExS_Commands.Execute,
+        )
         or postStageParams
         or exportParams
     ):
@@ -376,6 +427,29 @@ def processListPushersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "in
     print(f"{len(export_plugin_names)} supported export plugins")
     for export_plugin_name in export_plugin_names:
         print(f"\t{export_plugin_name}")
+    return 0
+
+
+def processListContainerFactoriesCommand(
+    wfBackend: "WfExSBackend", logLevel: "int"
+) -> "int":
+    container_types = wfBackend.listImplementedContainerTypes()
+    print(f"{len(container_types)} supported container factories")
+    for container_type in container_types:
+        print(f"\t{container_type.value}")
+
+    return 0
+
+
+def processListWorkflowEnginesCommand(
+    wfBackend: "WfExSBackend", logLevel: "int"
+) -> "int":
+    print(f"{len(wfBackend.WORKFLOW_ENGINES)} supported workflow engines")
+    for workflow_type in wfBackend.WORKFLOW_ENGINES:
+        print(
+            f"\t{workflow_type.shortname} => {workflow_type.name} (priority {workflow_type.priority})"
+        )
+
     return 0
 
 
@@ -1075,12 +1149,18 @@ def _get_wfexs_argparse_internal(
 
     ap_lf = genParserSub(sp, WfExS_Commands.ListFetchers)
     ap_lp = genParserSub(sp, WfExS_Commands.ListPushers)
+    ap_lc = genParserSub(sp, WfExS_Commands.ListContainerFactories)
+    ap_lw = genParserSub(sp, WfExS_Commands.ListWorkflowEngines)
     ap_ll = genParserSub(sp, WfExS_Commands.ListLicences)
     ap_cv = genParserSub(sp, WfExS_Commands.ConfigValidate, preStageParams=True)
 
     ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)
 
-    ap_r_s = genParserSub(sp, WfExS_Commands.ReStage, postStageParams=True)
+    ap_r_s = genParserSub(
+        sp, WfExS_Commands.ReStage, preStageParams=True, postStageParams=True
+    )
+
+    ap_imp = genParserSub(sp, WfExS_Commands.Import, preStageParams=True)
 
     ap_m = genParserSub(sp, WfExS_Commands.MountWorkDir, postStageParams=True)
 
@@ -1207,6 +1287,7 @@ def main() -> None:
         WfExS_Commands.ListPushers,
         WfExS_Commands.Stage,
         WfExS_Commands.ReStage,
+        WfExS_Commands.Import,
         WfExS_Commands.Execute,
     ):
         updated_config, local_config = WfExSBackend.bootstrap(
@@ -1233,6 +1314,12 @@ def main() -> None:
 
     if command == WfExS_Commands.ListPushers:
         sys.exit(processListPushersCommand(wfBackend, logLevel))
+
+    if command == WfExS_Commands.ListContainerFactories:
+        sys.exit(processListContainerFactoriesCommand(wfBackend, logLevel))
+
+    if command == WfExS_Commands.ListWorkflowEngines:
+        sys.exit(processListWorkflowEnginesCommand(wfBackend, logLevel))
 
     if command == WfExS_Commands.ListLicences:
         sys.exit(processListLicencesCommand(wfBackend, logLevel))
@@ -1317,7 +1404,7 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-    elif not args.workflowConfigFilename:
+    elif command != WfExS_Commands.Import and not args.workflowConfigFilename:
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
     elif command == WfExS_Commands.ConfigValidate:
@@ -1325,7 +1412,7 @@ def main() -> None:
             args.workflowConfigFilename, args.securityContextsConfigFilename
         )
         sys.exit(retval)
-    else:
+    elif command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
         wfInstance = wfBackend.fromFiles(
             args.workflowConfigFilename,
             args.securityContextsConfigFilename,
@@ -1335,6 +1422,24 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
         )
+    elif command == WfExS_Commands.Import:
+        wfInstance = wfBackend.fromPreviousROCrate(
+            args.workflowROCrateFilenameOrURI,
+            securityContextsConfigFilename=args.securityContextsConfigFilename,
+            replaced_parameters_filename=args.workflowConfigFilename,
+            nickname_prefix=args.nickname_prefix,
+            public_key_filenames=args.public_key_files,
+            private_key_filename=args.private_key_file,
+            private_key_passphrase=private_key_passphrase,
+            orcids=op_orcids,
+            secure=args.secure,
+        )
+    else:
+        print(
+            f"[ERROR] Unimplemented command {command.value}. Stopping.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # This is needed to be sure the encfs instance is unmounted
     if command != WfExS_Commands.MountWorkDir:
@@ -1356,12 +1461,14 @@ def main() -> None:
         sys.stderr.flush()
         wfInstance = wfBackend.fromPreviousInstanceDeclaration(
             source_wfInstance,
-            args.securityContextsConfigFilename,
+            securityContextsConfigFilename=args.securityContextsConfigFilename,
+            replaced_parameters_filename=args.workflowConfigFilename,
             nickname_prefix=args.nickname_prefix,
             public_key_filenames=args.public_key_files,
             private_key_filename=args.private_key_file,
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
+            secure=args.secure,
         )
 
     wfSetup = wfInstance.getStagedSetup()
@@ -1374,6 +1481,7 @@ def main() -> None:
 
     if command in (
         WfExS_Commands.Stage,
+        WfExS_Commands.Import,
         WfExS_Commands.ReStage,
         WfExS_Commands.Execute,
     ):

@@ -1,3 +1,5 @@
+from typing import Sequence
+
 from jsonpath_ng import parse as parse
 from jsonpath_ng.jsonpath import (
     DatumInContext,

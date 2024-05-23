@@ -3,6 +3,7 @@ from typing import (
     Any,
     Optional,
     Sequence,
+    Set,
 )
 
 from .model.computerlanguage import LANG_MAP as LANG_MAP
@@ -36,14 +37,18 @@ def suite(
 ) -> None: ...
 def instance(
     crate_dir: str,
-    suite,
-    url,
+    suite: Optional[str],
+    url: str,
     resource: str,
     service: str,
     identifier: Optional[str],
     name: Optional[str],
 ) -> None: ...
 def definition(
-    crate_dir: str, suite, path: str, engine: str, engine_version: Optional[str]
+    crate_dir: str,
+    suite: Optional[str],
+    path: str,
+    engine: str,
+    engine_version: Optional[str],
 ) -> None: ...
 def write_zip(crate_dir: str, dst: str) -> None: ...

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,7 +37,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .common import (
+from ..common import (
     ContainerTaggedName,
     ContainerType,
     ContentKind,
@@ -61,17 +61,16 @@ if TYPE_CHECKING:
         Sequence,
         Set,
         Tuple,
+        Type,
         Union,
     )
 
     from typing_extensions import Final
 
-    from .common import (
+    from ..common import (
         AbsPath,
         AnyPath,
-        EngineLocalConfig,
         EngineMode,
-        EnginePath,
         EngineVersion,
         ExitVal,
         ExpectedOutput,
@@ -80,10 +79,13 @@ if TYPE_CHECKING:
         RelPath,
         SymbolicParamName,
         URIType,
-        WorkflowEngineVersionStr,
     )
 
-    from .utils.groovy_parsing import (
+    from ..container_factories import (
+        ContainerFactory,
+    )
+
+    from ..utils.groovy_parsing import (
         ContextAssignments,
         NfInclude,
         NfIncludeConfig,
@@ -91,8 +93,14 @@ if TYPE_CHECKING:
         NfWorkflow,
     )
 
-from .engine import WorkflowEngine, WorkflowEngineException
-from .engine import (
+    from . import (
+        EngineLocalConfig,
+        EnginePath,
+        WorkflowEngineVersionStr,
+    )
+
+from . import WorkflowEngine, WorkflowEngineException
+from . import (
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
@@ -100,11 +108,16 @@ from .engine import (
     WORKDIR_STDERR_FILE,
     WorkflowType,
 )
-from .fetchers.http import fetchClassicURL
-from .utils.contents import (
+
+from ..container_factories.no_container import (
+    NoContainerFactory,
+)
+
+from ..fetchers.http import fetchClassicURL
+from ..utils.contents import (
     copy2_nofollow,
 )
-from .utils.groovy_parsing import (
+from ..utils.groovy_parsing import (
     analyze_nf_content,
     ERROR_PROCESS_NAME,
 )
@@ -167,7 +180,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     def __init__(
         self,
-        container_type: "ContainerType" = ContainerType.NoContainer,
+        container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
         cacheDir: "Optional[AnyPath]" = None,
         workflow_config: "Optional[Mapping[str, Any]]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
@@ -185,7 +198,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         config_directory: "Optional[AnyPath]" = None,
     ):
         super().__init__(
-            container_type=container_type,
+            container_factory_clazz=container_factory_clazz,
             cacheDir=cacheDir,
             workflow_config=workflow_config,
             local_config=local_config,
@@ -442,7 +455,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # Let's record all the configuration files
         nxfScripts: "MutableSequence[RelPath]" = []
         absolutePutativeCandidateNf: "Optional[AbsPath]" = None
-        engineVer = None
         minimalEngineVer = None
         kw_20_04_Pat: "Optional[Pattern[str]]" = re.compile(
             r"\$(?:(?:launchDir|moduleDir|projectDir)|\{(?:launchDir|moduleDir|projectDir)\})"
@@ -523,7 +535,16 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                     putativeEngineVerVal[1]
                                 )
                                 if matched:
-                                    engineVer = cast("EngineVersion", matched.group(1))
+                                    if engineVer is None or engineVer < matched.group(
+                                        1
+                                    ):
+                                        engineVer = cast(
+                                            "EngineVersion", matched.group(1)
+                                        )
+                                    else:
+                                        self.logger.info(
+                                            f"Manifest reports version {matched.group(1)}, but version {engineVer} was requested"
+                                        )
                                     break
                                 else:
                                     self.logger.debug(

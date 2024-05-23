@@ -34,6 +34,7 @@ import tempfile
 import threading
 import time
 import warnings
+import zipfile
 
 from typing import (
     cast,
@@ -56,6 +57,9 @@ from .common import (
 
 from .fetchers import (
     FetcherException,
+    # Next ones are needed for correct unmarshalling
+    RemoteRepo,
+    RepoType,
 )
 
 from .utils.orcid import (
@@ -83,6 +87,7 @@ if TYPE_CHECKING:
     from typing_extensions import (
         Final,
         Literal,
+        TypeAlias,
         TypedDict,
         Required,
         NotRequired,
@@ -92,44 +97,37 @@ if TYPE_CHECKING:
         AbsPath,
         AnyContent,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         EngineVersion,
-        EnvironmentBlock,
         ExitVal,
-        ExportActionBlock,
         LicenceDescription,
         MaterializedOutput,
-        MutableParamsBlock,
-        OutputsBlock,
-        ParamsBlock,
-        PlaceHoldersBlock,
-        ProcessorArchitecture,
         RelPath,
         RepoTag,
         RepoURL,
         SecurityContextConfig,
-        SecurityContextConfigBlock,
         SymbolicName,
         SymbolicParamName,
         SymbolicOutputName,
         TRS_Workflow_Descriptor,
         WfExSInstanceId,
-        WorkflowConfigBlock,
-        WorkflowEngineVersionStr,
-        WorkflowMetaConfigBlock,
         WritableSecurityContextConfig,
-        WritableWorkflowMetaConfigBlock,
         URIType,
         URIWithMetadata,
+    )
+
+    from .container_factories import (
+        ContainerEngineVersionStr,
+        ContainerOperatingSystem,
+        ProcessorArchitecture,
     )
 
     from .encrypted_fs import (
         EncryptedFSType,
     )
 
-    from .engine import (
+    from .workflow_engines import (
         AbstractWorkflowEngineType,
+        WorkflowEngineVersionStr,
     )
 
     from .pushers import (
@@ -185,16 +183,33 @@ if TYPE_CHECKING:
         total=False,
     )
 
-    WFVersionId = Union[str, int]
-    WorkflowId = Union[str, int]
+    WFVersionId: TypeAlias = Union[str, int]
+    WorkflowId: TypeAlias = Union[str, int]
+
+    ExportActionBlock: TypeAlias = Mapping[str, Any]
+
+    MutableParamsBlock: TypeAlias = MutableMapping[str, Any]
+    ParamsBlock: TypeAlias = Mapping[str, Any]
+
+    PlaceHoldersBlock: TypeAlias = Mapping[str, Union[int, float, str]]
+
+    EnvironmentBlock: TypeAlias = Mapping[str, Any]
+
+    MutableOutputsBlock: TypeAlias = MutableMapping[str, Any]
+    OutputsBlock: TypeAlias = Mapping[str, Any]
+
+    WorkflowConfigBlock: TypeAlias = Mapping[str, Any]
+
+    WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
+    WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
 
 import urllib.parse
 
 # This is needed to assure yaml.safe_load unmarshalls gives no error
-from .container import (
+from .container_factories import (
     Container,
 )
-from .engine import (
+from .workflow_engines import (
     WorkflowType,
 )
 
@@ -213,11 +228,20 @@ from .utils.licences import (
     AcceptableLicenceSchemes,
     LicenceMatcherSingleton,
 )
+from .utils.misc import (
+    lazy_import,
+)
+from .utils.rocrate import (
+    ROCrateToolbox,
+)
 
 from .security_context import (
     SecurityContextVault,
 )
 import bagit
+
+magic = lazy_import("magic")
+# import magic
 
 from . import __url__ as wfexs_backend_url
 from . import __official_name__ as wfexs_backend_name
@@ -227,7 +251,6 @@ from . import common as common_defs_module
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
-
 import yaml
 
 YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
@@ -256,13 +279,12 @@ from .common import (
     MarshallingStatus,
     MaterializedContent,
     MaterializedInput,
-    RemoteRepo,
     StagedSetup,
 )
 
 from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
 
-from .engine import (
+from .workflow_engines import (
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WorkflowEngine,
@@ -297,11 +319,12 @@ from .fetchers.trs_files import (
     TRS_SCHEME_PREFIX,
 )
 
-from .nextflow_engine import NextflowWorkflowEngine
-from .cwl_engine import CWLWorkflowEngine
-
 if TYPE_CHECKING:
     from .wfexs_backend import WfExSBackend
+
+# This code needs exception groups
+if sys.version_info[:2] < (3, 11):
+    from exceptiongroup import ExceptionGroup
 
 
 # Related export namedtuples
@@ -355,14 +378,8 @@ class DefaultMissing(Dict[KT, VT]):
         return cast(VT, key)
 
 
-# The list of classes to be taken into account
-# CWL detection is before, as Nextflow one is
-# a bit lax (only detects a couple of too common
-# keywords)
-WORKFLOW_ENGINE_CLASSES: "Final[Sequence[Type[WorkflowEngine]]]" = [
-    CWLWorkflowEngine,
-    NextflowWorkflowEngine,
-]
+ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
+LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
 
 
 def _wakeupEncDir(
@@ -389,6 +406,10 @@ class ExportActionException(AbstractWfExSException):
     pass
 
 
+class WFWarning(UserWarning):
+    pass
+
+
 class WF:
     """
     Workflow enaction class
@@ -406,14 +427,6 @@ class WF:
         "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
     )
     TRS_TOOLS_PATH: "Final[str]" = "tools/"
-
-    WORKFLOW_ENGINES: "Final[Sequence[WorkflowType]]" = list(
-        map(lambda clazz: clazz.MyWorkflowType(), WORKFLOW_ENGINE_CLASSES)
-    )
-
-    RECOGNIZED_TRS_DESCRIPTORS: "Final[Mapping[TRS_Workflow_Descriptor, WorkflowType]]" = dict(
-        map(lambda t: (t.trs_descriptor, t), WORKFLOW_ENGINES)
-    )
 
     def __init__(
         self,
@@ -451,6 +464,7 @@ class WF:
         versioning, providing an UUID, etc.
         :param descriptor_type: The type of descriptor that represents this version of the workflow
         (e.g. CWL, WDL, NFL, or GALAXY). It is optional, so it is guessed from the calls to the API.
+        It can be either the short name of the workflow engine, or the name used by GA4GH TRS.
         :param trs_endpoint: The TRS endpoint used to find the workflow.
         :param params: Optional params for the workflow execution.
         :param outputs:
@@ -527,10 +541,18 @@ class WF:
             if nickname is not None:
                 workflow_meta["nickname"] = nickname
             if descriptor_type is not None:
-                descriptor = self.RECOGNIZED_TRS_DESCRIPTORS.get(descriptor_type)
+                descriptor = self.wfexs.RECOGNIZED_TRS_DESCRIPTORS.get(descriptor_type)
+                if descriptor is None:
+                    descriptor = self.wfexs.RECOGNIZED_SHORTNAME_DESCRIPTORS.get(
+                        descriptor_type
+                    )
+
                 if descriptor is not None:
                     workflow_meta["workflow_type"] = descriptor.shortname
                 else:
+                    self.logger.warning(
+                        f"This instance of WfExS backend does not recognize workflows of type {descriptor_type}"
+                    )
                     workflow_meta["workflow_type"] = descriptor_type
             if trs_endpoint is not None:
                 workflow_meta["trs_endpoint"] = trs_endpoint
@@ -1143,6 +1165,56 @@ class WF:
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
 
+    @staticmethod
+    def __read_yaml_config(filename: "AnyPath") -> "WritableWorkflowMetaConfigBlock":
+        with open(filename, mode="r", encoding="utf-8") as wcf:
+            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+
+        return cast("WritableWorkflowMetaConfigBlock", workflow_meta)
+
+    @classmethod
+    def __merge_params_from_file(
+        cls,
+        wfexs: "WfExSBackend",
+        base_workflow_meta: "WorkflowMetaConfigBlock",
+        replaced_parameters_filename: "AnyPath",
+    ) -> "WritableWorkflowMetaConfigBlock":
+        new_params_meta = cls.__read_yaml_config(replaced_parameters_filename)
+
+        if (
+            not isinstance(base_workflow_meta, dict)
+            or "params" not in base_workflow_meta
+        ):
+            raise WFException(
+                "Base workflow metadata does not have the proper WfExS parameters structure"
+            )
+
+        if not isinstance(new_params_meta, dict) or "params" not in new_params_meta:
+            raise WFException(
+                f"Loaded {replaced_parameters_filename} does not have the proper WfExS parameters structure"
+            )
+
+        # Now, trim everything but what it is allowed
+        existing_keys = set(new_params_meta.keys())
+        existing_keys.remove("params")
+        if len(existing_keys) > 0:
+            for key in existing_keys:
+                del new_params_meta[key]
+
+        # This key is needed to pass the validation
+        new_params_meta["workflow_id"] = "dummy"
+        # Let's check!
+        if wfexs.validateConfigFiles(new_params_meta) > 0:
+            raise WFException(
+                f"Loaded WfExS parameters from {replaced_parameters_filename} fails (have a look at the log messages for details)"
+            )
+
+        # Last, merge
+        workflow_meta = copy.deepcopy(base_workflow_meta)
+        workflow_meta["params"].update(new_params_meta["params"])
+
+        return workflow_meta
+
     @classmethod
     def FromWorkDir(
         cls,
@@ -1196,8 +1268,7 @@ class WF:
         This class method creates a new staged working directory
         """
 
-        with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+        workflow_meta = cls.__read_yaml_config(workflowMetaFilename)
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -1262,11 +1333,13 @@ class WF:
         wfexs: "WfExSBackend",
         wfInstance: "WF",
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        replaced_parameters_filename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        secure: "bool" = True,
         paranoidMode: "bool" = False,
     ) -> "WF":
         """
@@ -1281,10 +1354,155 @@ class WF:
         # Now we should be able to get the configuration file
         workflow_meta = copy.deepcopy(wfInstance.staging_recipe)
 
+        if replaced_parameters_filename is not None:
+            workflow_meta = cls.__merge_params_from_file(
+                wfexs, workflow_meta, replaced_parameters_filename
+            )
+
         # We have to reset the inherited paranoid mode and nickname
         for k_name in ("nickname", "paranoid_mode"):
             if k_name in workflow_meta:
                 del workflow_meta[k_name]
+
+        # We also have to reset the secure mode
+        workflow_meta.setdefault("workflow_config", {})["secure"] = secure
+
+        return cls.FromStagedRecipe(
+            wfexs,
+            workflow_meta,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+            orcids=orcids,
+            public_key_filenames=public_key_filenames,
+            private_key_filename=private_key_filename,
+            private_key_passphrase=private_key_passphrase,
+            paranoidMode=paranoidMode,
+        )
+
+    @classmethod
+    def FromPreviousROCrate(
+        cls,
+        wfexs: "WfExSBackend",
+        workflowROCrateFilename: "AnyPath",
+        public_name: "str",  # Mainly used for provenance and exceptions
+        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        replaced_parameters_filename: "Optional[AnyPath]" = None,
+        nickname_prefix: "Optional[str]" = None,
+        orcids: "Sequence[str]" = [],
+        public_key_filenames: "Sequence[AnyPath]" = [],
+        private_key_filename: "Optional[AnyPath]" = None,
+        private_key_passphrase: "Optional[str]" = None,
+        secure: "bool" = True,
+        paranoidMode: "bool" = False,
+    ) -> "WF":
+        """
+        This class method creates a new staged working directory
+        based on the declaration of an existing one
+        """
+
+        # Is it a bare file or an archive?
+        jsonld_filename: "Optional[str]" = None
+        if os.path.isdir(workflowROCrateFilename):
+            possible_jsonld_filename = os.path.join(
+                workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
+            )
+            legacy_jsonld_filename = os.path.join(
+                workflowROCrateFilename, LEGACY_ROCRATE_JSONLD_FILENAME
+            )
+            if os.path.exists(possible_jsonld_filename):
+                jsonld_filename = possible_jsonld_filename
+            elif os.path.exists(legacy_jsonld_filename):
+                jsonld_filename = legacy_jsonld_filename
+            else:
+                raise WFException(
+                    f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
+                )
+        elif os.path.isfile(workflowROCrateFilename):
+            jsonld_filename = workflowROCrateFilename
+        else:
+            raise WFException(f"Input {public_name} is neither a file or a directory")
+
+        jsonld_bin: "Optional[bytes]" = None
+        putative_mime = magic.from_file(jsonld_filename, mime=True)
+        # Bare possible RO-Crate
+        if putative_mime == "application/json":
+            with open(jsonld_filename, mode="rb") as jdf:
+                jsonld_bin = jdf.read()
+        # Archived possible RO-Crate
+        elif putative_mime == "application/zip":
+            with zipfile.ZipFile(workflowROCrateFilename, mode="r") as zf:
+                try:
+                    jsonld_bin = zf.read(ROCRATE_JSONLD_FILENAME)
+                except Exception as e:
+                    try:
+                        jsonld_bin = zf.read(LEGACY_ROCRATE_JSONLD_FILENAME)
+                    except Exception as e2:
+                        raise WFException(
+                            f"Unable to locate RO-Crate metadata descriptor within {public_name}"
+                        ) from ExceptionGroup(  # pylint: disable=possibly-used-before-assignment
+                            f"Both {ROCRATE_JSONLD_FILENAME} and {LEGACY_ROCRATE_JSONLD_FILENAME} tried",
+                            [e, e2],
+                        )
+
+                putative_mime_ld = magic.from_buffer(jsonld_bin, mime=True)
+                if putative_mime_ld != "application/json":
+                    raise WFException(
+                        f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
+                    )
+        else:
+            raise WFException(
+                f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
+            )
+
+        # Let's parse the JSON (in order to check whether it is valid)
+        try:
+            jsonld_obj = json.loads(jsonld_bin)
+        except json.JSONDecodeError as jde:
+            raise WFException(
+                f"Content from {public_name} is not a valid JSON"
+            ) from jde
+
+        (
+            repo,
+            workflow_type,
+            container_type,
+            the_containers,
+            params,
+            environment,
+            outputs,
+        ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
+            jsonld_obj, public_name
+        )
+        workflow_pid = wfexs.gen_workflow_pid(repo)
+        logging.debug(
+            f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
+        )
+        logging.debug(f"Containers {the_containers}")
+        workflow_meta: "WritableWorkflowMetaConfigBlock" = {
+            "workflow_id": workflow_pid,
+            "workflow_type": workflow_type.shortname,
+            "environment": environment,
+            "params": params,
+            "outputs": outputs,
+            "workflow_config": {
+                "secure": secure,
+            },
+        }
+        if container_type is not None:
+            workflow_meta["workflow_config"]["containerType"] = container_type.value
+
+        logging.debug(f"{json.dumps(workflow_meta, indent=4)}")
+
+        if replaced_parameters_filename is not None:
+            workflow_meta = cls.__merge_params_from_file(
+                wfexs, workflow_meta, replaced_parameters_filename
+            )
+
+        # Last, be sure that what it has been generated is correct
+        if wfexs.validateConfigFiles(workflow_meta, securityContextsConfigFilename) > 0:
+            raise WFException(
+                f"Generated WfExS description from {public_name} fails (have a look at the log messages for details)"
+            )
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -1478,7 +1696,7 @@ class WF:
         # A valid engine must be identified from the fetched content
         # TODO: decide whether to force some specific version
         if self.engineDesc is None:
-            for engineDesc in self.WORKFLOW_ENGINES:
+            for engineDesc in self.wfexs.WORKFLOW_ENGINES:
                 self.logger.debug("Testing engine " + engineDesc.trs_descriptor)
                 engine = self.wfexs.instantiateEngine(engineDesc, self.staged_setup)
 
@@ -1518,7 +1736,12 @@ class WF:
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
 
-    def setupEngine(self, offline: "bool" = False, ignoreCache: "bool" = False) -> None:
+    def setupEngine(
+        self,
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        initial_engine_version: "Optional[EngineVersion]" = None,
+    ) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
             assert self.id is not None
@@ -1535,13 +1758,26 @@ class WF:
             self.engine is not None
         ), "Workflow engine not properly identified or set up"
 
+        engine_version: "Optional[EngineVersion]"
         if self.materializedEngine is None:
             assert self.localWorkflow is not None
             localWorkflow = self.localWorkflow
+            do_identify = True
+            if self.engineVer is not None:
+                engine_version = self.engineVer
+            else:
+                engine_version = initial_engine_version
         else:
             localWorkflow = self.materializedEngine.workflow
+            engine_version = self.materializedEngine.version
+            do_identify = False
 
-        matWfEngV2 = self.engine.materializeEngine(localWorkflow, self.engineVer)
+        # This is to avoid double initialization
+        matWfEngV2 = self.engine.materializeEngine(
+            localWorkflow,
+            engineVersion=engine_version,
+            do_identify=do_identify,
+        )
 
         # At this point, there can be uninitialized elements
         if matWfEngV2 is not None:
@@ -1604,6 +1840,7 @@ class WF:
             "injectInputs is being deprecated", PendingDeprecationWarning, stacklevel=2
         )
         if workflowInputs_destdir is None:
+            assert self.inputsDir is not None
             workflowInputs_destdir = self.inputsDir
         if workflowInputs_cacheDir is None:
             workflowInputs_cacheDir = CacheType.Input
@@ -1615,8 +1852,6 @@ class WF:
             raise WFException(
                 "Cannot inject inputs as the store directory is undefined"
             )
-
-        assert workflowInputs_destdir is not None
 
         for path in paths:
             # We are sending the context name thinking in the future,
@@ -3339,6 +3574,22 @@ This is an enumeration of the types of collected contents:
 
         return self.configMarshalled
 
+    def __get_combined_globals(self) -> "Mapping[str, Any]":
+        """
+        This method is needed since workflow engines and container factories
+        are dynamically loaded.
+        """
+        combined_globals = copy.copy(common_defs_module.__dict__)
+        combined_globals.update(globals())
+        combined_globals.update(
+            [
+                (workflow_engine.__name__, workflow_engine)
+                for workflow_engine in self.wfexs.listWorkflowEngineClasses()
+            ]
+        )
+
+        return combined_globals
+
     def unmarshallConfig(
         self, fail_ok: "bool" = False
     ) -> "Optional[Union[bool, datetime.datetime]]":
@@ -3567,8 +3818,7 @@ This is an enumeration of the types of collected contents:
                 with open(marshalled_stage_file, mode="r", encoding="utf-8") as msF:
                     marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
 
-                    combined_globals = copy.copy(common_defs_module.__dict__)
-                    combined_globals.update(globals())
+                    combined_globals = self.__get_combined_globals()
                     stage = unmarshall_namedtuple(marshalled_stage, combined_globals)
                     self.remote_repo = stage.get("remote_repo")
                     # This one takes precedence
@@ -3770,8 +4020,7 @@ This is an enumeration of the types of collected contents:
             try:
                 with open(marshalled_execution_file, mode="r", encoding="utf-8") as meF:
                     marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = copy.copy(common_defs_module.__dict__)
-                    combined_globals.update(globals())
+                    combined_globals = self.__get_combined_globals()
                     execution_read = unmarshall_namedtuple(
                         marshalled_execution, combined_globals
                     )
@@ -3970,8 +4219,7 @@ This is an enumeration of the types of collected contents:
             try:
                 with open(marshalled_export_file, mode="r", encoding="utf-8") as meF:
                     marshalled_export = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = copy.copy(common_defs_module.__dict__)
-                    combined_globals.update(globals())
+                    combined_globals = self.__get_combined_globals()
                     self.runExportActions = unmarshall_namedtuple(
                         marshalled_export, combined_globals
                     )
@@ -4323,16 +4571,11 @@ This is an enumeration of the types of collected contents:
             crate_pid=crate_pid,
         )
 
-        wrroc.addWorkflowInputs(
+        wrroc.addStagedWorkflowDetails(
             self.materializedParams,
-            are_envvars=False,
-        )
-        wrroc.addWorkflowInputs(
             self.materializedEnvironment,
-            are_envvars=True,
+            self.outputs,
         )
-        if self.outputs is not None:
-            wrroc.addWorkflowExpectedOutputs(self.outputs)
 
         # Save RO-crate as execution.crate.zip
         if filename is None:

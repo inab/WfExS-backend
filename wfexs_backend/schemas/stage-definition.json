@@ -567,11 +567,7 @@
 		"workflow_type": {
 			"title": "The optional, forced workflow type",
 			"description": "When this key is set, it is forcing the workflow type. WfExS-backend is usually able to identify the workflow type, unless there are two intertwined workflows in the same location",
-			"type": "string",
-			"enum": [
-				"nextflow",
-				"cwl"
-			]
+			"type": "string"
 		},
 		"workflow_config": {
 			"type": "object",

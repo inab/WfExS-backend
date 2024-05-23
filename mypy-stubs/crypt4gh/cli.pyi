@@ -8,6 +8,7 @@ from typing import (
     Optional,
     Pattern,
     Sequence,
+    Tuple,
 )
 
 from typing_extensions import (
@@ -18,7 +19,6 @@ LOG: Logger
 C4GH_DEBUG: str | Literal[False]
 DEFAULT_SK: Optional[str]
 DEFAULT_LOG: Optional[str]
-__doc__: str
 
 def parse_args(argv: Sequence[str] = ...) -> Mapping[str, Any]: ...
 

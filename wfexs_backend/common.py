@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -133,14 +133,6 @@ if TYPE_CHECKING:
     RepoURL = NewType("RepoURL", URIType)
     # The tag, branch or hash of a workflow in a git repository
     RepoTag = NewType("RepoTag", str)
-    # This is also an absolute path
-    EnginePath = NewType("EnginePath", AbsPath)
-
-    # This is a container engine version
-    ContainerEngineVersionStr = NewType("ContainerEngineVersionStr", str)
-    WorkflowEngineVersionStr = NewType("WorkflowEngineVersionStr", str)
-    ContainerOperatingSystem = NewType("ContainerOperatingSystem", str)
-    ProcessorArchitecture = NewType("ProcessorArchitecture", str)
 
     # This is a workflow engine version
     EngineVersion = NewType("EngineVersion", str)
@@ -160,27 +152,6 @@ if TYPE_CHECKING:
 
     SecurityContextConfig: TypeAlias = Mapping[str, Any]
     WritableSecurityContextConfig: TypeAlias = MutableMapping[str, Any]
-    SecurityContextConfigBlock: TypeAlias = Mapping[str, SecurityContextConfig]
-
-    # TODO: study using TypedDict
-    LocalConfig: TypeAlias = Mapping[str, Any]
-    ContainerLocalConfig: TypeAlias = Mapping[str, Any]
-    EngineLocalConfig: TypeAlias = Mapping[str, Any]
-    WorkflowConfigBlock: TypeAlias = Mapping[str, Any]
-    WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
-    WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
-    WfExSConfigBlock: TypeAlias = Mapping[str, Any]
-    WritableWfExSConfigBlock: TypeAlias = MutableMapping[str, Any]
-    ExportActionBlock: TypeAlias = Mapping[str, Any]
-    ParamsBlock: TypeAlias = Mapping[str, Any]
-    EnvironmentBlock: TypeAlias = Mapping[str, Any]
-    MutableParamsBlock: TypeAlias = MutableMapping[str, Any]
-    OutputsBlock: TypeAlias = Mapping[str, Any]
-    PlaceHoldersBlock: TypeAlias = Mapping[str, Union[int, float, str]]
-
-    # As each workflow engine can have its own naming convention, leave them to
-    # provide it
-    ContainerFileNamingMethod: TypeAlias = Callable[[URIType], RelPath]
 
 
 ## BEWARE!!!! The names of these keys MUST NOT CHANGE
@@ -575,43 +546,6 @@ class LocalWorkflow(NamedTuple):
 
 if TYPE_CHECKING:
     TRS_Workflow_Descriptor: TypeAlias = str
-
-
-class RepoType(enum.Enum):
-    Git = "git"
-    Raw = "raw"
-    Other = "other"
-    SoftwareHeritage = "swh"
-    TRS = "trs"
-
-    @classmethod
-    def _undeprecate_table(cls) -> "Mapping[str, str]":
-        # These fixes are needed to map deprecated values
-        # to the most approximate ones
-        return {
-            "github": "git",
-            "gitlab": "git",
-            "bitbucket": "git",
-        }
-
-
-class RepoGuessFlavor(enum.Enum):
-    GitHub = "github"
-    GitLab = "gitlab"
-    BitBucket = "bitbucket"
-
-
-class RemoteRepo(NamedTuple):
-    """
-    Remote repository description
-    """
-
-    repo_url: "RepoURL"
-    tag: "Optional[RepoTag]" = None
-    rel_path: "Optional[RelPath]" = None
-    repo_type: "Optional[RepoType]" = None
-    web_url: "Optional[URIType]" = None
-    guess_flavor: "Optional[RepoGuessFlavor]" = None
 
 
 class StagedSetup(NamedTuple):

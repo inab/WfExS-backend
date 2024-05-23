@@ -1,9 +1,11 @@
 from typing import (
+    Any,
     Optional,
     Pattern,
     Sequence,
 )
 from .. import DatumInContext as DatumInContext, This as This
+from ..jsonpath import JSONVal
 
 SUB: Pattern[str]
 SPLIT: Pattern[str]

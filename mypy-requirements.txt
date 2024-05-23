@@ -3,6 +3,10 @@ mypy-extensions
 # typing libraries, needed by mypy
 types-boto3
 types-certifi
+# We do not use this directly, but the crypt4gh stubs embedded in the repo
+types-cryptography
+# We do not use this directly, but the rdflib annotations
+types-html5lib
 types-jsonschema
 types-mypy-extensions
 types-openpyxl
@@ -12,5 +16,6 @@ types-pyxdg
 types-PyYAML
 types-requests
 types-setuptools
-# We do not use this directly, but the crypt4gh stubs embedded in the repo
-cryptography >= 41.0.0
+# We do not use this directly, but indirectly the type annotations for
+# extended_nc_client
+types-six

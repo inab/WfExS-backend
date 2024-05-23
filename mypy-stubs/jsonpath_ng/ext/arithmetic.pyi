@@ -1,4 +1,6 @@
 from typing import (
+    Callable,
+    Mapping,
     Sequence,
 )
 

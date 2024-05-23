@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,12 +32,12 @@ from typing import (
 from urllib import parse
 import uuid
 
-from .common import (
+from ..common import (
     META_JSON_POSTFIX,
     DEFAULT_SINGULARITY_CMD,
 )
 
-from . import common
+from .. import common
 
 if TYPE_CHECKING:
     from typing import (
@@ -56,16 +56,19 @@ if TYPE_CHECKING:
         TypedDict,
     )
 
-    from .common import (
+    from ..common import (
         AbsPath,
         AnyPath,
-        ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ContainerTaggedName,
         Fingerprint,
-        ProcessorArchitecture,
         RelPath,
         URIType,
+    )
+
+    from . import (
+        ContainerFileNamingMethod,
+        ContainerLocalConfig,
+        ProcessorArchitecture,
     )
 
     class SingularityManifest(TypedDict):
@@ -78,7 +81,7 @@ if TYPE_CHECKING:
         image_signature: NotRequired[Fingerprint]
 
 
-from .container import (
+from . import (
     Container,
     ContainerFactory,
     ContainerEngineException,
@@ -87,9 +90,9 @@ from .container import (
     DOCKER_SCHEME,
 )
 
-from .utils.contents import link_or_copy
-from .utils.digests import ComputeDigestFromFile, nihDigester
-from .utils.docker import DockerHelper
+from ..utils.contents import link_or_copy
+from ..utils.digests import ComputeDigestFromFile, nihDigester
+from ..utils.docker import DockerHelper
 
 
 class FailedContainerTag(NamedTuple):

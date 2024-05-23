@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2023 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +33,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from .common import (
+from ..common import (
     AbstractWfExSException,
     ContainerType,
     ContentKind,
@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         Callable,
         Mapping,
         MutableSequence,
+        NewType,
         Optional,
         Pattern,
         Sequence,
@@ -61,15 +62,16 @@ if TYPE_CHECKING:
         Union,
     )
 
-    from .common import (
+    from typing_extensions import (
+        Final,
+        TypeAlias,
+    )
+
+    from ..common import (
         AbstractGeneratedContent,
         AbsPath,
         AnyPath,
-        ContainerEngineVersionStr,
-        ContainerOperatingSystem,
         ContainerTaggedName,
-        EngineLocalConfig,
-        EnginePath,
         EngineVersion,
         ExitVal,
         ExpectedOutput,
@@ -77,7 +79,6 @@ if TYPE_CHECKING:
         LocalWorkflow,
         MaterializedInput,
         MaterializedContent,
-        ProcessorArchitecture,
         RelPath,
         StagedExecution,
         StagedSetup,
@@ -86,20 +87,29 @@ if TYPE_CHECKING:
         TRS_Workflow_Descriptor,
         URIType,
         WFLangVersion,
-        WorkflowEngineVersionStr,
     )
 
-    from .container import (
+    from ..container_factories import (
         Container,
+        ContainerEngineVersionStr,
+        ContainerFactory,
+        ContainerOperatingSystem,
+        ProcessorArchitecture,
     )
 
-from .container import ContainerFactory, NoContainerFactory
-from .singularity_container import SingularityContainerFactory
-from .docker_container import DockerContainerFactory
-from .podman_container import PodmanContainerFactory
+    EngineLocalConfig: TypeAlias = Mapping[str, Any]
 
-from .utils.contents import CWLDesc2Content, GetGeneratedDirectoryContent
-from .utils.digests import ComputeDigestFromFile, nihDigester
+    # This is also an absolute path
+    EnginePath = NewType("EnginePath", AbsPath)
+
+    WorkflowEngineVersionStr = NewType("WorkflowEngineVersionStr", str)
+
+from ..container_factories.no_container import (
+    NoContainerFactory,
+)
+
+from ..utils.contents import CWLDesc2Content, GetGeneratedDirectoryContent
+from ..utils.digests import ComputeDigestFromFile, nihDigester
 
 # Constants
 WORKDIR_INPUTS_RELDIR = "inputs"
@@ -129,6 +139,10 @@ WORKDIR_PASSPHRASE_FILE = ".passphrase"
 STATS_DAG_DOT_FILE = "dag.dot"
 
 
+# Default priority
+DEFAULT_PRIORITY: "Final[int]" = 0
+
+
 class WorkflowType(NamedTuple):
     """
     engineName: symbolic name of the engine
@@ -152,6 +166,8 @@ class WorkflowType(NamedTuple):
     url: "URIType"
     trs_descriptor: "TRS_Workflow_Descriptor"
     rocrate_programming_language: "str"
+    priority: "int" = DEFAULT_PRIORITY
+    enabled: "bool" = True
 
     @classmethod
     def _value_fixes(cls) -> "Mapping[str, Optional[str]]":
@@ -243,7 +259,10 @@ class AbstractWorkflowEngineType(abc.ABC):
 
     @abc.abstractmethod
     def materializeEngine(
-        self, localWf: "LocalWorkflow", engineVersion: "Optional[EngineVersion]" = None
+        self,
+        localWf: "LocalWorkflow",
+        engineVersion: "Optional[EngineVersion]" = None,
+        do_identify: "bool" = False,
     ) -> "Optional[MaterializedWorkflowEngine]":
         pass
 
@@ -288,6 +307,9 @@ class AbstractWorkflowEngineType(abc.ABC):
     def FromStagedSetup(
         cls,
         staged_setup: "StagedSetup",
+        container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
+            NoContainerFactory
+        ],
         cache_dir: "Optional[AnyPath]" = None,
         cache_workflow_dir: "Optional[AnyPath]" = None,
         cache_workflow_inputs_dir: "Optional[AnyPath]" = None,
@@ -305,18 +327,10 @@ class WorkflowEngineException(AbstractWfExSException):
     pass
 
 
-CONTAINER_FACTORY_CLASSES: "Sequence[Type[ContainerFactory]]" = [
-    SingularityContainerFactory,
-    DockerContainerFactory,
-    PodmanContainerFactory,
-    NoContainerFactory,
-]
-
-
 class WorkflowEngine(AbstractWorkflowEngineType):
     def __init__(
         self,
-        container_type: "ContainerType" = ContainerType.NoContainer,
+        container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
         cacheDir: "Optional[AnyPath]" = None,
         workflow_config: "Optional[Mapping[str, Any]]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
@@ -492,33 +506,25 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             engine_mode = EngineMode(engine_mode)
         self.engine_mode = engine_mode
 
-        if not self.supportsContainerType(container_type):
+        container_type = container_factory_clazz.ContainerType()
+        if not self.SupportsContainerType(container_type):
             raise WorkflowEngineException(
                 f"Current implementation of {self.__class__.__name__} does not support {container_type}"
             )
 
-        if secure_exec and not self.supportsSecureExecContainerType(container_type):
+        if secure_exec and not self.SupportsSecureExecContainerType(container_type):
             raise WorkflowEngineException(
                 f"Due technical limitations, secure or paranoid executions are incompatible with {container_type}"
             )
 
-        for containerFactory in CONTAINER_FACTORY_CLASSES:
-            if containerFactory.ContainerType() == container_type:
-                self.logger.debug(f"Container type {container_type}")
-                self.container_factory = containerFactory(
-                    cacheDir=cacheDir,
-                    stagedContainersDir=stagedContainersDir,
-                    local_config=local_config,
-                    engine_name=self.__class__.__name__,
-                    tempDir=self.tempDir,
-                )
-                break
-        else:
-            raise WorkflowEngineException(
-                "FATAL: No container factory implementation for {}".format(
-                    container_type
-                )
-            )
+        self.logger.debug(f"Instantiating container type {container_type}")
+        self.container_factory = container_factory_clazz(
+            cacheDir=cacheDir,
+            stagedContainersDir=stagedContainersDir,
+            local_config=local_config,
+            engine_name=self.__class__.__name__,
+            tempDir=self.tempDir,
+        )
 
         isUserNS = self.container_factory.supportsFeature("userns")
         self.logger.debug(
@@ -559,6 +565,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def FromStagedSetup(
         cls,
         staged_setup: "StagedSetup",
+        container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
+            NoContainerFactory
+        ],
         cache_dir: "Optional[AnyPath]" = None,
         cache_workflow_dir: "Optional[AnyPath]" = None,
         cache_workflow_inputs_dir: "Optional[AnyPath]" = None,
@@ -576,8 +585,18 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         :param config_directory:
         """
 
+        the_container_factory_clazz: "Optional[Type[ContainerFactory]]" = None
+        for container_factory_clazz in container_factory_classes:
+            if container_factory_clazz.ContainerType() == staged_setup.container_type:
+                the_container_factory_clazz = container_factory_clazz
+                # self.logger.debug(f"Selected container type {staged_setup.container_type}")
+                break
+        else:
+            raise WorkflowEngineException(
+                f"FATAL: No container factory implementation for {staged_setup.container_type}"
+            )
         return cls(
-            container_type=staged_setup.container_type,
+            container_factory_clazz=the_container_factory_clazz,
             workflow_config=staged_setup.workflow_config,
             engineTweaksDir=staged_setup.engine_tweaks_dir,
             workDir=staged_setup.work_dir,
@@ -607,11 +626,27 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def SupportedSecureExecContainerTypes(cls) -> "Set[ContainerType]":
         pass
 
-    def supportsContainerType(self, containerType: "ContainerType") -> "bool":
-        return containerType in self.SupportedContainerTypes()
+    @classmethod
+    def SupportsContainerType(cls, container_type: "ContainerType") -> "bool":
+        return container_type in cls.SupportedContainerTypes()
 
-    def supportsSecureExecContainerType(self, containerType: "ContainerType") -> "bool":
-        return containerType in self.SupportedSecureExecContainerTypes()
+    @classmethod
+    def SupportsContainerFactory(
+        cls, container_factory_clazz: "Type[ContainerFactory]"
+    ) -> "bool":
+        return cls.SupportsContainerType(container_factory_clazz.ContainerType())
+
+    @classmethod
+    def SupportsSecureExecContainerType(cls, container_type: "ContainerType") -> "bool":
+        return container_type in cls.SupportedSecureExecContainerTypes()
+
+    @classmethod
+    def SupportsSecureExecContainerFactory(
+        cls, container_factory_clazz: "Type[ContainerFactory]"
+    ) -> "bool":
+        return cls.SupportsSecureExecContainerType(
+            container_factory_clazz.ContainerType()
+        )
 
     @abc.abstractmethod
     def identifyWorkflow(
@@ -646,7 +681,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         return matWfEng.instance._get_engine_version_str(matWfEng)
 
     def materializeEngine(
-        self, localWf: "LocalWorkflow", engineVersion: "Optional[EngineVersion]" = None
+        self,
+        localWf: "LocalWorkflow",
+        engineVersion: "Optional[EngineVersion]" = None,
+        do_identify: "bool" = False,
     ) -> "Optional[MaterializedWorkflowEngine]":
         """
         Method to ensure the required engine version is materialized
@@ -655,7 +693,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         """
 
         # This method can be forced to materialize an specific engine version
-        if engineVersion is None:
+        if do_identify or engineVersion is None:
             # The identification could return an augmented LocalWorkflow instance
             resLocalWf: "Optional[LocalWorkflow]"
             engineVersion, resLocalWf = self.identifyWorkflow(localWf, engineVersion)

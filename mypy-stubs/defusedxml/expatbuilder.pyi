@@ -20,21 +20,41 @@ class DefusedExpatBuilder(_ExpatBuilder):
         forbid_external: bool = True,
     ) -> None: ...
     def defused_start_doctype_decl(
-        self, name, sysid, pubid, has_internal_subset
+        self,
+        name: str | None,
+        sysid: str | None,
+        pubid: str | None,
+        has_internal_subset: bool,
     ) -> None: ...
     def defused_entity_decl(
-        self, name, is_parameter_entity, value, base, sysid, pubid, notation_name
+        self,
+        name: str | None,
+        is_parameter_entity: bool,
+        value: str | None,
+        base: str | None,
+        sysid: str | None,
+        pubid: str | None,
+        notation_name: str | None,
     ) -> None: ...
     def defused_unparsed_entity_decl(
-        self, name, base, sysid, pubid, notation_name
+        self,
+        name: str | None,
+        base: str | None,
+        sysid: str | None,
+        pubid: str | None,
+        notation_name: str | None,
     ) -> None: ...
     def defused_external_entity_ref_handler(
-        self, context, base, sysid, pubid
+        self,
+        context: str | None,
+        base: str | None,
+        sysid: str | None,
+        pubid: str | None,
     ) -> None: ...
-    def install(self, parser) -> None: ...
+    def install(self, parser: _ExpatBuilder) -> None: ...
 
 class DefusedExpatBuilderNS(_Namespaces, DefusedExpatBuilder):
-    def install(self, parser) -> None: ...
+    def install(self, parser: _ExpatBuilder) -> None: ...
     def reset(self) -> None: ...
 
 def parse(
