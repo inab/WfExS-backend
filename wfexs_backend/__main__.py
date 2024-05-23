@@ -237,15 +237,7 @@ def genParserSub(
     )
 
     if preStageParams:
-        if command != WfExS_Commands.Import:
-            ap_.add_argument(
-                "-W",
-                "--workflow-config",
-                dest="workflowConfigFilename",
-                required=True,
-                help="Configuration file, describing workflow and inputs",
-            )
-        else:
+        if command == WfExS_Commands.Import:
             ap_.add_argument(
                 "-R",
                 "--workflow-rocrate",
@@ -254,7 +246,18 @@ def genParserSub(
                 help="Workflow Run RO-Crate describing a previous workflow execution. It can be either a local path or an URI resolvable from WfExS with no authentication",
             )
 
-        if command in (WfExS_Commands.Import, WfExS_Commands.ReStage):
+        not_restage = command not in (WfExS_Commands.Import, WfExS_Commands.ReStage)
+        ap_.add_argument(
+            "-W",
+            "--workflow-config",
+            dest="workflowConfigFilename",
+            required=not_restage,
+            help="Configuration file, describing workflow and inputs"
+            if not_restage
+            else "Optional configuration file, describing some inputs which will replace the base, original ones",
+        )
+
+        if not not_restage:
             ap_.add_argument(
                 "-s",
                 "--no-secure",
@@ -1153,7 +1156,9 @@ def _get_wfexs_argparse_internal(
 
     ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)
 
-    ap_r_s = genParserSub(sp, WfExS_Commands.ReStage, postStageParams=True)
+    ap_r_s = genParserSub(
+        sp, WfExS_Commands.ReStage, preStageParams=True, postStageParams=True
+    )
 
     ap_imp = genParserSub(sp, WfExS_Commands.Import, preStageParams=True)
 
@@ -1420,7 +1425,8 @@ def main() -> None:
     elif command == WfExS_Commands.Import:
         wfInstance = wfBackend.fromPreviousROCrate(
             args.workflowROCrateFilenameOrURI,
-            args.securityContextsConfigFilename,
+            securityContextsConfigFilename=args.securityContextsConfigFilename,
+            replaced_parameters_filename=args.workflowConfigFilename,
             nickname_prefix=args.nickname_prefix,
             public_key_filenames=args.public_key_files,
             private_key_filename=args.private_key_file,
@@ -1455,7 +1461,8 @@ def main() -> None:
         sys.stderr.flush()
         wfInstance = wfBackend.fromPreviousInstanceDeclaration(
             source_wfInstance,
-            args.securityContextsConfigFilename,
+            securityContextsConfigFilename=args.securityContextsConfigFilename,
+            replaced_parameters_filename=args.workflowConfigFilename,
             nickname_prefix=args.nickname_prefix,
             public_key_filenames=args.public_key_files,
             private_key_filename=args.private_key_file,

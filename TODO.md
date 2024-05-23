@@ -55,15 +55,17 @@ references to the inputs, that we are going to use to instantiate the workflows.
 
   - [x] **Step 7.k**: Upload to Dataverse.
   
-- [ ] **Step 8**: (partially implemented) Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
+- [x] **Step 8**: (partially implemented) Create execution provenance, which includes uploading URLs of results and / or DOIs / URIs.
 
 - [x] **Step 9**: Generate RO-Crate from execution provenance and exported results.
 
   - [x] **Step 9.a**: Generated RO-Crate should be consumable by WorkflowHub.
 
-  - [ ] **Step 9.c**: Generated RO-Crate should be consumable by WfExS-backend.
+  - [x] **Step 9.c**: Generated RO-Crate should be consumable by WfExS-backend.
   
-  - [ ] **Step 9.d**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate.
+  - [x] **Step 9.d**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate (only metadata).
+
+  - [ ] **Step 9.e**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate (reusing payloads).
 
 
 ## Other features

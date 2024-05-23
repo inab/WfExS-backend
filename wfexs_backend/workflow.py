@@ -1165,6 +1165,56 @@ class WF:
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
 
+    @staticmethod
+    def __read_yaml_config(filename: "AnyPath") -> "WritableWorkflowMetaConfigBlock":
+        with open(filename, mode="r", encoding="utf-8") as wcf:
+            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+
+        return cast("WritableWorkflowMetaConfigBlock", workflow_meta)
+
+    @classmethod
+    def __merge_params_from_file(
+        cls,
+        wfexs: "WfExSBackend",
+        base_workflow_meta: "WorkflowMetaConfigBlock",
+        replaced_parameters_filename: "AnyPath",
+    ) -> "WritableWorkflowMetaConfigBlock":
+        new_params_meta = cls.__read_yaml_config(replaced_parameters_filename)
+
+        if (
+            not isinstance(base_workflow_meta, dict)
+            or "params" not in base_workflow_meta
+        ):
+            raise WFException(
+                "Base workflow metadata does not have the proper WfExS parameters structure"
+            )
+
+        if not isinstance(new_params_meta, dict) or "params" not in new_params_meta:
+            raise WFException(
+                f"Loaded {replaced_parameters_filename} does not have the proper WfExS parameters structure"
+            )
+
+        # Now, trim everything but what it is allowed
+        existing_keys = set(new_params_meta.keys())
+        existing_keys.remove("params")
+        if len(existing_keys) > 0:
+            for key in existing_keys:
+                del new_params_meta[key]
+
+        # This key is needed to pass the validation
+        new_params_meta["workflow_id"] = "dummy"
+        # Let's check!
+        if wfexs.validateConfigFiles(new_params_meta) > 0:
+            raise WFException(
+                f"Loaded WfExS parameters from {replaced_parameters_filename} fails (have a look at the log messages for details)"
+            )
+
+        # Last, merge
+        workflow_meta = copy.deepcopy(base_workflow_meta)
+        workflow_meta["params"].update(new_params_meta["params"])
+
+        return workflow_meta
+
     @classmethod
     def FromWorkDir(
         cls,
@@ -1218,8 +1268,7 @@ class WF:
         This class method creates a new staged working directory
         """
 
-        with open(workflowMetaFilename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+        workflow_meta = cls.__read_yaml_config(workflowMetaFilename)
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -1284,6 +1333,7 @@ class WF:
         wfexs: "WfExSBackend",
         wfInstance: "WF",
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        replaced_parameters_filename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
@@ -1303,6 +1353,11 @@ class WF:
         #    raise WFException(f"Staged working directory from {wfInstance} was not properly staged")
         # Now we should be able to get the configuration file
         workflow_meta = copy.deepcopy(wfInstance.staging_recipe)
+
+        if replaced_parameters_filename is not None:
+            workflow_meta = cls.__merge_params_from_file(
+                wfexs, workflow_meta, replaced_parameters_filename
+            )
 
         # We have to reset the inherited paranoid mode and nickname
         for k_name in ("nickname", "paranoid_mode"):
@@ -1331,6 +1386,7 @@ class WF:
         workflowROCrateFilename: "AnyPath",
         public_name: "str",  # Mainly used for provenance and exceptions
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        replaced_parameters_filename: "Optional[AnyPath]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
         public_key_filenames: "Sequence[AnyPath]" = [],
@@ -1436,6 +1492,11 @@ class WF:
             workflow_meta["workflow_config"]["containerType"] = container_type.value
 
         logging.debug(f"{json.dumps(workflow_meta, indent=4)}")
+
+        if replaced_parameters_filename is not None:
+            workflow_meta = cls.__merge_params_from_file(
+                wfexs, workflow_meta, replaced_parameters_filename
+            )
 
         # Last, be sure that what it has been generated is correct
         if wfexs.validateConfigFiles(workflow_meta, securityContextsConfigFilename) > 0:
@@ -3513,6 +3574,22 @@ This is an enumeration of the types of collected contents:
 
         return self.configMarshalled
 
+    def __get_combined_globals(self) -> "Mapping[str, Any]":
+        """
+        This method is needed since workflow engines and container factories
+        are dynamically loaded.
+        """
+        combined_globals = copy.copy(common_defs_module.__dict__)
+        combined_globals.update(globals())
+        combined_globals.update(
+            [
+                (workflow_engine.__name__, workflow_engine)
+                for workflow_engine in self.wfexs.listWorkflowEngineClasses()
+            ]
+        )
+
+        return combined_globals
+
     def unmarshallConfig(
         self, fail_ok: "bool" = False
     ) -> "Optional[Union[bool, datetime.datetime]]":
@@ -3741,8 +3818,7 @@ This is an enumeration of the types of collected contents:
                 with open(marshalled_stage_file, mode="r", encoding="utf-8") as msF:
                     marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
 
-                    combined_globals = copy.copy(common_defs_module.__dict__)
-                    combined_globals.update(globals())
+                    combined_globals = self.__get_combined_globals()
                     stage = unmarshall_namedtuple(marshalled_stage, combined_globals)
                     self.remote_repo = stage.get("remote_repo")
                     # This one takes precedence
@@ -3944,8 +4020,7 @@ This is an enumeration of the types of collected contents:
             try:
                 with open(marshalled_execution_file, mode="r", encoding="utf-8") as meF:
                     marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = copy.copy(common_defs_module.__dict__)
-                    combined_globals.update(globals())
+                    combined_globals = self.__get_combined_globals()
                     execution_read = unmarshall_namedtuple(
                         marshalled_execution, combined_globals
                     )
@@ -4144,8 +4219,7 @@ This is an enumeration of the types of collected contents:
             try:
                 with open(marshalled_export_file, mode="r", encoding="utf-8") as meF:
                     marshalled_export = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = copy.copy(common_defs_module.__dict__)
-                    combined_globals.update(globals())
+                    combined_globals = self.__get_combined_globals()
                     self.runExportActions = unmarshall_namedtuple(
                         marshalled_export, combined_globals
                     )

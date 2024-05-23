@@ -68,13 +68,13 @@ python WfExS-backend.py --full-help
 usage: WfExS-backend.py [-h] [--log-file LOGFILENAME] [-q] [-v] [-d]
                         [-L LOCALCONFIGFILENAME] [--cache-dir CACHEDIR] [-V]
                         [--full-help]
-                        {init,cache,staged-workdir,export,list-fetchers,list-exporters,list-licences,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+                        {init,cache,staged-workdir,export,list-fetchers,list-exporters,list-container-factories,list-workflow-engines,list-licences,config-validate,stage,re-stage,import,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
                         ...
 
-WfExS (workflow execution service) backend 0.10.1-12-g24f2de3
-(24f2de3bb0b0f3f8a59c90ec16fdf07b66ebe641, branch jmfernandez)
+WfExS (workflow execution service) backend 0.99.0-43-g5058e32
+(5058e32bba74aecc3fef81c9b954b80afbbbb146, branch full_circle)
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
   --log-file LOGFILENAME
                         Store messages in a file instead of using standard
@@ -86,8 +86,8 @@ optional arguments:
   -L LOCALCONFIGFILENAME, --local-config LOCALCONFIGFILENAME
                         Local installation configuration file (can also be set
                         up through WFEXS_CONFIG_FILE environment variable)
-                        (default: /home/jmfernandez/projects/WfExS-
-                        backend/wfexs_config.yml)
+                        (default: /home/jmfernandez/projects/WfExS/WfExS-
+                        backend_full_circle/wfexs_config.yml)
   --cache-dir CACHEDIR  Caching directory (default: None)
   -V, --version         show program's version number and exit
   --full-help           It returns full help (default: False)
@@ -95,15 +95,19 @@ optional arguments:
 commands:
   Command to run. It must be one of these
 
-  {init,cache,staged-workdir,export,list-fetchers,list-exporters,list-licences,config-validate,stage,re-stage,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
+  {init,cache,staged-workdir,export,list-fetchers,list-exporters,list-container-factories,list-workflow-engines,list-licences,config-validate,stage,re-stage,import,mount-workdir,export-stage,offline-execute,execute,export-results,export-crate}
     init                Init local setup
     cache               Cache handling subcommands
     staged-workdir      Staged working directories handling subcommands
     export              Staged working directories export subcommands
     list-fetchers       List the supported fetchers / schemes
     list-exporters      List the supported export plugins
+    list-container-factories
+                        List the supported container factories
+    list-workflow-engines
+                        List the supported workflow engines
     list-licences       List the documented licences, both embedded and
-                        fetched from SPDX release 3.22
+                        fetched from SPDX release 3.23
     config-validate     Validate the configuration files to be used for
                         staging and execution
     stage               Prepare the staging (working) directory for workflow
@@ -111,6 +115,8 @@ commands:
     re-stage            Prepare a new staging (working) directory for workflow
                         execution, repeating the fetch of dependencies and
                         contents
+    import              Workflow Run RO-Crate import into a new staged working
+                        directory
     mount-workdir       Mount the encrypted staging directory on secure
                         staging scenarios
     export-stage        Export the staging directory as an RO-Crate
@@ -327,6 +333,28 @@ optional arguments:
 ```
 </details>
 <details>
+<summary>Subparser <code>list-container-factories</code></summary>
+
+```
+usage: WfExS-backend.py list-container-factories [-h]
+
+optional arguments:
+  -h, --help  show this help message and exit
+
+```
+</details>
+<details>
+<summary>Subparser <code>list-workflow-engines</code></summary>
+
+```
+usage: WfExS-backend.py list-workflow-engines [-h]
+
+optional arguments:
+  -h, --help  show this help message and exit
+
+```
+</details>
+<details>
 <summary>Subparser <code>list-licences</code></summary>
 
 ```
@@ -403,15 +431,24 @@ secure workdir arguments:
 <summary>Subparser <code>re-stage</code></summary>
 
 ```
-usage: WfExS-backend.py re-stage [-h] [-Z SECURITYCONTEXTSCONFIGFILENAME]
+Subparser 're-stage'
+usage: WfExS-backend.py re-stage [-h] [-W WORKFLOWCONFIGFILENAME] [-s] [-S]
+                                 [-Z SECURITYCONTEXTSCONFIGFILENAME]
                                  [-n NICKNAME_PREFIX] [--orcid ORCIDS]
                                  [--public-key-file PUBLIC_KEY_FILES]
                                  [--private-key-file PRIVATE_KEY_FILE]
                                  [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
                                  -J WORKFLOWWORKINGDIRECTORY
 
-optional arguments:
+options:
   -h, --help            show this help message and exit
+  -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
+                        Optional configuration file, describing some inputs
+                        which will replace the base, original ones (default:
+                        None)
+  -s, --no-secure       Make unsecured working directory (default: True)
+  -S, --secure          Make secured working directory (default) (default:
+                        False)
   -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
                         Configuration file, describing security contexts,
                         which hold credentials and similar (default: None)
@@ -426,6 +463,61 @@ optional arguments:
                         directory (default: [])
   -J WORKFLOWWORKINGDIRECTORY, --staged-job-dir WORKFLOWWORKINGDIRECTORY
                         Already staged job directory (default: None)
+
+secure workdir arguments:
+  Private key and passphrase to access secured working directories
+
+  --private-key-file PRIVATE_KEY_FILE
+                        This parameter passes the name of the file containing
+                        the private key needed to unlock an encrypted working
+                        directory. (default: None)
+  --private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR
+                        This parameter passes the name of the environment
+                        variable containing the passphrase needed to decrypt
+                        the private key needed to unlock an encrypted working
+                        directory. (default: )
+
+```
+</details>
+<details>
+<summary>Subparser <code>import</code></summary>
+
+```
+Subparser 'import'
+usage: WfExS-backend.py import [-h] -R WORKFLOWROCRATEFILENAMEORURI
+                               [-W WORKFLOWCONFIGFILENAME] [-s] [-S]
+                               [-Z SECURITYCONTEXTSCONFIGFILENAME]
+                               [-n NICKNAME_PREFIX] [--orcid ORCIDS]
+                               [--public-key-file PUBLIC_KEY_FILES]
+                               [--private-key-file PRIVATE_KEY_FILE]
+                               [--private-key-passphrase-envvar PRIVATE_KEY_PASSPHRASE_ENVVAR]
+
+options:
+  -h, --help            show this help message and exit
+  -R WORKFLOWROCRATEFILENAMEORURI, --workflow-rocrate WORKFLOWROCRATEFILENAMEORURI
+                        Workflow Run RO-Crate describing a previous workflow
+                        execution. It can be either a local path or an URI
+                        resolvable from WfExS with no authentication (default:
+                        None)
+  -W WORKFLOWCONFIGFILENAME, --workflow-config WORKFLOWCONFIGFILENAME
+                        Optional configuration file, describing some inputs
+                        which will replace the base, original ones (default:
+                        None)
+  -s, --no-secure       Make unsecured working directory (default: True)
+  -S, --secure          Make secured working directory (default) (default:
+                        False)
+  -Z SECURITYCONTEXTSCONFIGFILENAME, --creds-config SECURITYCONTEXTSCONFIGFILENAME
+                        Configuration file, describing security contexts,
+                        which hold credentials and similar (default: None)
+  -n NICKNAME_PREFIX, --nickname-prefix NICKNAME_PREFIX
+                        Nickname prefix to be used on staged workdir creation
+                        (default: None)
+  --orcid ORCIDS        ORCID(s) of the person(s) staging, running or
+                        exporting the workflow scenario (default: [])
+  --public-key-file PUBLIC_KEY_FILES
+                        This parameter switches on secure processing. Path to
+                        the public key(s) to be used to encrypt the working
+                        directory (default: [])
 
 secure workdir arguments:
   Private key and passphrase to access secured working directories
