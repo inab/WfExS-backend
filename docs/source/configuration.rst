@@ -90,6 +90,8 @@ Main local configuration parameters
 
 Description of main local configuration parameters. More detailed information can be found 
 `here <https://github.com/paulaidt/WfExS-backend?tab=readme-ov-file#configuration-files>`_.
+
+
 .. list-table::
 
    * - ``cacheDir``
