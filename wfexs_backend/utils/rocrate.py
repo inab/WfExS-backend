@@ -495,50 +495,6 @@ WHERE   {
 }
 """
 
-    OBTAIN_WF_CONTAINERS_SPARQL: "Final[str]" = """\
-SELECT ?container ?container_additional_type ?type_of_container ?type_of_container_type ?container_registry ?container_name ?container_tag ?container_sha256 ?container_platform ?container_arch
-WHERE   {
-    ?entity s:softwareAddOn ?container.
-    ?container
-        a wrterm:ContainerImage ;
-        s:additionalType ?container_additional_type .
-    OPTIONAL {
-        ?container
-            s:softwareRequirements ?container_type ;
-            s:applicationCategory ?type_of_container .
-        ?container_type
-            a s:SoftwareApplication ;
-            s:applicationCategory ?type_of_container_type .
-        FILTER(
-            STRSTARTS(str(?type_of_container), str(wikidata:)) &&
-            STRSTARTS(str(?type_of_container_type), str(wikidata:))
-        ) .
-    }
-    OPTIONAL {
-        ?container wrterm:registry ?container_registry .
-    }
-    OPTIONAL {
-        ?container s:name ?container_name .
-    }
-    OPTIONAL {
-        ?container wrterm:tag ?container_tag .
-    }
-    OPTIONAL {
-        ?container wrterm:sha256 ?container_sha256 .
-    }
-    OPTIONAL {
-        ?container
-            a s:SoftwareApplication ;
-            s:operatingSystem ?container_platform .
-    }
-    OPTIONAL {
-        ?container
-            a s:SoftwareApplication ;
-            s:processorRequirements ?container_arch .
-    }
-}
-"""
-
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
