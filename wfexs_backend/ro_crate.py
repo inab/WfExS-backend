@@ -1337,6 +1337,11 @@ you can find here an almost complete list of the possible ones:
 
         failed_licences: "MutableSequence[URIType]" = []
         for in_item in inputs:
+            # Skip autoFilled inputs, as they should have their
+            # mirror parameters in outputs
+            if in_item.autoFilled:
+                continue
+
             formal_parameter_id = (
                 f"{self.wf_file.id}#{input_sep}:"
                 + urllib.parse.quote(in_item.name, safe="")
@@ -2195,6 +2200,11 @@ you can find here an almost complete list of the possible ones:
                     identifier=formal_parameter_id,
                     additional_type=additional_type,
                 )
+
+                # This one must be a real boolean, as of schema.org
+                if out_item.syntheticOutput is not None:
+                    formal_parameter["valueRequired"] = not out_item.syntheticOutput
+
                 self.crate.add(formal_parameter)
 
             # Add to the list only when it is needed
@@ -2506,6 +2516,11 @@ you can find here an almost complete list of the possible ones:
                     identifier=formal_parameter_id,
                     additional_type=additional_type,
                 )
+
+                # This one must be a real boolean, as of schema.org
+                if out_item.syntheticOutput is not None:
+                    formal_parameter["valueRequired"] = not out_item.syntheticOutput
+
                 self.crate.add(formal_parameter)
                 self.wf_file.append_to("output", formal_parameter, compact=True)
 
