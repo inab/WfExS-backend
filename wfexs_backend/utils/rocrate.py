@@ -23,6 +23,9 @@ import enum
 import inspect
 import json
 import logging
+import os.path
+import sys
+import zipfile
 
 from typing import (
     cast,
@@ -83,6 +86,10 @@ import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
 
+# This code needs exception groups
+if sys.version_info[:2] < (3, 11):
+    from exceptiongroup import ExceptionGroup
+
 from ..common import (
     ContainerType,
     ContentKind,
@@ -100,6 +107,13 @@ from .digests import (
 from ..fetchers import (
     RemoteRepo,
 )
+
+from ..utils.misc import (
+    lazy_import,
+)
+
+magic = lazy_import("magic")
+# import magic
 
 
 class ContainerTypeMetadata(NamedTuple):
@@ -176,6 +190,79 @@ class ROCrateToolboxException(Exception):
     pass
 
 
+ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
+LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
+
+
+def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "Any":
+    # Is it a bare file or an archive?
+    jsonld_filename: "Optional[str]" = None
+    if os.path.isdir(workflowROCrateFilename):
+        possible_jsonld_filename = os.path.join(
+            workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
+        )
+        legacy_jsonld_filename = os.path.join(
+            workflowROCrateFilename, LEGACY_ROCRATE_JSONLD_FILENAME
+        )
+        if os.path.exists(possible_jsonld_filename):
+            jsonld_filename = possible_jsonld_filename
+        elif os.path.exists(legacy_jsonld_filename):
+            jsonld_filename = legacy_jsonld_filename
+        else:
+            raise ROCrateToolboxException(
+                f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
+            )
+    elif os.path.isfile(workflowROCrateFilename):
+        jsonld_filename = workflowROCrateFilename
+    else:
+        raise ROCrateToolboxException(
+            f"Input {public_name} is neither a file or a directory"
+        )
+
+    jsonld_bin: "Optional[bytes]" = None
+    mag = magic.Magic(mime=True)
+    putative_mime = mag.from_file(os.path.realpath(jsonld_filename))
+    # Bare possible RO-Crate
+    if putative_mime == "application/json":
+        with open(jsonld_filename, mode="rb") as jdf:
+            jsonld_bin = jdf.read()
+    # Archived possible RO-Crate
+    elif putative_mime == "application/zip":
+        with zipfile.ZipFile(workflowROCrateFilename, mode="r") as zf:
+            try:
+                jsonld_bin = zf.read(ROCRATE_JSONLD_FILENAME)
+            except Exception as e:
+                try:
+                    jsonld_bin = zf.read(LEGACY_ROCRATE_JSONLD_FILENAME)
+                except Exception as e2:
+                    raise ROCrateToolboxException(
+                        f"Unable to locate RO-Crate metadata descriptor within {public_name}"
+                    ) from ExceptionGroup(  # pylint: disable=possibly-used-before-assignment
+                        f"Both {ROCRATE_JSONLD_FILENAME} and {LEGACY_ROCRATE_JSONLD_FILENAME} tried",
+                        [e, e2],
+                    )
+
+            putative_mime_ld = mag.from_buffer(jsonld_bin)
+            if putative_mime_ld != "application/json":
+                raise ROCrateToolboxException(
+                    f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
+                )
+    else:
+        raise ROCrateToolboxException(
+            f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
+        )
+
+    # Let's parse the JSON (in order to check whether it is valid)
+    try:
+        jsonld_obj = json.loads(jsonld_bin)
+    except json.JSONDecodeError as jde:
+        raise ROCrateToolboxException(
+            f"Content from {public_name} is not a valid JSON"
+        ) from jde
+
+    return jsonld_obj
+
+
 class ROCrateToolbox(abc.ABC):
     # This is needed due limitations from rdflib mangling relative ids
     WFEXS_TRICK_SPARQL_PRE_PREFIX: "Final[str]" = "shttp:"
@@ -233,7 +320,7 @@ class ROCrateToolbox(abc.ABC):
         self.wfexs = wfexs
 
     IS_ROCRATE_SPARQL: "Final[str]" = """\
-SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?mainentity ?bsworkflowprofile ?wrprocessprofile ?wrwfprofile
+SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?wfhrepourl ?mainentity ?bsworkflowprofile ?wrprocessprofile ?wrwfprofile
 WHERE   {
     ?rocratejson
         a s:CreativeWork ;
@@ -267,6 +354,9 @@ WHERE   {
                 STRSTARTS(str(?wrprocessprofile), str(wrprocess:)) &&
                 STRSTARTS(str(?wrwfprofile), str(wrwf:))
             ) .
+        }
+        OPTIONAL {
+            ?rootdataset s:isBasedOn ?wfhrepourl
         }
     }
 }
@@ -1517,10 +1607,11 @@ Container {containerrow.container}
 
         return licences
 
-    def _extractWorkflowMetadata(
+    def extractWorkflowMetadata(
         self,
         g: "rdflib.graph.Graph",
         main_entity: "rdflib.term.Identifier",
+        default_repo: "Optional[str]",
         public_name: "str",
     ) -> "Tuple[RemoteRepo, WorkflowType]":
         # This query will tell us where the original workflow was located,
@@ -1573,6 +1664,10 @@ Container {containerrow.container}
             raise ROCrateToolboxException(
                 f"Unable to infer the permanent identifier from the workflow at {public_name}"
             )
+
+        # The RO-Crate was produced by RO-Crate
+        if ("workflowhub.eu" in repo_pid) and default_repo is not None:
+            repo_pid = default_repo
 
         repo_version: "Optional[str]" = None
         if langrow.workflow_version:
@@ -1643,8 +1738,11 @@ Container {containerrow.container}
         # The default crate licences
         crate_licences = self._getLicences(g, matched_crate.mainentity, public_name)
 
-        repo, workflow_type = self._extractWorkflowMetadata(
-            g, matched_crate.mainentity, public_name
+        repo, workflow_type = self.extractWorkflowMetadata(
+            g,
+            matched_crate.mainentity,
+            default_repo=str(matched_crate.wfhrepourl),
+            public_name=public_name,
         )
 
         # At this point we know WfExS supports the workflow engine.
