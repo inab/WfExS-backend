@@ -416,6 +416,8 @@ class ExpectedOutput(NamedTuple):
     glob: When the workflow engine does not use symbolic
       names to label the outputs, this is the filename pattern to capture the
       local path, based on the output / working directory.
+    syntheticOutput: It is true for outputs which do not really exist
+    either as parameter or explicit outputs.
     """
 
     name: "SymbolicOutputName"
@@ -424,9 +426,10 @@ class ExpectedOutput(NamedTuple):
     cardinality: "Tuple[int, int]"
     fillFrom: "Optional[SymbolicParamName]" = None
     glob: "Optional[GlobPattern]" = None
+    syntheticOutput: "Optional[bool]" = None
 
     def _marshall(self) -> "MutableMapping[str, Any]":
-        mD = {
+        mD: "MutableMapping[str, Any]" = {
             "c-l-a-s-s": self.kind.name,
             "cardinality": list(self.cardinality),
         }
@@ -437,6 +440,8 @@ class ExpectedOutput(NamedTuple):
             mD["glob"] = self.glob
         if self.fillFrom is not None:
             mD["fillFrom"] = self.fillFrom
+        if self.syntheticOutput is not None:
+            mD["syntheticOutput"] = self.syntheticOutput
 
         return mD
 
@@ -451,6 +456,7 @@ class ExpectedOutput(NamedTuple):
             fillFrom=obj.get("fillFrom"),
             glob=obj.get("glob"),
             cardinality=cast("Tuple[int, int]", tuple(obj["cardinality"])),
+            syntheticOutput=cast("Optional[bool]", obj.get("syntheticOutput")),
         )
 
 
@@ -525,6 +531,7 @@ class MaterializedOutput(NamedTuple):
     kind: "ContentKind"
     expectedCardinality: "Tuple[int, int]"
     values: "Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[AbstractGeneratedContent]]"
+    syntheticOutput: "Optional[bool]" = None
 
 
 class LocalWorkflow(NamedTuple):
