@@ -1147,6 +1147,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 expectedCardinality=expectedOutput.cardinality,
                 values=expMatContents if len(expMatContents) > 0 else expMatValues,
                 syntheticOutput=expectedOutput.syntheticOutput,
+                filledFrom=expectedOutput.fillFrom
+                if expectedOutput.syntheticOutput
+                else None,
+                glob=expectedOutput.glob if expectedOutput.syntheticOutput else None,
             )
 
             matOutputs.append(matOutput)

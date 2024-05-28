@@ -153,6 +153,8 @@ ApplicationCategory2ContainerType: "Final[Mapping[str, ContainerType]]" = {
 WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
 WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
 
+WFEXS_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
+WFEXS_NAMESPACE: "Final[str]" = WFEXS_CONTEXT + "#"
 
 CONTAINER_DOCKERIMAGE_SHORT: "Final[str]" = "DockerImage"
 CONTAINER_SIFIMAGE_SHORT: "Final[str]" = "SIFImage"

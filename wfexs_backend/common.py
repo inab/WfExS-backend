@@ -532,6 +532,8 @@ class MaterializedOutput(NamedTuple):
     expectedCardinality: "Tuple[int, int]"
     values: "Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[AbstractGeneratedContent]]"
     syntheticOutput: "Optional[bool]" = None
+    filledFrom: "Optional[str]" = None
+    glob: "Optional[GlobPattern]" = None
 
 
 class LocalWorkflow(NamedTuple):

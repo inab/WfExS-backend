@@ -101,7 +101,10 @@ from .utils.rocrate import (
     ContainerType2AdditionalType,
     ContainerTypeMetadata,
     ContainerTypeMetadataDetails,
+    WFEXS_CONTEXT,
+    WFEXS_NAMESPACE,
     WORKFLOW_RUN_CONTEXT,
+    WORKFLOW_RUN_NAMESPACE,
 )
 
 magic = lazy_import("magic")
@@ -929,21 +932,25 @@ class WorkflowRunROCrate:
         RO_licences = self._process_licences(licences)
 
         # Add extra terms
-        # self.crate.metadata.extra_terms.update(
-        #     {
-        #         "sha256": WORKFLOW_RUN_CONTEXT + "#sha256",
-        #         # Next ones are experimental
-        #         ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_CONTEXT + "#"
-        #         + ContainerImageAdditionalType.Docker.value,
-        #         ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_CONTEXT + "#"
-        #         + ContainerImageAdditionalType.Singularity.value,
-        #         "containerImage": WORKFLOW_RUN_CONTEXT + "#containerImage",
-        #         "ContainerImage": WORKFLOW_RUN_CONTEXT + "#ContainerImage",
-        #         "registry": WORKFLOW_RUN_CONTEXT + "#registry",
-        #         "tag": WORKFLOW_RUN_CONTEXT + "#tag",
-        #     }
-        # )
+        self.crate.metadata.extra_terms.update(
+            {
+                # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
+                # # Next ones are experimental
+                # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
+                # + ContainerImageAdditionalType.Docker.value,
+                # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
+                # + ContainerImageAdditionalType.Singularity.value,
+                # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
+                # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
+                # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
+                # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
+                "syntheticOutput": WFEXS_NAMESPACE + "syntheticOutput",
+                "globPattern": WFEXS_NAMESPACE + "globPattern",
+                "filledFrom": WFEXS_NAMESPACE + "filledFrom",
+            }
+        )
         self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
+        # self.crate.metadata.extra_contexts.append(WFEXS_CONTEXT)
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
@@ -2204,6 +2211,18 @@ you can find here an almost complete list of the possible ones:
                 # This one must be a real boolean, as of schema.org
                 if out_item.syntheticOutput is not None:
                     formal_parameter["valueRequired"] = not out_item.syntheticOutput
+                    formal_parameter["syntheticOutput"] = out_item.syntheticOutput
+                    if out_item.syntheticOutput:
+                        if out_item.glob is not None:
+                            formal_parameter["globPattern"] = out_item.glob
+                        if out_item.fillFrom is not None:
+                            # This is a bit dirty, but effective
+                            other_parameter_id = (
+                                self.wf_file.id
+                                + "#output:"
+                                + urllib.parse.quote(out_item.fillFrom, safe="")
+                            )
+                            formal_parameter["filledFrom"] = {"@id": other_parameter_id}
 
                 self.crate.add(formal_parameter)
 
@@ -2520,6 +2539,18 @@ you can find here an almost complete list of the possible ones:
                 # This one must be a real boolean, as of schema.org
                 if out_item.syntheticOutput is not None:
                     formal_parameter["valueRequired"] = not out_item.syntheticOutput
+                    formal_parameter["syntheticOutput"] = out_item.syntheticOutput
+                    if out_item.syntheticOutput:
+                        if out_item.glob is not None:
+                            formal_parameter["globPattern"] = out_item.glob
+                        if out_item.filledFrom is not None:
+                            # This is a bit dirty, but effective
+                            other_parameter_id = (
+                                self.wf_file.id
+                                + "#output:"
+                                + urllib.parse.quote(out_item.filledFrom, safe="")
+                            )
+                            formal_parameter["filledFrom"] = {"@id": other_parameter_id}
 
                 self.crate.add(formal_parameter)
                 self.wf_file.append_to("output", formal_parameter, compact=True)
