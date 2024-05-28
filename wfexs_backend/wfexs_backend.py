@@ -114,6 +114,7 @@ from .utils.passphrase_wrapper import (
 )
 
 from .utils.rocrate import (
+    ReadROCrateMetadata,
     ROCrateToolbox,
 )
 
@@ -2579,56 +2580,26 @@ class WfExSBackend:
         :param expectedEngineDesc: If defined, an instance of WorkflowType
         :return:
         """
-        roCrateObj = FixedROCrate(roCrateFile)
-        # roCrateJSON = roCrateObj.metadata.generate()
-        # self.rocrate_toolbox.IdentifyROCrate(roCrateJON, roCrateFile)
 
-        # TODO: get roCrateObj mainEntity programming language
-        # self.logger.debug(roCrateObj.root_dataset.as_jsonld())
-        mainEntityProgrammingLanguageId: "Optional[str]" = None
-        mainEntityProgrammingLanguageUrl: "Optional[str]" = None
-        mainEntityIdHolder: "Optional[str]" = None
-        mainEntityId = None
-        workflowPID = None
-        workflowUploadURL = None
-        workflowRepoURL = None
-        workflowTypeId = None
-        for e in roCrateObj.get_entities():
-            if (
-                (mainEntityIdHolder is None)
-                and e["@type"] == "CreativeWork"
-                and ".json" in e["@id"]
-            ):
-                mainEntityIdHolder = e.as_jsonld()["about"]["@id"]
-            elif e["@id"] == mainEntityIdHolder:
-                eAsLD = e.as_jsonld()
-                mainEntityId = eAsLD["mainEntity"]["@id"]
-                workflowRepoURL = eAsLD.get("isBasedOn")
-                workflowPID = eAsLD.get("identifier")
-            elif e["@id"] == mainEntityId:
-                eAsLD = e.as_jsonld()
-                workflowUploadURL = eAsLD.get("url")
-                workflowTypeId = eAsLD["programmingLanguage"]["@id"]
-            elif e["@id"] == workflowTypeId:
-                # A bit dirty, but it works
-                eAsLD = e.as_jsonld()
-                mainEntityProgrammingLanguageId = eAsLD.get("identifier", {}).get("@id")
-                mainEntityProgrammingLanguageUrl = eAsLD.get("url", {}).get("@id")
-
-        if mainEntityProgrammingLanguageUrl is None:
+        public_name = roCrateFile
+        jsonld_obj = ReadROCrateMetadata(roCrateFile, public_name=public_name)
+        matched_crate, g = self.rocrate_toolbox.identifyROCrate(
+            jsonld_obj, public_name=public_name
+        )
+        # Is it an RO-Crate?
+        if matched_crate is None:
             raise WfExSBackendException(
-                "Workflow RO-Crate manifest does not describe the workflow language"
+                f"JSON-LD from {public_name} is not an RO-Crate"
             )
 
-        engineDesc = self.matchWorkflowType(
-            mainEntityProgrammingLanguageUrl, mainEntityProgrammingLanguageId
-        )
-
-        if (expectedEngineDesc is not None) and engineDesc != expectedEngineDesc:
+        if matched_crate.wfcrateprofile is None:
             raise WfExSBackendException(
-                "Expected programming language {} does not match identified one {} in RO-Crate manifest".format(
-                    expectedEngineDesc.engineName, engineDesc.engineName
-                )
+                f"JSON-LD from {public_name} is not a Workflow RO-Crate"
+            )
+
+        if matched_crate.mainentity is None:
+            raise WfExSBackendException(
+                f"Unable to find the main entity workflow at {public_name} Workflow RO-Crate"
             )
 
         # This workflow URL, in the case of github, can provide the repo,
@@ -2636,32 +2607,41 @@ class WfExSBackend:
         # fetched content (needed by Nextflow)
 
         # Some RO-Crates might have this value missing or ill-built
-        remote_repo: "Optional[RemoteRepo]" = None
-        if workflowUploadURL is not None:
-            try:
-                remote_repo = self.guess_repo_params(workflowUploadURL, fail_ok=True)
-            except:
-                self.logger.exception(
-                    f"Unable to use RO-Crate derived {workflowUploadURL} as workflow source"
-                )
+        repo, workflow_type = self.rocrate_toolbox.extractWorkflowMetadata(
+            g,
+            matched_crate.mainentity,
+            default_repo=str(matched_crate.wfhrepourl),
+            public_name=public_name,
+        )
 
-        if workflowRepoURL is not None and (
-            remote_repo is None or remote_repo.repo_type is None
-        ):
-            try:
-                remote_repo = self.guess_repo_params(workflowRepoURL, fail_ok=True)
-            except:
-                self.logger.exception(
-                    f"Unable to use RO-Crate derived {workflowRepoURL} as workflow source"
-                )
-
-        if remote_repo is None or remote_repo.repo_type is None:
+        if (expectedEngineDesc is not None) and workflow_type != expectedEngineDesc:
             raise WfExSBackendException(
-                "Unable to guess repository from RO-Crate manifest"
+                "Expected programming language {} does not match identified one {} in RO-Crate manifest".format(
+                    expectedEngineDesc.engineName, workflow_type.engineName
+                )
             )
 
+        # We need this additional step to guess the repo type
+        guessedRepo = self.guess_repo_params(repo.repo_url, fail_ok=True)
+        if guessedRepo is None or guessedRepo.repo_type is None:
+            raise WfExSBackendException(
+                f"Unable to guess repository from RO-Crate manifest obtained from {public_name}"
+            )
+
+        # Rescuing some values
+        if repo.tag is not None and guessedRepo.tag is None:
+            guessedRepo = guessedRepo._replace(tag=repo.tag)
+
+        if repo.rel_path is not None and (
+            guessedRepo.rel_path is None or len(guessedRepo.rel_path) == 0
+        ):
+            guessedRepo = guessedRepo._replace(rel_path=repo.rel_path)
+
+        if repo.web_url is not None:
+            guessedRepo = guessedRepo._replace(web_url=repo.web_url)
+
         # It must return four elements:
-        return IdentifiedWorkflow(workflow_type=engineDesc, remote_repo=remote_repo)
+        return IdentifiedWorkflow(workflow_type=workflow_type, remote_repo=guessedRepo)
 
     DEFAULT_RO_EXTENSION: "Final[str]" = ".crate.zip"
 
