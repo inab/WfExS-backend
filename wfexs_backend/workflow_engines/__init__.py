@@ -1122,6 +1122,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                             matchedValue = mP.read()
                             expMatValues.append(matchedValue)
             else:
+                assert (
+                    self.HasExplicitOutputs()
+                ), f"Workflow engine {self.MyWorkflowType().engineName} does not support explicit outputs, but received {expectedOutput}"
                 outputVal = outputsMapping.get(expectedOutput.name)
 
                 if (outputVal is None) and cannotBeEmpty:
@@ -1147,9 +1150,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 expectedCardinality=expectedOutput.cardinality,
                 values=expMatContents if len(expMatContents) > 0 else expMatValues,
                 syntheticOutput=expectedOutput.syntheticOutput,
-                filledFrom=expectedOutput.fillFrom
-                if expectedOutput.syntheticOutput
-                else None,
+                filledFrom=expectedOutput.fillFrom,
                 glob=expectedOutput.glob if expectedOutput.syntheticOutput else None,
             )
 
