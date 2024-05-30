@@ -2020,13 +2020,17 @@ Container {containerrow.container}
                 if not output_decl.get("syntheticOutput", False):
                     # Additional check
                     fill_from = output_decl.get("fillFrom")
-                    if fill_from == output_name:
-                        # Now, inject an input
-                        new_params[output_name] = {
-                            "c-l-a-s-s": output_decl["c-l-a-s-s"],
-                            "autoFill": True,
-                            "autoPrefix": True,
-                        }
+                    if fill_from != output_name:
+                        self.logger.warning(
+                            f"fillFrom property differs from what it is expected: {fill_from} vs {output_name} . Fixing"
+                        )
+                        output_decl["fillFrom"] = output_name
+                    # Now, inject an input
+                    new_params[output_name] = {
+                        "c-l-a-s-s": output_decl["c-l-a-s-s"],
+                        "autoFill": True,
+                        "autoPrefix": True,
+                    }
             params = new_params
 
         return (
