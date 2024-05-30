@@ -302,6 +302,11 @@ class CWLWorkflowEngine(WorkflowEngine):
         )
 
     @classmethod
+    def HasExplicitOutputs(cls) -> "bool":
+        # CWL has a clear separation between inputs and outputs
+        return True
+
+    @classmethod
     def SupportedContainerTypes(cls) -> "Set[ContainerType]":
         return cls.SUPPORTED_CONTAINER_TYPES
 
@@ -934,7 +939,12 @@ STDERR
             )
         engineVersion = matWfEng.version
 
-        outputDirPostfix, outputsDir, outputMetaDir = self.create_job_directories()
+        (
+            outputDirPostfix,
+            intermediateDir,
+            outputsDir,
+            outputMetaDir,
+        ) = self.create_job_directories()
         outputStatsDir = os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
         os.makedirs(outputStatsDir, exist_ok=True)
 
@@ -1031,7 +1041,7 @@ STDERR
                     # the workflow
                     with open(stdoutFilename, mode="wb+") as cwl_yaml_stdout:
                         with open(stderrFilename, mode="ab+") as cwl_yaml_stderr:
-                            intermediateDir = self.intermediateDir + "/"
+                            jobIntermediateDir = intermediateDir + "/"
                             outputDir = outputsDir + "/"
 
                             # This is needed to isolate execution environment
@@ -1066,8 +1076,8 @@ STDERR
                                 f"{cwltool_install_dir}/bin/cwltool",
                                 *debugFlags,
                                 "--outdir=" + outputDir,
-                                "--tmp-outdir-prefix=" + intermediateDir,
-                                "--tmpdir-prefix=" + intermediateDir,
+                                "--tmp-outdir-prefix=" + jobIntermediateDir,
+                                "--tmpdir-prefix=" + jobIntermediateDir,
                                 "--strict",
                                 "--no-doc-cache",
                             ]

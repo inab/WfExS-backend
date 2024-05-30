@@ -327,6 +327,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         )
 
     @classmethod
+    def HasExplicitOutputs(cls) -> "bool":
+        # Nextflow only has params
+        return False
+
+    @classmethod
     def SupportedContainerTypes(cls) -> "Set[ContainerType]":
         return cls.SUPPORTED_CONTAINER_TYPES
 
@@ -739,6 +744,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
         workdir: "Optional[AbsPath]" = None,
+        intermediateDir: "Optional[AbsPath]" = None,
         nextflow_path: "Optional[EnginePath]" = None,
         containers_path: "Optional[AnyPath]" = None,
         stdoutFilename: "Optional[AbsPath]" = None,
@@ -755,6 +761,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 nextflow_version,
                 commandLine,
                 workdir,
+                intermediateDir=intermediateDir,
                 containers_path=containers_path,
                 stdoutFilename=stdoutFilename,
                 stderrFilename=stderrFilename,
@@ -765,6 +772,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 nextflow_version,
                 commandLine,
                 workdir,
+                intermediateDir=intermediateDir,
                 containers_path=containers_path,
                 nextflow_install_dir=nextflow_path,
                 stdoutFilename=stdoutFilename,
@@ -785,6 +793,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
         workdir: "Optional[AbsPath]" = None,
+        intermediateDir: "Optional[AbsPath]" = None,
         nextflow_install_dir: "Optional[EnginePath]" = None,
         containers_path: "Optional[AnyPath]" = None,
         stdoutFilename: "Optional[AbsPath]" = None,
@@ -826,7 +835,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
             instEnv.pop("NXF_JAVA_HOME", None)
             instEnv.pop("JAVA_HOME", None)
 
-        instEnv["NXF_WORK"] = workdir if workdir is not None else self.intermediateDir
+        jobIntermediateDir: "str" = (
+            intermediateDir if intermediateDir is not None else self.intermediateDir
+        )
+        instEnv["NXF_WORK"] = workdir if workdir is not None else jobIntermediateDir
         instEnv["NXF_ASSETS"] = self.nxf_assets
         if self.logger.getEffectiveLevel() <= logging.DEBUG:
             instEnv["NXF_DEBUG"] = "1"
@@ -929,6 +941,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
         workdir: "Optional[AbsPath]" = None,
+        intermediateDir: "Optional[AbsPath]" = None,
         containers_path: "Optional[AnyPath]" = None,
         stdoutFilename: "Optional[AbsPath]" = None,
         stderrFilename: "Optional[AbsPath]" = None,
@@ -1539,11 +1552,11 @@ STDERR
                 elif matInput.autoFilled:
                     # This is needed to correct paths for different executions
                     assert isinstance(value, str)
-                    nxfValues.append(
-                        os.path.join(
-                            outputsDir, os.path.relpath(value, self.outputsDir)
-                        )
-                    )
+                    if os.path.isabs(value):
+                        rel_path = os.path.relpath(value, self.outputsDir)
+                    else:
+                        rel_path = value
+                    nxfValues.append(os.path.join(outputsDir, rel_path))
                 else:
                     nxfValues.append(value)
 
@@ -1607,7 +1620,12 @@ STDERR
 
         # These declarations provide a separate metadata directory for
         # each one of the executions of Nextflow
-        outputDirPostfix, outputsDir, outputMetaDir = self.create_job_directories()
+        (
+            outputDirPostfix,
+            intermediateDir,
+            outputsDir,
+            outputMetaDir,
+        ) = self.create_job_directories()
         outputStatsDir = os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
         os.makedirs(outputStatsDir, exist_ok=True)
 
@@ -1857,7 +1875,7 @@ wfexs_allParams()
             runName,
             "-offline",
             "-w",
-            self.intermediateDir,
+            intermediateDir,
             "-params-file",
             inputsFileName,
         ]
@@ -1887,6 +1905,7 @@ wfexs_allParams()
             matWfEng.version,
             nxf_params,
             workdir=outputsDir,
+            intermediateDir=intermediateDir,
             nextflow_path=matWfEng.engine_path,
             containers_path=matWfEng.containers_path,
             stdoutFilename=stdoutFilename,

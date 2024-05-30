@@ -237,6 +237,7 @@
 					"minLength": 1
 				},
 				"security-context": {
+					"description": "Use an explicitly named security context",
 					"type": "string",
 					"minLength": 1
 				},
@@ -250,6 +251,7 @@
 					"default": false
 				},
 				"autoPrefix": {
+					"description": "When autoFill is true and this parameter is false, this directory is mapped to the parent output one for this execution. When both autoFill and this parameter are true, an output file or directory name is assigned, based on its complete param name",
 					"type": "boolean",
 					"default": false
 				}
@@ -732,6 +734,10 @@
 							"description": "Autofilled input from where to get the files and directories to be assigned to this output, useful in workflow models where outputs are not explicitly declared (Nextflow, Snakemake)",
 							"type": "string",
 							"minLength": 1
+						},
+						"syntheticOutput": {
+							"description": "Is this output a synthetic one? The default value when it is not defined depends on the type of workflow.",
+							"type": "boolean"
 						},
 						"glob": {
 							"description": "Glob pattern to get the files and directories to be assigned to this output, useful in workflow models where outputs are not explicitly declared (Nextflow, Snakemake)",

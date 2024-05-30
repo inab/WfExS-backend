@@ -23,6 +23,10 @@ import enum
 import inspect
 import json
 import logging
+import os.path
+import sys
+import urllib.parse
+import zipfile
 
 from typing import (
     cast,
@@ -71,6 +75,7 @@ if TYPE_CHECKING:
         ParamsBlock,
         MutableOutputsBlock,
         OutputsBlock,
+        Sch_Output,
     )
 
     from ..workflow_engines import (
@@ -82,6 +87,10 @@ import aiohttp
 import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
+
+# This code needs exception groups
+if sys.version_info[:2] < (3, 11):
+    from exceptiongroup import ExceptionGroup
 
 from ..common import (
     ContainerType,
@@ -100,6 +109,13 @@ from .digests import (
 from ..fetchers import (
     RemoteRepo,
 )
+
+from ..utils.misc import (
+    lazy_import,
+)
+
+magic = lazy_import("magic")
+# import magic
 
 
 class ContainerTypeMetadata(NamedTuple):
@@ -139,6 +155,8 @@ ApplicationCategory2ContainerType: "Final[Mapping[str, ContainerType]]" = {
 WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
 WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
 
+WFEXS_TERMS_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
+WFEXS_TERMS_NAMESPACE: "Final[str]" = WFEXS_TERMS_CONTEXT + "#"
 
 CONTAINER_DOCKERIMAGE_SHORT: "Final[str]" = "DockerImage"
 CONTAINER_SIFIMAGE_SHORT: "Final[str]" = "SIFImage"
@@ -176,11 +194,84 @@ class ROCrateToolboxException(Exception):
     pass
 
 
+ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
+LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
+
+
+def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "Any":
+    # Is it a bare file or an archive?
+    jsonld_filename: "Optional[str]" = None
+    if os.path.isdir(workflowROCrateFilename):
+        possible_jsonld_filename = os.path.join(
+            workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
+        )
+        legacy_jsonld_filename = os.path.join(
+            workflowROCrateFilename, LEGACY_ROCRATE_JSONLD_FILENAME
+        )
+        if os.path.exists(possible_jsonld_filename):
+            jsonld_filename = possible_jsonld_filename
+        elif os.path.exists(legacy_jsonld_filename):
+            jsonld_filename = legacy_jsonld_filename
+        else:
+            raise ROCrateToolboxException(
+                f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
+            )
+    elif os.path.isfile(workflowROCrateFilename):
+        jsonld_filename = workflowROCrateFilename
+    else:
+        raise ROCrateToolboxException(
+            f"Input {public_name} is neither a file or a directory"
+        )
+
+    jsonld_bin: "Optional[bytes]" = None
+    mag = magic.Magic(mime=True)
+    putative_mime = mag.from_file(os.path.realpath(jsonld_filename))
+    # Bare possible RO-Crate
+    if putative_mime == "application/json":
+        with open(jsonld_filename, mode="rb") as jdf:
+            jsonld_bin = jdf.read()
+    # Archived possible RO-Crate
+    elif putative_mime == "application/zip":
+        with zipfile.ZipFile(workflowROCrateFilename, mode="r") as zf:
+            try:
+                jsonld_bin = zf.read(ROCRATE_JSONLD_FILENAME)
+            except Exception as e:
+                try:
+                    jsonld_bin = zf.read(LEGACY_ROCRATE_JSONLD_FILENAME)
+                except Exception as e2:
+                    raise ROCrateToolboxException(
+                        f"Unable to locate RO-Crate metadata descriptor within {public_name}"
+                    ) from ExceptionGroup(  # pylint: disable=possibly-used-before-assignment
+                        f"Both {ROCRATE_JSONLD_FILENAME} and {LEGACY_ROCRATE_JSONLD_FILENAME} tried",
+                        [e, e2],
+                    )
+
+            putative_mime_ld = mag.from_buffer(jsonld_bin)
+            if putative_mime_ld != "application/json":
+                raise ROCrateToolboxException(
+                    f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
+                )
+    else:
+        raise ROCrateToolboxException(
+            f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
+        )
+
+    # Let's parse the JSON (in order to check whether it is valid)
+    try:
+        jsonld_obj = json.loads(jsonld_bin)
+    except json.JSONDecodeError as jde:
+        raise ROCrateToolboxException(
+            f"Content from {public_name} is not a valid JSON"
+        ) from jde
+
+    return jsonld_obj
+
+
 class ROCrateToolbox(abc.ABC):
     # This is needed due limitations from rdflib mangling relative ids
-    WFEXS_TRICK_SPARQL_PRE_PREFIX: "Final[str]" = "shttp:"
-    WFEXS_TRICK_SPARQL_BASE: "Final[str]" = f"{WFEXS_TRICK_SPARQL_PRE_PREFIX}///"
-    WFEXS_TRICK_SPARQL_NS: "Final[str]" = "wfexs"
+    RELATIVE_ROCRATE_SCHEME: "Final[str]" = "rel-crate"
+    RELATIVE_ROCRATE_SPARQL_BASE: "Final[str]" = RELATIVE_ROCRATE_SCHEME + ":"
+    RELATIVE_ROCRATE_NS: "Final[str]" = "crate"
 
     SCHEMA_ORG_PREFIX: "Final[str]" = "http://schema.org/"
 
@@ -197,8 +288,9 @@ class ROCrateToolbox(abc.ABC):
         "wrprocess": "https://w3id.org/ro/wfrun/process/",
         "wrwf": "https://w3id.org/ro/wfrun/workflow/",
         "wrterm": WORKFLOW_RUN_NAMESPACE,
+        "wfexsterm": WFEXS_TERMS_NAMESPACE,
         "wikidata": "https://www.wikidata.org/wiki/",
-        WFEXS_TRICK_SPARQL_NS: WFEXS_TRICK_SPARQL_BASE,
+        RELATIVE_ROCRATE_NS: RELATIVE_ROCRATE_SPARQL_BASE,
     }
 
     LEAF_TYPE_2_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = {
@@ -232,8 +324,15 @@ class ROCrateToolbox(abc.ABC):
 
         self.wfexs = wfexs
 
+        # This is needed for proper behaviour
+        # https://stackoverflow.com/a/6264214
+        if self.RELATIVE_ROCRATE_SCHEME not in urllib.parse.uses_relative:
+            urllib.parse.uses_relative.append(self.RELATIVE_ROCRATE_SCHEME)
+        if self.RELATIVE_ROCRATE_SCHEME not in urllib.parse.uses_fragment:
+            urllib.parse.uses_fragment.append(self.RELATIVE_ROCRATE_SCHEME)
+
     IS_ROCRATE_SPARQL: "Final[str]" = """\
-SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?mainentity ?bsworkflowprofile ?wrprocessprofile ?wrwfprofile
+SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?wfhrepourl ?mainentity ?bsworkflowprofile ?wrprocessprofile ?wrwfprofile
 WHERE   {
     ?rocratejson
         a s:CreativeWork ;
@@ -267,6 +366,9 @@ WHERE   {
                 STRSTARTS(str(?wrprocessprofile), str(wrprocess:)) &&
                 STRSTARTS(str(?wrwfprofile), str(wrwf:))
             ) .
+        }
+        OPTIONAL {
+            ?rootdataset s:isBasedOn ?wfhrepourl
         }
     }
 }
@@ -307,7 +409,7 @@ WHERE {
         # # Setting the augmented context with the trick
         # context.append(
         #     {
-        #         "@base": self.WFEXS_TRICK_SPARQL_BASE,
+        #         "@base": self.RELATIVE_ROCRATE_SPARQL_BASE,
         #     }
         # )
         #
@@ -337,7 +439,7 @@ WHERE {
         parsed = g.parse(
             data=jsonld_str,
             format="json-ld",
-            base=self.WFEXS_TRICK_SPARQL_PRE_PREFIX,
+            base=self.RELATIVE_ROCRATE_SPARQL_BASE,
         )
 
         # This query will tell us whether the JSON-LD is about an RO-Crate 1.1
@@ -495,54 +597,10 @@ WHERE   {
 }
 """
 
-    OBTAIN_WF_CONTAINERS_SPARQL: "Final[str]" = """\
-SELECT ?container ?container_additional_type ?type_of_container ?type_of_container_type ?container_registry ?container_name ?container_tag ?container_sha256 ?container_platform ?container_arch
-WHERE   {
-    ?entity s:softwareAddOn ?container.
-    ?container
-        a wrterm:ContainerImage ;
-        s:additionalType ?container_additional_type .
-    OPTIONAL {
-        ?container
-            s:softwareRequirements ?container_type ;
-            s:applicationCategory ?type_of_container .
-        ?container_type
-            a s:SoftwareApplication ;
-            s:applicationCategory ?type_of_container_type .
-        FILTER(
-            STRSTARTS(str(?type_of_container), str(wikidata:)) &&
-            STRSTARTS(str(?type_of_container_type), str(wikidata:))
-        ) .
-    }
-    OPTIONAL {
-        ?container wrterm:registry ?container_registry .
-    }
-    OPTIONAL {
-        ?container s:name ?container_name .
-    }
-    OPTIONAL {
-        ?container wrterm:tag ?container_tag .
-    }
-    OPTIONAL {
-        ?container wrterm:sha256 ?container_sha256 .
-    }
-    OPTIONAL {
-        ?container
-            a s:SoftwareApplication ;
-            s:operatingSystem ?container_platform .
-    }
-    OPTIONAL {
-        ?container
-            a s:SoftwareApplication ;
-            s:processorRequirements ?container_arch .
-    }
-}
-"""
-
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?main_entity bsworkflow:input ?inputfp .
     ?inputfp
@@ -553,13 +611,27 @@ WHERE   {
     {
         # A file, which is a schema.org MediaObject
         ?input
-            a s:MediaObject ;
-            s:contentUrl ?fileuri .
+            a s:MediaObject .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
+        }
     } UNION {
         # A directory, which is a schema.org Dataset
         ?input
-            a s:Dataset ;
-            s:contentUrl ?fileuri .
+            a s:Dataset .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
+        }
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -587,6 +659,9 @@ WHERE   {
             ?component s:contentUrl ?fileuri .
         }
         OPTIONAL {
+            ?component s:identifier ?filepid .
+        }
+        OPTIONAL {
             ?component s:value ?value .
         }
     }
@@ -596,7 +671,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?main_entity wrterm:environment ?envfp .
     ?envfp
@@ -608,14 +683,28 @@ WHERE   {
         # A file, which is a schema.org MediaObject
         ?env
             a s:MediaObject ;
-            s:name ?name_env ;
-            s:contentUrl ?fileuri .
+            s:name ?name_env .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
     } UNION {
         # A directory, which is a schema.org Dataset
         ?env
             a s:Dataset ;
-            s:name ?name_env ;
-            s:contentUrl ?fileuri .
+            s:name ?name_env .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -645,6 +734,9 @@ WHERE   {
             ?component s:contentUrl ?fileuri .
         }
         OPTIONAL {
+            ?component s:identifer ?filepid .
+        }
+        OPTIONAL {
             ?component s:value ?value .
         }
     }
@@ -654,7 +746,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_OUTPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?name ?outputfp ?additional_type ?default_value
+SELECT  ?name ?outputfp ?additional_type ?default_value ?synthetic_output ?glob_pattern ?filled_from_name
 WHERE   {
     ?main_entity bsworkflow:output ?outputfp .
     ?outputfp
@@ -662,8 +754,20 @@ WHERE   {
         s:name ?name ;
         s:additionalType ?additional_type .
     OPTIONAL {
-        ?ouputfp
+        ?outputfp
             s:defaultValue ?default_value .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:syntheticOutput ?synthetic_output .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:globPattern ?glob_pattern .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:filledFrom ?filled_from_name .
     }
 }
 """
@@ -671,7 +775,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?execution s:object ?input .
     {
@@ -679,8 +783,15 @@ WHERE   {
         BIND ( "File" AS ?additional_type )
         ?input
             a s:MediaObject ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?inputfp .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
+        }
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -690,8 +801,15 @@ WHERE   {
         BIND ( "Dataset" AS ?additional_type )
         ?input
             a s:Dataset ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?inputfp .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
+        }
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -733,6 +851,9 @@ WHERE   {
             a ?leaf_type .
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:identifier ?filepid .
         }
         OPTIONAL {
             ?component s:value ?value .
@@ -744,7 +865,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?execution wrterm:environment ?env .
     {
@@ -753,8 +874,15 @@ WHERE   {
         ?env
             a s:MediaObject ;
             s:name ?name_env ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?envfp .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -765,8 +893,15 @@ WHERE   {
         ?env
             a s:Dataset ;
             s:name ?name_env ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?envfp .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -812,6 +947,9 @@ WHERE   {
             ?component s:contentUrl ?fileuri .
         }
         OPTIONAL {
+            ?component s:identifier ?filepid .
+        }
+        OPTIONAL {
             ?component s:value ?value .
         }
     }
@@ -821,7 +959,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_OUTPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?synthetic_output ?glob_pattern ?filled_from_name
 WHERE   {
     ?execution s:result ?output .
     {
@@ -837,6 +975,10 @@ WHERE   {
         OPTIONAL {
             ?output
                 s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?output
+                s:identifier ?filepid .
         }
     } UNION {
         # A directory, which is a schema.org Dataset
@@ -862,6 +1004,10 @@ WHERE   {
             ?output
                 s:contentUrl ?fileuri .
         }
+        OPTIONAL {
+            ?output
+                s:identifier ?filepid .
+        }
     } UNION {
         # A single property value, which can be either Integer, Text, Boolean or Float
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
@@ -891,12 +1037,27 @@ WHERE   {
             ?component s:contentUrl ?fileuri .
         }
         OPTIONAL {
+            ?component s:identifier ?filepid .
+        }
+        OPTIONAL {
             ?component s:value ?value .
         }
     }
     OPTIONAL {
-        ?ouputfp
+        ?outputfp
             s:defaultValue ?default_value .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:syntheticOutput ?synthetic_output .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:globPattern ?glob_pattern .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:filledFrom ?filled_from_name .
     }
     OPTIONAL {
         ?output
@@ -1218,18 +1379,45 @@ Container {containerrow.container}
             if hasattr(outputrow, "alternate_name"):
                 preferred_name = str(outputrow.alternate_name)
 
-            valobj: "MutableMapping[str, Any]" = base.setdefault(
-                output_last,
-                {
-                    "c-l-a-s-s": ContentKind.Directory.name
-                    if additional_type == "Dataset"
-                    else ContentKind.File.name,
-                    "cardinality": cardinality,
-                },
-            )
+            synthetic_output = False
+            if outputrow.synthetic_output is not None:
+                if isinstance(outputrow.synthetic_output, rdflib.term.Literal):
+                    synthetic_output = bool(outputrow.synthetic_output.value)
+                else:
+                    ser_val = str(outputrow.synthetic_output).lower()
+                    synthetic_output = (
+                        False if len(ser_val) == 0 or ser_val == "false" else True
+                    )
+
+            # Self generated outputs with fake names => skip it!!!!!
+            if (
+                synthetic_output
+                and outputrow.glob_pattern is None
+                and outputrow.filled_from_name is None
+            ):
+                continue
+
+            sch_output: "Sch_Output" = {
+                "c-l-a-s-s": ContentKind.Directory.name
+                if additional_type == "Dataset"
+                else ContentKind.File.name,
+                "cardinality": cardinality,
+            }
+
+            valobj: "Sch_Output" = base.setdefault(output_last, sch_output)
 
             if preferred_name is not None:
                 valobj["preferredName"] = preferred_name
+
+            # Now, WfExS terms processing
+            if outputrow.synthetic_output is not None:
+                valobj["syntheticOutput"] = synthetic_output
+
+            if outputrow.glob_pattern is not None:
+                valobj["glob"] = str(outputrow.glob_pattern)
+
+            if outputrow.filled_from_name is not None:
+                valobj["fillFrom"] = str(outputrow.filled_from_name)
 
         return outputs
 
@@ -1317,6 +1505,10 @@ Container {containerrow.container}
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
+                if inputrow.fileuri is None and inputrow.filepid is None:
+                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found. Stopping."
+                    self.logger.error(errmsg)
+                    raise ROCrateToolboxException(errmsg)
                 valobj = base.setdefault(
                     param_last,
                     {
@@ -1330,12 +1522,22 @@ Container {containerrow.container}
                 licences = self._getLicences(g, inputrow.input, public_name)
                 if len(licences) == 0:
                     licences = default_licences
+                the_uri: "str"
+                if inputrow.fileuri is not None:
+                    the_uri = str(inputrow.fileuri)
+                elif inputrow.filepid is not None:
+                    the_uri = str(inputrow.filepid)
+                else:
+                    raise ROCrateToolboxException(
+                        "FATAL RO-Crate workflow input processing error. Check the code of WfExS"
+                    )
+
                 the_url: "Union[str, Mapping[str, Any]]"
                 if len(licences) == 0:
-                    the_url = str(inputrow.fileuri)
+                    the_url = the_uri
                 else:
                     the_url = {
-                        "uri": str(inputrow.fileuri),
+                        "uri": the_uri,
                         "licences": licences,
                     }
 
@@ -1561,10 +1763,11 @@ Container {containerrow.container}
 
         return licences
 
-    def _extractWorkflowMetadata(
+    def extractWorkflowMetadata(
         self,
         g: "rdflib.graph.Graph",
         main_entity: "rdflib.term.Identifier",
+        default_repo: "Optional[str]",
         public_name: "str",
     ) -> "Tuple[RemoteRepo, WorkflowType]":
         # This query will tell us where the original workflow was located,
@@ -1617,6 +1820,10 @@ Container {containerrow.container}
             raise ROCrateToolboxException(
                 f"Unable to infer the permanent identifier from the workflow at {public_name}"
             )
+
+        # The RO-Crate was produced by RO-Crate
+        if ("workflowhub.eu" in repo_pid) and default_repo is not None:
+            repo_pid = default_repo
 
         repo_version: "Optional[str]" = None
         if langrow.workflow_version:
@@ -1687,8 +1894,11 @@ Container {containerrow.container}
         # The default crate licences
         crate_licences = self._getLicences(g, matched_crate.mainentity, public_name)
 
-        repo, workflow_type = self._extractWorkflowMetadata(
-            g, matched_crate.mainentity, public_name
+        repo, workflow_type = self.extractWorkflowMetadata(
+            g,
+            matched_crate.mainentity,
+            default_repo=str(matched_crate.wfhrepourl),
+            public_name=public_name,
         )
 
         # At this point we know WfExS supports the workflow engine.
@@ -1801,6 +2011,27 @@ Container {containerrow.container}
 
         # TODO: finish
         assert container_type is not None
+
+        # This postprocessing is needed to declare the parameters
+        # which are really outputs
+        if not workflow_type.has_explicit_outputs:
+            new_params = cast("MutableParamsBlock", copy.copy(params))
+            for output_name, output_decl in outputs.items():
+                if not output_decl.get("syntheticOutput", False):
+                    # Additional check
+                    fill_from = output_decl.get("fillFrom")
+                    if fill_from != output_name:
+                        self.logger.warning(
+                            f"fillFrom property differs from what it is expected: {fill_from} vs {output_name} . Fixing"
+                        )
+                        output_decl["fillFrom"] = output_name
+                    # Now, inject an input
+                    new_params[output_name] = {
+                        "c-l-a-s-s": output_decl["c-l-a-s-s"],
+                        "autoFill": True,
+                        "autoPrefix": True,
+                    }
+            params = new_params
 
         return (
             repo,

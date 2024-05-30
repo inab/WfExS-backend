@@ -825,6 +825,10 @@ WfExS commands are:
 
 * `stage`: This command is used to first validate workflow staging and security context configuration files, then fetch all the workflow preconditions and files, staging them for an execution. It honours `-L`, `-W`, `-Z` parameters and `WFEXS_CONFIG_FILE` environment variable, and once the staging is finished it prints the path to the parent execution environment.
 
+* `re-stage`: This command is used to reuse an already staged workflow in a completely uncoupled working directory. The command allows replacing some of the parameters.
+
+* `import`: This command is used to fetch and import a previously generated Workflow Run RO-Crate, for reproducibility. The command allows replacing some of the original parameters, for replicability.
+
 * `staged-workdir`: This command is complementary to `stage`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable. This command has several subcommands which help on the workflow execution lifecycle (list available working directories and their statuses, remove some of them, execute either a shell or a custom command in a working directory context, execute, export prospective and retrospective provenance to RO-Crate, ...).
 
 * `export`: This command is complementary to `stage`. It recognizes both `-L` parameter and `WFEXS_CONFIG_FILE` environment variable, and depends on `-J` parameter to locate the execution environment directory to be used, properly staged through `stage`. It also depends on both -E and -Z parameters, to declare the different export patterns and the needed credentials to complete the rules. This command has a couple of subcommands to list previously exported items and to do those exports.

@@ -173,6 +173,10 @@ class WorkflowType(NamedTuple):
     def _value_fixes(cls) -> "Mapping[str, Optional[str]]":
         return {"shortname": "trs_descriptor"}
 
+    @property
+    def has_explicit_outputs(self) -> "bool":
+        return self.clazz.HasExplicitOutputs()
+
 
 class MaterializedWorkflowEngine(NamedTuple):
     """
@@ -201,6 +205,11 @@ class AbstractWorkflowEngineType(abc.ABC):
     @classmethod
     @abc.abstractmethod
     def MyWorkflowType(cls) -> "WorkflowType":
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def HasExplicitOutputs(cls) -> "bool":
         pass
 
     @property
@@ -788,8 +797,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def staged_containers_dir(self) -> "AnyPath":
         return self.stagedContainersDir
 
-    def create_job_directories(self) -> "Tuple[str, AbsPath, AbsPath]":
+    def create_job_directories(self) -> "Tuple[str, AbsPath, AbsPath, AbsPath]":
         outputDirPostfix = "_" + str(int(time.time())) + "_" + str(os.getpid())
+        intermediateDir = cast(
+            "AbsPath", os.path.join(self.intermediateDir, outputDirPostfix)
+        )
+        os.makedirs(intermediateDir, exist_ok=True)
         outputsDir = cast("AbsPath", os.path.join(self.outputsDir, outputDirPostfix))
         os.makedirs(outputsDir, exist_ok=True)
         outputMetaDir = cast(
@@ -797,7 +810,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         )
         os.makedirs(outputMetaDir, exist_ok=True)
 
-        return outputDirPostfix, outputsDir, outputMetaDir
+        return outputDirPostfix, intermediateDir, outputsDir, outputMetaDir
 
     @abc.abstractmethod
     def launchWorkflow(
@@ -956,6 +969,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                             kind=guessedOutputKindDef,
                             expectedCardinality=self.GuessedCardinalityMapping[False],
                             values=matValuesDef,
+                            syntheticOutput=True,
                         )
 
                         matOutputs.append(matOutput)
@@ -983,6 +997,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                 len(matValues) > 1
                             ],
                             values=matValues,
+                            syntheticOutput=False,
                         )
 
                         matOutputs.append(matOutput)
@@ -998,11 +1013,15 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     for matchedPath in matInputValues:
                         # FIXME: Are these elements always paths??????
                         if isinstance(matchedPath, str):
+                            if os.path.isabs(matchedPath):
+                                abs_matched_path = matchedPath
+                            else:
+                                abs_matched_path = os.path.join(outputsDir, matchedPath)
                             try:
                                 theContent: "AbstractGeneratedContent"
                                 if expectedOutput.kind == ContentKind.Directory:
                                     theContent = GetGeneratedDirectoryContent(
-                                        thePath=cast("AbsPath", matchedPath),
+                                        thePath=cast("AbsPath", abs_matched_path),
                                         uri=None,  # TODO: generate URIs when it is advised
                                         preferredFilename=expectedOutput.preferredFilename,
                                         signatureMethod=nihDigester,
@@ -1010,12 +1029,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     expMatContents.append(theContent)
                                 elif expectedOutput.kind == ContentKind.File:
                                     theContent = GeneratedContent(
-                                        local=cast("AbsPath", matchedPath),
+                                        local=cast("AbsPath", abs_matched_path),
                                         uri=None,  # TODO: generate URIs when it is advised
                                         signature=cast(
                                             "Fingerprint",
                                             ComputeDigestFromFile(
-                                                matchedPath, repMethod=nihDigester
+                                                abs_matched_path, repMethod=nihDigester
                                             ),
                                         ),
                                         preferredFilename=expectedOutput.preferredFilename,
@@ -1034,15 +1053,19 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     ) as mP:
                                         theValue = mP.read()
                                         expMatValues.append(theValue)
-                            except:
-                                self.logger.error(
-                                    f"Unable to read path {matchedPath} from filled input {expectedOutput.fillFrom}"
+                            except Exception as e:
+                                self.logger.exception(
+                                    f"Unable to read path {abs_matched_path} ({matchedPath}) from filled input {expectedOutput.fillFrom}"
                                 )
                         else:
                             self.logger.exception("FIXME!!!!!!!!!!!!")
                             raise WorkflowEngineException("FIXME!!!!!!!!!!!!")
 
-                if len(expMatValues) == 0 and cannotBeEmpty:
+                if (
+                    len(expMatValues) == 0
+                    and len(expMatContents) == 0
+                    and cannotBeEmpty
+                ):
                     self.logger.warning(
                         f"Output {expectedOutput.name} got no path from filled input {expectedOutput.fillFrom}"
                     )
@@ -1099,6 +1122,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                             matchedValue = mP.read()
                             expMatValues.append(matchedValue)
             else:
+                assert (
+                    self.HasExplicitOutputs()
+                ), f"Workflow engine {self.MyWorkflowType().engineName} does not support explicit outputs, but received {expectedOutput}"
                 outputVal = outputsMapping.get(expectedOutput.name)
 
                 if (outputVal is None) and cannotBeEmpty:
@@ -1123,6 +1149,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 kind=expectedOutput.kind,
                 expectedCardinality=expectedOutput.cardinality,
                 values=expMatContents if len(expMatContents) > 0 else expMatValues,
+                syntheticOutput=expectedOutput.syntheticOutput,
+                filledFrom=expectedOutput.fillFrom,
+                glob=expectedOutput.glob if expectedOutput.syntheticOutput else None,
             )
 
             matOutputs.append(matOutput)

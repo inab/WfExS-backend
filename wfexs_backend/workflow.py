@@ -59,6 +59,7 @@ from .fetchers import (
     FetcherException,
     # Next ones are needed for correct unmarshalling
     RemoteRepo,
+    RepoGuessFlavor,
     RepoType,
 )
 
@@ -155,6 +156,7 @@ if TYPE_CHECKING:
     Sch_InputURI_Fetchable = Union[Sch_InputURI_Elem, Sequence[Sch_InputURI_Elem]]
     Sch_InputURI = Union[Sch_InputURI_Fetchable, Sequence[Sequence[Sch_InputURI_Elem]]]
 
+    # Remember to change this if the JSON schema is changed
     Sch_Tabular = TypedDict(
         "Sch_Tabular",
         {
@@ -165,6 +167,7 @@ if TYPE_CHECKING:
         },
     )
 
+    # Remember to change this if the JSON schema is changed
     Sch_Param = TypedDict(
         "Sch_Param",
         {
@@ -179,6 +182,20 @@ if TYPE_CHECKING:
             "globExplode": str,
             "autoFill": bool,
             "autoPrefix": bool,
+        },
+        total=False,
+    )
+
+    # Remember to change this if the JSON schema is changed
+    Sch_Output = TypedDict(
+        "Sch_Output",
+        {
+            "c-l-a-s-s": str,
+            "cardinality": Union[str, int, Sequence[int]],
+            "preferredName": str,
+            "fillFrom": str,
+            "glob": str,
+            "syntheticOutput": bool,
         },
         total=False,
     )
@@ -228,20 +245,14 @@ from .utils.licences import (
     AcceptableLicenceSchemes,
     LicenceMatcherSingleton,
 )
-from .utils.misc import (
-    lazy_import,
-)
 from .utils.rocrate import (
-    ROCrateToolbox,
+    ReadROCrateMetadata,
 )
 
 from .security_context import (
     SecurityContextVault,
 )
 import bagit
-
-magic = lazy_import("magic")
-# import magic
 
 from . import __url__ as wfexs_backend_url
 from . import __official_name__ as wfexs_backend_name
@@ -376,10 +387,6 @@ class DefaultMissing(Dict[KT, VT]):
 
     def __missing__(self, key: KT) -> VT:
         return cast(VT, key)
-
-
-ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
-LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
 
 
 def _wakeupEncDir(
@@ -526,7 +533,7 @@ class WF:
         # This property should mutate after unmarshalling the config
         self.container_type_str = container_type_str
 
-        self.outputs: "Optional[Sequence[ExpectedOutput]]"
+        self.expected_outputs: "Optional[Sequence[ExpectedOutput]]" = None
         self.default_actions: "Optional[Sequence[ExportAction]]"
         self.trs_endpoint: "Optional[str]"
         self.version_id: "Optional[WFVersionId]"
@@ -595,9 +602,10 @@ class WF:
             self.params = params
             self.environment = environment
             self.placeholders = placeholders
-            self.formatted_params = self.formatParams(params)
-            self.formatted_environment = self.formatParams(environment)
-            self.outputs = self.parseExpectedOutputs(outputs)
+            self.formatted_params, self.outputs_to_inject = self.formatParams(params)
+            assert self.outputs_to_inject is not None
+            self.formatted_environment, _ = self.formatParams(environment)
+            self.outputs = outputs
             self.default_actions = self.parseExportActions(
                 [] if default_actions is None else default_actions
             )
@@ -1400,67 +1408,7 @@ class WF:
         based on the declaration of an existing one
         """
 
-        # Is it a bare file or an archive?
-        jsonld_filename: "Optional[str]" = None
-        if os.path.isdir(workflowROCrateFilename):
-            possible_jsonld_filename = os.path.join(
-                workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
-            )
-            legacy_jsonld_filename = os.path.join(
-                workflowROCrateFilename, LEGACY_ROCRATE_JSONLD_FILENAME
-            )
-            if os.path.exists(possible_jsonld_filename):
-                jsonld_filename = possible_jsonld_filename
-            elif os.path.exists(legacy_jsonld_filename):
-                jsonld_filename = legacy_jsonld_filename
-            else:
-                raise WFException(
-                    f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
-                )
-        elif os.path.isfile(workflowROCrateFilename):
-            jsonld_filename = workflowROCrateFilename
-        else:
-            raise WFException(f"Input {public_name} is neither a file or a directory")
-
-        jsonld_bin: "Optional[bytes]" = None
-        putative_mime = magic.from_file(jsonld_filename, mime=True)
-        # Bare possible RO-Crate
-        if putative_mime == "application/json":
-            with open(jsonld_filename, mode="rb") as jdf:
-                jsonld_bin = jdf.read()
-        # Archived possible RO-Crate
-        elif putative_mime == "application/zip":
-            with zipfile.ZipFile(workflowROCrateFilename, mode="r") as zf:
-                try:
-                    jsonld_bin = zf.read(ROCRATE_JSONLD_FILENAME)
-                except Exception as e:
-                    try:
-                        jsonld_bin = zf.read(LEGACY_ROCRATE_JSONLD_FILENAME)
-                    except Exception as e2:
-                        raise WFException(
-                            f"Unable to locate RO-Crate metadata descriptor within {public_name}"
-                        ) from ExceptionGroup(  # pylint: disable=possibly-used-before-assignment
-                            f"Both {ROCRATE_JSONLD_FILENAME} and {LEGACY_ROCRATE_JSONLD_FILENAME} tried",
-                            [e, e2],
-                        )
-
-                putative_mime_ld = magic.from_buffer(jsonld_bin, mime=True)
-                if putative_mime_ld != "application/json":
-                    raise WFException(
-                        f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
-                    )
-        else:
-            raise WFException(
-                f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
-            )
-
-        # Let's parse the JSON (in order to check whether it is valid)
-        try:
-            jsonld_obj = json.loads(jsonld_bin)
-        except json.JSONDecodeError as jde:
-            raise WFException(
-                f"Content from {public_name} is not a valid JSON"
-            ) from jde
+        jsonld_obj = ReadROCrateMetadata(workflowROCrateFilename, public_name)
 
         (
             repo,
@@ -1473,6 +1421,7 @@ class WF:
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
             jsonld_obj, public_name
         )
+
         workflow_pid = wfexs.gen_workflow_pid(repo)
         logging.debug(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
@@ -1757,6 +1706,23 @@ class WF:
         assert (
             self.engine is not None
         ), "Workflow engine not properly identified or set up"
+
+        # Process outputs now we have an engine
+        if isinstance(self.outputs, dict):
+            assert self.outputs_to_inject is not None
+            outputs = list(self.outputs.values())
+            if (len(outputs) == 0 and len(self.outputs_to_inject) == 0) or (
+                len(outputs) > 0 and isinstance(outputs[0], ExpectedOutput)
+            ):
+                self.expected_outputs = outputs
+            else:
+                self.expected_outputs = self.parseExpectedOutputs(
+                    self.outputs_to_inject,
+                    self.outputs,
+                    default_synthetic_output=not self.engine.HasExplicitOutputs(),
+                )
+        else:
+            self.expected_outputs = None
 
         engine_version: "Optional[EngineVersion]"
         if self.materializedEngine is None:
@@ -2170,10 +2136,11 @@ class WF:
 
     def formatParams(
         self, params: "Optional[ParamsBlock]", prefix: "str" = ""
-    ) -> "Optional[ParamsBlock]":
+    ) -> "Tuple[Optional[ParamsBlock] , Optional[Sequence[Sch_Output]]]":
         if params is None:
-            return None
+            return None, None
 
+        outputs_to_inject: "MutableSequence[Sch_Output]" = []
         formatted_params: "MutableParamsBlock" = dict()
         some_formatted = False
         for key, raw_inputs in params.items():
@@ -2194,23 +2161,75 @@ class WF:
                                 inputClass, linearKey
                             )
                         )
+
+                    prefrel_formatted = False
+                    formatted_preferred_name_conf: "Optional[Union[str, Literal[False]]]" = (
+                        None
+                    )
+                    formatted_reldir_conf: "Optional[Union[str, Literal[False]]]" = None
                     if inputClass in (
                         ContentKind.File.name,
                         ContentKind.Directory.name,
-                    ):  # input files
-                        if inputClass == ContentKind.Directory.name:
-                            # We have to autofill this with the outputs directory,
-                            # so results are properly stored (without escaping the jail)
-                            if inputs.get("autoFill", False):
-                                formatted_params[key] = inputs
-                                continue
+                        ContentKind.ContentWithURIs.name,
+                    ):
+                        # These parameters can be used both for input placement tuning
+                        # as well for output placement
+                        preferred_name_conf = inputs.get("preferred-name")
+                        if isinstance(preferred_name_conf, str):
+                            formatted_preferred_name_conf = (
+                                self._formatStringFromPlaceHolders(preferred_name_conf)
+                            )
+                            if preferred_name_conf != formatted_preferred_name_conf:
+                                prefrel_formatted = True
+                        else:
+                            formatted_preferred_name_conf = preferred_name_conf
 
-                            globExplode = inputs.get("globExplode")
-                        elif inputClass == ContentKind.File.name and inputs.get(
-                            "autoFill", False
-                        ):
-                            formatted_params[key] = inputs
+                        reldir_conf = inputs.get("relative-dir")
+                        if isinstance(reldir_conf, str):
+                            formatted_reldir_conf = self._formatStringFromPlaceHolders(
+                                reldir_conf
+                            )
+                            if reldir_conf != formatted_reldir_conf:
+                                prefrel_formatted = True
+                        else:
+                            formatted_reldir_conf = reldir_conf
+
+                    if inputClass in (
+                        ContentKind.File.name,
+                        ContentKind.Directory.name,
+                    ):
+                        # input files
+                        # We have to autofill this with the outputs directory,
+                        # so results are properly stored (without escaping the jail)
+                        if inputs.get("autoFill", False):
+                            if prefrel_formatted:
+                                some_formatted = True
+                                formatted_inputs = copy.copy(inputs)
+                                if formatted_preferred_name_conf is not None:
+                                    formatted_inputs[
+                                        "preferred-name"
+                                    ] = formatted_preferred_name_conf
+                                if formatted_reldir_conf is not None:
+                                    formatted_inputs[
+                                        "relative-dir"
+                                    ] = formatted_reldir_conf
+                            else:
+                                formatted_inputs = inputs
+                            formatted_params[key] = formatted_inputs
+
+                            # Inject as an output
+                            outputs_to_inject.append(
+                                {
+                                    "c-l-a-s-s": inputClass,
+                                    "cardinality": 1,
+                                    "fillFrom": linearKey,
+                                    "syntheticOutput": False,
+                                }
+                            )
                             continue
+
+                        if inputClass == ContentKind.Directory.name:
+                            globExplode = inputs.get("globExplode")
 
                     # Processing url and secondary-urls
                     if ("url" in inputs) and (
@@ -2220,8 +2239,9 @@ class WF:
                             ContentKind.Directory.name,
                             ContentKind.ContentWithURIs.name,
                         )
-                    ):  # input files
-                        was_formatted = False
+                    ):
+                        # input files
+                        was_formatted = prefrel_formatted
 
                         remote_files: "Sch_InputURI" = inputs["url"]
                         if remote_files is not None:
@@ -2250,28 +2270,6 @@ class WF:
                         else:
                             formatted_secondary_remote_files = None
 
-                        preferred_name_conf = inputs.get("preferred-name")
-                        formatted_preferred_name_conf: "Optional[Union[str, Literal[False]]]"
-                        if isinstance(preferred_name_conf, str):
-                            formatted_preferred_name_conf = (
-                                self._formatStringFromPlaceHolders(preferred_name_conf)
-                            )
-                            if preferred_name_conf != formatted_preferred_name_conf:
-                                was_formatted = True
-                        else:
-                            formatted_preferred_name_conf = preferred_name_conf
-
-                        reldir_conf = inputs.get("relative-dir")
-                        formatted_reldir_conf: "Optional[Union[str, Literal[False]]]"
-                        if isinstance(reldir_conf, str):
-                            formatted_reldir_conf = self._formatStringFromPlaceHolders(
-                                reldir_conf
-                            )
-                            if reldir_conf != formatted_reldir_conf:
-                                was_formatted = True
-                        else:
-                            formatted_reldir_conf = reldir_conf
-
                         # Something has to be changed
                         if was_formatted:
                             some_formatted = True
@@ -2283,13 +2281,11 @@ class WF:
                                 formatted_inputs[
                                     "secondary-urls"
                                 ] = formatted_secondary_remote_files
-                            if "preferred-name" in inputs:
-                                assert formatted_preferred_name_conf is not None
+                            if formatted_preferred_name_conf is not None:
                                 formatted_inputs[
                                     "preferred-name"
                                 ] = formatted_preferred_name_conf
-                            if "relative-dir" in inputs:
-                                assert formatted_reldir_conf is not None
+                            if formatted_reldir_conf is not None:
                                 formatted_inputs["relative-dir"] = formatted_reldir_conf
                         else:
                             formatted_inputs = inputs
@@ -2350,12 +2346,18 @@ class WF:
 
                 else:
                     # possible nested files
-                    formatted_inputs_nested = self.formatParams(
+                    (
+                        formatted_inputs_nested,
+                        child_outputs_to_inject,
+                    ) = self.formatParams(
                         cast("ParamsBlock", inputs), prefix=linearKey + "."
                     )
                     if inputs != formatted_inputs_nested:
                         some_formatted = True
                     formatted_params[key] = formatted_inputs_nested
+                    # Propagate the outputs to inject
+                    if isinstance(child_outputs_to_inject, list):
+                        outputs_to_inject.extend(child_outputs_to_inject)
             elif isinstance(raw_inputs, list):
                 if len(raw_inputs) > 0 and isinstance(raw_inputs[0], str):
                     formatted_inputs_l = []
@@ -2380,7 +2382,7 @@ class WF:
             else:
                 formatted_params[key] = raw_inputs
 
-        return formatted_params if some_formatted else params
+        return formatted_params if some_formatted else params, outputs_to_inject
 
     def _fetchContentWithURIs(
         self,
@@ -2695,12 +2697,31 @@ class WF:
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
                             if inputs.get("autoFill", False):
-                                if inputs.get("autoPrefix", True):
+                                relative_dir = inputs.get("relative-dir")
+                                preferred_name = inputs.get("preferred-name")
+                                auto_prefix = inputs.get("autoPrefix", True)
+                                if (
+                                    relative_dir is not None
+                                    or preferred_name is not None
+                                ):
+                                    auto_prefix = True
+
+                                if auto_prefix:
+                                    if relative_dir is not None:
+                                        rel_auto_filled = relative_dir
+                                    else:
+                                        rel_auto_filled = ""
+                                    if preferred_name is not None:
+                                        the_tokens = [preferred_name]
+                                    else:
+                                        the_tokens = path_tokens
+                                    # We cannot use an absolute path because
+                                    # each run has its own output directory!!!
                                     autoFilledDir = os.path.join(
-                                        self.outputsDir, *path_tokens
+                                        rel_auto_filled, *the_tokens
                                     )
                                 else:
-                                    autoFilledDir = self.outputsDir
+                                    autoFilledDir = ""
 
                                 theInputs.append(
                                     MaterializedInput(
@@ -2715,9 +2736,22 @@ class WF:
                         elif inputClass == ContentKind.File.name and inputs.get(
                             "autoFill", False
                         ):
+                            relative_dir = inputs.get("relative-dir")
+                            preferred_name = inputs.get("preferred-name")
+                            if relative_dir is not None:
+                                rel_auto_filled = relative_dir
+                            else:
+                                rel_auto_filled = ""
+                            if preferred_name is not None:
+                                the_tokens = [preferred_name]
+                            else:
+                                the_tokens = path_tokens
+
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
-                            autoFilledFile = os.path.join(self.outputsDir, path_tokens)
+                            autoFilledFile = os.path.join(
+                                self.outputsDir, rel_auto_filled, *the_tokens
+                            )
                             autoFilledDir = os.path.dirname(autoFilledFile)
                             # This is needed to assure the path exists
                             if autoFilledDir != self.outputsDir:
@@ -3036,9 +3070,21 @@ class WF:
     }
 
     def parseExpectedOutputs(
-        self, outputs: "Union[Sequence[Any], Mapping[str, Any]]"
+        self,
+        outputs_to_inject: "Sequence[Sch_Output]",
+        outputs: "Union[Sequence[Sch_Output], Mapping[str, Sch_Output]]",
+        default_synthetic_output: "bool",
     ) -> "Sequence[ExpectedOutput]":
         expectedOutputs = []
+        known_outputs: "Set[str]" = set()
+
+        outputs_to_process = []
+        for output_to_inject in outputs_to_inject:
+            fill_from = output_to_inject.get("fillFrom")
+            assert isinstance(fill_from, str)
+            if fill_from not in known_outputs:
+                known_outputs.add(fill_from)
+                outputs_to_process.append((fill_from, output_to_inject))
 
         # TODO: implement parsing of outputs
         outputsIter = (
@@ -3046,6 +3092,12 @@ class WF:
         )
 
         for outputKey, outputDesc in outputsIter:
+            # Skip already injected
+            if str(outputKey) not in known_outputs:
+                known_outputs.add(outputKey)
+                outputs_to_process.append((str(outputKey), outputDesc))
+
+        for output_name, outputDesc in outputs_to_process:
             # The glob pattern
             patS = outputDesc.get("glob")
             if patS is not None:
@@ -3073,7 +3125,7 @@ class WF:
                 cardinality = self.CardinalityMapping[self.DefaultCardinality]
 
             eOutput = ExpectedOutput(
-                name=outputKey,
+                name=cast("SymbolicOutputName", output_name),
                 kind=self.OutputClassMapping.get(
                     outputDesc.get("c-l-a-s-s"), ContentKind.File
                 ),
@@ -3081,6 +3133,9 @@ class WF:
                 cardinality=cardinality,
                 fillFrom=fillFrom,
                 glob=patS,
+                syntheticOutput=outputDesc.get(
+                    "syntheticOutput", default_synthetic_output
+                ),
             )
             expectedOutputs.append(eOutput)
 
@@ -3089,8 +3144,6 @@ class WF:
     def parseExportActions(
         self, raw_actions: "Sequence[ExportActionBlock]"
     ) -> "Sequence[ExportAction]":
-        assert self.outputs is not None
-
         o_raw_actions = {"exports": raw_actions}
         valErrors = config_validate(o_raw_actions, self.EXPORT_ACTIONS_SCHEMA)
         if len(valErrors) > 0:
@@ -3156,7 +3209,7 @@ class WF:
         assert self.materializedEngine is not None
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
-        assert self.outputs is not None
+        assert self.expected_outputs is not None
 
         if self.stagedExecutions is None:
             self.stagedExecutions = []
@@ -3165,7 +3218,7 @@ class WF:
             self.materializedEngine,
             self.materializedParams,
             self.materializedEnvironment,
-            self.outputs,
+            self.expected_outputs,
         )
 
         self.stagedExecutions.append(stagedExec)
@@ -3537,8 +3590,7 @@ This is an enumeration of the types of collected contents:
         if self.placeholders is not None:
             workflow_meta["placeholders"] = self.placeholders
         if self.outputs is not None:
-            outputs = {output.name: output for output in self.outputs}
-            workflow_meta["outputs"] = outputs
+            workflow_meta["outputs"] = self.outputs
         if self.default_actions is not None:
             workflow_meta["default_actions"] = self.default_actions
 
@@ -3640,8 +3692,12 @@ This is an enumeration of the types of collected contents:
                     self.params = workflow_meta.get("params")
                     self.environment = workflow_meta.get("environment")
                     self.placeholders = workflow_meta.get("placeholders")
-                    self.formatted_params = self.formatParams(self.params)
-                    self.formatted_environment = self.formatParams(self.environment)
+                    self.outputs = workflow_meta.get("outputs")
+                    self.formatted_params, self.outputs_to_inject = self.formatParams(
+                        self.params
+                    )
+                    assert self.outputs_to_inject is not None
+                    self.formatted_environment, _ = self.formatParams(self.environment)
 
                     # The right moment to rescue this?
                     if isinstance(self.workflow_config, dict):
@@ -3649,16 +3705,6 @@ This is an enumeration of the types of collected contents:
                         if container_type_str is not None:
                             self.explicit_container_type = True
                             self.container_type_str = container_type_str
-
-                    outputsM = workflow_meta.get("outputs")
-                    if isinstance(outputsM, dict):
-                        outputs = list(outputsM.values())
-                        if len(outputs) == 0 or isinstance(outputs[0], ExpectedOutput):
-                            self.outputs = outputs
-                        else:
-                            self.outputs = self.parseExpectedOutputs(outputsM)
-                    else:
-                        self.outputs = None
 
                     defaultActionsM = workflow_meta.get("default_actions")
                     if isinstance(defaultActionsM, dict):
@@ -3904,6 +3950,24 @@ This is an enumeration of the types of collected contents:
                         self.engine = self.wfexs.instantiateEngine(
                             self.engineDesc, self.staged_setup
                         )
+
+                    # Process outputs now we have an engine
+                    if isinstance(self.outputs, dict):
+                        assert self.engine is not None
+                        assert self.outputs_to_inject is not None
+                        outputs = list(self.outputs.values())
+                        if (len(outputs) == 0 and len(self.outputs_to_inject) == 0) or (
+                            len(outputs) > 0 and isinstance(outputs[0], ExpectedOutput)
+                        ):
+                            self.expected_outputs = outputs
+                        else:
+                            self.expected_outputs = self.parseExpectedOutputs(
+                                self.outputs_to_inject,
+                                self.outputs,
+                                default_synthetic_output=not self.engine.HasExplicitOutputs(),
+                            )
+                    else:
+                        self.expected_outputs = None
             except Exception as e:
                 errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(
                     marshalled_stage_file, e
@@ -4574,7 +4638,7 @@ This is an enumeration of the types of collected contents:
         wrroc.addStagedWorkflowDetails(
             self.materializedParams,
             self.materializedEnvironment,
-            self.outputs,
+            self.expected_outputs,
         )
 
         # Save RO-crate as execution.crate.zip

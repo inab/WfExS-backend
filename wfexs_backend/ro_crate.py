@@ -101,7 +101,10 @@ from .utils.rocrate import (
     ContainerType2AdditionalType,
     ContainerTypeMetadata,
     ContainerTypeMetadataDetails,
+    WFEXS_TERMS_CONTEXT,
+    WFEXS_TERMS_NAMESPACE,
     WORKFLOW_RUN_CONTEXT,
+    WORKFLOW_RUN_NAMESPACE,
 )
 
 magic = lazy_import("magic")
@@ -929,21 +932,25 @@ class WorkflowRunROCrate:
         RO_licences = self._process_licences(licences)
 
         # Add extra terms
-        # self.crate.metadata.extra_terms.update(
-        #     {
-        #         "sha256": WORKFLOW_RUN_CONTEXT + "#sha256",
-        #         # Next ones are experimental
-        #         ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_CONTEXT + "#"
-        #         + ContainerImageAdditionalType.Docker.value,
-        #         ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_CONTEXT + "#"
-        #         + ContainerImageAdditionalType.Singularity.value,
-        #         "containerImage": WORKFLOW_RUN_CONTEXT + "#containerImage",
-        #         "ContainerImage": WORKFLOW_RUN_CONTEXT + "#ContainerImage",
-        #         "registry": WORKFLOW_RUN_CONTEXT + "#registry",
-        #         "tag": WORKFLOW_RUN_CONTEXT + "#tag",
-        #     }
-        # )
+        self.crate.metadata.extra_terms.update(
+            {
+                # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
+                # # Next ones are experimental
+                # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
+                # + ContainerImageAdditionalType.Docker.value,
+                # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
+                # + ContainerImageAdditionalType.Singularity.value,
+                # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
+                # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
+                # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
+                # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
+                "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
+                "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
+                "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
+            }
+        )
         self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
+        # self.crate.metadata.extra_contexts.append(WFEXS_TERMS_CONTEXT)
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
@@ -1337,6 +1344,11 @@ you can find here an almost complete list of the possible ones:
 
         failed_licences: "MutableSequence[URIType]" = []
         for in_item in inputs:
+            # Skip autoFilled inputs, as they should have their
+            # mirror parameters in outputs
+            if in_item.autoFilled:
+                continue
+
             formal_parameter_id = (
                 f"{self.wf_file.id}#{input_sep}:"
                 + urllib.parse.quote(in_item.name, safe="")
@@ -1756,7 +1768,7 @@ you can find here an almost complete list of the possible ones:
             dest_path=the_name if do_attach else None,
             clazz=SourceCodeFile if is_soft_source else FixedFile,
         )
-        if do_attach and (the_uri is not None):
+        if the_uri is not None:
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
@@ -1833,7 +1845,7 @@ you can find here an almost complete list of the possible ones:
             validate_url=False,
             # properties=file_properties,
         )
-        if do_attach and (the_uri is not None):
+        if the_uri is not None:
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
@@ -1995,6 +2007,8 @@ you can find here an almost complete list of the possible ones:
         the_name: "Optional[str]" = None
         rocrate_wf_folder: "str" = os.path.relpath(the_workflow.dir, self.work_dir)
         the_alternate_name: "str"
+        assert self.staged_setup.workflow_dir is not None
+        the_alternate_name = os.path.relpath(the_path, self.staged_setup.workflow_dir)
         if do_attach:
             # if wf_entrypoint_url is not None:
             #    # This is needed to avoid future collisions with other workflows stored in the RO-Crate
@@ -2004,14 +2018,8 @@ you can find here an almost complete list of the possible ones:
             # else:
             #    rocrate_wf_folder = str(uuid.uuid4())
 
-            the_alternate_name = os.path.relpath(the_path, the_workflow.dir)
-            the_name = rocrate_wf_folder + "/" + the_alternate_name
-        else:
-            the_alternate_name = cast(
-                "RelPath",
-                os.path.join(
-                    rocrate_wf_folder, os.path.relpath(the_path, the_workflow.dir)
-                ),
+            the_name = os.path.join(
+                rocrate_wf_folder, os.path.relpath(the_path, the_workflow.dir)
             )
 
         # When the id is none and ...
@@ -2084,7 +2092,7 @@ you can find here an almost complete list of the possible ones:
                 if added_operational_container not in existing_operational_containers:
                     existing_operational_containers.append(added_operational_container)
 
-        if do_attach and (the_uri is not None):
+        if the_uri is not None:
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
@@ -2144,15 +2152,17 @@ you can find here an almost complete list of the possible ones:
                     self.crate.add(the_entity)
                 else:
                     rocrate_file_id = rocrate_file_id_base + "/" + rel_file
-                    the_name = cast(
+                    the_s_name = cast(
                         "RelPath", os.path.join(rocrate_wf_folder, rel_file)
+                    )
+                    the_alternate_name = os.path.relpath(
+                        os.path.join(the_workflow.dir, rel_file),
+                        self.staged_setup.workflow_dir,
                     )
                     the_entity = self._add_file_to_crate(
                         the_path=os.path.join(the_workflow.dir, rel_file),
-                        the_name=the_name,
-                        the_alternate_name=cast("RelPath", rel_file)
-                        if do_attach
-                        else the_name,
+                        the_name=the_s_name,
+                        the_alternate_name=cast("RelPath", the_alternate_name),
                         the_uri=cast("URIType", rocrate_file_id),
                         do_attach=do_attach,
                         is_soft_source=True,
@@ -2195,6 +2205,18 @@ you can find here an almost complete list of the possible ones:
                     identifier=formal_parameter_id,
                     additional_type=additional_type,
                 )
+
+                # This one must be a real boolean, as of schema.org
+                if out_item.syntheticOutput is not None:
+                    formal_parameter["valueRequired"] = not out_item.syntheticOutput
+                    formal_parameter["syntheticOutput"] = out_item.syntheticOutput
+                    if out_item.syntheticOutput:
+                        if out_item.glob is not None:
+                            formal_parameter["globPattern"] = out_item.glob
+                    if out_item.fillFrom is not None:
+                        # This is a bit dirty, but effective
+                        formal_parameter["filledFrom"] = out_item.fillFrom
+
                 self.crate.add(formal_parameter)
 
             # Add to the list only when it is needed
@@ -2506,6 +2528,18 @@ you can find here an almost complete list of the possible ones:
                     identifier=formal_parameter_id,
                     additional_type=additional_type,
                 )
+
+                # This one must be a real boolean, as of schema.org
+                if out_item.syntheticOutput is not None:
+                    formal_parameter["valueRequired"] = not out_item.syntheticOutput
+                    formal_parameter["syntheticOutput"] = out_item.syntheticOutput
+                    if out_item.syntheticOutput:
+                        if out_item.glob is not None:
+                            formal_parameter["globPattern"] = out_item.glob
+                if out_item.filledFrom is not None:
+                    # This is a bit dirty, but effective
+                    formal_parameter["filledFrom"] = out_item.filledFrom
+
                 self.crate.add(formal_parameter)
                 self.wf_file.append_to("output", formal_parameter, compact=True)
 
@@ -2629,6 +2663,11 @@ you can find here an almost complete list of the possible ones:
 
         if the_content.uri is not None and not the_content.uri.uri.startswith("nih:"):
             the_content_uri = the_content.uri.uri
+            crate_file = cast(
+                "Optional[FixedFile]", self.crate.dereference(the_content_uri)
+            )
+            if crate_file is not None:
+                return crate_file
         else:
             the_content_uri = None
 
@@ -2687,6 +2726,9 @@ you can find here an almost complete list of the possible ones:
                 the_id = dest_path
             else:
                 the_id = the_uri
+            crate_dataset = cast(
+                "Optional[FixedDataset]", self.crate.dereference(the_id)
+            )
             # if the_uri is not None:
             #    an_uri = the_uri
             #    dest_path = None
@@ -2695,6 +2737,9 @@ you can find here an almost complete list of the possible ones:
             #    dest_path = os.path.relpath(the_content.local, self.work_dir)
             #    # digest, algo = extract_digest(the_content.signature)
             #    # dest_path = hexDigest(algo, digest)
+
+            if crate_dataset is not None:
+                return crate_dataset, the_files_crates
 
             crate_dataset = self.crate.add_dataset_ext(
                 identifier=the_id,
@@ -2705,7 +2750,7 @@ you can find here an almost complete list of the possible ones:
                 # properties=file_properties,
             )
 
-            if do_attach and (the_uri is not None):
+            if the_uri is not None:
                 if the_uri.startswith("http") or the_uri.startswith("ftp"):
                     # See https://github.com/ResearchObject/ro-crate/pull/259
                     uri_key = "contentUrl"
