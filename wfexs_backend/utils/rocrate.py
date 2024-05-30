@@ -600,7 +600,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?main_entity bsworkflow:input ?inputfp .
     ?inputfp
@@ -611,13 +611,27 @@ WHERE   {
     {
         # A file, which is a schema.org MediaObject
         ?input
-            a s:MediaObject ;
-            s:contentUrl ?fileuri .
+            a s:MediaObject .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
+        }
     } UNION {
         # A directory, which is a schema.org Dataset
         ?input
-            a s:Dataset ;
-            s:contentUrl ?fileuri .
+            a s:Dataset .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
+        }
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -645,6 +659,9 @@ WHERE   {
             ?component s:contentUrl ?fileuri .
         }
         OPTIONAL {
+            ?component s:identifier ?filepid .
+        }
+        OPTIONAL {
             ?component s:value ?value .
         }
     }
@@ -654,7 +671,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?main_entity wrterm:environment ?envfp .
     ?envfp
@@ -666,14 +683,28 @@ WHERE   {
         # A file, which is a schema.org MediaObject
         ?env
             a s:MediaObject ;
-            s:name ?name_env ;
-            s:contentUrl ?fileuri .
+            s:name ?name_env .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
     } UNION {
         # A directory, which is a schema.org Dataset
         ?env
             a s:Dataset ;
-            s:name ?name_env ;
-            s:contentUrl ?fileuri .
+            s:name ?name_env .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -701,6 +732,9 @@ WHERE   {
             a ?leaf_type .
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:identifer ?filepid .
         }
         OPTIONAL {
             ?component s:value ?value .
@@ -741,7 +775,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?execution s:object ?input .
     {
@@ -754,6 +788,10 @@ WHERE   {
             ?input
                 s:contentUrl ?fileuri .
         }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
+        }
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -763,11 +801,14 @@ WHERE   {
         BIND ( "Dataset" AS ?additional_type )
         ?input
             a s:Dataset ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?inputfp .
         OPTIONAL {
             ?input
                 s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?input
+                s:identifier ?filepid .
         }
         ?inputfp
             a bs:FormalParameter ;
@@ -810,6 +851,9 @@ WHERE   {
             a ?leaf_type .
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:identifier ?filepid .
         }
         OPTIONAL {
             ?component s:value ?value .
@@ -821,7 +865,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
 WHERE   {
     ?execution wrterm:environment ?env .
     {
@@ -830,8 +874,15 @@ WHERE   {
         ?env
             a s:MediaObject ;
             s:name ?name_env ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?envfp .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -842,8 +893,15 @@ WHERE   {
         ?env
             a s:Dataset ;
             s:name ?name_env ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?envfp .
+        OPTIONAL {
+            ?env
+                s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?env
+                s:identifier ?filepid .
+        }
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -889,6 +947,9 @@ WHERE   {
             ?component s:contentUrl ?fileuri .
         }
         OPTIONAL {
+            ?component s:identifier ?filepid .
+        }
+        OPTIONAL {
             ?component s:value ?value .
         }
     }
@@ -898,7 +959,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_OUTPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?value ?component ?leaf_type ?synthetic_output ?glob_pattern ?filled_from_name
+SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?synthetic_output ?glob_pattern ?filled_from_name
 WHERE   {
     ?execution s:result ?output .
     {
@@ -914,6 +975,10 @@ WHERE   {
         OPTIONAL {
             ?output
                 s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?output
+                s:identifier ?filepid .
         }
     } UNION {
         # A directory, which is a schema.org Dataset
@@ -939,6 +1004,10 @@ WHERE   {
             ?output
                 s:contentUrl ?fileuri .
         }
+        OPTIONAL {
+            ?output
+                s:identifier ?filepid .
+        }
     } UNION {
         # A single property value, which can be either Integer, Text, Boolean or Float
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
@@ -966,6 +1035,9 @@ WHERE   {
             a ?leaf_type .
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
+        }
+        OPTIONAL {
+            ?component s:identifier ?filepid .
         }
         OPTIONAL {
             ?component s:value ?value .
@@ -1433,8 +1505,8 @@ Container {containerrow.container}
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
-                if inputrow.fileuri is None:
-                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated contentUrl was found. Stopping."
+                if inputrow.fileuri is None and inputrow.filepid is None:
+                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found. Stopping."
                     self.logger.error(errmsg)
                     raise ROCrateToolboxException(errmsg)
                 valobj = base.setdefault(
@@ -1450,12 +1522,22 @@ Container {containerrow.container}
                 licences = self._getLicences(g, inputrow.input, public_name)
                 if len(licences) == 0:
                     licences = default_licences
+                the_uri: "str"
+                if inputrow.fileuri is not None:
+                    the_uri = str(inputrow.fileuri)
+                elif inputrow.filepid is not None:
+                    the_uri = str(inputrow.filepid)
+                else:
+                    raise ROCrateToolboxException(
+                        "FATAL RO-Crate workflow input processing error. Check the code of WfExS"
+                    )
+
                 the_url: "Union[str, Mapping[str, Any]]"
                 if len(licences) == 0:
-                    the_url = str(inputrow.fileuri)
+                    the_url = the_uri
                 else:
                     the_url = {
-                        "uri": str(inputrow.fileuri),
+                        "uri": the_uri,
                         "licences": licences,
                     }
 
