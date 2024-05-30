@@ -1768,7 +1768,7 @@ you can find here an almost complete list of the possible ones:
             dest_path=the_name if do_attach else None,
             clazz=SourceCodeFile if is_soft_source else FixedFile,
         )
-        if do_attach and (the_uri is not None):
+        if the_uri is not None:
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
@@ -1845,7 +1845,7 @@ you can find here an almost complete list of the possible ones:
             validate_url=False,
             # properties=file_properties,
         )
-        if do_attach and (the_uri is not None):
+        if the_uri is not None:
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
@@ -2092,7 +2092,7 @@ you can find here an almost complete list of the possible ones:
                 if added_operational_container not in existing_operational_containers:
                     existing_operational_containers.append(added_operational_container)
 
-        if do_attach and (the_uri is not None):
+        if the_uri is not None:
             if the_uri.startswith("http") or the_uri.startswith("ftp"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
@@ -2750,7 +2750,7 @@ you can find here an almost complete list of the possible ones:
                 # properties=file_properties,
             )
 
-            if do_attach and (the_uri is not None):
+            if the_uri is not None:
                 if the_uri.startswith("http") or the_uri.startswith("ftp"):
                     # See https://github.com/ResearchObject/ro-crate/pull/259
                     uri_key = "contentUrl"
