@@ -1421,6 +1421,7 @@ class WF:
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
             jsonld_obj, public_name
         )
+
         workflow_pid = wfexs.gen_workflow_pid(repo)
         logging.debug(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"

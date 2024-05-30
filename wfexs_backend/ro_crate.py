@@ -101,8 +101,8 @@ from .utils.rocrate import (
     ContainerType2AdditionalType,
     ContainerTypeMetadata,
     ContainerTypeMetadataDetails,
-    WFEXS_CONTEXT,
-    WFEXS_NAMESPACE,
+    WFEXS_TERMS_CONTEXT,
+    WFEXS_TERMS_NAMESPACE,
     WORKFLOW_RUN_CONTEXT,
     WORKFLOW_RUN_NAMESPACE,
 )
@@ -944,13 +944,13 @@ class WorkflowRunROCrate:
                 # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
                 # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
                 # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
-                "syntheticOutput": WFEXS_NAMESPACE + "syntheticOutput",
-                "globPattern": WFEXS_NAMESPACE + "globPattern",
-                "filledFrom": WFEXS_NAMESPACE + "filledFrom",
+                "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
+                "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
+                "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
             }
         )
         self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
-        # self.crate.metadata.extra_contexts.append(WFEXS_CONTEXT)
+        # self.crate.metadata.extra_contexts.append(WFEXS_TERMS_CONTEXT)
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
@@ -2007,6 +2007,8 @@ you can find here an almost complete list of the possible ones:
         the_name: "Optional[str]" = None
         rocrate_wf_folder: "str" = os.path.relpath(the_workflow.dir, self.work_dir)
         the_alternate_name: "str"
+        assert self.staged_setup.workflow_dir is not None
+        the_alternate_name = os.path.relpath(the_path, self.staged_setup.workflow_dir)
         if do_attach:
             # if wf_entrypoint_url is not None:
             #    # This is needed to avoid future collisions with other workflows stored in the RO-Crate
@@ -2016,14 +2018,8 @@ you can find here an almost complete list of the possible ones:
             # else:
             #    rocrate_wf_folder = str(uuid.uuid4())
 
-            the_alternate_name = os.path.relpath(the_path, the_workflow.dir)
-            the_name = rocrate_wf_folder + "/" + the_alternate_name
-        else:
-            the_alternate_name = cast(
-                "RelPath",
-                os.path.join(
-                    rocrate_wf_folder, os.path.relpath(the_path, the_workflow.dir)
-                ),
+            the_name = os.path.join(
+                rocrate_wf_folder, os.path.relpath(the_path, the_workflow.dir)
             )
 
         # When the id is none and ...
@@ -2156,15 +2152,17 @@ you can find here an almost complete list of the possible ones:
                     self.crate.add(the_entity)
                 else:
                     rocrate_file_id = rocrate_file_id_base + "/" + rel_file
-                    the_name = cast(
+                    the_s_name = cast(
                         "RelPath", os.path.join(rocrate_wf_folder, rel_file)
+                    )
+                    the_alternate_name = os.path.relpath(
+                        os.path.join(the_workflow.dir, rel_file),
+                        self.staged_setup.workflow_dir,
                     )
                     the_entity = self._add_file_to_crate(
                         the_path=os.path.join(the_workflow.dir, rel_file),
-                        the_name=the_name,
-                        the_alternate_name=cast("RelPath", rel_file)
-                        if do_attach
-                        else the_name,
+                        the_name=the_s_name,
+                        the_alternate_name=cast("RelPath", the_alternate_name),
                         the_uri=cast("URIType", rocrate_file_id),
                         do_attach=do_attach,
                         is_soft_source=True,
@@ -2215,14 +2213,9 @@ you can find here an almost complete list of the possible ones:
                     if out_item.syntheticOutput:
                         if out_item.glob is not None:
                             formal_parameter["globPattern"] = out_item.glob
-                        if out_item.fillFrom is not None:
-                            # This is a bit dirty, but effective
-                            other_parameter_id = (
-                                self.wf_file.id
-                                + "#output:"
-                                + urllib.parse.quote(out_item.fillFrom, safe="")
-                            )
-                            formal_parameter["filledFrom"] = {"@id": other_parameter_id}
+                    if out_item.fillFrom is not None:
+                        # This is a bit dirty, but effective
+                        formal_parameter["filledFrom"] = out_item.fillFrom
 
                 self.crate.add(formal_parameter)
 
@@ -2543,14 +2536,9 @@ you can find here an almost complete list of the possible ones:
                     if out_item.syntheticOutput:
                         if out_item.glob is not None:
                             formal_parameter["globPattern"] = out_item.glob
-                        if out_item.filledFrom is not None:
-                            # This is a bit dirty, but effective
-                            other_parameter_id = (
-                                self.wf_file.id
-                                + "#output:"
-                                + urllib.parse.quote(out_item.filledFrom, safe="")
-                            )
-                            formal_parameter["filledFrom"] = {"@id": other_parameter_id}
+                if out_item.filledFrom is not None:
+                    # This is a bit dirty, but effective
+                    formal_parameter["filledFrom"] = out_item.filledFrom
 
                 self.crate.add(formal_parameter)
                 self.wf_file.append_to("output", formal_parameter, compact=True)
@@ -2675,6 +2663,11 @@ you can find here an almost complete list of the possible ones:
 
         if the_content.uri is not None and not the_content.uri.uri.startswith("nih:"):
             the_content_uri = the_content.uri.uri
+            crate_file = cast(
+                "Optional[FixedFile]", self.crate.dereference(the_content_uri)
+            )
+            if crate_file is not None:
+                return crate_file
         else:
             the_content_uri = None
 
@@ -2733,6 +2726,9 @@ you can find here an almost complete list of the possible ones:
                 the_id = dest_path
             else:
                 the_id = the_uri
+            crate_dataset = cast(
+                "Optional[FixedDataset]", self.crate.dereference(the_id)
+            )
             # if the_uri is not None:
             #    an_uri = the_uri
             #    dest_path = None
@@ -2741,6 +2737,9 @@ you can find here an almost complete list of the possible ones:
             #    dest_path = os.path.relpath(the_content.local, self.work_dir)
             #    # digest, algo = extract_digest(the_content.signature)
             #    # dest_path = hexDigest(algo, digest)
+
+            if crate_dataset is not None:
+                return crate_dataset, the_files_crates
 
             crate_dataset = self.crate.add_dataset_ext(
                 identifier=the_id,

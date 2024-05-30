@@ -25,6 +25,7 @@ import json
 import logging
 import os.path
 import sys
+import urllib.parse
 import zipfile
 
 from typing import (
@@ -74,6 +75,7 @@ if TYPE_CHECKING:
         ParamsBlock,
         MutableOutputsBlock,
         OutputsBlock,
+        Sch_Output,
     )
 
     from ..workflow_engines import (
@@ -153,8 +155,8 @@ ApplicationCategory2ContainerType: "Final[Mapping[str, ContainerType]]" = {
 WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
 WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
 
-WFEXS_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
-WFEXS_NAMESPACE: "Final[str]" = WFEXS_CONTEXT + "#"
+WFEXS_TERMS_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
+WFEXS_TERMS_NAMESPACE: "Final[str]" = WFEXS_TERMS_CONTEXT + "#"
 
 CONTAINER_DOCKERIMAGE_SHORT: "Final[str]" = "DockerImage"
 CONTAINER_SIFIMAGE_SHORT: "Final[str]" = "SIFImage"
@@ -267,9 +269,9 @@ def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "
 
 class ROCrateToolbox(abc.ABC):
     # This is needed due limitations from rdflib mangling relative ids
-    WFEXS_TRICK_SPARQL_PRE_PREFIX: "Final[str]" = "shttp:"
-    WFEXS_TRICK_SPARQL_BASE: "Final[str]" = f"{WFEXS_TRICK_SPARQL_PRE_PREFIX}///"
-    WFEXS_TRICK_SPARQL_NS: "Final[str]" = "wfexs"
+    RELATIVE_ROCRATE_SCHEME: "Final[str]" = "rel-crate"
+    RELATIVE_ROCRATE_SPARQL_BASE: "Final[str]" = RELATIVE_ROCRATE_SCHEME + ":"
+    RELATIVE_ROCRATE_NS: "Final[str]" = "crate"
 
     SCHEMA_ORG_PREFIX: "Final[str]" = "http://schema.org/"
 
@@ -286,8 +288,9 @@ class ROCrateToolbox(abc.ABC):
         "wrprocess": "https://w3id.org/ro/wfrun/process/",
         "wrwf": "https://w3id.org/ro/wfrun/workflow/",
         "wrterm": WORKFLOW_RUN_NAMESPACE,
+        "wfexsterm": WFEXS_TERMS_NAMESPACE,
         "wikidata": "https://www.wikidata.org/wiki/",
-        WFEXS_TRICK_SPARQL_NS: WFEXS_TRICK_SPARQL_BASE,
+        RELATIVE_ROCRATE_NS: RELATIVE_ROCRATE_SPARQL_BASE,
     }
 
     LEAF_TYPE_2_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = {
@@ -320,6 +323,13 @@ class ROCrateToolbox(abc.ABC):
         )
 
         self.wfexs = wfexs
+
+        # This is needed for proper behaviour
+        # https://stackoverflow.com/a/6264214
+        if self.RELATIVE_ROCRATE_SCHEME not in urllib.parse.uses_relative:
+            urllib.parse.uses_relative.append(self.RELATIVE_ROCRATE_SCHEME)
+        if self.RELATIVE_ROCRATE_SCHEME not in urllib.parse.uses_fragment:
+            urllib.parse.uses_fragment.append(self.RELATIVE_ROCRATE_SCHEME)
 
     IS_ROCRATE_SPARQL: "Final[str]" = """\
 SELECT  ?rocratejson ?rootdataset ?rocrateprofile ?wfcrateprofile ?wfhrepourl ?mainentity ?bsworkflowprofile ?wrprocessprofile ?wrwfprofile
@@ -399,7 +409,7 @@ WHERE {
         # # Setting the augmented context with the trick
         # context.append(
         #     {
-        #         "@base": self.WFEXS_TRICK_SPARQL_BASE,
+        #         "@base": self.RELATIVE_ROCRATE_SPARQL_BASE,
         #     }
         # )
         #
@@ -429,7 +439,7 @@ WHERE {
         parsed = g.parse(
             data=jsonld_str,
             format="json-ld",
-            base=self.WFEXS_TRICK_SPARQL_PRE_PREFIX,
+            base=self.RELATIVE_ROCRATE_SPARQL_BASE,
         )
 
         # This query will tell us whether the JSON-LD is about an RO-Crate 1.1
@@ -702,7 +712,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_OUTPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?name ?outputfp ?additional_type ?default_value
+SELECT  ?name ?outputfp ?additional_type ?default_value ?synthetic_output ?glob_pattern ?filled_from_name
 WHERE   {
     ?main_entity bsworkflow:output ?outputfp .
     ?outputfp
@@ -710,8 +720,20 @@ WHERE   {
         s:name ?name ;
         s:additionalType ?additional_type .
     OPTIONAL {
-        ?ouputfp
+        ?outputfp
             s:defaultValue ?default_value .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:syntheticOutput ?synthetic_output .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:globPattern ?glob_pattern .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:filledFrom ?filled_from_name .
     }
 }
 """
@@ -869,7 +891,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_OUTPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?value ?component ?leaf_type
+SELECT  ?output ?name ?alternate_name ?outputfp ?default_value ?additional_type ?fileuri ?value ?component ?leaf_type ?synthetic_output ?glob_pattern ?filled_from_name
 WHERE   {
     ?execution s:result ?output .
     {
@@ -943,8 +965,20 @@ WHERE   {
         }
     }
     OPTIONAL {
-        ?ouputfp
+        ?outputfp
             s:defaultValue ?default_value .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:syntheticOutput ?synthetic_output .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:globPattern ?glob_pattern .
+    }
+    OPTIONAL {
+        ?outputfp
+            wfexsterm:filledFrom ?filled_from_name .
     }
     OPTIONAL {
         ?output
@@ -1266,18 +1300,45 @@ Container {containerrow.container}
             if hasattr(outputrow, "alternate_name"):
                 preferred_name = str(outputrow.alternate_name)
 
-            valobj: "MutableMapping[str, Any]" = base.setdefault(
-                output_last,
-                {
-                    "c-l-a-s-s": ContentKind.Directory.name
-                    if additional_type == "Dataset"
-                    else ContentKind.File.name,
-                    "cardinality": cardinality,
-                },
-            )
+            synthetic_output = False
+            if outputrow.synthetic_output is not None:
+                if isinstance(outputrow.synthetic_output, rdflib.term.Literal):
+                    synthetic_output = bool(outputrow.synthetic_output.value)
+                else:
+                    ser_val = str(outputrow.synthetic_output).lower()
+                    synthetic_output = (
+                        False if len(ser_val) == 0 or ser_val == "false" else True
+                    )
+
+            # Self generated outputs with fake names => skip it!!!!!
+            if (
+                synthetic_output
+                and outputrow.glob_pattern is None
+                and outputrow.filled_from_name is None
+            ):
+                continue
+
+            sch_output: "Sch_Output" = {
+                "c-l-a-s-s": ContentKind.Directory.name
+                if additional_type == "Dataset"
+                else ContentKind.File.name,
+                "cardinality": cardinality,
+            }
+
+            valobj: "Sch_Output" = base.setdefault(output_last, sch_output)
 
             if preferred_name is not None:
                 valobj["preferredName"] = preferred_name
+
+            # Now, WfExS terms processing
+            if outputrow.synthetic_output is not None:
+                valobj["syntheticOutput"] = synthetic_output
+
+            if outputrow.glob_pattern is not None:
+                valobj["glob"] = str(outputrow.glob_pattern)
+
+            if outputrow.filled_from_name is not None:
+                valobj["fillFrom"] = str(outputrow.filled_from_name)
 
         return outputs
 
@@ -1857,6 +1918,23 @@ Container {containerrow.container}
 
         # TODO: finish
         assert container_type is not None
+
+        # This postprocessing is needed to declare the parameters
+        # which are really outputs
+        if not workflow_type.has_explicit_outputs:
+            new_params = cast("MutableParamsBlock", copy.copy(params))
+            for output_name, output_decl in outputs.items():
+                if not output_decl.get("syntheticOutput", False):
+                    # Additional check
+                    fill_from = output_decl.get("fillFrom")
+                    if fill_from == output_name:
+                        # Now, inject an input
+                        new_params[output_name] = {
+                            "c-l-a-s-s": output_decl["c-l-a-s-s"],
+                            "autoFill": True,
+                            "autoPrefix": True,
+                        }
+            params = new_params
 
         return (
             repo,
