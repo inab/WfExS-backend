@@ -749,8 +749,11 @@ WHERE   {
         BIND ( "File" AS ?additional_type )
         ?input
             a s:MediaObject ;
-            s:contentUrl ?fileuri ;
             s:exampleOfWork ?inputfp .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -762,6 +765,10 @@ WHERE   {
             a s:Dataset ;
             s:contentUrl ?fileuri ;
             s:exampleOfWork ?inputfp .
+        OPTIONAL {
+            ?input
+                s:contentUrl ?fileuri .
+        }
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -1426,6 +1433,10 @@ Container {containerrow.container}
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
+                if inputrow.fileuri is None:
+                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated contentUrl was found. Stopping."
+                    self.logger.error(errmsg)
+                    raise ROCrateToolboxException(errmsg)
                 valobj = base.setdefault(
                     param_last,
                     {
