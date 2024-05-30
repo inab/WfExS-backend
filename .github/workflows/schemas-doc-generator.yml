@@ -1,7 +1,6 @@
 name: schemas-doc-generator
 
 on:
-  pull_request:
   push:
     branches: [main]
 
