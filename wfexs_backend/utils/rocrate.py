@@ -600,7 +600,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
 WHERE   {
     ?main_entity bsworkflow:input ?inputfp .
     ?inputfp
@@ -612,6 +612,7 @@ WHERE   {
         # A file, which is a schema.org MediaObject
         ?input
             a s:MediaObject .
+        BIND (?input AS ?fileid)
         OPTIONAL {
             ?input
                 s:contentUrl ?fileuri .
@@ -624,6 +625,7 @@ WHERE   {
         # A directory, which is a schema.org Dataset
         ?input
             a s:Dataset .
+        BIND (?input AS ?fileid)
         OPTIONAL {
             ?input
                 s:contentUrl ?fileuri .
@@ -655,6 +657,7 @@ WHERE   {
             s:hasPart+ ?component .
         ?component
             a ?leaf_type .
+        BIND (?component AS ?fileid)
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
         }
@@ -671,7 +674,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
 WHERE   {
     ?main_entity wrterm:environment ?envfp .
     ?envfp
@@ -684,6 +687,7 @@ WHERE   {
         ?env
             a s:MediaObject ;
             s:name ?name_env .
+        BIND (?env AS ?fileid)
         OPTIONAL {
             ?env
                 s:contentUrl ?fileuri .
@@ -697,6 +701,7 @@ WHERE   {
         ?env
             a s:Dataset ;
             s:name ?name_env .
+        BIND (?env AS ?fileid)
         OPTIONAL {
             ?env
                 s:contentUrl ?fileuri .
@@ -730,6 +735,7 @@ WHERE   {
             s:hasPart+ ?component .
         ?component
             a ?leaf_type .
+        BIND (?component AS ?fileid)
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
         }
@@ -775,7 +781,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
 WHERE   {
     ?execution s:object ?input .
     {
@@ -784,6 +790,7 @@ WHERE   {
         ?input
             a s:MediaObject ;
             s:exampleOfWork ?inputfp .
+        BIND (?input AS ?fileid)
         OPTIONAL {
             ?input
                 s:contentUrl ?fileuri .
@@ -802,6 +809,7 @@ WHERE   {
         ?input
             a s:Dataset ;
             s:exampleOfWork ?inputfp .
+        BIND (?input AS ?fileid)
         OPTIONAL {
             ?input
                 s:contentUrl ?fileuri .
@@ -849,6 +857,7 @@ WHERE   {
             s:additionalType ?additional_type .
         ?component
             a ?leaf_type .
+        BIND (?component AS ?fileid)
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
         }
@@ -865,7 +874,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
 WHERE   {
     ?execution wrterm:environment ?env .
     {
@@ -875,6 +884,7 @@ WHERE   {
             a s:MediaObject ;
             s:name ?name_env ;
             s:exampleOfWork ?envfp .
+        BIND (?env AS ?fileid)
         OPTIONAL {
             ?env
                 s:contentUrl ?fileuri .
@@ -894,6 +904,7 @@ WHERE   {
             a s:Dataset ;
             s:name ?name_env ;
             s:exampleOfWork ?envfp .
+        BIND (?env AS ?fileid)
         OPTIONAL {
             ?env
                 s:contentUrl ?fileuri .
@@ -943,6 +954,7 @@ WHERE   {
             s:additionalType ?additional_type .
         ?component
             a ?leaf_type .
+        BIND (?component AS ?fileid)
         OPTIONAL {
             ?component s:contentUrl ?fileuri .
         }
@@ -1505,10 +1517,6 @@ Container {containerrow.container}
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
-                if inputrow.fileuri is None and inputrow.filepid is None:
-                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found. Stopping."
-                    self.logger.error(errmsg)
-                    raise ROCrateToolboxException(errmsg)
                 valobj = base.setdefault(
                     param_last,
                     {
@@ -1519,18 +1527,25 @@ Container {containerrow.container}
                 )
 
             if isinstance(valobj, dict):
-                licences = self._getLicences(g, inputrow.input, public_name)
-                if len(licences) == 0:
-                    licences = default_licences
                 the_uri: "str"
                 if inputrow.fileuri is not None:
                     the_uri = str(inputrow.fileuri)
                 elif inputrow.filepid is not None:
                     the_uri = str(inputrow.filepid)
                 else:
-                    raise ROCrateToolboxException(
-                        "FATAL RO-Crate workflow input processing error. Check the code of WfExS"
-                    )
+                    the_uri = str(inputrow.fileid)
+
+                # Check it is not an originally relative URI
+                parsed_uri = urllib.parse.urlparse(the_uri)
+                if parsed_uri.scheme in ("", self.RELATIVE_ROCRATE_SCHEME):
+                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found, and its @id is a relative URI. Stopping."
+                    self.logger.error(errmsg)
+                    raise ROCrateToolboxException(errmsg)
+
+                # Now, the licence
+                licences = self._getLicences(g, inputrow.input, public_name)
+                if len(licences) == 0:
+                    licences = default_licences
 
                 the_url: "Union[str, Mapping[str, Any]]"
                 if len(licences) == 0:
@@ -1673,6 +1688,22 @@ Container {containerrow.container}
                 )
 
             if isinstance(valobj, dict):
+                the_uri: "str"
+                if envrow.fileuri is not None:
+                    the_uri = str(envrow.fileuri)
+                elif envrow.filepid is not None:
+                    the_uri = str(envrow.filepid)
+                else:
+                    the_uri = str(envrow.fileid)
+
+                # Check it is not an originally relative URI
+                parsed_uri = urllib.parse.urlparse(the_uri)
+                if parsed_uri.scheme in ("", self.RELATIVE_ROCRATE_SCHEME):
+                    errmsg = f"Environment variable {env_name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found, and its @id is a relative URI. Stopping."
+                    self.logger.error(errmsg)
+                    raise ROCrateToolboxException(errmsg)
+
+                # Now, the licence
                 licences = self._getLicences(g, envrow.env, public_name)
                 if len(licences) == 0:
                     licences = default_licences
