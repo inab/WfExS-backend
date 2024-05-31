@@ -728,7 +728,7 @@ class WorkflowRunROCrate:
         # This is used to avoid including twice the very same value
         # in the RO-Crate
         self._item_hash: "MutableMapping[bytes, rocrate.model.entity.Entity]" = {}
-        self._added_containers: "MutableSequence[Container]" = []
+        self._added_container_images: "MutableMapping[int, ContainerImage]" = {}
         self._wf_to_containers: "MutableMapping[str, MutableSequence[ContainerImage]]" = (
             {}
         )
@@ -1123,10 +1123,6 @@ you can find here an almost complete list of the possible ones:
         if len(containers) > 0:
             do_attach = CratableItem.Containers in self.payloads
             for container in containers:
-                # Skip early what it was already included in the crate
-                if container in self._added_containers:
-                    continue
-
                 container_type_metadata = ContainerTypeMetadataDetails[container.type]
                 crate_cont_type = self.cached_cts.get(container.type)
                 if crate_cont_type is None:
@@ -1179,6 +1175,11 @@ you can find here an almost complete list of the possible ones:
 
                         crate_source_cont_type = self.crate.add(container_source_type)
                         self.cached_cts[container.source_type] = crate_source_cont_type
+
+                # Skip early what it was already included in the crate
+                if id(container) in self._added_container_images:
+                    added_containers.append(self._added_container_images[id(container)])
+                    continue
 
                 software_container: "ContainerImage"
                 registry, tag_name, tag_label = container.decompose_docker_tagged_name
@@ -1268,9 +1269,6 @@ you can find here an almost complete list of the possible ones:
 
                 crate_cont = self.crate.dereference(software_container.id)
                 if crate_cont is None:
-                    # Record the container
-                    self._added_containers.append(container)
-
                     # Now, add container metadata, which is going to be
                     # consumed by WfExS or third parties
                     metadataLocalPath: "Optional[str]" = None
@@ -1321,6 +1319,11 @@ you can find here an almost complete list of the possible ones:
                         sa_crate.append_to(
                             "softwareRequirements", crate_cont, compact=True
                         )
+
+                # Record the container image
+                self._added_container_images[id(container)] = cast(
+                    "ContainerImage", crate_cont
+                )
 
                 added_containers.append(cast("ContainerImage", crate_cont))
 
