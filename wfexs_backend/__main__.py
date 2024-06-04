@@ -1255,7 +1255,7 @@ def main() -> None:
             )
 
     if args.cacheDir:
-        local_config["cache-directory"] = args.cacheDir
+        local_config["cacheDir"] = args.cacheDir
 
     # In any case, assuring the cache directory does exist
     cacheDir = local_config.get("cacheDir")
