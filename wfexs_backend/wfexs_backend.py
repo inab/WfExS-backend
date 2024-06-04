@@ -292,6 +292,11 @@ class WfExSBackend:
 
         updated = False
 
+        valErrors = config_validate(local_config_ro, cls.CONFIG_SCHEMA)
+        if len(valErrors) > 0:
+            logging.error(f"ERROR on incoming local configuration block for bootstrap: {valErrors}")
+            sys.exit(1)
+
         local_config = cast("WritableWfExSConfigBlock", copy.deepcopy(local_config_ro))
 
         # Getting the config directory
@@ -394,6 +399,13 @@ class WfExSBackend:
             logger.info(
                 "Python interpreter does not support scrypt, so encoded crypt4gh keys with that algorithm cannot be used"
             )
+
+        # Validate, again, as it changed
+        if updated:
+            valErrors = config_validate(local_config, cls.CONFIG_SCHEMA)
+            if len(valErrors) > 0:
+                logging.error(f"ERROR in bootstrapped updated local configuration block: {valErrors}")
+                sys.exit(1)
 
         return updated, local_config
 
