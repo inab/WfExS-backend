@@ -494,9 +494,7 @@ STDERR
                 )
 
             with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
-                tmpContainerPath = os.path.join(
-                    self.containersCacheDir, str(uuid.uuid4())
-                )
+                tmpContainerPath = self.cc_handler._genTmpContainerPath()
 
                 self.logger.debug(
                     f"downloading temporary container: {tag_name} => {tmpContainerPath}"
@@ -573,10 +571,8 @@ STDERR
 
             if tmpContainerPath is None:
                 assert localContainerPath is not None
-                tmpContainerPath = os.path.join(
-                    self.containersCacheDir, str(uuid.uuid4())
-                )
-                link_or_copy(localContainerPath, cast("AbsPath", tmpContainerPath))
+                tmpContainerPath = self.cc_handler._genTmpContainerPath()
+                link_or_copy(localContainerPath, tmpContainerPath)
             tmpContainerPathMeta = tmpContainerPath + META_JSON_POSTFIX
 
             self.logger.debug(

@@ -28,6 +28,7 @@ import subprocess
 import abc
 import logging
 import inspect
+import uuid
 
 from typing import (
     cast,
@@ -284,6 +285,12 @@ class ContainerCacheHandler:
 
         self.simpleFileNameMethod = simple_file_name_method
 
+    def _genTmpContainerPath(self) -> "AbsPath":
+        """
+        This is a helper method
+        """
+        return cast("AbsPath", os.path.join(self.containersCacheDir, str(uuid.uuid4())))
+
     def _genContainerPaths(
         self, container: "ContainerTaggedName"
     ) -> "Tuple[AbsPath, AbsPath]":
@@ -371,6 +378,26 @@ class ContainerCacheHandler:
 
         return trusted_copy, localContainerPath, localContainerPathMeta, imageSignature
 
+    def genStagedContainersDirPaths(
+        self,
+        container: "ContainerTaggedName",
+        stagedContainersDir: "AnyPath",
+    ) -> "Tuple[AbsPath, AbsPath]":
+        containerFilename = self.simpleFileNameMethod(
+            cast("URIType", container.origTaggedName)
+        )
+        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
+
+        containerPath = cast(
+            "AbsPath", os.path.join(stagedContainersDir, containerFilename)
+        )
+
+        containerPathMeta = cast(
+            "AbsPath", os.path.join(stagedContainersDir, containerFilenameMeta)
+        )
+
+        return containerPath, containerPathMeta
+
     def transfer(
         self,
         container: "ContainerTaggedName",
@@ -393,20 +420,11 @@ class ContainerCacheHandler:
 
         # Last, but not the least important
         # Hardlink or copy the container and its metadata
-        containerFilename = self.simpleFileNameMethod(
-            cast("URIType", container.origTaggedName)
+        containerPath, containerPathMeta = self.genStagedContainersDirPaths(
+            container, stagedContainersDir
         )
-        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
 
         os.makedirs(stagedContainersDir, exist_ok=True)
-        containerPath = cast(
-            "AbsPath", os.path.join(stagedContainersDir, containerFilename)
-        )
-
-        containerPathMeta = cast(
-            "AbsPath", os.path.join(stagedContainersDir, containerFilenameMeta)
-        )
-
         if force or not os.path.exists(containerPath):
             link_or_copy(localContainerPath, containerPath)
         if force or not os.path.exists(containerPathMeta):

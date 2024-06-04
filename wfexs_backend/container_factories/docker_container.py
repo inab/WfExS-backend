@@ -181,169 +181,72 @@ STDERR
             # Last case, it already has a registry declared
 
         self.logger.info(f"downloading docker container: {tag_name} => {dockerTag}")
-        # These are the paths to the copy of the saved container
-        containerFilename = self.simpleFileNameMethod(cast("URIType", tag_name))
-        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
-        localContainerPath = cast(
-            "AbsPath",
-            os.path.join(self.engineContainersSymlinkDir, containerFilename),
-        )
-        localContainerPathMeta = cast(
-            "AbsPath",
-            os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
-        )
 
-        # Keep a copy outside the cache directory
-        if containers_dir is None:
-            containers_dir = self.stagedContainersDir
-        containerPath = cast("AbsPath", os.path.join(containers_dir, containerFilename))
-        containerPathMeta = cast(
-            "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
-        )
-
-        # Now it is time to check whether the local cache of the container
-        # does exist and it is right
+        fetch_metadata = True
         trusted_copy = False
-        image_id: "Optional[Fingerprint]" = None
+        localContainerPath: "Optional[AbsPath]" = None
+        localContainerPathMeta: "Optional[AbsPath]" = None
         imageSignature: "Optional[Fingerprint]" = None
+        image_id: "Optional[Fingerprint]" = None
         manifestsImageSignature: "Optional[Fingerprint]" = None
         manifests = None
         manifest = None
-        if not force and os.path.isfile(localContainerPathMeta):
-            trusted_copy = True
-            try:
-                with open(localContainerPathMeta, mode="r", encoding="utf-8") as mH:
-                    signaturesAndManifest = cast(
-                        "DockerManifestMetadata", json.load(mH)
-                    )
-                    image_id = signaturesAndManifest["image_id"]
-                    imageSignature = signaturesAndManifest["image_signature"]
-                    manifestsImageSignature = signaturesAndManifest[
-                        "manifests_signature"
-                    ]
-                    manifests = signaturesAndManifest["manifests"]
-
-                    # Check the status of the gathered manifests
-                    trusted_copy = (
-                        manifestsImageSignature
-                        == self._gen_trimmed_manifests_signature(manifests)
-                    )
-            except Exception as e:
-                self.logger.exception(
-                    f"Problems extracting docker metadata at {localContainerPathMeta}"
-                )
-                trusted_copy = False
-
-            # Let's check metadata coherence
-            if trusted_copy:
-                trusted_copy = (
-                    imageSignature is not None
-                    and manifestsImageSignature is not None
-                    and manifests is not None
-                )
+        if not force:
+            (
+                trusted_copy,
+                localContainerPath,
+                localContainerPathMeta,
+                imageSignature,
+            ) = self.cc_handler.query(tag)
 
             if trusted_copy:
-                assert manifestsImageSignature is not None
-                if os.path.islink(localContainerPathMeta):
-                    # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                    unlinkedContainerPathMeta = os.readlink(localContainerPathMeta)
-                    fsImageSignatureMeta = os.path.basename(unlinkedContainerPathMeta)
-                    if fsImageSignatureMeta.endswith(META_JSON_POSTFIX):
-                        fsImageSignatureMeta = fsImageSignatureMeta[
-                            : -len(META_JSON_POSTFIX)
+                try:
+                    with open(localContainerPathMeta, mode="r", encoding="utf-8") as mH:
+                        signaturesAndManifest = cast(
+                            "DockerManifestMetadata", json.load(mH)
+                        )
+                        image_id = signaturesAndManifest["image_id"]
+                        imageSignature_in_metadata = signaturesAndManifest[
+                            "image_signature"
                         ]
-                    putativeManifestsImageSignature = (
-                        fsImageSignatureMeta.replace("~", "=")
-                        .replace("-", "/")
-                        .replace("_", "+")
-                    )
+                        manifestsImageSignature = signaturesAndManifest[
+                            "manifests_signature"
+                        ]
+                        manifests = signaturesAndManifest["manifests"]
 
-                    trusted_copy = (
-                        putativeManifestsImageSignature == manifestsImageSignature
-                    )
-                    if trusted_copy:
-                        canonicalContainerPathMeta = os.path.join(
-                            self.containersCacheDir,
-                            fsImageSignatureMeta + META_JSON_POSTFIX,
+                        # Check the status of the gathered manifests
+                        trusted_copy = (
+                            manifestsImageSignature
+                            == self._gen_trimmed_manifests_signature(manifests)
                         )
 
-                        trusted_copy = os.path.samefile(
-                            os.path.realpath(localContainerPathMeta),
-                            os.path.realpath(canonicalContainerPathMeta),
-                        )
-                else:
-                    # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                    putativeCanonicalContainerPathMeta = os.path.join(
-                        self.containersCacheDir,
-                        manifestsImageSignature.replace("=", "~")
-                        .replace("/", "-")
-                        .replace("+", "_"),
+                        if trusted_copy:
+                            trusted_copy = imageSignature == imageSignature_in_metadata
+                            fetch_metadata = not trusted_copy
+                except Exception as e:
+                    self.logger.exception(
+                        f"Problems extracting docker metadata at {localContainerPathMeta}"
                     )
-
-                    # This is to detect poisoned caches
-                    trusted_copy = os.path.samefile(
-                        localContainerPathMeta, putativeCanonicalContainerPathMeta
-                    )
-
-            # Now, let's check the image itself
-            if trusted_copy and os.path.isfile(localContainerPath):
-                trusted_copy = imageSignature == ComputeDigestFromFile(
-                    localContainerPath
-                )
-
-            if trusted_copy:
-                assert imageSignature is not None
-                if os.path.islink(localContainerPath):
-                    # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                    unlinkedContainerPath = os.readlink(localContainerPath)
-                    fsImageSignature = os.path.basename(unlinkedContainerPath)
-                    putativeImageSignature = (
-                        fsImageSignature.replace("~", "=")
-                        .replace("-", "/")
-                        .replace("_", "+")
-                    )
-
-                    trusted_copy = putativeImageSignature == manifestsImageSignature
-                    if trusted_copy:
-                        canonicalContainerPath = os.path.join(
-                            self.containersCacheDir,
-                            fsImageSignature,
-                        )
-
-                        trusted_copy = os.path.samefile(
-                            os.path.realpath(localContainerPath),
-                            os.path.realpath(canonicalContainerPath),
-                        )
-
-                else:
-                    # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                    putativeCanonicalContainerPath = os.path.join(
-                        self.containersCacheDir,
-                        imageSignature.replace("=", "~")
-                        .replace("/", "-")
-                        .replace("+", "_"),
-                    )
-
-                    # This is to detect poisoned caches
-                    trusted_copy = os.path.samefile(
-                        localContainerPath, putativeCanonicalContainerPath
-                    )
+                    trusted_copy = False
 
         # And now, the final judgement!
-        if force or not trusted_copy:
+        if not trusted_copy:
             if offline:
                 raise ContainerFactoryException(
                     f"Banned remove docker containers in offline mode from {tag_name}"
                 )
 
-            if os.path.exists(localContainerPathMeta) or os.path.exists(
-                localContainerPath
+            if (
+                localContainerPathMeta is not None
+                and localContainerPath is not None
+                and (
+                    os.path.exists(localContainerPathMeta)
+                    or os.path.exists(localContainerPath)
+                )
             ):
                 self.logger.warning(
                     f"Unable to trust Docker container {tag_name} => {dockerTag} . Discarding cached contents"
                 )
-                real_unlink_if_exists(localContainerPathMeta)
-                real_unlink_if_exists(localContainerPath)
 
             # Blindly remove
             _, _, _ = self._rmi(dockerTag, matEnv)
@@ -374,37 +277,23 @@ STDERR
                 manifests = cast("Sequence[Mapping[str, Any]]", json.loads(d_out_v))
                 manifest = manifests[0]
                 image_id = cast("Fingerprint", manifest["Id"])
+                manifestsImageSignature = self._gen_trimmed_manifests_signature(
+                    manifests
+                )
             except Exception as e:
                 raise ContainerFactoryException(
                     f"FATAL ERROR: Docker finished properly but it did not properly materialize {tag_name}: {e}"
                 )
 
             self.logger.info(
-                "saving docker container (for reproducibility matters): {} => {}".format(
-                    tag_name, localContainerPath
-                )
+                f"saving docker container (for reproducibility matters): {tag_name}"
             )
 
             # Let's materialize the container image for preservation
-            manifestsImageSignature = self._gen_trimmed_manifests_signature(manifests)
-            canonicalContainerPath = os.path.join(
-                self.containersCacheDir,
-                manifestsImageSignature.replace("=", "~")
-                .replace("/", "-")
-                .replace("+", "_"),
-            )
-
-            # Being sure the paths do not exist
-            if os.path.exists(canonicalContainerPath):
-                os.unlink(canonicalContainerPath)
-            canonicalContainerPathMeta = canonicalContainerPath + META_JSON_POSTFIX
-            if os.path.exists(canonicalContainerPathMeta):
-                os.unlink(canonicalContainerPathMeta)
+            tmpContainerPath = self.cc_handler._genTmpContainerPath()
 
             # Now, save the image as such
-            d_retval, d_err_ev = self._save(
-                dockerTag, cast("AbsPath", canonicalContainerPath), matEnv
-            )
+            d_retval, d_err_ev = self._save(dockerTag, tmpContainerPath, matEnv)
             self.logger.debug("docker save retval: {}".format(d_retval))
             self.logger.debug("docker save stderr: {}".format(d_err_v))
 
@@ -418,19 +307,22 @@ STDERR
                 )
 
                 # Removing partial dumps
-                if os.path.exists(canonicalContainerPath):
+                if os.path.exists(tmpContainerPath):
                     try:
-                        os.unlink(canonicalContainerPath)
+                        os.unlink(tmpContainerPath)
                     except:
                         pass
                 raise ContainerEngineException(errstr)
 
-            imageSignature = cast(
-                "Fingerprint", ComputeDigestFromFile(canonicalContainerPath)
+            # This is needed for the metadata
+            imageSignature = self.cc_handler._computeFingerprint(
+                cast("AnyPath", tmpContainerPath)
             )
 
+            tmpContainerPathMeta = tmpContainerPath + META_JSON_POSTFIX
+
             # Last, save the metadata itself for further usage
-            with open(canonicalContainerPathMeta, mode="w", encoding="utf-8") as tcpM:
+            with open(tmpContainerPathMeta, mode="w", encoding="utf-8") as tcpM:
                 manifest_metadata: "DockerManifestMetadata" = {
                     "image_id": image_id,
                     "image_signature": imageSignature,
@@ -439,40 +331,30 @@ STDERR
                 }
                 json.dump(manifest_metadata, tcpM)
 
-            # Now, check the relative symbolic link of image
-            if os.path.lexists(localContainerPath):
-                os.unlink(localContainerPath)
-
-            os.symlink(
-                os.path.relpath(
-                    canonicalContainerPath, self.engineContainersSymlinkDir
-                ),
-                localContainerPath,
+            # And update the cache
+            self.cc_handler.update(
+                tag,
+                image_path=tmpContainerPath,
+                image_metadata_path=cast("AbsPath", tmpContainerPathMeta),
+                do_move=True,
             )
 
-            # Now, check the relative symbolic link of metadata
-            if os.path.lexists(localContainerPathMeta):
-                os.unlink(localContainerPathMeta)
-            os.symlink(
-                os.path.relpath(
-                    canonicalContainerPathMeta, self.engineContainersSymlinkDir
-                ),
-                localContainerPathMeta,
-            )
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
+
+        # Do not allow overwriting in offline mode
+        transferred_image = self.cc_handler.transfer(
+            tag, stagedContainersDir=containers_dir, force=force and not offline
+        )
+        assert transferred_image is not None, f"Unexpected cache miss for {tag}"
+        containerPath, containerPathMeta = transferred_image
 
         assert manifestsImageSignature is not None
         assert manifests is not None
         if manifest is None:
             manifest = manifests[0]
 
-        # Do not allow overwriting in offline mode
-        if not offline or not os.path.exists(containerPath):
-            link_or_copy(localContainerPath, containerPath)
-        if not offline or not os.path.exists(containerPathMeta):
-            link_or_copy(localContainerPathMeta, containerPathMeta)
-
         # Now the image is not loaded here, but later in deploySingleContainer
-
         # Then, compute the fingerprint
         fingerprint = None
         if len(manifest["RepoDigests"]) > 0:
@@ -513,15 +395,10 @@ STDERR
         tag_name = container.origTaggedName
 
         # These are the paths to the copy of the saved container
-        containerFilename = self.simpleFileNameMethod(cast("URIType", tag_name))
-        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
-
-        # Keep a copy outside the cache directory
         if containers_dir is None:
             containers_dir = self.stagedContainersDir
-        containerPath = cast("AbsPath", os.path.join(containers_dir, containerFilename))
-        containerPathMeta = cast(
-            "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
+        containerPath, containerPathMeta = self.cc_handler.genStagedContainersDirPaths(
+            container, containers_dir
         )
 
         imageSignature: "Optional[Fingerprint]" = None
@@ -529,7 +406,7 @@ STDERR
         manifests = None
         manifest = None
         if not os.path.isfile(containerPathMeta):
-            errmsg = f"FATAL ERROR: Docker saved image {containerFilenameMeta} is not in the staged working dir for {tag_name}"
+            errmsg = f"FATAL ERROR: Docker saved image {os.path.basename(containerPathMeta)} is not in the staged working dir for {tag_name}"
             self.logger.error(errmsg)
             raise ContainerFactoryException(errmsg)
 
