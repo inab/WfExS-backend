@@ -278,7 +278,7 @@ class WfExSBackend:
         local_config_ro: "WfExSConfigBlock",
         config_directory: "Optional[AnyPath]" = None,
         key_prefix: "Optional[str]" = None,
-    ) -> "Tuple[bool, WfExSConfigBlock]":
+    ) -> "Tuple[bool, WfExSConfigBlock, AnyPath]":
         """
         :param local_config: Relevant local configuration, like the cache directory.
         :param config_directory: The filename to be used to resolve relative paths
@@ -294,14 +294,18 @@ class WfExSBackend:
 
         valErrors = config_validate(local_config_ro, cls.CONFIG_SCHEMA)
         if len(valErrors) > 0:
-            logging.error(f"ERROR on incoming local configuration block for bootstrap: {valErrors}")
+            logging.error(
+                f"ERROR on incoming local configuration block for bootstrap: {valErrors}"
+            )
             sys.exit(1)
 
         local_config = cast("WritableWfExSConfigBlock", copy.deepcopy(local_config_ro))
 
         # Getting the config directory
         if config_directory is None:
-            config_directory = cast("AbsPath", os.getcwd())
+            config_directory = cast(
+                "AbsPath", tempfile.mkdtemp(prefix="WfExS", suffix="config")
+            )
         if not os.path.isabs(config_directory):
             config_directory = cast("AbsPath", os.path.abspath(config_directory))
 
@@ -404,10 +408,12 @@ class WfExSBackend:
         if updated:
             valErrors = config_validate(local_config, cls.CONFIG_SCHEMA)
             if len(valErrors) > 0:
-                logging.error(f"ERROR in bootstrapped updated local configuration block: {valErrors}")
+                logging.error(
+                    f"ERROR in bootstrapped updated local configuration block: {valErrors}"
+                )
                 sys.exit(1)
 
-        return updated, local_config
+        return updated, local_config, config_directory
 
     @classmethod
     def FromDescription(
@@ -437,7 +443,7 @@ class WfExSBackend:
             stacklevel=2,
         )
 
-        _, updated_local_config = cls.bootstrap(
+        _, updated_local_config, config_directory = cls.bootstrap(
             local_config, config_directory=config_directory
         )
 
@@ -476,7 +482,8 @@ class WfExSBackend:
         )
 
         if not isinstance(local_config, dict):
-            local_config = {}
+            # Minimal bootstrapping for embedded cases
+            _, local_config, config_directory = self.bootstrap({}, config_directory)
 
         # validate the local configuration object
         valErrors = config_validate(local_config, self.CONFIG_SCHEMA)
@@ -1666,7 +1673,9 @@ class WfExSBackend:
                             creation,
                             orcids,  # TODO: give some use to this
                             instanceRawWorkdir,
-                        ) = self.parseOrCreateRawWorkDir(entry.path, create_ok=False)
+                        ) = self.parseOrCreateRawWorkDir(
+                            cast("AbsPath", entry.path), create_ok=False
+                        )
                     except:
                         self.logger.warning(f"Skipped {entry.name} on listing")
                         continue
