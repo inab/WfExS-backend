@@ -165,20 +165,10 @@ STDERR
                 "Ill-formed answer from podman version"
             ) from e
 
-    def materializeSingleContainer(
+    def _genPodmanTag(
         self,
         tag: "ContainerTaggedName",
-        containers_dir: "Optional[AnyPath]" = None,
-        offline: "bool" = False,
-        force: "bool" = False,
-    ) -> "Optional[Container]":
-        """
-        It is assured the containers are materialized
-        """
-
-        matEnv = dict(os.environ)
-        matEnv.update(self.environment)
-
+    ) -> "Tuple[URIType, str]":
         # It is an absolute URL, we are removing the docker://
         tag_name = tag.origTaggedName
         if tag_name.startswith(DOCKER_PROTO):
@@ -206,6 +196,26 @@ STDERR
                 dockerTag = f"{registry}/{dockerTag}"
                 podmanPullTag = DOCKER_PROTO + dockerTag
             # Last case, it already has a registry declared
+
+        return cast("URIType", dockerTag), podmanPullTag
+
+    def materializeSingleContainer(
+        self,
+        tag: "ContainerTaggedName",
+        containers_dir: "Optional[AnyPath]" = None,
+        offline: "bool" = False,
+        force: "bool" = False,
+    ) -> "Optional[Container]":
+        """
+        It is assured the containers are materialized
+        """
+
+        matEnv = dict(os.environ)
+        matEnv.update(self.environment)
+
+        # It is an absolute URL, we are removing the docker://
+        tag_name = tag.origTaggedName
+        dockerTag, podmanPullTag = self._genPodmanTag(tag)
 
         self.logger.info(f"downloading podman container: {tag_name} => {podmanPullTag}")
 
@@ -397,7 +407,7 @@ STDERR
         # And add to the list of containers
         return Container(
             origTaggedName=tag_name,
-            taggedName=cast("URIType", dockerTag),
+            taggedName=dockerTag,
             signature=image_id,
             fingerprint=fingerprint,
             architecture=architecture,
@@ -412,14 +422,13 @@ STDERR
 
     def deploySingleContainer(
         self,
-        container: "Container",
+        container: "ContainerTaggedName",
         containers_dir: "Optional[AnyPath]" = None,
         force: "bool" = False,
-    ) -> "bool":
+    ) -> "Tuple[Container, bool]":
         # Should we load the image?
         matEnv = dict(os.environ)
         matEnv.update(self.environment)
-        dockerTag = container.taggedName
         tag_name = container.origTaggedName
 
         # These are the paths to the copy of the saved container
@@ -433,19 +442,70 @@ STDERR
         manifestsImageSignature: "Optional[Fingerprint]" = None
         manifests = None
         manifest = None
+        if not os.path.isfile(containerPath):
+            errmsg = f"Podman saved image {os.path.basename(containerPath)} is not in the staged working dir for {tag_name}"
+            self.logger.warning(errmsg)
+            raise ContainerFactoryException(errmsg)
+
         if not os.path.isfile(containerPathMeta):
-            errmsg = f"FATAL ERROR: Podman saved image {os.path.basename(containerPathMeta)} is not in the staged working dir for {tag_name}"
+            errmsg = f"FATAL ERROR: Podman saved image metadata {os.path.basename(containerPathMeta)} is not in the staged working dir for {tag_name}"
             self.logger.error(errmsg)
             raise ContainerFactoryException(errmsg)
 
         try:
             with open(containerPathMeta, mode="r", encoding="utf-8") as mH:
                 signaturesAndManifest = cast("DockerManifestMetadata", json.load(mH))
-                imageSignature = signaturesAndManifest["image_signature"]
+                imageSignature_in_metadata = signaturesAndManifest["image_signature"]
                 manifestsImageSignature = signaturesAndManifest["manifests_signature"]
                 manifests = signaturesAndManifest["manifests"]
+
+                if isinstance(container, Container):
+                    # Reuse the input container instance
+                    rebuilt_container = container
+                    dockerTag = rebuilt_container.taggedName
+                else:
+                    manifest = manifests[0]
+
+                    dockerTag, podmanPullTag = self._genPodmanTag(container)
+
+                    image_id = signaturesAndManifest["image_id"]
+
+                    # Then, compute the fingerprint based on remote repo's information
+                    fingerprint = None
+                    if len(manifest["RepoDigests"]) > 0:
+                        fingerprint = manifest["RepoDigests"][0]
+
+                    # Learning about the intended processor architecture and variant
+                    architecture = manifest.get("Architecture")
+                    # As of version 4.5.0, podman does not report the architecture variant
+                    if architecture is not None:
+                        variant = manifest.get("Variant")
+                        if variant is not None:
+                            architecture += "/" + variant
+
+                    rebuilt_container = Container(
+                        origTaggedName=container.origTaggedName,
+                        taggedName=dockerTag,
+                        signature=image_id,
+                        fingerprint=fingerprint,
+                        architecture=architecture,
+                        operatingSystem=manifest.get("Os"),
+                        type=self.containerType,
+                        localPath=containerPath,
+                        registries=container.registries,
+                        metadataLocalPath=containerPathMeta,
+                        source_type=container.type,
+                        image_signature=imageSignature_in_metadata,
+                    )
         except Exception as e:
             errmsg = f"Problems extracting podman metadata at {containerPathMeta}"
+            self.logger.exception(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        imageSignature = self.cc_handler._computeFingerprint(containerPath)
+
+        if imageSignature != imageSignature_in_metadata:
+            errmsg = f"Image signature recorded in {os.path.basename(containerPathMeta)} does not match image signature of {os.path.basename(containerPath)}"
             self.logger.exception(errmsg)
             raise ContainerFactoryException(errmsg)
 
@@ -500,4 +560,4 @@ STDERR
                 self.logger.error(errstr)
                 raise ContainerEngineException(errstr)
 
-        return do_redeploy
+        return rebuilt_container, do_redeploy

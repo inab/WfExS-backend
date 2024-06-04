@@ -681,17 +681,23 @@ STDERR
             containers_dir = self.stagedContainersDir
         for tag in tagList:
             if self.AcceptsContainer(tag):
-                container = self.materializeSingleContainer(
-                    tag,
-                    containers_dir=containers_dir,
-                    offline=offline,
-                    force=force,
-                )
-                if container is not None:
-                    if container not in materialized_containers:
-                        materialized_containers.append(container)
-                else:
-                    not_found_containers.append(tag.origTaggedName)
+                container: "Optional[Container]"
+                try:
+                    container, was_redeployed = self.deploySingleContainer(
+                        tag, containers_dir=containers_dir, force=force
+                    )
+                except ContainerFactoryException as cfe:
+                    container = self.materializeSingleContainer(
+                        tag,
+                        containers_dir=containers_dir,
+                        offline=offline,
+                        force=force,
+                    )
+                    if container is not None:
+                        if container not in materialized_containers:
+                            materialized_containers.append(container)
+                    else:
+                        not_found_containers.append(tag.origTaggedName)
 
         if len(not_found_containers) > 0:
             raise ContainerNotFoundException(
@@ -728,12 +734,12 @@ STDERR
             containers_dir = self.stagedContainersDir
         for container in containers_list:
             if self.AcceptsContainer(container):
-                was_redeployed = self.deploySingleContainer(
+                deployed_container, was_redeployed = self.deploySingleContainer(
                     container,
                     containers_dir=containers_dir,
                     force=force,
                 )
-                if was_redeployed is not None:
+                if was_redeployed:
                     redeployed_containers.append(container)
 
         return redeployed_containers
@@ -741,10 +747,10 @@ STDERR
     @abc.abstractmethod
     def deploySingleContainer(
         self,
-        container: "Container",
+        container: "ContainerTaggedName",
         containers_dir: "Optional[AnyPath]" = None,
         force: "bool" = False,
-    ) -> "bool":
+    ) -> "Tuple[Container, bool]":
         """
         It is assured the container is properly deployed
         """

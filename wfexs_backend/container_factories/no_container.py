@@ -97,11 +97,13 @@ class NoContainerFactory(ContainerFactory):
 
     def deploySingleContainer(
         self,
-        container: "Container",
+        container: "ContainerTaggedName",
         containers_dir: "Optional[AnyPath]" = None,
         force: "bool" = False,
-    ) -> "bool":
+    ) -> "Tuple[Container, bool]":
         """
         This is a no-op
         """
-        return False
+        assert isinstance(container, Container)
+
+        return container, False

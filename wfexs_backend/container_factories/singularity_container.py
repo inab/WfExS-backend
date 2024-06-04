@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Set,
+        Tuple,
         Union,
     )
     from typing_extensions import (
@@ -198,6 +199,10 @@ class SingularityContainerFactory(ContainerFactory):
     def _getContainerArchitecture(
         self, container_filename: "AnyPath", matEnv: "Mapping[str, str]" = {}
     ) -> "Optional[ProcessorArchitecture]":
+        if len(matEnv) == 0:
+            matEnv = dict(os.environ)
+            matEnv.update(self.environment)
+
         with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
             self.logger.debug(
                 f"Checking {container_filename} looks like a singularity container"
@@ -370,20 +375,10 @@ STDERR
 
         return the_cont if isinstance(the_cont, Container) else None
 
-    def _materializeSingleContainerSing(
+    def _genSingTag(
         self,
         tag: "ContainerTaggedName",
-        matEnv: "Mapping[str, str]" = {},
-        dhelp: "DockerHelper" = DockerHelper(),
-        containers_dir: "Optional[AnyPath]" = None,
-        offline: "bool" = False,
-        force: "bool" = False,
-    ) -> "Union[Container, FailedContainerTag]":
-        if len(matEnv) == 0:
-            matEnvNew = dict(os.environ)
-            matEnvNew.update(self.environment)
-            matEnv = matEnvNew
-
+    ) -> "Tuple[str, parse.ParseResult, bool]":
         # It is not an absolute URL, we are prepending the docker://
         tag_name = tag.origTaggedName
         parsedTag = parse.urlparse(tag_name)
@@ -419,6 +414,60 @@ STDERR
                 singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
                 parsedTag = parse.urlparse(singTag)
             # Last case, it already has a registry declared
+        # It is not an absolute URL, we are prepending the docker://
+        tag_name = tag.origTaggedName
+        parsedTag = parse.urlparse(tag_name)
+        if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
+            singTag = tag_name
+            isDocker = parsedTag.scheme == DOCKER_SCHEME
+        else:
+            if parsedTag.scheme == "":
+                singTag = "docker://" + tag_name
+                parsedTag = parse.urlparse(singTag)
+            else:
+                parsedTag = parsedTag._replace(
+                    scheme=DOCKER_SCHEME,
+                    netloc=parsedTag.scheme + ":" + parsedTag.path,
+                    path="",
+                )
+                singTag = parse.urlunparse(parsedTag)
+            # Assuming it is docker
+            isDocker = True
+
+        # Should we enrich the tag with the registry?
+        if (
+            isDocker
+            and isinstance(tag.registries, dict)
+            and (common.ContainerType.Docker in tag.registries)
+        ):
+            registry = tag.registries[common.ContainerType.Docker]
+            # Bare case
+            if len(parsedTag.path) <= 1:
+                singTag = f"docker://{registry}/library/{parsedTag.netloc}"
+                parsedTag = parse.urlparse(singTag)
+            elif "/" not in parsedTag.path[1:]:
+                singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
+                parsedTag = parse.urlparse(singTag)
+            # Last case, it already has a registry declared
+
+        return singTag, parsedTag, isDocker
+
+    def _materializeSingleContainerSing(
+        self,
+        tag: "ContainerTaggedName",
+        matEnv: "Mapping[str, str]" = {},
+        dhelp: "DockerHelper" = DockerHelper(),
+        containers_dir: "Optional[AnyPath]" = None,
+        offline: "bool" = False,
+        force: "bool" = False,
+    ) -> "Union[Container, FailedContainerTag]":
+        if len(matEnv) == 0:
+            matEnvNew = dict(os.environ)
+            matEnvNew.update(self.environment)
+            matEnv = matEnvNew
+
+        tag_name = tag.origTaggedName
+        singTag, parsedTag, isDocker = self._genSingTag(tag)
 
         fetch_metadata = True
         trusted_copy = False
@@ -673,14 +722,21 @@ STDERR
             # If we cannot materialize it we cannot accept it
             if not self.AcceptsContainer(tag):
                 continue
-            matched_container = self._materializeSingleContainerSing(
-                tag,
-                matEnv=matEnv,
-                dhelp=dhelp,
-                containers_dir=containers_dir,
-                offline=offline,
-                force=force,
-            )
+
+            matched_container: "Union[Container, FailedContainerTag]"
+            try:
+                matched_container, was_redeployed = self.deploySingleContainer(
+                    tag, containers_dir=containers_dir, force=force
+                )
+            except ContainerFactoryException as cfe:
+                matched_container = self._materializeSingleContainerSing(
+                    tag,
+                    matEnv=matEnv,
+                    dhelp=dhelp,
+                    containers_dir=containers_dir,
+                    offline=offline,
+                    force=force,
+                )
 
             if isinstance(matched_container, Container):
                 if matched_container not in containersList:
@@ -703,10 +759,10 @@ STDERR
 
     def deploySingleContainer(
         self,
-        container: "Container",
+        container: "ContainerTaggedName",
         containers_dir: "Optional[AnyPath]" = None,
         force: "bool" = False,
-    ) -> "bool":
+    ) -> "Tuple[Container, bool]":
         """
         This is almost no-op, but it should check
         the integrity of the local images
@@ -718,8 +774,62 @@ STDERR
         )
 
         if not os.path.isfile(containerPath):
-            errmsg = f"FATAL ERROR: SIF saved image {os.path.basename(containerPath)} is not in the staged working dir for {container.origTaggedName}"
-            self.logger.error(errmsg)
+            errmsg = f"SIF saved image {os.path.basename(containerPath)} is not in the staged working dir for {container.origTaggedName}"
+            self.logger.warning(errmsg)
             raise ContainerFactoryException(errmsg)
 
-        return False
+        if not os.path.isfile(containerPathMeta):
+            errmsg = f"SIF saved image metadata {os.path.basename(containerPathMeta)} is not in the staged working dir for {container.origTaggedName}"
+            self.logger.warning(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        try:
+            with open(containerPathMeta, mode="r", encoding="utf-8") as mH:
+                signaturesAndManifest = cast("SingularityManifest", json.load(mH))
+                imageSignature_in_metadata = signaturesAndManifest["image_signature"]
+
+                if isinstance(container, Container):
+                    # Reuse the input container instance
+                    rebuilt_container = container
+                else:
+                    singTag, parsedTag, isDocker = self._genSingTag(container)
+
+                    partial_fingerprint = signaturesAndManifest.get("dcd")
+                    repo = signaturesAndManifest["repo"]
+                    if partial_fingerprint is not None:
+                        fingerprint = cast(
+                            # Maybe in the future registryServer + '/' + repo + "@" + partial_fingerprint
+                            "Fingerprint",
+                            repo + "@" + partial_fingerprint,
+                        )
+                    else:
+                        # TODO: is there a better alternative?
+                        fingerprint = cast("Fingerprint", container.origTaggedName)
+
+                    rebuilt_container = Container(
+                        origTaggedName=container.origTaggedName,
+                        taggedName=cast("URIType", singTag),
+                        signature=imageSignature_in_metadata,
+                        fingerprint=fingerprint,
+                        architecture=self._getContainerArchitecture(containerPath),
+                        type=self.containerType,
+                        localPath=containerPath,
+                        registries=container.registries,
+                        metadataLocalPath=containerPathMeta,
+                        source_type=container.type,
+                        image_signature=imageSignature_in_metadata,
+                    )
+
+        except Exception as e:
+            errmsg = f"Problems extracting SIF metadata at {containerPathMeta} or {containerPath}"
+            self.logger.exception(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        imageSignature = self.cc_handler._computeFingerprint(containerPath)
+
+        if imageSignature != imageSignature_in_metadata:
+            errmsg = f"Image signature recorded in {os.path.basename(containerPathMeta)} does not match image signature of {os.path.basename(containerPath)}"
+            self.logger.exception(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        return rebuilt_container, False
