@@ -63,8 +63,8 @@ class NoContainerFactory(ContainerFactory):
     The 'no container approach', for development and local installed software
     """
 
-    # def __init__(self, cacheDir=None, local_config=None, engine_name='unset'):
-    #    super().__init__(cacheDir=cacheDir, local_config=local_config, engine_name=engine_name)
+    # def __init__(self, containersCacheDir=None, tools_config=None, engine_name='unset'):
+    #    super().__init__(containersCacheDir=containersCacheDir, tools_config=tools_config, engine_name=engine_name)
     AcceptedContainerTypes = set([common.ContainerType.NoContainer])
 
     @classmethod
@@ -86,7 +86,6 @@ class NoContainerFactory(ContainerFactory):
     def materializeSingleContainer(
         self,
         tag: "ContainerTaggedName",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
         offline: "bool" = False,
         force: "bool" = False,
@@ -99,7 +98,6 @@ class NoContainerFactory(ContainerFactory):
     def deploySingleContainer(
         self,
         container: "Container",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[AnyPath]" = None,
         force: "bool" = False,
     ) -> "bool":

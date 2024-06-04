@@ -505,10 +505,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.stagedContainersDir = cast("AbsPath", stagedContainersDir)
 
         # Setting up common properties
-        self.docker_cmd = local_config.get("tools", {}).get(
-            "dockerCommand", DEFAULT_DOCKER_CMD
-        )
-        engine_mode = local_config.get("tools", {}).get("engineMode")
+        tools_config = local_config.get("tools", {})
+        self.docker_cmd = tools_config.get("dockerCommand", DEFAULT_DOCKER_CMD)
+        engine_mode = tools_config.get("engineMode")
         if engine_mode is None:
             engine_mode = DEFAULT_ENGINE_MODE
         else:
@@ -527,10 +526,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             )
 
         self.logger.debug(f"Instantiating container type {container_type}")
+        # For materialized containers, we should use common directories
+        # This for the containers themselves
+        containersCacheDir = cast(
+            "AnyPath",
+            os.path.join(cacheDir, "containers", container_factory_clazz.__name__),
+        )
         self.container_factory = container_factory_clazz(
-            cacheDir=cacheDir,
+            simpleFileNameMethod=self.simpleContainerFileName,
+            containersCacheDir=containersCacheDir,
             stagedContainersDir=stagedContainersDir,
-            local_config=local_config,
+            tools_config=tools_config,
             engine_name=self.__class__.__name__,
             tempDir=self.tempDir,
         )
@@ -770,7 +776,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             self.container_factory.engine_version(),
             self.container_factory.materializeContainers(
                 listOfContainerTags,
-                self.simpleContainerFileName,
                 containers_dir=containersDir,
                 offline=offline,
             ),
@@ -788,7 +793,6 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         return self.container_factory.deployContainers(
             containers_list=containers_list,
-            simpleFileNameMethod=self.simpleContainerFileName,
             containers_dir=containersDir,
             force=force,
         )

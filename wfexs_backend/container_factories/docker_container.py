@@ -88,21 +88,22 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
 
     def __init__(
         self,
-        cacheDir: "Optional[AnyPath]" = None,
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containersCacheDir: "Optional[AnyPath]" = None,
         stagedContainersDir: "Optional[AnyPath]" = None,
-        local_config: "Optional[ContainerLocalConfig]" = None,
+        tools_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
         tempDir: "Optional[AnyPath]" = None,
     ):
         super().__init__(
-            cacheDir=cacheDir,
+            simpleFileNameMethod=simpleFileNameMethod,
+            containersCacheDir=containersCacheDir,
             stagedContainersDir=stagedContainersDir,
-            local_config=local_config,
+            tools_config=tools_config,
             engine_name=engine_name,
             tempDir=tempDir,
         )
-        tools = local_config.get("tools", {}) if local_config else {}
-        self.runtime_cmd = tools.get("dockerCommand", DEFAULT_DOCKER_CMD)
+        self.runtime_cmd = self.tools_config.get("dockerCommand", DEFAULT_DOCKER_CMD)
 
     @classmethod
     def ContainerType(cls) -> "ContainerType":
@@ -149,7 +150,6 @@ STDERR
     def materializeSingleContainer(
         self,
         tag: "ContainerTaggedName",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
         force: "bool" = False,
@@ -182,7 +182,7 @@ STDERR
 
         self.logger.info(f"downloading docker container: {tag_name} => {dockerTag}")
         # These are the paths to the copy of the saved container
-        containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
+        containerFilename = self.simpleFileNameMethod(cast("URIType", tag_name))
         containerFilenameMeta = containerFilename + META_JSON_POSTFIX
         localContainerPath = cast(
             "AbsPath",
@@ -503,7 +503,6 @@ STDERR
     def deploySingleContainer(
         self,
         container: "Container",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
         containers_dir: "Optional[AnyPath]" = None,
         force: "bool" = False,
     ) -> "bool":
@@ -514,7 +513,7 @@ STDERR
         tag_name = container.origTaggedName
 
         # These are the paths to the copy of the saved container
-        containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
+        containerFilename = self.simpleFileNameMethod(cast("URIType", tag_name))
         containerFilenameMeta = containerFilename + META_JSON_POSTFIX
 
         # Keep a copy outside the cache directory

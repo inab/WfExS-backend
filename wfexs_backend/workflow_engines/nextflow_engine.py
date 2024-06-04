@@ -743,15 +743,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
+        containers_path: "Optional[AnyPath]" = None,
         workdir: "Optional[AbsPath]" = None,
         intermediateDir: "Optional[AbsPath]" = None,
         nextflow_path: "Optional[EnginePath]" = None,
-        containers_path: "Optional[AnyPath]" = None,
         stdoutFilename: "Optional[AbsPath]" = None,
         stderrFilename: "Optional[AbsPath]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
     ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         self.logger.debug("Command => nextflow " + " ".join(commandLine))
+
+        if containers_path is None:
+            containers_path = self.container_factory.cacheDir
         if self.engine_mode == EngineMode.Docker:
             (
                 retval,
@@ -760,9 +763,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
             ) = self.runNextflowCommandInDocker(
                 nextflow_version,
                 commandLine,
-                workdir,
-                intermediateDir=intermediateDir,
                 containers_path=containers_path,
+                workdir=workdir,
+                intermediateDir=intermediateDir,
                 stdoutFilename=stdoutFilename,
                 stderrFilename=stderrFilename,
                 runEnv=runEnv,
@@ -771,9 +774,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
             retval, nxf_run_stdout_v, nxf_run_stderr_v = self.runLocalNextflowCommand(
                 nextflow_version,
                 commandLine,
-                workdir,
-                intermediateDir=intermediateDir,
                 containers_path=containers_path,
+                workdir=workdir,
+                intermediateDir=intermediateDir,
                 nextflow_install_dir=nextflow_path,
                 stdoutFilename=stdoutFilename,
                 stderrFilename=stderrFilename,
@@ -792,10 +795,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
+        containers_path: "AnyPath",
         workdir: "Optional[AbsPath]" = None,
         intermediateDir: "Optional[AbsPath]" = None,
         nextflow_install_dir: "Optional[EnginePath]" = None,
-        containers_path: "Optional[AnyPath]" = None,
         stdoutFilename: "Optional[AbsPath]" = None,
         stderrFilename: "Optional[AbsPath]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
@@ -851,8 +854,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
         instEnv["TMPDIR"] = self.tempDir
 
         # This is needed to have Nextflow using the cached contents
-        if containers_path is None:
-            containers_path = self.container_factory.cacheDir
         if self.container_factory.containerType == ContainerType.Singularity:
             # See https://github.com/nextflow-io/nextflow/commit/91e9ee7c3c2ed4e63559339ae1a1d2c7d5f25953
             if nextflow_version >= "21.09.0-edge":
@@ -940,9 +941,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
+        containers_path: "AnyPath",
         workdir: "Optional[AbsPath]" = None,
         intermediateDir: "Optional[AbsPath]" = None,
-        containers_path: "Optional[AnyPath]" = None,
         stdoutFilename: "Optional[AbsPath]" = None,
         stderrFilename: "Optional[AbsPath]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
@@ -1904,10 +1905,10 @@ wfexs_allParams()
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
             nxf_params,
+            containers_path=matWfEng.containers_path,
             workdir=outputsDir,
             intermediateDir=intermediateDir,
             nextflow_path=matWfEng.engine_path,
-            containers_path=matWfEng.containers_path,
             stdoutFilename=stdoutFilename,
             stderrFilename=stderrFilename,
             runEnv=runEnv,
