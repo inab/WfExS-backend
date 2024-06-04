@@ -711,4 +711,15 @@ STDERR
         This is almost no-op, but it should check
         the integrity of the local images
         """
-        return force
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
+        containerPath, containerPathMeta = self.cc_handler.genStagedContainersDirPaths(
+            container, containers_dir
+        )
+
+        if not os.path.isfile(containerPath):
+            errmsg = f"FATAL ERROR: SIF saved image {os.path.basename(containerPath)} is not in the staged working dir for {container.origTaggedName}"
+            self.logger.error(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        return False
