@@ -1255,7 +1255,7 @@ def main() -> None:
             )
 
     if args.cacheDir:
-        local_config["cache-directory"] = args.cacheDir
+        local_config["cacheDir"] = args.cacheDir
 
     # In any case, assuring the cache directory does exist
     cacheDir = local_config.get("cacheDir")
@@ -1273,11 +1273,12 @@ def main() -> None:
 
     # A filename is needed later, in order to initialize installation keys
     if not localConfigFilename:
-        localConfigFilename = defaultLocalConfigFilename
-
-    # Hints for the the default path for the Crypt4GH keys
-    config_directory = os.path.dirname(localConfigFilename)
-    config_relname = os.path.basename(localConfigFilename)
+        config_directory = None
+        config_relname = os.path.basename(defaultLocalConfigFilename)
+    else:
+        # Hints for the the default path for the Crypt4GH keys
+        config_directory = os.path.dirname(localConfigFilename)
+        config_relname = os.path.basename(localConfigFilename)
 
     # Initialize (and create config file)
     if command in (
@@ -1290,9 +1291,11 @@ def main() -> None:
         WfExS_Commands.Import,
         WfExS_Commands.Execute,
     ):
-        updated_config, local_config = WfExSBackend.bootstrap(
+        updated_config, local_config, config_directory = WfExSBackend.bootstrap(
             local_config, config_directory, key_prefix=config_relname
         )
+        # This is needed because config directory could have been empty
+        localConfigFilename = os.path.join(config_directory, config_relname)
 
         # Last, should config be saved back?
         if updated_config or not os.path.exists(localConfigFilename):
