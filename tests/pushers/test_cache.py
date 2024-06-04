@@ -119,7 +119,7 @@ def test_cache_push(tmpdir) -> "None":  # type: ignore[no-untyped-def]
     # First, instantiate WfExS backend
     temppath = tmpdir.mkdir("TEMP")
 
-    bootstrap_ok, test_local_config = WfExSBackend.bootstrap(
+    bootstrap_ok, test_local_config, config_directory = WfExSBackend.bootstrap(
         local_config_ro={
             "cacheDir": "CACHE",
             "workDir": "WORKDIRS",
@@ -129,7 +129,7 @@ def test_cache_push(tmpdir) -> "None":  # type: ignore[no-untyped-def]
     )
     wfexs = WfExSBackend(
         local_config=test_local_config,
-        config_directory=tmpdir.strpath,
+        config_directory=config_directory,
     )
 
     # Second, instantiate the cache plugin
