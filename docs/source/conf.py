@@ -4,10 +4,10 @@ import os
 import sys
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), '../..')))
 
-print("HOLA")
-print(sys.path)
-print("HOLAERR", file=sys.stderr)
-print(sys.path, file=sys.stderr)
+# print("HOLA")
+# print(sys.path)
+# print("HOLAERR", file=sys.stderr)
+# print(sys.path, file=sys.stderr)
 
 # -- Project information
 
@@ -28,6 +28,7 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx_copybutton',
     'sphinxarg.ext',
+    'sphinxcontrib.datatemplates',
 ]
 
 intersphinx_mapping = {

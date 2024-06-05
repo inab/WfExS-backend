@@ -23,4 +23,5 @@ Contents
    usage
    contributing
    generalwebs
+   available_features
    cli
