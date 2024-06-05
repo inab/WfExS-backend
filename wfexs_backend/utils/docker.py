@@ -235,10 +235,10 @@ class DockerHelper(abc.ABC):
             pathToParse = parsedTag.netloc + parsedTag.path
 
         splitSep = "@sha256:"
-        splitPos = pathToParse.find(splitSep)
+        splitPos = pathToParse.rfind(splitSep)
         if splitPos == -1:
             splitSep = ":"
-            splitPos = pathToParse.find(splitSep)
+            splitPos = pathToParse.rfind(splitSep)
 
         if splitPos != -1:
             repo = pathToParse[0:splitPos]
