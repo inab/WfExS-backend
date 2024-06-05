@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import copy
 from dataclasses import dataclass
+import json
 import os
 import tempfile
 import atexit
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import (
+        NotRequired,
         TypeAlias,
         TypedDict,
         Final,
@@ -85,14 +87,8 @@ if TYPE_CHECKING:
     ContainerOperatingSystem = NewType("ContainerOperatingSystem", str)
     ProcessorArchitecture = NewType("ProcessorArchitecture", str)
 
-    DockerLikeManifest: TypeAlias = Mapping[str, Any]
-    MutableDockerLikeManifest: TypeAlias = MutableMapping[str, Any]
-
-    class DockerManifestMetadata(TypedDict):
-        image_id: Fingerprint
-        image_signature: Fingerprint
-        manifests_signature: Fingerprint
-        manifests: Sequence[DockerLikeManifest]
+    class AbstractImageManifestMetadata(TypedDict):
+        image_signature: NotRequired[Fingerprint]
 
     import yaml
 
@@ -173,7 +169,7 @@ class Container(ContainerTaggedName):
             # Now ...
             registry: "str"
             tag_name: "str"
-            tag_label: "str"
+            tag_label: "Optional[str]"
 
             # Is it a fully qualified docker tag?
             left_slash_pos = tagged_name.find("/")
@@ -184,13 +180,21 @@ class Container(ContainerTaggedName):
                 registry = DEFAULT_DOCKER_REGISTRY
 
             # Now, the tag label
-            right_colon_pos = tagged_name.rfind(":")
-            if right_colon_pos < 0:
-                tag_name = tagged_name
-                tag_label = "latest"
+            right_sha256_pos = tagged_name.rfind("@sha256:")
+            if right_sha256_pos > 0:
+                tag_name = tagged_name[0:right_sha256_pos]
+                # No tag label, as it is an specific layer
+                tag_label = None
             else:
-                tag_name = tagged_name[0:right_colon_pos]
-                tag_label = tagged_name[right_colon_pos + 1 :]
+                right_colon_pos = tagged_name.rfind(":")
+                right_slash_pos = tagged_name.rfind("/")
+                if right_colon_pos > right_slash_pos:
+                    tag_name = tagged_name[0:right_colon_pos]
+                    tag_label = tagged_name[right_colon_pos + 1 :]
+                else:
+                    tag_name = tagged_name
+                    # Default
+                    tag_label = "latest"
 
             return registry, tag_name, tag_label
         else:
@@ -374,7 +378,20 @@ class ContainerCacheHandler:
                     trusted_copy = canonicalImageSignature == imageSignature
 
         if trusted_copy:
-            trusted_copy = os.path.isfile(localContainerPathMeta)
+            if os.path.isfile(localContainerPathMeta):
+                try:
+                    with open(localContainerPathMeta, mode="r", encoding="utf-8") as mH:
+                        signaturesAndManifest = cast(
+                            "AbstractImageManifestMetadata", json.load(mH)
+                        )
+                        imageSignature_in_metadata = signaturesAndManifest.get(
+                            "image_signature"
+                        )
+                        trusted_copy = imageSignature_in_metadata == imageSignature
+                except:
+                    trusted_copy = False
+            else:
+                trusted_copy = False
 
         return trusted_copy, localContainerPath, localContainerPathMeta, imageSignature
 
