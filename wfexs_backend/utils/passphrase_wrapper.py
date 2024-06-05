@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import os
 import random
+import secrets
 import tempfile
 from typing import (
     cast,
@@ -63,7 +64,7 @@ class RemoteWordlistResource(NamedTuple):
     subend: "Optional[int]" = None
 
 
-class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
+class WfExSPassphraseGenerator:
     DEFAULT_PASSPHRASE_LENGTH: "Final[int]" = 6
     WFEXS_PASSPHRASE_SCHEME: "Final[str]" = "wfexs.funny-passphrase"
 
@@ -104,6 +105,9 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
         ],
     }
 
+    MIN_RAND_CHARS: "Final[int]" = 5
+    MAX_RAND_CHARS: "Final[int]" = 13
+
     def __init__(
         self,
         cacheHandler: "SchemeHandlerCacheHandler",
@@ -115,9 +119,24 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
         self.cacheHandler = cacheHandler
         self.cacheDir = cacheDir
 
-        cindex_sets = self._materialize_word_sets(word_sets)
+        self._word_sets = word_sets
+        self._fungen: "Optional[FunnyPassphraseGenerator]" = None
 
-        super().__init__(**cindex_sets)
+    @property
+    def fungen(self) -> "FunnyPassphraseGenerator":
+        if self._fungen is None:
+            cindex_sets = self._materialize_word_sets(self._word_sets)
+
+            self._fungen = FunnyPassphraseGenerator(**cindex_sets)
+
+        return self._fungen
+
+    @property
+    def initialized(self) -> "bool":
+        return self._fungen is not None
+
+    def initialize(self) -> "bool":
+        return self.fungen != None
 
     def _materialize_word_sets(
         self, raw_word_sets: "Mapping[str, Sequence[RemoteWordlistResource]]"
@@ -187,29 +206,48 @@ class WfExSPassphraseGenerator(FunnyPassphraseGenerator):
         """
         This method is needed to hook into the funny passphrase library
         """
-        get_random = 1 if chosen_wordlist is None else 0
+        # Trying to avoid initializing
+        if chosen_wordlist is not None or self.initialized:
+            try:
+                get_random = 1 if chosen_wordlist is None else 0
 
-        wordlists_tags = self.word_set_tags()
-        if get_random == 0:
-            if not isinstance(chosen_wordlist, list):
-                chosen_wordlist = [cast("Union[str, int]", chosen_wordlist)]
+                wordlists_tags = self.fungen.word_set_tags()
+                if get_random == 0:
+                    if not isinstance(chosen_wordlist, list):
+                        chosen_wordlist = [cast("Union[str, int]", chosen_wordlist)]
 
-            # Validating the wordlist
-            for chosen in chosen_wordlist:
-                if chosen not in wordlists_tags:
-                    get_random = len(chosen_wordlist)
-                    break
+                    # Validating the wordlist
+                    for chosen in chosen_wordlist:
+                        if chosen not in wordlists_tags:
+                            get_random = len(chosen_wordlist)
+                            break
 
-        if get_random > 0:
-            chosen_wordlist = [
-                wordlists_tags[random.randrange(len(wordlists_tags))]
-                for _ in range(get_random)
-            ]
+                if get_random > 0:
+                    chosen_wordlist = [
+                        wordlists_tags[random.randrange(len(wordlists_tags))]
+                        for _ in range(get_random)
+                    ]
 
-        return self.generate_passphrase(
-            num=passphrase_length,
-            subset=cast("Sequence[Union[str, int]]", chosen_wordlist),
-        )
+                return self.fungen.generate_passphrase(
+                    num=passphrase_length,
+                    subset=cast("Sequence[Union[str, int]]", chosen_wordlist),
+                )
+            except Exception as e:
+                # If something happens, gracefully fallback
+                pass
+
+        # This path is followed when it is not initialized and
+        # no chosen wordlist is provided, potentially avoiding
+        # remote access, or some failure happened while fetching
+        random_passphrase = [
+            secrets.token_urlsafe(
+                secrets.randbelow(self.MAX_RAND_CHARS - self.MIN_RAND_CHARS + 1)
+                + self.MIN_RAND_CHARS
+            )
+            for _ in range(passphrase_length)
+        ]
+
+        return " ".join(random_passphrase)
 
     def generate_nickname(self) -> str:
         """
