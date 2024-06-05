@@ -19,11 +19,44 @@
 from .wfexs_backend import WfExSBackend
 from typing import TYPE_CHECKING
 
+from .utils.licences import LicenceMatcherSingleton
+
 if TYPE_CHECKING:
-    from typing import Sequence
-    from .common import ContainerType
+    from typing import (
+        Sequence,
+        Tuple,
+    )
+
+    from .common import (
+        ContainerType,
+        LicenceDescription,
+    )
+
+    from .workflow_engines import (
+        WorkflowType,
+    )
 
 
 def list_containers() -> "Sequence[ContainerType]":
     wfBackend = WfExSBackend()
     return wfBackend.listImplementedContainerTypes()
+
+
+def list_export_plugins() -> "Sequence[str]":
+    wfBackend = WfExSBackend()
+    return wfBackend.listExportPluginNames()
+
+
+def list_fetchers() -> "Sequence[Tuple[str, str, int]]":
+    wfBackend = WfExSBackend()
+    return wfBackend.describeFetchableSchemes()
+
+
+def list_licences() -> "Sequence[LicenceDescription]":
+    licence_matcher = LicenceMatcherSingleton()
+    return licence_matcher.describeDocumentedLicences()
+
+
+def list_workflow_engines() -> "Sequence[WorkflowType]":
+    wfBackend = WfExSBackend()
+    return wfBackend.WORKFLOW_ENGINES
