@@ -606,7 +606,10 @@ class ContainerFactory(abc.ABC):
 
     @classmethod
     def AcceptsContainer(cls, container: "ContainerTaggedName") -> "bool":
-        return cls.AcceptsContainerType(container.type)
+        if isinstance(container, Container) and container.source_type is not None:
+            return cls.AcceptsContainerType(container.source_type)
+        else:
+            return cls.AcceptsContainerType(container.type)
 
     @classmethod
     @abc.abstractmethod
