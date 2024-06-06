@@ -239,6 +239,9 @@ class DockerHelper(abc.ABC):
         if splitPos == -1:
             splitSep = ":"
             splitPos = pathToParse.rfind(splitSep)
+        else:
+            # We need to include 'sha256:' prefix in alias
+            splitSep = "@"
 
         if splitPos != -1:
             repo = pathToParse[0:splitPos]
@@ -280,6 +283,7 @@ class DockerHelper(abc.ABC):
 
             assert partial_fingerprint is not None
         except Exception as e:
+            self.logger.exception(f"Unable to obtain fingerprint from {tag}")
             raise DockerHelperException(
                 f"Unable to obtain fingerprint from {tag}. Reason {e}"
             ) from e
