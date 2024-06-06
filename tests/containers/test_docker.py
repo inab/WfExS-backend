@@ -215,6 +215,6 @@ def test_docker_container_tagged_name_cached(cont_tagged: "ContainerTaggedName",
             "fingerprint",
             "source_type",
         ):
-            assert getattr(cont_tagged, attr) == getattr(
-                containers[0], attr
-            ), f"Expected and obtainer container '{attr}' do not match: {getattr(cont_tagged, attr)} vs {getattr(containers[0], attr)}"
+            assert getattr(container, attr) == getattr(
+                container2, attr
+            ), f"Expected and obtainer container '{attr}' do not match: {getattr(container, attr)} vs {getattr(container2, attr)}"
