@@ -89,6 +89,7 @@ from . import (
     ContainerEngineException,
     ContainerFactoryException,
     ContainerNotFoundException,
+    DEFAULT_DOCKER_REGISTRY,
     DOCKER_SCHEME,
 )
 
@@ -453,21 +454,20 @@ STDERR
         # Now, the singPullTag
         if isDocker and isinstance(tag, Container) and tag.fingerprint is not None:
             shapos = singTag.rfind("@sha256:")
-            if shapos != -1:
+            atpos = tag.fingerprint.rfind("@")
+            if shapos != -1 or atpos <= 0:
                 # The sha256 tag takes precedence over the recorded signature
                 singPullTag = singTag
             else:
-                atpos = tag.fingerprint.rfind("@")
-                if atpos > 0:
-                    partial_fingerprint = tag.fingerprint[atpos:]
-                    colonpos = singTag.rfind(":")
-                    slashpos = singTag.rfind("/")
-                    if colonpos > slashpos:
-                        singPullTag = singTag[:colonpos]
-                    else:
-                        singPullTag = singTag
+                partial_fingerprint = tag.fingerprint[atpos:]
+                colonpos = singTag.rfind(":")
+                slashpos = singTag.rfind("/")
+                if colonpos > slashpos:
+                    singPullTag = singTag[:colonpos]
+                else:
+                    singPullTag = singTag
 
-                    singPullTag += partial_fingerprint
+                singPullTag += partial_fingerprint
         else:
             singPullTag = singTag
 
@@ -551,10 +551,21 @@ STDERR
                             imageSignature_in_metadata = metadata.get("image_signature")
                             manifest = metadata.get("manifest")
                             if partial_fingerprint is not None:
+                                usableRegistryServer = (
+                                    DEFAULT_DOCKER_REGISTRY
+                                    if registryServer.endswith(
+                                        "." + DEFAULT_DOCKER_REGISTRY
+                                    )
+                                    else registryServer
+                                )
                                 fingerprint = cast(
                                     # Maybe in the future registryServer + '/' + repo + "@" + partial_fingerprint
                                     "Fingerprint",
-                                    repo + "@" + partial_fingerprint,
+                                    usableRegistryServer
+                                    + "/"
+                                    + repo
+                                    + "@"
+                                    + partial_fingerprint,
                                 )
                             else:
                                 # TODO: is there a better alternative?
@@ -688,9 +699,18 @@ STDERR
                         "dcd": tag_pull_details.partial_fingerprint,
                         "manifest": tag_pull_details.manifest,
                     }
+                    usableRegistryServer = (
+                        DEFAULT_DOCKER_REGISTRY
+                        if tag_pull_details.registryServer.endswith(
+                            "." + DEFAULT_DOCKER_REGISTRY
+                        )
+                        else tag_pull_details.registryServer
+                    )
                     fingerprint = cast(
                         "Fingerprint",
-                        tag_pull_details.repo
+                        usableRegistryServer
+                        + "/"
+                        + tag_pull_details.repo
                         + "@"
                         + tag_pull_details.partial_fingerprint,
                     )
@@ -841,10 +861,20 @@ STDERR
                     partial_fingerprint = signaturesAndManifest.get("dcd")
                     repo = signaturesAndManifest["repo"]
                     if partial_fingerprint is not None:
+                        registryServer = signaturesAndManifest["registryServer"]
+                        usableRegistryServer = (
+                            DEFAULT_DOCKER_REGISTRY
+                            if registryServer.endswith("." + DEFAULT_DOCKER_REGISTRY)
+                            else registryServer
+                        )
                         fingerprint = cast(
                             # Maybe in the future registryServer + '/' + repo + "@" + partial_fingerprint
                             "Fingerprint",
-                            repo + "@" + partial_fingerprint,
+                            usableRegistryServer
+                            + "/"
+                            + repo
+                            + "@"
+                            + partial_fingerprint,
                         )
                     else:
                         # TODO: is there a better alternative?
@@ -860,7 +890,9 @@ STDERR
                         localPath=containerPath,
                         registries=container.registries,
                         metadataLocalPath=containerPathMeta,
-                        source_type=container.type,
+                        source_type=container.source_type
+                        if isinstance(container, Container)
+                        else container.type,
                         image_signature=imageSignature_in_metadata,
                     )
 

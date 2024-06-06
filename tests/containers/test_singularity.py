@@ -50,31 +50,11 @@ from wfexs_backend.container_factories.singularity_container import (
     SingularityContainerFactory,
 )
 
+from tests.containers.util import simpleTestContainerFileName
 
 # Enable logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-
-
-def simpleTestContainerFileName(imageUrl: "URIType") -> "RelPath":
-    """
-    This method was borrowed from
-    https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L80
-    and translated to Python
-    """
-    p = imageUrl.find("://")
-    name = imageUrl[p + 3 :] if p != -1 else imageUrl
-    extension = ".img"
-    if ".sif:" in name:
-        extension = ".sif"
-        name = name.replace(".sif:", "-")
-    elif name.endswith(".sif"):
-        extension = ".sif"
-        name = name[:-4]
-
-    name = name.replace(":", "-").replace("/", "-")
-
-    return cast("RelPath", name + extension)
 
 
 def test_singularity_basic(tmpdir) -> "None":  # type: ignore[no-untyped-def]
@@ -121,7 +101,7 @@ TAGGED_TESTBED = pytest.mark.parametrize(
                 ),
                 fingerprint=cast(
                     "Fingerprint",
-                    "library/busybox@sha256:9ae97d36d26566ff84e8893c64a6dc4fe8ca6d1144bf5b87b2b85a32def253c7",
+                    "docker.io/library/busybox@sha256:9ae97d36d26566ff84e8893c64a6dc4fe8ca6d1144bf5b87b2b85a32def253c7",
                 ),
                 source_type=ContainerType.Docker,
                 image_signature=cast(
@@ -143,7 +123,7 @@ TAGGED_TESTBED = pytest.mark.parametrize(
                 ),
                 fingerprint=cast(
                     "Fingerprint",
-                    "quay/busybox@sha256:92f3298bf80a1ba949140d77987f5de081f010337880cd771f7e7fc928f8c74d",
+                    "quay.io/quay/busybox@sha256:92f3298bf80a1ba949140d77987f5de081f010337880cd771f7e7fc928f8c74d",
                 ),
                 source_type=ContainerType.Docker,
                 image_signature=cast(
@@ -181,7 +161,9 @@ def test_singularity_container_tagged_name(cont_tagged: "ContainerTaggedName", t
             "fingerprint",
             "source_type",
         ):
-            assert getattr(cont_tagged, attr) == getattr(containers[0], attr)
+            assert getattr(cont_tagged, attr) == getattr(
+                containers[0], attr
+            ), f"Expected and obtainer container '{attr}' do not match: {getattr(cont_tagged, attr)} vs {getattr(containers[0], attr)}"
 
 
 @TAGGED_TESTBED
@@ -230,4 +212,6 @@ def test_singularity_container_tagged_name_cached(cont_tagged: "ContainerTaggedN
             "fingerprint",
             "source_type",
         ):
-            assert getattr(container, attr) == getattr(container2, attr)
+            assert getattr(cont_tagged, attr) == getattr(
+                containers[0], attr
+            ), f"Expected and obtainer container '{attr}' do not match: {getattr(cont_tagged, attr)} vs {getattr(containers[0], attr)}"
