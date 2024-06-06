@@ -181,14 +181,14 @@ class AbstractDockerContainerFactory(ContainerFactory):
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying {self.variant_name()} container {dockerTag}")
             d_retval = subprocess.Popen(
-                [self.runtime_cmd, "inspect", dockerTag],
+                [self.runtime_cmd, "image", "inspect", dockerTag],
                 env=matEnv,
                 stdout=d_out,
                 stderr=d_err,
             ).wait()
 
             self.logger.debug(
-                f"{self.variant_name()} inspect {dockerTag} retval: {d_retval}"
+                f"{self.variant_name()} image inspect {dockerTag} retval: {d_retval}"
             )
 
             with open(d_out.name, mode="rb") as c_stF:
