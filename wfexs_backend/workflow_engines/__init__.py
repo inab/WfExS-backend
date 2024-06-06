@@ -249,6 +249,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         listOfContainerTags: "Sequence[ContainerTaggedName]",
         containersDir: "AnyPath",
         offline: "bool" = False,
+        force: "bool" = False,
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         pass
 
@@ -768,6 +769,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         listOfContainerTags: "Sequence[ContainerTaggedName]",
         containersDir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
+        force: "bool" = False,
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         if containersDir is None:
             containersDir = self.stagedContainersDir
@@ -778,6 +780,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 listOfContainerTags,
                 containers_dir=containersDir,
                 offline=offline,
+                force=force,
             ),
             *self.container_factory.architecture,
         )
