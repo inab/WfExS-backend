@@ -197,19 +197,21 @@ STDERR
             # Last case, it already has a registry declared
 
         # This is needed ....
-        if isinstance(tag, Container) and tag.signature is not None:
+        if isinstance(tag, Container) and tag.fingerprint is not None:
             shapos = dockerTag.rfind("@sha256:")
-            if shapos != -1:
+            atpos = tag.fingerprint.rfind("@")
+            if shapos != -1 or atpos <= 0:
                 # The sha256 tag takes precedence over the recorded signature
                 dockerPullTag = dockerTag
             else:
+                partial_fingerprint = tag.fingerprint[atpos:]
                 colonpos = dockerTag.rfind(":")
                 slashpos = dockerTag.rfind("/")
                 if colonpos > slashpos:
                     dockerPullTag = dockerTag[:colonpos]
                 else:
                     dockerPullTag = dockerTag
-                dockerPullTag += "@sha256:" + tag.signature
+                dockerPullTag += partial_fingerprint
         else:
             dockerPullTag = dockerTag
 
@@ -439,7 +441,7 @@ STDERR
             localPath=containerPath,
             registries=tag.registries,
             metadataLocalPath=containerPathMeta,
-            source_type=tag.type,
+            source_type=tag.source_type if isinstance(tag, Container) else tag.type,
             image_signature=imageSignature,
         )
 
@@ -519,7 +521,9 @@ STDERR
                         localPath=containerPath,
                         registries=container.registries,
                         metadataLocalPath=containerPathMeta,
-                        source_type=container.type,
+                        source_type=container.source_type
+                        if isinstance(container, Container)
+                        else container.type,
                         image_signature=imageSignature_in_metadata,
                     )
         except Exception as e:

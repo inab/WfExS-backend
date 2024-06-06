@@ -68,6 +68,7 @@ from . import (
     Container,
     ContainerEngineException,
     ContainerFactoryException,
+    DEFAULT_DOCKER_REGISTRY,
 )
 from .abstract_docker_container import (
     AbstractDockerContainerFactory,
@@ -173,23 +174,45 @@ STDERR
                 dockerTag = f"{registry}/{dockerTag}"
             # Last case, it already has a registry declared
 
-        if isinstance(tag, Container) and tag.signature is not None:
+        # This is needed ....
+        if isinstance(tag, Container) and tag.fingerprint is not None:
             shapos = dockerTag.rfind("@sha256:")
-            if shapos != -1:
+            atpos = tag.fingerprint.rfind("@")
+            if shapos != -1 or atpos <= 0:
                 # The sha256 tag takes precedence over the recorded signature
                 dockerPullTag = dockerTag
             else:
+                partial_fingerprint = tag.fingerprint[atpos:]
                 colonpos = dockerTag.rfind(":")
                 slashpos = dockerTag.rfind("/")
                 if colonpos > slashpos:
                     dockerPullTag = dockerTag[:colonpos]
                 else:
                     dockerPullTag = dockerTag
-                dockerPullTag += "@sha256:" + tag.signature
+                dockerPullTag += partial_fingerprint
         else:
             dockerPullTag = dockerTag
 
         return cast("URIType", dockerTag), dockerPullTag
+
+    def _enrichFingerprint(
+        self, fingerprint: "str", tag: "ContainerTaggedName"
+    ) -> "Fingerprint":
+        # Should we enrich it?
+        if isinstance(tag.registries, dict) and (
+            ContainerType.Docker in tag.registries
+        ):
+            registry = tag.registries[ContainerType.Docker]
+        else:
+            registry = DEFAULT_DOCKER_REGISTRY
+        # Bare case
+        if "/" not in fingerprint:
+            fingerprint = f"{registry}/library/{fingerprint}"
+        elif fingerprint.find("/") == fingerprint.rfind("/"):
+            fingerprint = f"{registry}/{fingerprint}"
+        # Last case, it already has a registry declared
+
+        return cast("Fingerprint", fingerprint)
 
     def materializeSingleContainer(
         self,
@@ -389,9 +412,9 @@ STDERR
 
         # Now the image is not loaded here, but later in deploySingleContainer
         # Then, compute the fingerprint
-        fingerprint = None
+        fingerprint: "Optional[Fingerprint]" = None
         if len(manifest["RepoDigests"]) > 0:
-            fingerprint = manifest["RepoDigests"][0]
+            fingerprint = self._enrichFingerprint(manifest["RepoDigests"][0], tag)
 
         # Learning about the intended processor architecture and variant
         architecture = manifest.get("Architecture")
@@ -411,7 +434,7 @@ STDERR
             localPath=containerPath,
             registries=tag.registries,
             metadataLocalPath=containerPathMeta,
-            source_type=tag.type,
+            source_type=tag.source_type if isinstance(tag, Container) else tag.type,
             image_signature=imageSignature,
         )
 
@@ -466,9 +489,11 @@ STDERR
                     image_id = signaturesAndManifest["image_id"]
 
                     # Then, compute the fingerprint
-                    fingerprint = None
+                    fingerprint: "Optional[Fingerprint]" = None
                     if len(manifest["RepoDigests"]) > 0:
-                        fingerprint = manifest["RepoDigests"][0]
+                        fingerprint = self._enrichFingerprint(
+                            manifest["RepoDigests"][0], container
+                        )
 
                     # Learning about the intended processor architecture and variant
                     architecture = manifest.get("Architecture")
@@ -488,7 +513,9 @@ STDERR
                         localPath=containerPath,
                         registries=container.registries,
                         metadataLocalPath=containerPathMeta,
-                        source_type=container.type,
+                        source_type=container.source_type
+                        if isinstance(container, Container)
+                        else container.type,
                         image_signature=imageSignature_in_metadata,
                     )
         except Exception as e:
