@@ -79,15 +79,15 @@ if TYPE_CHECKING:
     )
 
     from . import (
+        AbstractImageManifestMetadata,
         Container,
     )
 
     DockerLikeManifest: TypeAlias = Mapping[str, Any]
     MutableDockerLikeManifest: TypeAlias = MutableMapping[str, Any]
 
-    class DockerManifestMetadata(TypedDict):
+    class DockerManifestMetadata(AbstractImageManifestMetadata):
         image_id: "Fingerprint"
-        image_signature: "Fingerprint"
         manifests_signature: "Fingerprint"
         manifests: "Sequence[DockerLikeManifest]"
 
@@ -216,6 +216,35 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
             self.logger.debug(
                 f"{self.variant_name()} pull {dockerTag} retval: {d_retval}"
+            )
+
+            with open(d_out.name, mode="r") as c_stF:
+                d_out_v = c_stF.read()
+            with open(d_err.name, "r") as c_stF:
+                d_err_v = c_stF.read()
+
+            self.logger.debug(f"{self.variant_name()} pull stdout: {d_out_v}")
+
+            self.logger.debug(f"{self.variant_name()} pull stderr: {d_err_v}")
+
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
+
+    def _tag(
+        self, dockerPullTag: "str", dockerTag: "str", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
+        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
+            self.logger.debug(
+                f"tagging {self.variant_name()} container {dockerPullTag} as {dockerTag}"
+            )
+            d_retval = subprocess.Popen(
+                [self.runtime_cmd, "tag", dockerPullTag, dockerTag],
+                env=matEnv,
+                stdout=d_out,
+                stderr=d_err,
+            ).wait()
+
+            self.logger.debug(
+                f"{self.variant_name()} tag {dockerPullTag} {dockerTag} retval: {d_retval}"
             )
 
             with open(d_out.name, mode="r") as c_stF:

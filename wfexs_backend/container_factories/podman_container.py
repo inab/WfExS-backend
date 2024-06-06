@@ -51,8 +51,11 @@ if TYPE_CHECKING:
         ContainerFileNamingMethod,
         ContainerLocalConfig,
         ContainerOperatingSystem,
-        DockerManifestMetadata,
         ProcessorArchitecture,
+    )
+
+    from .abstract_docker_container import (
+        DockerManifestMetadata,
     )
 
 from ..common import (
@@ -168,15 +171,13 @@ STDERR
     def _genPodmanTag(
         self,
         tag: "ContainerTaggedName",
-    ) -> "Tuple[URIType, str]":
+    ) -> "Tuple[URIType, str, str]":
         # It is an absolute URL, we are removing the docker://
         tag_name = tag.origTaggedName
         if tag_name.startswith(DOCKER_PROTO):
             dockerTag = tag_name[len(DOCKER_PROTO) :]
-            podmanPullTag = tag_name
         else:
             dockerTag = tag_name
-            podmanPullTag = DOCKER_PROTO + tag_name
 
         # Should we enrich the tag with the registry?
         if isinstance(tag.registries, dict) and (
@@ -191,13 +192,30 @@ STDERR
             # Bare case
             if "/" not in dockerTag:
                 dockerTag = f"{registry}/library/{dockerTag}"
-                podmanPullTag = DOCKER_PROTO + dockerTag
             elif dockerTag.find("/") == dockerTag.rfind("/"):
                 dockerTag = f"{registry}/{dockerTag}"
-                podmanPullTag = DOCKER_PROTO + dockerTag
             # Last case, it already has a registry declared
 
-        return cast("URIType", dockerTag), podmanPullTag
+        # This is needed ....
+        if isinstance(tag, Container) and tag.signature is not None:
+            shapos = dockerTag.rfind("@sha256:")
+            if shapos != -1:
+                # The sha256 tag takes precedence over the recorded signature
+                dockerPullTag = dockerTag
+            else:
+                colonpos = dockerTag.rfind(":")
+                slashpos = dockerTag.rfind("/")
+                if colonpos > slashpos:
+                    dockerPullTag = dockerTag[:colonpos]
+                else:
+                    dockerPullTag = dockerTag
+                dockerPullTag += "@sha256:" + tag.signature
+        else:
+            dockerPullTag = dockerTag
+
+        podmanPullTag = DOCKER_PROTO + dockerPullTag
+
+        return cast("URIType", dockerTag), dockerPullTag, podmanPullTag
 
     def materializeSingleContainer(
         self,
@@ -215,7 +233,7 @@ STDERR
 
         # It is an absolute URL, we are removing the docker://
         tag_name = tag.origTaggedName
-        dockerTag, podmanPullTag = self._genPodmanTag(tag)
+        dockerTag, dockerPullTag, podmanPullTag = self._genPodmanTag(tag)
 
         self.logger.info(f"downloading podman container: {tag_name} => {podmanPullTag}")
 
@@ -290,6 +308,11 @@ STDERR
 
             # And now, let's materialize the new world
             d_retval, d_out_v, d_err_v = self._pull(podmanPullTag, matEnv)
+
+            if d_retval == 0 and dockerTag != dockerPullTag:
+                # Second try
+                d_retval, d_out_v, d_err_v = self._tag(dockerPullTag, dockerTag, matEnv)
+
             if d_retval == 0:
                 # Second try
                 d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
@@ -466,7 +489,9 @@ STDERR
                 else:
                     manifest = manifests[0]
 
-                    dockerTag, podmanPullTag = self._genPodmanTag(container)
+                    dockerTag, dockerPullTag, podmanPullTag = self._genPodmanTag(
+                        container
+                    )
 
                     image_id = signaturesAndManifest["image_id"]
 

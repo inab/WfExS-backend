@@ -61,25 +61,26 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         ContainerTaggedName,
+        ExitVal,
         Fingerprint,
         RelPath,
         URIType,
     )
 
     from . import (
+        AbstractImageManifestMetadata,
         ContainerFileNamingMethod,
         ContainerLocalConfig,
         ProcessorArchitecture,
     )
 
-    class SingularityManifest(TypedDict):
+    class SingularityManifest(AbstractImageManifestMetadata):
         registryServer: Required[str]
         registryType: Required[str]
         repo: Required[str]
         alias: Required[Optional[str]]
         dcd: NotRequired[str]
         manifest: NotRequired[Mapping[str, Any]]
-        image_signature: NotRequired[Fingerprint]
 
 
 from . import (
@@ -220,18 +221,18 @@ class SingularityContainerFactory(ContainerFactory):
                     s_out_v = c_stF.read()
                 with open(s_err.name, "r") as c_stF:
                     s_err_v = c_stF.read()
-                errstr = """Could not inspect singularity image {}. Retval {}
+                errstr = f"""\
+Could not inspect singularity image {container_filename}. Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                    container_filename, s_retval, s_out_v, s_err_v
-                )
+{s_err_v}"""
+
                 self.logger.error(errstr)
                 raise ContainerEngineException(errstr)
 
@@ -257,18 +258,18 @@ STDERR
             self.logger.debug(f"singularity sif list stderr: {s_err_v}")
 
             if s_retval != 0:
-                errstr = """Could not describe singularity image {}. Retval {}
+                errstr = f"""\
+Could not describe singularity image {container_filename}. Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                    container_filename, s_retval, s_out_v, s_err_v
-                )
+{s_err_v}"""
+
                 self.logger.warning(errstr)
                 self.logger.warning(
                     f"Most probably, image {container_filename} was built using singularity older than 3.0.0"
@@ -328,18 +329,17 @@ STDERR
             self.logger.debug(f"singularity sif info stderr: {s_err_v}")
 
             if s_retval != 0:
-                errstr = """Could not describe bundle {}  from singularity image {}. Retval {}
+                errstr = f"""\
+Could not describe bundle {data_bundle_id} from singularity image {container_filename}. Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                    data_bundle_id, container_filename, s_retval, s_out_v, s_err_v
-                )
+{s_err_v}"""
                 raise ContainerEngineException(errstr)
 
             # Learning the architecture
@@ -378,7 +378,7 @@ STDERR
     def _genSingTag(
         self,
         tag: "ContainerTaggedName",
-    ) -> "Tuple[str, parse.ParseResult, bool]":
+    ) -> "Tuple[str, parse.ParseResult, str, bool]":
         # It is not an absolute URL, we are prepending the docker://
         tag_name = tag.origTaggedName
         parsedTag = parse.urlparse(tag_name)
@@ -450,7 +450,57 @@ STDERR
                 parsedTag = parse.urlparse(singTag)
             # Last case, it already has a registry declared
 
-        return singTag, parsedTag, isDocker
+        # Now, the singPullTag
+        if isDocker and isinstance(tag, Container) and tag.fingerprint is not None:
+            shapos = singTag.rfind("@sha256:")
+            if shapos != -1:
+                # The sha256 tag takes precedence over the recorded signature
+                singPullTag = singTag
+            else:
+                atpos = tag.fingerprint.rfind("@")
+                if atpos > 0:
+                    partial_fingerprint = tag.fingerprint[atpos:]
+                    colonpos = singTag.rfind(":")
+                    slashpos = singTag.rfind("/")
+                    if colonpos > slashpos:
+                        singPullTag = singTag[:colonpos]
+                    else:
+                        singPullTag = singTag
+
+                    singPullTag += partial_fingerprint
+        else:
+            singPullTag = singTag
+
+        return singTag, parsedTag, singPullTag, isDocker
+
+    def _pull(
+        self, singTag: "str", tmpContainerPath: "str", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
+        with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
+            self.logger.debug(
+                f"downloading temporary container: {singTag} => {tmpContainerPath}"
+            )
+            # Singularity command line borrowed from
+            # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
+            s_retval = subprocess.Popen(
+                [self.runtime_cmd, "pull", "--name", tmpContainerPath, singTag],
+                env=matEnv,
+                stdout=s_out,
+                stderr=s_err,
+            ).wait()
+
+            self.logger.debug(f"singularity pull retval: {s_retval}")
+
+            with open(s_out.name, "r") as c_stF:
+                s_out_v = c_stF.read()
+            with open(s_err.name, "r") as c_stF:
+                s_err_v = c_stF.read()
+
+            self.logger.debug(f"singularity pull stdout: {s_out_v}")
+
+            self.logger.debug(f"singularity pull stderr: {s_err_v}")
+
+        return cast("ExitVal", s_retval), s_out_v, s_err_v
 
     def _materializeSingleContainerSing(
         self,
@@ -467,7 +517,7 @@ STDERR
             matEnv = matEnvNew
 
         tag_name = tag.origTaggedName
-        singTag, parsedTag, isDocker = self._genSingTag(tag)
+        singTag, parsedTag, singPullTag, isDocker = self._genSingTag(tag)
 
         fetch_metadata = True
         trusted_copy = False
@@ -542,69 +592,48 @@ STDERR
                     f"Cannot download containers in offline mode from {tag_name}"
                 )
 
-            with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
-                tmpContainerPath = self.cc_handler._genTmpContainerPath()
+            tmpContainerPath = self.cc_handler._genTmpContainerPath()
+            s_retval, s_out_v, s_err_v = self._pull(
+                singPullTag, tmpContainerPath, matEnv
+            )
 
-                self.logger.debug(
-                    f"downloading temporary container: {tag_name} => {tmpContainerPath}"
-                )
-                # Singularity command line borrowed from
-                # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
-                s_retval = subprocess.Popen(
-                    [self.runtime_cmd, "pull", "--name", tmpContainerPath, singTag],
-                    env=matEnv,
-                    stdout=s_out,
-                    stderr=s_err,
-                ).wait()
-
-                self.logger.debug(f"singularity pull retval: {s_retval}")
-
-                with open(s_out.name, "r") as c_stF:
-                    s_out_v = c_stF.read()
-                with open(s_err.name, "r") as c_stF:
-                    s_err_v = c_stF.read()
-
-                self.logger.debug(f"singularity pull stdout: {s_out_v}")
-
-                self.logger.debug(f"singularity pull stderr: {s_err_v}")
-
-                # Reading the output and error for the report
-                if s_retval == 0:
-                    if not os.path.exists(tmpContainerPath):
-                        raise ContainerFactoryException(
-                            "FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(
-                                tag_name, tmpContainerPath
-                            )
+            # Reading the output and error for the report
+            if s_retval == 0:
+                if not os.path.exists(tmpContainerPath):
+                    raise ContainerFactoryException(
+                        "FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(
+                            tag_name, tmpContainerPath
                         )
-
-                    # This is needed for the metadata
-                    imageSignature = self.cc_handler._computeFingerprint(
-                        cast("AnyPath", tmpContainerPath)
                     )
-                else:
-                    errstr = """Could not materialize singularity image {}. Retval {}
+
+                # This is needed for the metadata
+                imageSignature = self.cc_handler._computeFingerprint(
+                    cast("AnyPath", tmpContainerPath)
+                )
+            else:
+                errstr = f"""\
+Could not materialize singularity image {singTag} ({singPullTag}). Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                        singTag, s_retval, s_out_v, s_err_v
-                    )
-                    if os.path.exists(tmpContainerPath):
-                        try:
-                            os.unlink(tmpContainerPath)
-                        except:
-                            pass
-                    self.logger.error(errstr)
+{s_err_v}"""
 
-                    return FailedContainerTag(
-                        tag=tag_name,
-                        sing_tag=singTag,
-                    )
+                if os.path.exists(tmpContainerPath):
+                    try:
+                        os.unlink(tmpContainerPath)
+                    except:
+                        pass
+                self.logger.error(errstr)
+
+                return FailedContainerTag(
+                    tag=tag_name,
+                    sing_tag=singPullTag,
+                )
 
         # At this point we should always have a image signature
         assert imageSignature is not None
@@ -633,24 +662,37 @@ STDERR
             if isDocker:
                 tag_details = dhelp.query_tag(singTag)
                 if tag_details is None:
+                    self.logger.error(f"FALLA {singTag}")
                     return FailedContainerTag(tag=tag_name, sing_tag=singTag)
+                if singTag != singPullTag:
+                    tag_pull_details = dhelp.query_tag(singPullTag)
+                    if tag_pull_details is None:
+                        self.logger.error(f"CANALLA {singPullTag}")
+                        return FailedContainerTag(tag=tag_name, sing_tag=singPullTag)
+                else:
+                    tag_pull_details = tag_details
+            else:
+                tag_pull_details = tag_details
 
             # Save the temporary metadata
             with open(tmpContainerPathMeta, mode="w", encoding="utf8") as tcpm:
                 tmp_meta: "SingularityManifest"
                 if tag_details is not None:
+                    assert tag_pull_details is not None
                     tmp_meta = {
                         "image_signature": imageSignature,
-                        "registryServer": tag_details.registryServer,
+                        "registryServer": tag_pull_details.registryServer,
                         "registryType": "docker",
-                        "repo": tag_details.repo,
+                        "repo": tag_pull_details.repo,
                         "alias": tag_details.alias,
-                        "dcd": tag_details.partial_fingerprint,
-                        "manifest": tag_details.manifest,
+                        "dcd": tag_pull_details.partial_fingerprint,
+                        "manifest": tag_pull_details.manifest,
                     }
                     fingerprint = cast(
                         "Fingerprint",
-                        tag_details.repo + "@" + tag_details.partial_fingerprint,
+                        tag_pull_details.repo
+                        + "@"
+                        + tag_pull_details.partial_fingerprint,
                     )
                 else:
                     # TODO: Which metadata could we add for other schemes?
@@ -694,7 +736,7 @@ STDERR
             localPath=containerPath,
             registries=tag.registries,
             metadataLocalPath=containerPathMeta,
-            source_type=tag.type,
+            source_type=tag.source_type if isinstance(tag, Container) else tag.type,
             image_signature=imageSignature,
         )
 
@@ -792,7 +834,9 @@ STDERR
                     # Reuse the input container instance
                     rebuilt_container = container
                 else:
-                    singTag, parsedTag, isDocker = self._genSingTag(container)
+                    singTag, parsedTag, singPullTag, isDocker = self._genSingTag(
+                        container
+                    )
 
                     partial_fingerprint = signaturesAndManifest.get("dcd")
                     repo = signaturesAndManifest["repo"]

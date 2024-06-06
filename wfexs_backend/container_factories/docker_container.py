@@ -51,8 +51,11 @@ if TYPE_CHECKING:
         ContainerFileNamingMethod,
         ContainerLocalConfig,
         ContainerOperatingSystem,
-        DockerManifestMetadata,
         ProcessorArchitecture,
+    )
+
+    from .abstract_docker_container import (
+        DockerManifestMetadata,
     )
 
 from ..common import (
@@ -150,7 +153,7 @@ STDERR
     def _genDockerTag(
         self,
         tag: "ContainerTaggedName",
-    ) -> "URIType":
+    ) -> "Tuple[URIType, str]":
         tag_name = tag.origTaggedName
         dockerTag = (
             tag_name[len(DOCKER_PROTO) :]
@@ -170,7 +173,23 @@ STDERR
                 dockerTag = f"{registry}/{dockerTag}"
             # Last case, it already has a registry declared
 
-        return cast("URIType", dockerTag)
+        if isinstance(tag, Container) and tag.signature is not None:
+            shapos = dockerTag.rfind("@sha256:")
+            if shapos != -1:
+                # The sha256 tag takes precedence over the recorded signature
+                dockerPullTag = dockerTag
+            else:
+                colonpos = dockerTag.rfind(":")
+                slashpos = dockerTag.rfind("/")
+                if colonpos > slashpos:
+                    dockerPullTag = dockerTag[:colonpos]
+                else:
+                    dockerPullTag = dockerTag
+                dockerPullTag += "@sha256:" + tag.signature
+        else:
+            dockerPullTag = dockerTag
+
+        return cast("URIType", dockerTag), dockerPullTag
 
     def materializeSingleContainer(
         self,
@@ -187,7 +206,7 @@ STDERR
 
         # It is an absolute URL, we are removing the docker://
         tag_name = tag.origTaggedName
-        dockerTag = self._genDockerTag(tag)
+        dockerTag, dockerPullTag = self._genDockerTag(tag)
 
         self.logger.info(f"downloading docker container: {tag_name} => {dockerTag}")
 
@@ -261,9 +280,14 @@ STDERR
             _, _, _ = self._rmi(dockerTag, matEnv)
 
             # And now, let's materialize the new world
-            d_retval, d_out_v, d_err_v = self._pull(dockerTag, matEnv)
-            if d_retval == 0:
+            d_retval, d_out_v, d_err_v = self._pull(dockerPullTag, matEnv)
+
+            if d_retval == 0 and dockerTag != dockerPullTag:
                 # Second try
+                d_retval, d_out_v, d_err_v = self._tag(dockerPullTag, dockerTag, matEnv)
+
+            if d_retval == 0:
+                # Third try
                 d_retval, d_out_v, d_err_v = self._inspect(dockerTag, matEnv)
 
             if d_retval != 0:
@@ -437,7 +461,7 @@ STDERR
                 else:
                     manifest = manifests[0]
 
-                    dockerTag = self._genDockerTag(container)
+                    dockerTag, dockerPullTag = self._genDockerTag(container)
 
                     image_id = signaturesAndManifest["image_id"]
 
