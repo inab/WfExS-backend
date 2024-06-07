@@ -138,6 +138,7 @@ from .fetchers.swh import (
 from .pushers import AbstractExportPlugin
 
 from .workflow import (
+    ReproducibilityLevel,
     WF,
     WFException,
 )
@@ -1312,6 +1313,8 @@ class WfExSBackend:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         return WF.FromPreviousInstanceDeclaration(
             self,
@@ -1325,6 +1328,8 @@ class WfExSBackend:
             private_key_passphrase=private_key_passphrase,
             secure=secure,
             paranoidMode=paranoidMode,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     def fromPreviousROCrate(
@@ -1339,6 +1344,8 @@ class WfExSBackend:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         # Let's check whether it is a local file
         # or a remote RO-Crate
@@ -1370,6 +1377,8 @@ class WfExSBackend:
             private_key_passphrase=private_key_passphrase,
             secure=secure,
             paranoidMode=paranoidMode,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     def parseAndValidateSecurityContextFile(

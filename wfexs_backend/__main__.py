@@ -80,7 +80,10 @@ except ImportError:
 
 from .security_context import SecurityContextVault
 from .wfexs_backend import WfExSBackend
-from .workflow import WF
+from .workflow import (
+    ReproducibilityLevel,
+    WF,
+)
 from . import get_WfExS_version_str
 from .utils.licences import LicenceMatcherSingleton
 from .utils.misc import DatetimeEncoder
@@ -272,6 +275,28 @@ def genParserSub(
                 dest="secure",
                 action="store_true",
                 help="Make secured working directory (default)",
+            )
+
+            ap_.add_argument(
+                "--strict-reproducibility",
+                dest="strict_reproducibility_level",
+                action="store_true",
+                default=False,
+                help="Strict reproducibility",
+            )
+            ap_.add_argument(
+                "--no-strict-reproducibility",
+                dest="strict_reproducibility_level",
+                action="store_false",
+                help="Permissive reproducibility",
+            )
+
+            ap_.add_argument(
+                "--reproducibility-level",
+                dest="reproducibility_level",
+                default=ReproducibilityLevel.Metadata,
+                choices=ReproducibilityLevel,
+                help="Max reproducibility level to be tried",
             )
 
     if preStageParams or exportParams or command == WfExS_Commands.ReStage:
@@ -1433,6 +1458,8 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
             secure=args.secure,
+            reproducibility_level=args.reproducibility_level,
+            strict_reproducibility_level=args.strict_reproducibility_level,
         )
     else:
         print(
@@ -1469,6 +1496,8 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
             secure=args.secure,
+            reproducibility_level=args.reproducibility_level,
+            strict_reproducibility_level=args.strict_reproducibility_level,
         )
 
     wfSetup = wfInstance.getStagedSetup()

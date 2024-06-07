@@ -20,6 +20,7 @@ from __future__ import absolute_import
 import atexit
 import copy
 import datetime
+import enum
 import inspect
 import json
 import logging
@@ -40,6 +41,7 @@ from typing import (
     cast,
     Dict,
     NamedTuple,
+    # This one might be needed for proper unmarshalling
     Pattern,
     TYPE_CHECKING,
     TypeVar,
@@ -77,7 +79,6 @@ if TYPE_CHECKING:
         MutableMapping,
         MutableSequence,
         Optional,
-        Pattern,
         Sequence,
         Set,
         Tuple,
@@ -338,6 +339,12 @@ if sys.version_info[:2] < (3, 11):
     from exceptiongroup import ExceptionGroup
 
 
+class ReproducibilityLevel(enum.IntEnum):
+    Minimal = enum.auto()  # Minimal / no reproducibility is requested
+    Metadata = enum.auto()  # Metadata reproducibility is requested
+    Strict = enum.auto()  # Strict reproducibility (metadata + payload) is required")
+
+
 # Related export namedtuples
 class ExportItem(NamedTuple):
     type: "ExportItemType"
@@ -459,6 +466,12 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
+        cached_workflow: "Optional[LocalWorkflow]" = None,
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
+        preferred_containers: "Sequence[Container]" = [],
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ):
         """
         Init function
@@ -508,6 +521,17 @@ class WF:
         )
 
         self.wfexs = wfexs
+
+        # These internal variables are needed for imports.
+        # They are not preserved in the marshalled staging state, so
+        # their effects are only in the initial session
+        self.cached_workflow = cached_workflow
+        self.cached_inputs = cached_inputs
+        self.cached_environment = cached_environment
+        self.preferred_containers = copy.copy(preferred_containers)
+        self.reproducibility_level = reproducibility_level
+        self.strict_reproducibility_level = strict_reproducibility_level
+
         self.encWorkDir: "Optional[AbsPath]" = None
         self.workDir: "Optional[AbsPath]" = None
 
@@ -1170,6 +1194,21 @@ class WF:
             else [],
         )
 
+    def getMaterializedWorkflow(self) -> "Optional[LocalWorkflow]":
+        return (
+            self.localWorkflow
+            if self.materializedEngine is None
+            else self.materializedEngine.workflow
+        )
+
+    def getMaterializedContainers(self) -> "Sequence[Container]":
+        containers: "Sequence[Container]" = []
+        if self.materializedEngine is not None:
+            if self.materializedEngine.containers is not None:
+                containers = self.materializedEngine.containers
+
+        return containers
+
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
 
@@ -1288,6 +1327,7 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            reproducibility_level=ReproducibilityLevel.Minimal,
         )
 
     @classmethod
@@ -1302,6 +1342,12 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
+        cached_workflow: "Optional[LocalWorkflow]" = None,
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
+        preferred_containers: "Sequence[Container]" = [],
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1333,6 +1379,12 @@ class WF:
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
+            preferred_containers=preferred_containers,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     @classmethod
@@ -1349,6 +1401,8 @@ class WF:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1385,6 +1439,12 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            cached_workflow=wfInstance.getMaterializedWorkflow(),
+            cached_inputs=wfInstance.materializedParams,
+            cached_environment=wfInstance.materializedEnvironment,
+            preferred_containers=wfInstance.getMaterializedContainers(),
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     @classmethod
@@ -1402,6 +1462,8 @@ class WF:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1463,6 +1525,12 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            # cached_workflow=  ,
+            # cached_inputs=  ,
+            # cached_environment=  ,
+            preferred_containers=the_containers,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     @classmethod
@@ -1476,6 +1544,12 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
+        cached_workflow: "Optional[LocalWorkflow]" = None,
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
+        preferred_containers: "Sequence[Container]" = [],
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method might create a new staged working directory
@@ -1514,6 +1588,12 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoid_mode=paranoidMode,
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
+            preferred_containers=preferred_containers,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     @classmethod
