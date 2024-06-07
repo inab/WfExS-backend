@@ -21,6 +21,7 @@ from typing import (
     cast,
     TYPE_CHECKING,
 )
+import sys
 from zipfile import (
     ZipFile,
     ZipInfo,
@@ -46,6 +47,8 @@ if TYPE_CHECKING:
         Tuple,
         Union,
     )
+
+    import zipfile
 
 
 def _parents(path: "str") -> "Iterator[str]":
@@ -194,8 +197,8 @@ def _extract_text_encoding(
 
 
 def path_relative_to(
-    path: "Union[Path, pathlib.Path]",
-    other: "Union[Path, pathlib.Path]",
+    path: "Union[Path, pathlib.Path, zipfile.Path]",
+    other: "Union[Path, pathlib.Path, zipfile.Path]",
     *extra: "Union[str, PathLike[str]]"
 ) -> "str":
     # Method body is borrowed from Python 3.12
@@ -384,3 +387,10 @@ class Path:
         if parent_at:
             parent_at += "/"
         return self._next(parent_at)
+
+
+# Older versions of Python do not have zipfile.Path
+if sys.version_info[:2] < (3, 8):
+    import zipfile
+
+    zipfile.Path = Path
