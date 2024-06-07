@@ -401,7 +401,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 "AbsPath", tempfile.mkdtemp(prefix="WfExS", suffix="backend")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, cacheDir)
+            atexit.register(shutil.rmtree, cacheDir, True)
         else:
             if not os.path.isabs(cacheDir):
                 cacheDir = cast(
@@ -436,7 +436,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 "AbsPath", tempfile.mkdtemp(prefix="WfExS-exec", suffix="workdir")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, workDir)
+            atexit.register(shutil.rmtree, workDir, True)
         self.workDir = workDir
 
         # This directory should hold intermediate workflow steps results
@@ -492,7 +492,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 "AbsPath", tempfile.mkdtemp(prefix="WfExS-exec", suffix="tempdir")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, tempDir)
+            atexit.register(shutil.rmtree, tempDir, True)
         self.tempDir = tempDir
 
         # This directory will hold the staged containers to be used
