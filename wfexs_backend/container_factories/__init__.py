@@ -273,7 +273,7 @@ class ContainerCacheHandler:
                 "AbsPath", tempfile.mkdtemp(prefix="wfexs", suffix="backend")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, containers_cache_dir)
+            atexit.register(shutil.rmtree, containers_cache_dir, True)
         else:
             os.makedirs(containers_cache_dir, exist_ok=True)
 
@@ -543,7 +543,7 @@ class ContainerFactory(abc.ABC):
                 "AbsPath", tempfile.mkdtemp(prefix="wfexs", suffix="backend")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, self.containersCacheDir)
+            atexit.register(shutil.rmtree, self.containersCacheDir, True)
         else:
             self.containersCacheDir = cast(
                 "AbsPath", os.path.abspath(containersCacheDir)
@@ -554,7 +554,7 @@ class ContainerFactory(abc.ABC):
                 "AbsPath", tempfile.mkdtemp(prefix="WfExS-container", suffix="tempdir")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, tempDir)
+            atexit.register(shutil.rmtree, tempDir, True)
 
         # This directory might be needed by temporary processes, like
         # image materialization in singularity or podman

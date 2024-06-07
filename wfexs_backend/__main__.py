@@ -1292,7 +1292,7 @@ def main() -> None:
         cacheDir = tempfile.mkdtemp(prefix="wfexs", suffix="tmpcache")
         local_config["cacheDir"] = cacheDir
         # Assuring this temporal directory is removed at the end
-        atexit.register(shutil.rmtree, cacheDir)
+        atexit.register(shutil.rmtree, cacheDir, True)
         print(
             f"[WARNING] Cache directory not defined. Created a temporary one at {cacheDir}",
             file=sys.stderr,

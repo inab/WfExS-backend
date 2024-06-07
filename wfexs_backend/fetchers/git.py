@@ -672,7 +672,7 @@ class GitFetcher(AbstractRepoFetcher):
                 repo_tag_destdir = cast(
                     "AbsPath", tempfile.mkdtemp(prefix="wfexs", suffix=".git")
                 )
-                atexit.register(shutil.rmtree, repo_tag_destdir)
+                atexit.register(shutil.rmtree, repo_tag_destdir, True)
             else:
                 repo_hashed_id = hashlib.sha1(repoURL.encode("utf-8")).hexdigest()
                 repo_destdir = os.path.join(base_repo_destdir, repo_hashed_id)

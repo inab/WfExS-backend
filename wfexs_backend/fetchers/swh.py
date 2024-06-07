@@ -449,7 +449,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                                 "AbsPath",
                                 tempfile.mkdtemp(prefix="wfexs", suffix=".swh"),
                             )
-                            atexit.register(shutil.rmtree, repo_tag_destdir)
+                            atexit.register(shutil.rmtree, repo_tag_destdir, True)
                         else:
                             repo_hashed_id = hashlib.sha1(
                                 repoURL.encode("utf-8")
@@ -478,7 +478,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
 
                     # These steps are needed because the bundle has its contents in the parent
                     extract_dir = tempfile.mkdtemp(prefix="wfexs", suffix=".swh")
-                    atexit.register(shutil.rmtree, extract_dir)
+                    atexit.register(shutil.rmtree, extract_dir, True)
                     with tarfile.open(
                         tmp_targz_filename.name, mode="r|*", bufsize=10 * 1024 * 1024
                     ) as tF:
