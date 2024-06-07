@@ -95,6 +95,8 @@ if sys.version_info[:2] < (3, 11):
 from ..common import (
     ContainerType,
     ContentKind,
+    LocalWorkflow,
+    MaterializedInput,
 )
 
 from ..container_factories import (
@@ -116,6 +118,12 @@ from ..utils.misc import (
 
 magic = lazy_import("magic")
 # import magic
+
+
+class ReproducibilityLevel(enum.IntEnum):
+    Minimal = enum.auto()  # Minimal / no reproducibility is requested
+    Metadata = enum.auto()  # Metadata reproducibility is requested
+    Strict = enum.auto()  # Strict reproducibility (metadata + payload) is required")
 
 
 class ContainerTypeMetadata(NamedTuple):
@@ -1899,7 +1907,8 @@ Container {containerrow.container}
         jsonld_obj: "Mapping[str, Any]",
         public_name: "str",
         retrospective_first: "bool" = True,
-    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, Sequence[Container], ParamsBlock, EnvironmentBlock, OutputsBlock]":
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -1921,6 +1930,10 @@ Container {containerrow.container}
             raise ROCrateToolboxException(
                 f"JSON-LD from {public_name} is not a WRROC Workflow"
             )
+
+        cached_workflow: "Optional[LocalWorkflow]" = None
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None
 
         # The default crate licences
         crate_licences = self._getLicences(g, matched_crate.mainentity, public_name)
@@ -2068,8 +2081,11 @@ Container {containerrow.container}
             repo,
             workflow_type,
             container_type,
-            the_containers,
             params,
             environment,
             outputs,
+            cached_workflow,
+            the_containers,
+            cached_inputs,
+            cached_environment,
         )

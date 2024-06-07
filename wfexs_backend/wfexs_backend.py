@@ -137,8 +137,11 @@ from .fetchers.swh import (
 
 from .pushers import AbstractExportPlugin
 
-from .workflow import (
+from .utils.rocrate import (
     ReproducibilityLevel,
+)
+
+from .workflow import (
     WF,
     WFException,
 )

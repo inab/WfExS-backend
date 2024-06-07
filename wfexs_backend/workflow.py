@@ -20,7 +20,6 @@ from __future__ import absolute_import
 import atexit
 import copy
 import datetime
-import enum
 import inspect
 import json
 import logging
@@ -248,6 +247,7 @@ from .utils.licences import (
 )
 from .utils.rocrate import (
     ReadROCrateMetadata,
+    ReproducibilityLevel,
 )
 
 from .security_context import (
@@ -337,12 +337,6 @@ if TYPE_CHECKING:
 # This code needs exception groups
 if sys.version_info[:2] < (3, 11):
     from exceptiongroup import ExceptionGroup
-
-
-class ReproducibilityLevel(enum.IntEnum):
-    Minimal = enum.auto()  # Minimal / no reproducibility is requested
-    Metadata = enum.auto()  # Metadata reproducibility is requested
-    Strict = enum.auto()  # Strict reproducibility (metadata + payload) is required")
 
 
 # Related export namedtuples
@@ -1476,12 +1470,17 @@ class WF:
             repo,
             workflow_type,
             container_type,
-            the_containers,
             params,
             environment,
             outputs,
+            cached_workflow,
+            the_containers,
+            cached_inputs,
+            cached_environment,
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
-            jsonld_obj, public_name
+            jsonld_obj,
+            public_name,
+            reproducibility_level=reproducibility_level,
         )
 
         workflow_pid = wfexs.gen_workflow_pid(repo)
@@ -1525,9 +1524,9 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
-            # cached_workflow=  ,
-            # cached_inputs=  ,
-            # cached_environment=  ,
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
             preferred_containers=the_containers,
             reproducibility_level=reproducibility_level,
             strict_reproducibility_level=strict_reproducibility_level,

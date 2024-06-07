@@ -79,9 +79,11 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .security_context import SecurityContextVault
+from .utils.rocrate import (
+    ReproducibilityLevel,
+)
 from .wfexs_backend import WfExSBackend
 from .workflow import (
-    ReproducibilityLevel,
     WF,
 )
 from . import get_WfExS_version_str
@@ -1268,7 +1270,7 @@ def main() -> None:
     localConfigFilename = args.localConfigFilename
     if localConfigFilename and os.path.exists(localConfigFilename):
         with open(localConfigFilename, mode="r", encoding="utf-8") as cf:
-            local_config = yaml.load(cf, Loader=YAMLLoader)
+            local_config = yaml.safe_load(cf)
     else:
         local_config = {}
         if localConfigFilename and not os.path.exists(localConfigFilename):
