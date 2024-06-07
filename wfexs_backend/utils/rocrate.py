@@ -24,9 +24,14 @@ import inspect
 import json
 import logging
 import os.path
+import pathlib
 import sys
 import urllib.parse
 import zipfile
+
+# Older versions of Python do not have zipfile.Path
+if sys.version_info[:2] < (3, 8):
+    from .zipfile_path import Path as ZipfilePath
 
 from typing import (
     cast,
@@ -82,6 +87,8 @@ if TYPE_CHECKING:
         WorkflowType,
     )
 
+    from .zipfile_path import Path as ZipfilePath
+
 # Needed by pyld to detect it
 import aiohttp
 import pyld  # type: ignore[import, import-untyped]
@@ -123,7 +130,7 @@ magic = lazy_import("magic")
 class ReproducibilityLevel(enum.IntEnum):
     Minimal = enum.auto()  # Minimal / no reproducibility is requested
     Metadata = enum.auto()  # Metadata reproducibility is requested
-    Strict = enum.auto()  # Strict reproducibility (metadata + payload) is required")
+    Full = enum.auto()  # Full reproducibility (metadata + payload) is required")
 
 
 class ContainerTypeMetadata(NamedTuple):
@@ -206,9 +213,12 @@ ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
 LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
 
 
-def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "Any":
+def ReadROCrateMetadata(
+    workflowROCrateFilename: "str", public_name: "str"
+) -> "Tuple[Any, Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]]":
     # Is it a bare file or an archive?
     jsonld_filename: "Optional[str]" = None
+    payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None
     if os.path.isdir(workflowROCrateFilename):
         possible_jsonld_filename = os.path.join(
             workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
@@ -224,6 +234,7 @@ def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "
             raise ROCrateToolboxException(
                 f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
             )
+        payload_dir = pathlib.Path(workflowROCrateFilename)
     elif os.path.isfile(workflowROCrateFilename):
         jsonld_filename = workflowROCrateFilename
     else:
@@ -259,6 +270,7 @@ def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "
                 raise ROCrateToolboxException(
                     f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
                 )
+        payload_dir = zipfile.Path(workflowROCrateFilename)
     else:
         raise ROCrateToolboxException(
             f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
@@ -272,7 +284,7 @@ def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "
             f"Content from {public_name} is not a valid JSON"
         ) from jde
 
-    return jsonld_obj
+    return jsonld_obj, payload_dir
 
 
 class ROCrateToolbox(abc.ABC):
@@ -1908,6 +1920,8 @@ Container {containerrow.container}
         public_name: "str",
         retrospective_first: "bool" = True,
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
     ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?

@@ -576,7 +576,7 @@ class WfExSBackend:
         else:
             cacheDir = tempfile.mkdtemp(prefix="WfExS", suffix="backend")
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, cacheDir)
+            atexit.register(shutil.rmtree, cacheDir, True)
 
         # Setting up caching directories
         self.cacheDir = cacheDir
@@ -609,7 +609,7 @@ class WfExSBackend:
         else:
             baseWorkDir = tempfile.mkdtemp(prefix="WfExS-workdir", suffix="backend")
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, baseWorkDir)
+            atexit.register(shutil.rmtree, baseWorkDir, True)
 
         self.baseWorkDir = baseWorkDir
         self.defaultParanoidMode = False
@@ -2136,7 +2136,7 @@ class WfExSBackend:
                 "AbsPath", tempfile.mkdtemp(prefix="WfExS", suffix="TRSFetched")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, meta_dir)
+            atexit.register(shutil.rmtree, meta_dir, True)
         else:
             # Assuring the destination directory does exist
             os.makedirs(meta_dir, exist_ok=True)
@@ -2594,7 +2594,9 @@ class WfExSBackend:
         """
 
         public_name = roCrateFile
-        jsonld_obj = ReadROCrateMetadata(roCrateFile, public_name=public_name)
+        jsonld_obj, payload_dir = ReadROCrateMetadata(
+            roCrateFile, public_name=public_name
+        )
         matched_crate, g = self.rocrate_toolbox.identifyROCrate(
             jsonld_obj, public_name=public_name
         )

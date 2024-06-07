@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import atexit
 import copy
+import dataclasses
 import datetime
 import inspect
 import json
@@ -69,6 +70,10 @@ from .utils.orcid import (
 )
 
 if TYPE_CHECKING:
+    from os import (
+        PathLike,
+    )
+
     from typing import (
         Any,
         ClassVar,
@@ -220,6 +225,9 @@ if TYPE_CHECKING:
     WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
     WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
 
+    from .utils.zipfile_path import Path as ZipfilePath
+
+
 import urllib.parse
 
 # This is needed to assure yaml.safe_load unmarshalls gives no error
@@ -326,6 +334,7 @@ from .utils.contents import (
 )
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import config_validate
+from .utils.zipfile_path import path_relative_to
 
 from .fetchers.trs_files import (
     TRS_SCHEME_PREFIX,
@@ -1441,6 +1450,53 @@ class WF:
             strict_reproducibility_level=strict_reproducibility_level,
         )
 
+    @staticmethod
+    def _transferInputs(
+        payload_dir: "Union[pathlib.Path, ZipfilePath, zipfile.Path]",
+        inputs_dir: "pathlib.Path",
+        cached_inputs: "Sequence[MaterializedInput]",
+    ) -> "Sequence[MaterializedInput]":
+        new_cached_inputs = []
+        for cached_input in cached_inputs:
+            new_cached_input = cached_input
+            if len(new_cached_input.values) > 0 and isinstance(
+                new_cached_input.values[0], MaterializedContent
+            ):
+                new_values: "MutableSequence[MaterializedContent]" = []
+                for value in cast(
+                    "Sequence[MaterializedContent]", new_cached_input.values
+                ):
+                    source_file = payload_dir / value.local
+                    dest_file = inputs_dir / path_relative_to(source_file, payload_dir)
+                    new_value = value._replace(
+                        local=cast("AbsPath", dest_file.as_posix())
+                    )
+                    new_values.append(new_value)
+
+                new_cached_input = new_cached_input._replace(values=new_values)
+
+            if (
+                new_cached_input.secondaryInputs is not None
+                and len(new_cached_input.secondaryInputs) > 0
+                and isinstance(new_cached_input.secondaryInputs[0], MaterializedContent)
+            ):
+                new_secondaryInputs: "MutableSequence[MaterializedContent]" = []
+                for secondaryInput in new_cached_input.secondaryInputs:
+                    source_file = payload_dir / secondaryInput.local
+                    dest_file = inputs_dir / path_relative_to(source_file, payload_dir)
+                    new_secondaryInput = secondaryInput._replace(
+                        local=cast("AbsPath", dest_file.as_posix())
+                    )
+                    new_secondaryInputs.append(new_secondaryInput)
+
+                new_cached_input = new_cached_input._replace(
+                    secondaryInputs=new_secondaryInputs
+                )
+
+            new_cached_inputs.append(new_cached_input)
+
+        return new_cached_inputs
+
     @classmethod
     def FromPreviousROCrate(
         cls,
@@ -1464,7 +1520,9 @@ class WF:
         based on the declaration of an existing one
         """
 
-        jsonld_obj = ReadROCrateMetadata(workflowROCrateFilename, public_name)
+        jsonld_obj, payload_dir = ReadROCrateMetadata(
+            workflowROCrateFilename, public_name
+        )
 
         (
             repo,
@@ -1481,7 +1539,111 @@ class WF:
             jsonld_obj,
             public_name,
             reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
+            payload_dir=payload_dir,
         )
+
+        # Now, some postprocessing...
+        if (
+            reproducibility_level >= ReproducibilityLevel.Full
+            and payload_dir is not None
+            and not isinstance(payload_dir, pathlib.Path)
+        ):
+            # This one is needed when the payload_dir is defined and not a
+            # local path, like within a zip archive.
+            materialized_payload_dir = pathlib.Path(
+                tempfile.mkdtemp(prefix="wfexs", suffix="import")
+            )
+            atexit.register(shutil.rmtree, materialized_payload_dir, True)
+
+            # Fix cached workflow
+            if cached_workflow is not None:
+                workflow_dir = materialized_payload_dir / WORKDIR_WORKFLOW_RELDIR
+                workflow_dir.mkdir(parents=True, exist_ok=True)
+
+                # Transfer entrypoint
+                if cached_workflow.relPath is not None:
+                    dest_entrypoint = workflow_dir / cached_workflow.relPath
+                    dest_entrypoint.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(
+                        cast("PathLike[str]", payload_dir / cached_workflow.relPath),
+                        dest_entrypoint,
+                    )
+                if (
+                    cached_workflow.relPathFiles is not None
+                    and len(cached_workflow.relPathFiles) > 0
+                ):
+                    # And all the elements
+                    for rel_file in cached_workflow.relPathFiles:
+                        if rel_file == cached_workflow.relPath:
+                            continue
+                        p_rel_file = urllib.parse.urlparse(rel_file)
+                        if p_rel_file.scheme != "":
+                            continue
+
+                        dest_file = workflow_dir / rel_file
+                        dest_file.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(
+                            cast("PathLike[str]", payload_dir / rel_file), dest_file
+                        )
+
+                # Last, the reference
+                cached_workflow = cached_workflow._replace(
+                    dir=cast("AbsPath", workflow_dir.as_posix())
+                )
+
+            # Fix containers
+            if len(the_containers) > 0:
+                containers_dir = materialized_payload_dir / WORKDIR_CONTAINERS_RELDIR
+                containers_dir.mkdir(parents=True, exist_ok=True)
+                new_containers = []
+                for the_container in the_containers:
+                    new_container = the_container
+
+                    if new_container.localPath is not None:
+                        source_image = payload_dir / new_container.localPath
+                        dest_image = containers_dir / path_relative_to(
+                            source_image, payload_dir
+                        )
+                        dest_image.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(cast("PathLike[str]", source_image), dest_image)
+
+                        new_container = dataclasses.replace(
+                            new_container,
+                            localPath=cast("AbsPath", dest_image.as_posix()),
+                        )
+
+                    if new_container.metadataLocalPath is not None:
+                        source_meta = payload_dir / new_container.metadataLocalPath
+                        dest_meta = containers_dir / path_relative_to(
+                            source_meta, payload_dir
+                        )
+                        dest_meta.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(cast("PathLike[str]", source_meta), dest_meta)
+
+                        new_container = dataclasses.replace(
+                            new_container,
+                            metadataLocalPath=cast("AbsPath", dest_meta.as_posix()),
+                        )
+
+                    new_containers.append(new_container)
+
+                the_containers = new_containers
+
+            # Fix inputs
+            inputs_dir = materialized_payload_dir / WORKDIR_INPUTS_RELDIR
+            if cached_inputs is not None and len(cached_inputs) > 0:
+                inputs_dir.mkdir(parents=True, exist_ok=True)
+                cached_inputs = cls._transferInputs(
+                    payload_dir, inputs_dir, cached_inputs
+                )
+
+            # Fix environment
+            if cached_environment is not None and len(cached_environment) > 0:
+                inputs_dir.mkdir(parents=True, exist_ok=True)
+                cached_environment = cls._transferInputs(
+                    payload_dir, inputs_dir, cached_environment
+                )
 
         workflow_pid = wfexs.gen_workflow_pid(repo)
         logging.debug(
