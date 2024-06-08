@@ -1649,7 +1649,6 @@ class WF:
         logging.debug(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
         )
-        logging.debug(f"Containers {the_containers}")
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
             "workflow_id": workflow_pid,
             "workflow_type": workflow_type.shortname,

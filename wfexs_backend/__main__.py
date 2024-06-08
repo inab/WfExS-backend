@@ -297,7 +297,10 @@ def genParserSub(
                 "--reproducibility-level",
                 dest="reproducibility_level",
                 default=ReproducibilityLevel.Metadata,
-                choices=ReproducibilityLevel,
+                choices=range(
+                    min(ReproducibilityLevel).value, max(ReproducibilityLevel).value + 1
+                ),
+                type=int,
                 help="Max reproducibility level to be tried",
             )
 
@@ -1460,7 +1463,7 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
             secure=args.secure,
-            reproducibility_level=args.reproducibility_level,
+            reproducibility_level=ReproducibilityLevel(args.reproducibility_level),
             strict_reproducibility_level=args.strict_reproducibility_level,
         )
     else:
@@ -1498,7 +1501,7 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
             secure=args.secure,
-            reproducibility_level=args.reproducibility_level,
+            reproducibility_level=ReproducibilityLevel(args.reproducibility_level),
             strict_reproducibility_level=args.strict_reproducibility_level,
         )
 

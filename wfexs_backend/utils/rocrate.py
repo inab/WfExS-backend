@@ -44,6 +44,7 @@ import warnings
 if TYPE_CHECKING:
     from typing import (
         Any,
+        IO,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -58,6 +59,7 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
+        AbsPath,
         Fingerprint,
         RelPath,
         RepoURL,
@@ -112,6 +114,7 @@ from ..container_factories import (
 )
 
 from .digests import (
+    ComputeDigestFromFileLike,
     stringifyDigest,
 )
 
@@ -570,21 +573,21 @@ WHERE   {
 """
 
     OBTAIN_RUN_CONTAINERS_SPARQL: "Final[str]" = """\
-SELECT ?container ?container_additional_type ?type_of_container ?type_of_container_type ?container_registry ?container_name ?container_tag ?container_sha256 ?container_platform ?container_arch
+SELECT DISTINCT ?container ?container_snapshot_size ?container_snapshot_sha256 ?container_additional_type ?type_of_container ?type_of_container_type ?source_container ?source_container_additional_type ?source_container_registry ?source_container_name ?source_container_tag ?source_container_sha256 ?source_container_platform ?source_container_arch ?source_container_metadata ?source_container_metadata_size ?source_container_metadata_sha256
 WHERE   {
     {
-        ?execution wrterm:containerImage ?container .
+        ?execution wrterm:containerImage ?source_container .
     } UNION {
-        ?entity s:softwareAddOn ?container.
+        ?entity s:softwareAddOn ?source_container.
     }
-    ?container
+    ?source_container
         a wrterm:ContainerImage ;
-        s:additionalType ?container_additional_type .
+        s:additionalType ?source_container_additional_type .
     OPTIONAL {
-        ?container
-            s:softwareRequirements ?container_type ;
+        ?source_container
+            s:softwareRequirements ?source_container_type ;
             s:applicationCategory ?type_of_container .
-        ?container_type
+        ?source_container_type
             a s:SoftwareApplication ;
             s:applicationCategory ?type_of_container_type .
         FILTER(
@@ -592,27 +595,58 @@ WHERE   {
             STRSTARTS(str(?type_of_container_type), str(wikidata:))
         ) .
     }
+
     OPTIONAL {
-        ?container wrterm:registry ?container_registry .
-    }
-    OPTIONAL {
-        ?container s:name ?container_name .
-    }
-    OPTIONAL {
-        ?container wrterm:tag ?container_tag .
-    }
-    OPTIONAL {
-        ?container wrterm:sha256 ?container_sha256 .
-    }
-    OPTIONAL {
+        ?create_snapshot_container
+            a s:CreateAction ;
+            s:object ?source_container ;
+            s:result ?container .
         ?container
-            a s:SoftwareApplication ;
-            s:operatingSystem ?container_platform .
+            a s:MediaObject ;
+            a wrterm:ContainerImage ;
+            s:additionalType ?container_additional_type .
+        OPTIONAL {
+            ?container wrterm:sha256 ?container_snapshot_sha256 .
+        }
+        OPTIONAL {
+            ?container
+                s:contentSize ?container_snapshot_size .
+        }
     }
     OPTIONAL {
-        ?container
+        ?source_container wrterm:registry ?source_container_registry .
+    }
+    OPTIONAL {
+        ?source_container s:name ?source_container_name .
+    }
+    OPTIONAL {
+        ?source_container wrterm:tag ?source_container_tag .
+    }
+    OPTIONAL {
+        ?source_container wrterm:sha256 ?source_container_sha256 .
+    }
+    OPTIONAL {
+        ?source_container
             a s:SoftwareApplication ;
-            s:processorRequirements ?container_arch .
+            s:operatingSystem ?source_container_platform .
+    }
+    OPTIONAL {
+        ?source_container
+            a s:SoftwareApplication ;
+            s:processorRequirements ?source_container_arch .
+    }
+    OPTIONAL {
+        ?source_container_metadata
+            a s:MediaObject ;
+            s:about ?source_container .
+        OPTIONAL {
+            ?source_container_metadata
+                s:contentSize ?source_container_metadata_size .
+        }
+        OPTIONAL {
+            ?source_container_metadata
+                s:sha256 ?source_container_metadata_sha256 .
+        }
     }
 }
 """
@@ -1102,6 +1136,7 @@ WHERE   {
         self,
         g: "rdflib.graph.Graph",
         main_entity: "rdflib.term.Identifier",
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         # Get the list of containers
         qcontainers = rdflib.plugins.sparql.prepareQuery(
@@ -1116,13 +1151,16 @@ WHERE   {
             },
         )
 
-        return self.__parseContainersResults(qcontainersres, main_entity)
+        return self.__parseContainersResults(
+            qcontainersres, main_entity, payload_dir=payload_dir
+        )
 
     def _parseContainersFromExecution(
         self,
         g: "rdflib.graph.Graph",
         execution: "rdflib.term.Identifier",
         main_entity: "rdflib.term.Identifier",
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         # Get the list of containers
         qcontainers = rdflib.plugins.sparql.prepareQuery(
@@ -1137,12 +1175,15 @@ WHERE   {
             },
         )
 
-        return self.__parseContainersResults(qcontainersres, main_entity)
+        return self.__parseContainersResults(
+            qcontainersres, main_entity, payload_dir=payload_dir
+        )
 
     def __parseContainersResults(
         self,
         qcontainersres: "rdflib.query.Result",
         main_entity: "rdflib.term.Identifier",
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         container_type: "Optional[ContainerType]" = None
         additional_container_type: "Optional[ContainerType]" = None
@@ -1216,72 +1257,233 @@ WHERE   {
             assert isinstance(
                 containerrow, rdflib.query.ResultRow
             ), "Check the SPARQL code, as it should be a SELECT query"
-            self.logger.debug(
-                f"""\
-Container {containerrow.container}
-{containerrow.container_additional_type}
-{containerrow.type_of_container}
-{containerrow.type_of_container_type}
-{containerrow.container_registry}
-{containerrow.container_name}
-{containerrow.container_tag}
-{containerrow.container_sha256}
-{containerrow.container_platform}
-{containerrow.container_arch}
-"""
-            )
 
-            if (
-                containerrow.container_additional_type is not None
-                and containerrow.container_name is not None
-            ):
+            self.logger.debug("\nTuple")
+            for key, val in containerrow.asdict().items():
+                self.logger.debug(f"{key} => {val}")
+
+            source_container_type: "Optional[ContainerType]" = None
+            if containerrow.source_container_additional_type is not None:
                 try:
-                    putative_additional_container_image_additional_type = (
+                    putative_additional_source_container_image_additional_type = (
                         StrContainerAdditionalType2ContainerImageAdditionalType.get(
-                            str(containerrow.container_additional_type)
+                            str(containerrow.source_container_additional_type)
                         )
                     )
-                    putative_additional_container_type = (
+                    source_container_type = (
                         None
-                        if putative_additional_container_image_additional_type is None
+                        if putative_additional_source_container_image_additional_type
+                        is None
                         else (
                             AdditionalType2ContainerType.get(
-                                putative_additional_container_image_additional_type
+                                putative_additional_source_container_image_additional_type
                             )
                         )
                     )
+                except Exception as e:
+                    self.logger.error(
+                        f"Unable to map additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
+                    )
+
+            if source_container_type is None:
+                source_container_type = container_type
+
+            if containerrow.source_container_name is not None:
+                try:
                     registries: "Optional[Mapping[ContainerType, str]]" = None
                     fingerprint = None
                     origTaggedName = ""
                     taggedName = ""
                     image_signature = None
-                    if putative_additional_container_type == ContainerType.Docker:
+                    if source_container_type == ContainerType.Docker:
                         the_registry = (
-                            str(containerrow.container_registry)
-                            if containerrow.container_registry is not None
+                            str(containerrow.source_container_registry)
+                            if containerrow.source_container_registry is not None
                             else DEFAULT_DOCKER_REGISTRY
                         )
                         registries = {
                             ContainerType.Docker: the_registry,
                         }
-                        container_identifier = str(containerrow.container_name)
-                        assert containerrow.container_tag is not None
-                        if containerrow.container_sha256 is not None:
-                            fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.container_sha256)}"
+                        container_identifier = str(containerrow.source_container_name)
+                        if "/" not in container_identifier:
+                            container_identifier = "library/" + container_identifier
+                        assert containerrow.source_container_tag is not None
+                        if containerrow.source_container_sha256 is not None:
+                            fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.source_container_sha256)}"
                         else:
-                            fingerprint = f"{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
-                        origTaggedName = (
-                            f"{container_identifier}:{str(containerrow.container_tag)}"
-                        )
-                        taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
-                        # Disable for now
-                        # image_signature = stringifyDigest("sha256", bytes.fromhex(str(containerrow.container_sha256)))
-                    elif (
-                        putative_additional_container_type == ContainerType.Singularity
-                    ):
-                        origTaggedName = str(containerrow.container_name)
+                            fingerprint = f"{the_registry}/{container_identifier}:{str(containerrow.source_container_tag)}"
+                        origTaggedName = f"{container_identifier}:{str(containerrow.source_container_tag)}"
+                        taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.source_container_tag)}"
+                    elif source_container_type == ContainerType.Singularity:
+                        origTaggedName = str(containerrow.source_container_name)
                         taggedName = origTaggedName
                         fingerprint = origTaggedName
+
+                    container_image_path: "Optional[str]" = None
+                    metadata_container_image_path: "Optional[str]" = None
+                    if payload_dir is not None:
+                        if containerrow.container != containerrow.source_container:
+                            container_image_uri = str(containerrow.container)
+                            container_image_parsed_uri = urllib.parse.urlparse(
+                                container_image_uri
+                            )
+                            if (
+                                container_image_parsed_uri.scheme
+                                == self.RELATIVE_ROCRATE_SCHEME
+                            ):
+                                container_image_path = container_image_parsed_uri.path
+                                if container_image_path.startswith("/"):
+                                    container_image_path = container_image_path[1:]
+
+                                located_snapshot = payload_dir / container_image_path
+                                if located_snapshot.exists():
+                                    if containerrow.container_snapshot_size is not None:
+                                        if hasattr(located_snapshot, "stat"):
+                                            the_size = located_snapshot.stat().st_size
+                                        else:
+                                            the_size = located_snapshot.root.getinfo(
+                                                container_image_path
+                                            ).file_size
+                                        if isinstance(
+                                            containerrow.container_snapshot_size,
+                                            rdflib.term.Literal,
+                                        ):
+                                            container_snapshot_size = int(
+                                                containerrow.container_snapshot_size.value
+                                            )
+                                        else:
+                                            container_snapshot_size = int(
+                                                str(
+                                                    containerrow.container_snapshot_size
+                                                )
+                                            )
+                                        if the_size == container_snapshot_size:
+                                            with located_snapshot.open(mode="rb") as lS:
+                                                computed_image_signature = (
+                                                    ComputeDigestFromFileLike(
+                                                        cast("IO[bytes]", lS),
+                                                        digestAlgorithm="sha256",
+                                                    )
+                                                )
+                                            if (
+                                                containerrow.container_snapshot_sha256
+                                                is not None
+                                            ):
+                                                image_signature = stringifyDigest(
+                                                    "sha256",
+                                                    bytes.fromhex(
+                                                        str(
+                                                            containerrow.container_snapshot_sha256
+                                                        )
+                                                    ),
+                                                )
+
+                                                if (
+                                                    image_signature
+                                                    != computed_image_signature
+                                                ):
+                                                    self.logger.warning(
+                                                        f"Discarding payload {container_image_path} for {origTaggedName} (mismatching digest)"
+                                                    )
+                                                    container_image_path = None
+                                            else:
+                                                image_signature = (
+                                                    computed_image_signature
+                                                )
+                                        else:
+                                            self.logger.warning(
+                                                f"Discarding payload {container_image_path} for {origTaggedName} (mismatching file size)"
+                                            )
+                                            container_image_path = None
+                                else:
+                                    self.logger.warning(
+                                        f"Discarding payload {container_image_path} (not found)"
+                                    )
+                                    container_image_path = None
+
+                        if containerrow.source_container_metadata is not None:
+                            container_metadata_uri = str(
+                                containerrow.source_container_metadata
+                            )
+                            container_metadata_parsed_uri = urllib.parse.urlparse(
+                                container_metadata_uri
+                            )
+                            if (
+                                container_metadata_parsed_uri.scheme
+                                == self.RELATIVE_ROCRATE_SCHEME
+                            ):
+                                metadata_container_image_path = (
+                                    container_metadata_parsed_uri.path
+                                )
+                                if metadata_container_image_path.startswith("/"):
+                                    metadata_container_image_path = (
+                                        metadata_container_image_path[1:]
+                                    )
+
+                                located_metadata = (
+                                    payload_dir / metadata_container_image_path
+                                )
+                                if located_metadata.exists():
+                                    if (
+                                        containerrow.source_container_metadata_size
+                                        is not None
+                                    ):
+                                        if hasattr(located_metadata, "stat"):
+                                            the_size = located_metadata.stat().st_size
+                                        else:
+                                            the_size = located_metadata.root.getinfo(
+                                                metadata_container_image_path
+                                            ).file_size
+                                        if isinstance(
+                                            containerrow.source_container_metadata_size,
+                                            rdflib.term.Literal,
+                                        ):
+                                            source_container_metadata_size = int(
+                                                containerrow.source_container_metadata_size.value
+                                            )
+                                        else:
+                                            source_container_metadata_size = int(
+                                                str(
+                                                    containerrow.source_container_metadata_size
+                                                )
+                                            )
+                                        if the_size == source_container_metadata_size:
+                                            with located_metadata.open(mode="rb") as lM:
+                                                computed_source_container_metadata_signature = ComputeDigestFromFileLike(
+                                                    cast("IO[bytes]", lM),
+                                                    digestAlgorithm="sha256",
+                                                )
+                                            if (
+                                                containerrow.source_container_metadata_sha256
+                                                is not None
+                                            ):
+                                                source_container_metadata_signature = stringifyDigest(
+                                                    "sha256",
+                                                    bytes.fromhex(
+                                                        str(
+                                                            containerrow.source_container_metadata_sha256
+                                                        )
+                                                    ),
+                                                )
+
+                                                if (
+                                                    source_container_metadata_signature
+                                                    != computed_source_container_metadata_signature
+                                                ):
+                                                    self.logger.warning(
+                                                        f"Discarding payload {metadata_container_image_path} for {origTaggedName} (mismatching digest)"
+                                                    )
+                                                    metadata_container_image_path = None
+                                        else:
+                                            self.logger.warning(
+                                                f"Discarding payload {metadata_container_image_path} for {origTaggedName} (mismatching file size)"
+                                            )
+                                            metadata_container_image_path = None
+                                else:
+                                    self.logger.warning(
+                                        f"Discarding payload {metadata_container_image_path} (not found)"
+                                    )
+                                    metadata_container_image_path = None
 
                     the_containers.append(
                         Container(
@@ -1289,26 +1491,30 @@ Container {containerrow.container}
                             type=container_type,
                             registries=registries,
                             taggedName=cast("URIType", taggedName),
+                            localPath=cast("AbsPath", container_image_path),
+                            metadataLocalPath=cast(
+                                "AbsPath", metadata_container_image_path
+                            ),
                             architecture=None
-                            if containerrow.container_arch is None
+                            if containerrow.source_container_arch is None
                             else cast(
                                 "ProcessorArchitecture",
-                                str(containerrow.container_arch),
+                                str(containerrow.source_container_arch),
                             ),
                             operatingSystem=None
-                            if containerrow.container_platform is None
+                            if containerrow.source_container_platform is None
                             else cast(
                                 "ContainerOperatingSystem",
-                                str(containerrow.container_platform),
+                                str(containerrow.source_container_platform),
                             ),
                             fingerprint=cast("Fingerprint", fingerprint),
-                            source_type=putative_additional_container_type,
+                            source_type=source_container_type,
                             image_signature=image_signature,
                         )
                     )
                 except Exception as e:
                     self.logger.exception(
-                        f"Unable to assign from additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
+                        f"Unable to assign from additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
                     )
 
         return container_type, the_containers
@@ -1976,7 +2182,7 @@ Container {containerrow.container}
             # also supported.
             # So, we are starting with the retrospective provenance
             # gathering the list of containers, to learn
-            # whi.
+            # which.
             try:
                 qexecs = rdflib.plugins.sparql.prepareQuery(
                     self.OBTAIN_RUNS_SPARQL,
@@ -1996,7 +2202,12 @@ Container {containerrow.container}
                     self.logger.debug(f"\tExecution {execrow.execution}")
 
                     contresult = self._parseContainersFromExecution(
-                        g, execrow.execution, main_entity=matched_crate.mainentity
+                        g,
+                        execrow.execution,
+                        main_entity=matched_crate.mainentity,
+                        payload_dir=payload_dir
+                        if reproducibility_level >= ReproducibilityLevel.Full
+                        else None,
                     )
                     # TODO: deal with more than one execution
                     if contresult is None:
@@ -2041,6 +2252,9 @@ Container {containerrow.container}
             contresult = self._parseContainersFromWorkflow(
                 g,
                 main_entity=matched_crate.mainentity,
+                payload_dir=payload_dir
+                if reproducibility_level >= ReproducibilityLevel.Full
+                else None,
             )
             # TODO: deal with more than one execution
             if contresult is not None:
