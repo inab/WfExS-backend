@@ -1741,7 +1741,8 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "ParamsBlock":
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+    ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qinputs = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_EXECUTION_INPUTS_SPARQL,
@@ -1754,7 +1755,9 @@ WHERE   {
             },
         )
 
-        return self.__parseInputsResults(qinputsres, g, default_licences, public_name)
+        return self.__parseInputsResults(
+            qinputsres, g, default_licences, public_name, payload_dir=payload_dir
+        )
 
     def _parseInputsFromMainEntity(
         self,
@@ -1762,7 +1765,8 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "ParamsBlock":
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+    ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwinputs = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_WORKFLOW_INPUTS_SPARQL,
@@ -1775,7 +1779,9 @@ WHERE   {
             },
         )
 
-        return self.__parseInputsResults(qwinputsres, g, default_licences, public_name)
+        return self.__parseInputsResults(
+            qwinputsres, g, default_licences, public_name, payload_dir=payload_dir
+        )
 
     def __parseInputsResults(
         self,
@@ -1783,9 +1789,11 @@ WHERE   {
         g: "rdflib.graph.Graph",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "ParamsBlock":
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+    ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # TODO: implement this
         params: "MutableParamsBlock" = {}
+        cached_inputs: "MutableSequence[MaterializedInput]" = []
         for inputrow in qinputsres:
             assert isinstance(
                 inputrow, rdflib.query.ResultRow
@@ -1897,7 +1905,7 @@ WHERE   {
                 else:
                     base[param_last] = the_value
 
-        return params
+        return params, cached_inputs if payload_dir is not None else None
 
     def _parseEnvFromExecution(
         self,
@@ -1906,7 +1914,8 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "EnvironmentBlock":
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+    ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qenv = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_EXECUTION_ENV_SPARQL,
@@ -1919,7 +1928,9 @@ WHERE   {
             },
         )
 
-        return self.__parseEnvResults(qenvres, g, default_licences, public_name)
+        return self.__parseEnvResults(
+            qenvres, g, default_licences, public_name, payload_dir=payload_dir
+        )
 
     def _parseEnvFromMainEntity(
         self,
@@ -1927,7 +1938,8 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "EnvironmentBlock":
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+    ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwenv = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_WORKFLOW_ENV_SPARQL,
@@ -1940,7 +1952,9 @@ WHERE   {
             },
         )
 
-        return self.__parseEnvResults(qwenvres, g, default_licences, public_name)
+        return self.__parseEnvResults(
+            qwenvres, g, default_licences, public_name, payload_dir=payload_dir
+        )
 
     def __parseEnvResults(
         self,
@@ -1948,12 +1962,14 @@ WHERE   {
         g: "rdflib.graph.Graph",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "EnvironmentBlock":
+        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+    ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         """
         This method is (almost) identical to __parseInputsResults
         """
         # TODO: implement this
         environment: "MutableMapping[str, Any]" = {}
+        cached_environment: "MutableSequence[MaterializedInput]" = []
         for envrow in qenvres:
             assert isinstance(
                 envrow, rdflib.query.ResultRow
@@ -2057,7 +2073,7 @@ WHERE   {
                 else:
                     environment[env_name] = the_value
 
-        return environment
+        return environment, cached_environment if payload_dir is not None else None
 
     def _getLicences(
         self,
@@ -2292,20 +2308,26 @@ WHERE   {
 
                     # TODO: which are the needed inputs, to be integrated
                     # into the latter workflow_meta?
-                    params = self._parseInputsFromExecution(
+                    params, cached_inputs = self._parseInputsFromExecution(
                         g,
                         execrow.execution,
                         main_entity=matched_crate.mainentity,
                         default_licences=crate_licences,
                         public_name=public_name,
+                        payload_dir=payload_dir
+                        if reproducibility_level >= ReproducibilityLevel.Full
+                        else None,
                     )
 
-                    environment = self._parseEnvFromExecution(
+                    environment, cached_environment = self._parseEnvFromExecution(
                         g,
                         execrow.execution,
                         main_entity=matched_crate.mainentity,
                         default_licences=crate_licences,
                         public_name=public_name,
+                        payload_dir=payload_dir
+                        if reproducibility_level >= ReproducibilityLevel.Full
+                        else None,
                     )
 
                     outputs = self._parseOutputsFromExecution(
@@ -2335,18 +2357,24 @@ WHERE   {
             if contresult is not None:
                 container_type, the_containers = contresult
 
-            params = self._parseInputsFromMainEntity(
+            params, cached_inputs = self._parseInputsFromMainEntity(
                 g,
                 main_entity=matched_crate.mainentity,
                 default_licences=crate_licences,
                 public_name=public_name,
+                payload_dir=payload_dir
+                if reproducibility_level >= ReproducibilityLevel.Full
+                else None,
             )
 
-            environment = self._parseEnvFromMainEntity(
+            environment, cached_environment = self._parseEnvFromMainEntity(
                 g,
                 main_entity=matched_crate.mainentity,
                 default_licences=crate_licences,
                 public_name=public_name,
+                payload_dir=payload_dir
+                if reproducibility_level >= ReproducibilityLevel.Full
+                else None,
             )
 
         if len(outputs) == 0:
