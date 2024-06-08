@@ -573,7 +573,7 @@ WHERE   {
 """
 
     OBTAIN_RUN_CONTAINERS_SPARQL: "Final[str]" = """\
-SELECT DISTINCT ?container ?container_snapshot_size ?container_snapshot_sha256 ?container_additional_type ?type_of_container ?type_of_container_type ?source_container ?source_container_additional_type ?source_container_registry ?source_container_name ?source_container_tag ?source_container_sha256 ?source_container_platform ?source_container_arch ?source_container_metadata ?source_container_metadata_size ?source_container_metadata_sha256
+SELECT DISTINCT ?container ?container_snapshot_size ?container_snapshot_sha256 ?container_additional_type ?type_of_container ?type_of_container_type ?source_container ?source_container_additional_type ?source_container_registry ?source_container_name ?source_container_tag ?source_container_sha256 ?source_container_platform ?source_container_arch ?source_container_metadata ?source_container_metadata_size ?source_container_metadata_sha256 ?type_of_source_container ?type_of_source_container_type
 WHERE   {
     {
         ?execution wrterm:containerImage ?source_container .
@@ -586,13 +586,13 @@ WHERE   {
     OPTIONAL {
         ?source_container
             s:softwareRequirements ?source_container_type ;
-            s:applicationCategory ?type_of_container .
+            s:applicationCategory ?type_of_source_container .
         ?source_container_type
             a s:SoftwareApplication ;
-            s:applicationCategory ?type_of_container_type .
+            s:applicationCategory ?type_of_source_container_type .
         FILTER(
-            STRSTARTS(str(?type_of_container), str(wikidata:)) &&
-            STRSTARTS(str(?type_of_container_type), str(wikidata:))
+            STRSTARTS(str(?type_of_source_container), str(wikidata:)) &&
+            STRSTARTS(str(?type_of_source_container_type), str(wikidata:))
         ) .
     }
 
@@ -611,6 +611,18 @@ WHERE   {
         OPTIONAL {
             ?container
                 s:contentSize ?container_snapshot_size .
+        }
+        OPTIONAL {
+            ?container
+                s:softwareRequirements ?container_type ;
+                s:applicationCategory ?type_of_container .
+            ?container_type
+                a s:SoftwareApplication ;
+                s:applicationCategory ?type_of_container_type .
+            FILTER(
+                STRSTARTS(str(?type_of_container), str(wikidata:)) &&
+                STRSTARTS(str(?type_of_container_type), str(wikidata:))
+            ) .
         }
     }
     OPTIONAL {
@@ -1186,7 +1198,9 @@ WHERE   {
         payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         container_type: "Optional[ContainerType]" = None
+        source_container_type: "Optional[ContainerType]" = None
         additional_container_type: "Optional[ContainerType]" = None
+        additional_source_container_type: "Optional[ContainerType]" = None
         the_containers: "MutableSequence[Container]" = []
         # This is the first pass, to learn about the kind of
         # container factory to use
@@ -1208,6 +1222,20 @@ WHERE   {
                 ):
                     self.logger.warning(
                         f"Not all the containers of execution {main_entity} were materialized with {container_type} factory (also found {putative_container_type})"
+                    )
+
+            if containerrow.type_of_source_container is not None:
+                putative_source_container_type = ApplicationCategory2ContainerType.get(
+                    str(containerrow.type_of_source_container)
+                )
+                if source_container_type is None:
+                    source_container_type = putative_source_container_type
+                elif (
+                    putative_source_container_type is not None
+                    and putative_source_container_type != source_container_type
+                ):
+                    self.logger.warning(
+                        f"Not all the source containers of execution {main_entity} were materialized with {source_container_type} factory (also found {putative_source_container_type})"
                     )
 
             # These hints should be left by any compliant WRROC
@@ -1243,10 +1271,57 @@ WHERE   {
                         f"Unable to map additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
                     )
 
+            # These hints should be left by any compliant WRROC
+            # implementation
+            if containerrow.source_container_additional_type is not None:
+                try:
+                    putative_additional_source_container_image_additional_type = (
+                        StrContainerAdditionalType2ContainerImageAdditionalType.get(
+                            str(containerrow.source_container_additional_type)
+                        )
+                    )
+                    putative_additional_source_container_type = (
+                        None
+                        if putative_additional_source_container_image_additional_type
+                        is None
+                        else (
+                            AdditionalType2ContainerType.get(
+                                putative_additional_source_container_image_additional_type
+                            )
+                        )
+                    )
+                    if additional_source_container_type is None:
+                        additional_source_container_type = (
+                            putative_additional_source_container_type
+                        )
+                    elif (
+                        putative_additional_source_container_type is not None
+                        and putative_additional_source_container_type
+                        not in (source_container_type, additional_source_container_type)
+                    ):
+                        self.logger.warning(
+                            f"Not all the source containers of execution {main_entity} were labelled with {additional_source_container_type} factory (also found {putative_additional_source_container_type})"
+                        )
+                except Exception as e:
+                    self.logger.error(
+                        f"Unable to map additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
+                    )
+
+        # Assigning this, as it is going to be used later to
+        # build the list of containers
+        if (
+            source_container_type is None
+            and additional_source_container_type is not None
+        ):
+            source_container_type = additional_source_container_type
+
         # Assigning this, as it is going to be used later to
         # build the list of containers
         if container_type is None and additional_container_type is not None:
             container_type = additional_container_type
+
+        if container_type is None and source_container_type is not None:
+            container_type = source_container_type
 
         if container_type is None:
             return None
@@ -1262,7 +1337,7 @@ WHERE   {
             for key, val in containerrow.asdict().items():
                 self.logger.debug(f"{key} => {val}")
 
-            source_container_type: "Optional[ContainerType]" = None
+            source_container_type = None
             if containerrow.source_container_additional_type is not None:
                 try:
                     putative_additional_source_container_image_additional_type = (
