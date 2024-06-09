@@ -1383,69 +1383,79 @@ WHERE   {
                                     container_image_path = container_image_path[1:]
 
                                 located_snapshot = payload_dir / container_image_path
-                                if located_snapshot.exists():
-                                    if containerrow.container_snapshot_size is not None:
-                                        if hasattr(located_snapshot, "stat"):
-                                            the_size = located_snapshot.stat().st_size
-                                        else:
-                                            the_size = located_snapshot.root.getinfo(
-                                                container_image_path
-                                            ).file_size
-                                        if isinstance(
-                                            containerrow.container_snapshot_size,
-                                            rdflib.term.Literal,
-                                        ):
-                                            container_snapshot_size = int(
-                                                containerrow.container_snapshot_size.value
-                                            )
-                                        else:
-                                            container_snapshot_size = int(
-                                                str(
-                                                    containerrow.container_snapshot_size
-                                                )
-                                            )
-                                        if the_size == container_snapshot_size:
-                                            with located_snapshot.open(mode="rb") as lS:
-                                                computed_image_signature = (
-                                                    ComputeDigestFromFileLike(
-                                                        cast("IO[bytes]", lS),
-                                                        digestAlgorithm="sha256",
-                                                    )
-                                                )
-                                            if (
-                                                containerrow.container_snapshot_sha256
-                                                is not None
-                                            ):
-                                                image_signature = stringifyDigest(
-                                                    "sha256",
-                                                    bytes.fromhex(
-                                                        str(
-                                                            containerrow.container_snapshot_sha256
-                                                        )
-                                                    ),
-                                                )
-
-                                                if (
-                                                    image_signature
-                                                    != computed_image_signature
-                                                ):
-                                                    self.logger.warning(
-                                                        f"Discarding payload {container_image_path} for {origTaggedName} (mismatching digest)"
-                                                    )
-                                                    container_image_path = None
-                                            else:
-                                                image_signature = (
-                                                    computed_image_signature
-                                                )
-                                        else:
-                                            self.logger.warning(
-                                                f"Discarding payload {container_image_path} for {origTaggedName} (mismatching file size)"
-                                            )
-                                            container_image_path = None
+                                include_container_image = located_snapshot.exists()
+                                if include_container_image:
+                                    include_container_image = located_snapshot.is_file()
+                                    if not include_container_image:
+                                        self.logger.warning(
+                                            f"Discarding container image payload {container_image_path} for {origTaggedName} (is not a file)"
+                                        )
                                 else:
                                     self.logger.warning(
-                                        f"Discarding payload {container_image_path} (not found)"
+                                        f"Discarding container image payload {container_image_path} for {origTaggedName} (not found)"
                                     )
+
+                                if (
+                                    include_container_image
+                                    and containerrow.container_snapshot_size is not None
+                                ):
+                                    if hasattr(located_snapshot, "stat"):
+                                        the_size = located_snapshot.stat().st_size
+                                    else:
+                                        the_size = located_snapshot.root.getinfo(
+                                            container_image_path
+                                        ).file_size
+                                    if isinstance(
+                                        containerrow.container_snapshot_size,
+                                        rdflib.term.Literal,
+                                    ):
+                                        container_snapshot_size = int(
+                                            containerrow.container_snapshot_size.value
+                                        )
+                                    else:
+                                        container_snapshot_size = int(
+                                            str(containerrow.container_snapshot_size)
+                                        )
+                                    include_container_image = (
+                                        the_size == container_snapshot_size
+                                    )
+                                    if not include_container_image:
+                                        self.logger.warning(
+                                            f"Discarding container image payload {container_image_path} for {origTaggedName} (mismatching file size)"
+                                        )
+
+                                if include_container_image:
+                                    with located_snapshot.open(mode="rb") as lS:
+                                        computed_image_signature = (
+                                            ComputeDigestFromFileLike(
+                                                cast("IO[bytes]", lS),
+                                                digestAlgorithm="sha256",
+                                            )
+                                        )
+                                    if (
+                                        containerrow.container_snapshot_sha256
+                                        is not None
+                                    ):
+                                        image_signature = stringifyDigest(
+                                            "sha256",
+                                            bytes.fromhex(
+                                                str(
+                                                    containerrow.container_snapshot_sha256
+                                                )
+                                            ),
+                                        )
+
+                                        include_container_image = (
+                                            image_signature == computed_image_signature
+                                        )
+                                        if not include_container_image:
+                                            self.logger.warning(
+                                                f"Discarding payload {container_image_path} for {origTaggedName} (mismatching digest)"
+                                            )
+                                    else:
+                                        image_signature = computed_image_signature
+
+                                if not include_container_image:
                                     container_image_path = None
 
                         if containerrow.source_container_metadata is not None:
@@ -1470,66 +1480,86 @@ WHERE   {
                                 located_metadata = (
                                     payload_dir / metadata_container_image_path
                                 )
-                                if located_metadata.exists():
-                                    if (
-                                        containerrow.source_container_metadata_size
-                                        is not None
-                                    ):
-                                        if hasattr(located_metadata, "stat"):
-                                            the_size = located_metadata.stat().st_size
-                                        else:
-                                            the_size = located_metadata.root.getinfo(
-                                                metadata_container_image_path
-                                            ).file_size
-                                        if isinstance(
-                                            containerrow.source_container_metadata_size,
-                                            rdflib.term.Literal,
-                                        ):
-                                            source_container_metadata_size = int(
-                                                containerrow.source_container_metadata_size.value
-                                            )
-                                        else:
-                                            source_container_metadata_size = int(
-                                                str(
-                                                    containerrow.source_container_metadata_size
-                                                )
-                                            )
-                                        if the_size == source_container_metadata_size:
-                                            with located_metadata.open(mode="rb") as lM:
-                                                computed_source_container_metadata_signature = ComputeDigestFromFileLike(
-                                                    cast("IO[bytes]", lM),
-                                                    digestAlgorithm="sha256",
-                                                )
-                                            if (
-                                                containerrow.source_container_metadata_sha256
-                                                is not None
-                                            ):
-                                                source_container_metadata_signature = stringifyDigest(
-                                                    "sha256",
-                                                    bytes.fromhex(
-                                                        str(
-                                                            containerrow.source_container_metadata_sha256
-                                                        )
-                                                    ),
-                                                )
-
-                                                if (
-                                                    source_container_metadata_signature
-                                                    != computed_source_container_metadata_signature
-                                                ):
-                                                    self.logger.warning(
-                                                        f"Discarding payload {metadata_container_image_path} for {origTaggedName} (mismatching digest)"
-                                                    )
-                                                    metadata_container_image_path = None
-                                        else:
-                                            self.logger.warning(
-                                                f"Discarding payload {metadata_container_image_path} for {origTaggedName} (mismatching file size)"
-                                            )
-                                            metadata_container_image_path = None
+                                include_metadata_container_image = (
+                                    located_metadata.exists()
+                                )
+                                if include_metadata_container_image:
+                                    include_metadata_container_image = (
+                                        located_metadata.is_file()
+                                    )
+                                    if not include_metadata_container_image:
+                                        self.logger.warning(
+                                            f"Discarding container metadata payload {metadata_container_image_path} for {origTaggedName} (is not a file)"
+                                        )
                                 else:
                                     self.logger.warning(
-                                        f"Discarding payload {metadata_container_image_path} (not found)"
+                                        f"Discarding container metadata payload {metadata_container_image_path} for {origTaggedName} (not found)"
                                     )
+
+                                if (
+                                    include_metadata_container_image
+                                    and containerrow.source_container_metadata_size
+                                    is not None
+                                ):
+                                    if hasattr(located_metadata, "stat"):
+                                        the_size = located_metadata.stat().st_size
+                                    else:
+                                        the_size = located_metadata.root.getinfo(
+                                            metadata_container_image_path
+                                        ).file_size
+                                    if isinstance(
+                                        containerrow.source_container_metadata_size,
+                                        rdflib.term.Literal,
+                                    ):
+                                        source_container_metadata_size = int(
+                                            containerrow.source_container_metadata_size.value
+                                        )
+                                    else:
+                                        source_container_metadata_size = int(
+                                            str(
+                                                containerrow.source_container_metadata_size
+                                            )
+                                        )
+
+                                    include_metadata_container_image = (
+                                        the_size == source_container_metadata_size
+                                    )
+                                    if not include_metadata_container_image:
+                                        self.logger.warning(
+                                            f"Discarding container metadata payload {container_image_path} for {origTaggedName} (mismatching file size)"
+                                        )
+
+                                if include_metadata_container_image:
+                                    with located_metadata.open(mode="rb") as lM:
+                                        computed_source_container_metadata_signature = (
+                                            ComputeDigestFromFileLike(
+                                                cast("IO[bytes]", lM),
+                                                digestAlgorithm="sha256",
+                                            )
+                                        )
+                                    if (
+                                        containerrow.source_container_metadata_sha256
+                                        is not None
+                                    ):
+                                        source_container_metadata_signature = stringifyDigest(
+                                            "sha256",
+                                            bytes.fromhex(
+                                                str(
+                                                    containerrow.source_container_metadata_sha256
+                                                )
+                                            ),
+                                        )
+
+                                        include_metadata_container_image = (
+                                            source_container_metadata_signature
+                                            == computed_source_container_metadata_signature
+                                        )
+                                        if not include_metadata_container_image:
+                                            self.logger.warning(
+                                                f"Discarding container metadata payload {metadata_container_image_path} for {origTaggedName} (mismatching digest)"
+                                            )
+
+                                if not include_metadata_container_image:
                                     metadata_container_image_path = None
 
                     the_containers.append(
