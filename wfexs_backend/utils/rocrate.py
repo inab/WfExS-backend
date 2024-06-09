@@ -64,6 +64,7 @@ if TYPE_CHECKING:
         RelPath,
         RepoURL,
         RepoTag,
+        SymbolicParamName,
         URIType,
     )
 
@@ -104,7 +105,10 @@ if sys.version_info[:2] < (3, 11):
 from ..common import (
     ContainerType,
     ContentKind,
+    DefaultNoLicenceTuple,
+    LicensedURI,
     LocalWorkflow,
+    MaterializedContent,
     MaterializedInput,
 )
 
@@ -666,7 +670,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_size ?file_sha256
 WHERE   {
     ?main_entity bsworkflow:input ?inputfp .
     ?inputfp
@@ -679,27 +683,11 @@ WHERE   {
         ?input
             a s:MediaObject .
         BIND (?input AS ?fileid)
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
     } UNION {
         # A directory, which is a schema.org Dataset
         ?input
             a s:Dataset .
         BIND (?input AS ?fileid)
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -712,9 +700,9 @@ WHERE   {
         }
     } UNION {
         # A single property value, which can be either Integer, Text, Boolean or Float
+        BIND (?input AS ?fileid)
         ?input
-            a s:PropertyValue ;
-            s:value ?value .
+            a s:PropertyValue .
     } UNION {
         # A combination of files or directories or property values
         VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
@@ -724,15 +712,23 @@ WHERE   {
         ?component
             a ?leaf_type .
         BIND (?component AS ?fileid)
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifier ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -740,7 +736,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
 WHERE   {
     ?main_entity wrterm:environment ?envfp .
     ?envfp
@@ -754,28 +750,12 @@ WHERE   {
             a s:MediaObject ;
             s:name ?name_env .
         BIND (?env AS ?fileid)
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
     } UNION {
         # A directory, which is a schema.org Dataset
         ?env
             a s:Dataset ;
             s:name ?name_env .
         BIND (?env AS ?fileid)
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -790,8 +770,8 @@ WHERE   {
         # A single property value, which can be either Integer, Text, Boolean or Float
         ?env
             a s:PropertyValue ;
-            s:name ?name_env ;
-            s:value ?value .
+            s:name ?name_env .
+        BIND (?env AS ?fileid)
     } UNION {
         # A combination of files or directories or property values
         VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
@@ -802,15 +782,23 @@ WHERE   {
         ?component
             a ?leaf_type .
         BIND (?component AS ?fileid)
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifer ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -847,7 +835,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
 WHERE   {
     ?execution s:object ?input .
     {
@@ -857,14 +845,6 @@ WHERE   {
             a s:MediaObject ;
             s:exampleOfWork ?inputfp .
         BIND (?input AS ?fileid)
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -876,14 +856,6 @@ WHERE   {
             a s:Dataset ;
             s:exampleOfWork ?inputfp .
         BIND (?input AS ?fileid)
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -903,8 +875,8 @@ WHERE   {
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
         ?input
             a s:PropertyValue ;
-            s:exampleOfWork ?inputfp ;
-            s:value ?value .
+            s:exampleOfWork ?inputfp .
+        BIND (?input AS ?fileid)
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -924,15 +896,23 @@ WHERE   {
         ?component
             a ?leaf_type .
         BIND (?component AS ?fileid)
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifier ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -940,7 +920,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
 WHERE   {
     ?execution wrterm:environment ?env .
     {
@@ -951,14 +931,6 @@ WHERE   {
             s:name ?name_env ;
             s:exampleOfWork ?envfp .
         BIND (?env AS ?fileid)
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -971,14 +943,6 @@ WHERE   {
             s:name ?name_env ;
             s:exampleOfWork ?envfp .
         BIND (?env AS ?fileid)
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -999,8 +963,8 @@ WHERE   {
         ?env
             a s:PropertyValue ;
             s:name ?name_env ;
-            s:exampleOfWork ?envfp ;
-            s:value ?value .
+            s:exampleOfWork ?envfp .
+        BIND (?env AS ?fileid)
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -1021,15 +985,23 @@ WHERE   {
         ?component
             a ?leaf_type .
         BIND (?component AS ?fileid)
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifier ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -1783,6 +1755,116 @@ WHERE   {
             qwinputsres, g, default_licences, public_name, payload_dir=payload_dir
         )
 
+    def __processPayloadInput(
+        self,
+        inputrow: "rdflib.query.ResultRow",
+        payload_dir: "Union[pathlib.Path, ZipfilePath, zipfile.Path]",
+        the_uri: "str",
+        licences: "Sequence[str]",
+        input_type: "str",
+        kindobj: "ContentKind",
+        cached_inputs_hash: "MutableMapping[str, MaterializedInput]",
+    ) -> "MutableMapping[str, MaterializedInput]":
+        input_uri = str(inputrow.fileid)
+        input_name = str(inputrow.name)
+        input_parsed_uri = urllib.parse.urlparse(input_uri)
+        if input_parsed_uri.scheme == self.RELATIVE_ROCRATE_SCHEME:
+            input_path = input_parsed_uri.path
+            if input_path.startswith("/"):
+                input_path = input_path[1:]
+
+            located_input = payload_dir / input_path
+            include_input = located_input.exists()
+            if include_input:
+                # Is it what it was claimed?
+                include_input = (
+                    kindobj == ContentKind.File and located_input.is_file()
+                ) or (kindobj == ContentKind.Directory and located_input.is_dir())
+                if not include_input:
+                    self.logger.warning(
+                        f"Discarding payload {input_path} for {input_type} {input_name} (not is a {kindobj.value})"
+                    )
+            else:
+                self.logger.warning(
+                    f"Discarding payload {input_path} for {input_type} {input_name} (not found)"
+                )
+
+            if (
+                include_input
+                and kindobj == ContentKind.File
+                and inputrow.file_size is not None
+            ):
+                # Does the recorded file size match?
+                if hasattr(located_input, "stat"):
+                    the_size = located_input.stat().st_size
+                else:
+                    the_size = located_input.root.getinfo(input_path).file_size
+                if isinstance(
+                    inputrow.file_size,
+                    rdflib.term.Literal,
+                ):
+                    file_size = int(inputrow.file_size.value)
+                else:
+                    file_size = int(str(inputrow.file_size))
+
+                include_input = the_size == file_size
+                if not include_input:
+                    self.logger.warning(
+                        f"Discarding payload {input_path} for {input_type} {input_name} (mismatching file size)"
+                    )
+
+            if include_input and kindobj == ContentKind.File:
+                with located_input.open(mode="rb") as lI:
+                    the_signature = ComputeDigestFromFileLike(
+                        cast("IO[bytes]", lI),
+                        digestAlgorithm="sha256",
+                    )
+                if inputrow.file_sha256 is not None:
+                    file_signature = stringifyDigest(
+                        "sha256",
+                        bytes.fromhex(str(inputrow.file_sha256)),
+                    )
+
+                    include_input = file_signature == the_signature
+                    if not include_input:
+                        self.logger.warning(
+                            f"Discarding payload {input_path} for {input_type} {input_name} (mismatching digest)"
+                        )
+                else:
+                    file_signature = the_signature
+
+            if include_input:
+                licences_tuple = (
+                    cast("Tuple[URIType, ...]", tuple(licences))
+                    if len(licences) > 0
+                    else DefaultNoLicenceTuple
+                )
+                mat_content = MaterializedContent(
+                    local=cast("AbsPath", input_path),
+                    licensed_uri=LicensedURI(
+                        uri=cast("URIType", the_uri),
+                        licences=licences_tuple,
+                    ),
+                    # TODO: better inference, as it might have a side effect
+                    prettyFilename=cast("RelPath", located_input.name),
+                    kind=kindobj,
+                )
+                cached_input = cached_inputs_hash.get(input_name)
+                if cached_input is None:
+                    cached_input = MaterializedInput(
+                        name=cast("SymbolicParamName", input_name),
+                        values=[mat_content],
+                        # implicit=,
+                    )
+                else:
+                    cached_input = cached_input._replace(
+                        values=[*cached_input.values, mat_content],
+                    )
+
+                cached_inputs_hash[input_name] = cached_input
+
+        return cached_inputs_hash
+
     def __parseInputsResults(
         self,
         qinputsres: "rdflib.query.Result",
@@ -1793,7 +1875,7 @@ WHERE   {
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # TODO: implement this
         params: "MutableParamsBlock" = {}
-        cached_inputs: "MutableSequence[MaterializedInput]" = []
+        cached_inputs_hash: "MutableMapping[str, MaterializedInput]" = {}
         for inputrow in qinputsres:
             assert isinstance(
                 inputrow, rdflib.query.ResultRow
@@ -1812,6 +1894,7 @@ WHERE   {
             additional_type = str(inputrow.additional_type)
             valarr: "Optional[MutableSequence[Any]]" = None
             valobj: "Optional[MutableMapping[str, Any]]" = None
+            kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
             if additional_type == "Collection":
                 leaf_type = str(inputrow.leaf_type)
@@ -1826,12 +1909,15 @@ WHERE   {
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
+                kindobj = (
+                    ContentKind.Directory
+                    if additional_type == "Dataset"
+                    else ContentKind.File
+                )
                 valobj = base.setdefault(
                     param_last,
                     {
-                        "c-l-a-s-s": ContentKind.Directory.name
-                        if additional_type == "Dataset"
-                        else ContentKind.File.name,
+                        "c-l-a-s-s": kindobj.value,
                     },
                 )
 
@@ -1874,6 +1960,18 @@ WHERE   {
                     valurl.append(the_url)
                 else:
                     valobj["url"] = the_url
+
+                if payload_dir is not None and inputrow.fileid is not None:
+                    assert kindobj is not None
+                    self.__processPayloadInput(
+                        inputrow,
+                        payload_dir,
+                        the_uri,
+                        licences,
+                        "input",
+                        kindobj,
+                        cached_inputs_hash,
+                    )
             else:
                 the_value_node: "rdflib.term.Identifier" = inputrow.value
                 the_value: "Union[str, int, float, bool]"
@@ -1905,7 +2003,10 @@ WHERE   {
                 else:
                     base[param_last] = the_value
 
-        return params, cached_inputs if payload_dir is not None else None
+        return (
+            params,
+            list(cached_inputs_hash.values()) if payload_dir is not None else None,
+        )
 
     def _parseEnvFromExecution(
         self,
@@ -1969,7 +2070,7 @@ WHERE   {
         """
         # TODO: implement this
         environment: "MutableMapping[str, Any]" = {}
-        cached_environment: "MutableSequence[MaterializedInput]" = []
+        cached_environment_hash: "MutableMapping[str, MaterializedInput]" = {}
         for envrow in qenvres:
             assert isinstance(
                 envrow, rdflib.query.ResultRow
@@ -1981,6 +2082,7 @@ WHERE   {
             additional_type = str(envrow.additional_type)
             valarr: "Optional[MutableSequence[Any]]" = None
             valobj: "Optional[MutableMapping[str, Any]]" = None
+            kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
             if additional_type == "Collection":
                 leaf_type = str(envrow.leaf_type)
@@ -1995,12 +2097,15 @@ WHERE   {
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
+                kindobj = (
+                    ContentKind.Directory
+                    if additional_type == "Dataset"
+                    else ContentKind.File
+                )
                 valobj = environment.setdefault(
                     env_name,
                     {
-                        "c-l-a-s-s": ContentKind.Directory.name
-                        if additional_type == "Dataset"
-                        else ContentKind.File.name,
+                        "c-l-a-s-s": kindobj.value,
                     },
                 )
 
@@ -2042,6 +2147,18 @@ WHERE   {
                     valurl.append(the_url)
                 else:
                     valobj["url"] = the_url
+
+                if payload_dir is not None and envrow.fileid is not None:
+                    assert kindobj is not None
+                    self.__processPayloadInput(
+                        envrow,
+                        payload_dir,
+                        the_uri,
+                        licences,
+                        "environment variable",
+                        kindobj,
+                        cached_environment_hash,
+                    )
             else:
                 the_value_node: "rdflib.term.Identifier" = envrow.value
                 the_value: "Union[str, int, float, bool]"
@@ -2073,7 +2190,10 @@ WHERE   {
                 else:
                     environment[env_name] = the_value
 
-        return environment, cached_environment if payload_dir is not None else None
+        return (
+            environment,
+            list(cached_environment_hash.values()) if payload_dir is not None else None,
+        )
 
     def _getLicences(
         self,
