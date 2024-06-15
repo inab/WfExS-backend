@@ -29,13 +29,12 @@ from zipfile import (
 
 
 if TYPE_CHECKING:
-    from os import (
-        PathLike,
-    )
+    import os
 
     from typing import (
         Any,
         Dict,
+        Generator,
         IO,
         Iterable,
         Iterator,
@@ -148,7 +147,7 @@ class CompleteDirs(ZipFile):
 
     @classmethod
     def make(
-        cls, source: "Union[CompleteDirs, ZipFile, str, PathLike[str]]"
+        cls, source: "Union[CompleteDirs, ZipFile, str, os.PathLike[str]]"
     ) -> "CompleteDirs":
         """
         Given a source (filename or zipfile), return an
@@ -197,16 +196,16 @@ def _extract_text_encoding(
 
 
 def path_relative_to(
-    path: "Union[Path, pathlib.Path, zipfile.Path]",
-    other: "Union[Path, pathlib.Path, zipfile.Path]",
-    *extra: "Union[str, PathLike[str]]"
+    path: "pathlib.Path", other: "pathlib.Path", *extra: "Union[str, os.PathLike[str]]"
 ) -> "str":
-    # Method body is borrowed from Python 3.12
+    # Method body is partially borrowed from Python 3.12
     # zipfile.Path.relative_to method.
     return posixpath.relpath(str(path), str(other.joinpath(*extra)))
 
 
-class Path:
+# Older versions of Python do not have zipfile.Path
+# and newer are not compatible with pathlib.Path
+class ZipfilePath(pathlib.Path):
     """
     A pathlib-compatible interface for zip files.
 
@@ -284,10 +283,12 @@ class Path:
     'mem'
     """
 
-    __repr = "{self.__class__.__name__}({self.root.filename!r}, {self.at!r})"
+    __repr = "{self.__class__.__name__}({self._root.filename!r}, {self._at!r})"
 
     def __init__(
-        self, root: "Union[str, CompleteDirs, PathLike[str], ZipFile]", at: "str" = ""
+        self,
+        root: "Union[str, CompleteDirs, os.PathLike[str], ZipFile]",
+        at: "str" = "",
     ):
         """
         Construct a Path from a ZipFile or filename.
@@ -298,15 +299,16 @@ class Path:
         original type, the caller should either create a
         separate ZipFile object or pass a filename.
         """
-        self.root = FastLookup.make(root)
-        self.at = at
+        self._root = FastLookup.make(root)
+        self._at = at
 
-    def open(
+    def open(  # type: ignore[override]
         self,
         mode: "str" = "r",
-        *args: "Any",
         pwd: "Optional[bytes]" = None,
-        **kwargs: "Any"
+        buffering: "int" = -1,
+        encoding: "Optional[str]" = None,
+        newline: "Optional[str]" = None,
     ) -> "Union[IO[str], IO[bytes]]":
         """
         Open this entry as text or binary following the semantics
@@ -318,79 +320,101 @@ class Path:
         zip_mode = mode[0]
         if not self.exists() and zip_mode == "r":
             raise FileNotFoundError(self)
-        stream = self.root.open(self.at, zip_mode, pwd=pwd)
+        stream = self._root.open(self._at, mode=zip_mode, pwd=pwd)
         if "b" in mode:
-            if args or kwargs:
-                raise ValueError("encoding args invalid for binary operation")
+            # if args or kwargs:
+            #    raise ValueError("encoding args invalid for binary operation")
             return stream
         # Text mode:
-        encoding, args, kwargs = _extract_text_encoding(*args, **kwargs)
-        return io.TextIOWrapper(stream, encoding, *args, **kwargs)
+        # encoding, args, kwargs = _extract_text_encoding(*args, **kwargs)
+        encoding = io.text_encoding(encoding, 2)
+        return io.TextIOWrapper(
+            stream,
+            encoding=encoding,
+            newline=newline,
+            line_buffering=(buffering > 0),
+        )
 
     @property
     def name(self) -> "str":
-        return pathlib.Path(self.at).name or self.filename.name
+        return pathlib.Path(self._at).name or self.filename.name
 
     @property
     def filename(self) -> "pathlib.Path":
-        assert self.root.filename is not None
-        return pathlib.Path(self.root.filename).joinpath(self.at)
+        assert self._root.filename is not None
+        return pathlib.Path(self._root.filename).joinpath(self._at)
 
     def read_text(self, *args: "Any", **kwargs: "Any") -> "str":
-        encoding, args, kwargs = _extract_text_encoding(*args, **kwargs)
-        with self.open("r", encoding, *args, **kwargs) as strm:
+        kwargs["mode"] = "r"
+        with self.open(*args, **kwargs) as strm:
             return cast("str", strm.read())
 
     def read_bytes(self) -> "bytes":
         with self.open("rb") as strm:
             return cast("bytes", strm.read())
 
-    def _is_child(self, path: "Path") -> "bool":
-        return posixpath.dirname(path.at.rstrip("/")) == self.at.rstrip("/")
+    def _is_child(self, path: "ZipfilePath") -> "bool":
+        return posixpath.dirname(path._at.rstrip("/")) == self._at.rstrip("/")
 
-    def _next(self, at: "str") -> "Path":
-        return self.__class__(self.root, at)
+    def _next(self, at: "str") -> "ZipfilePath":
+        return self.__class__(self._root, at)
 
     def is_dir(self) -> "bool":
-        return not self.at or self.at.endswith("/")
+        return not self._at or self._at.endswith("/")
 
     def is_file(self) -> "bool":
         return self.exists() and not self.is_dir()
 
-    def exists(self) -> "bool":
-        return self.at in self.root._name_set()
+    def exists(self, *, follow_symlinks: bool = False) -> "bool":
+        return self._at in self._root._name_set()
 
-    def iterdir(self) -> "Iterator[Path]":
+    def iterdir(self) -> "Generator[ZipfilePath, None, None]":
         if not self.is_dir():
             raise ValueError("Can't listdir a file")
-        subs = map(self._next, self.root.namelist())
-        return filter(self._is_child, subs)
+        subs = map(self._next, self._root.namelist())
+        return cast("Generator[ZipfilePath, None, None]", filter(self._is_child, subs))
 
     def __str__(self) -> "str":
-        assert self.root.filename is not None
-        return posixpath.join(self.root.filename, self.at)
+        assert self._root.filename is not None
+        return posixpath.join(self._root.filename, self._at)
 
     def __repr__(self) -> "str":
         return self.__repr.format(self=self)
 
-    def joinpath(self, *other: "Union[str, PathLike[str]]") -> "Path":
-        next = posixpath.join(self.at, *other)
-        return self._next(self.root.resolve_dir(next))
+    def joinpath(self, *other: "Union[str, os.PathLike[str]]") -> "ZipfilePath":
+        next = posixpath.join(self._at, *other)
+        return self._next(self._root.resolve_dir(next))
 
     __truediv__ = joinpath
 
     @property
-    def parent(self) -> "Union[Path, pathlib.Path]":
-        if not self.at:
-            return self.filename.parent
-        parent_at = posixpath.dirname(self.at.rstrip("/"))
+    def parent(self) -> "ZipfilePath":
+        if not self._at:
+            return self.filename.parent  # type: ignore[return-value]
+        parent_at = posixpath.dirname(self._at.rstrip("/"))
         if parent_at:
             parent_at += "/"
         return self._next(parent_at)
+
+    @property
+    def zip_root(self) -> "ZipFile":
+        return self._root
+
+    def relative_to(  # type: ignore[override]
+        self,
+        other: "Union[str, os.PathLike[str]]",
+        /,
+        *_deprecated: "Union[str, os.PathLike[str]]",
+        walk_up: bool = False,
+    ) -> "pathlib.Path":
+        return pathlib.Path(path_relative_to(self, pathlib.Path(other)))
+
+    def with_name(self, name: "Union[str, os.PathLike[str]]") -> "ZipfilePath":
+        return self.parent.joinpath(name)
 
 
 # Older versions of Python do not have zipfile.Path
 if sys.version_info[:2] < (3, 8):
     import zipfile
 
-    zipfile.Path = Path
+    zipfile.Path = ZipfilePath
