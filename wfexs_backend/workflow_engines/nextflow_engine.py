@@ -754,7 +754,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.logger.debug("Command => nextflow " + " ".join(commandLine))
 
         if containers_path is None:
-            containers_path = self.container_factory.cacheDir
+            containers_path = cast(
+                "AnyPath", self.container_factory.cacheDir.as_posix()
+            )
         if self.engine_mode == EngineMode.Docker:
             (
                 retval,

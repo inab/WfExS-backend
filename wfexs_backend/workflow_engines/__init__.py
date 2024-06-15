@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import os
+import pathlib
 import sys
 import tempfile
 import atexit
@@ -503,7 +504,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         elif not os.path.isabs(stagedContainersDir):
             stagedContainersDir = cast("AbsPath", os.path.abspath(stagedContainersDir))
         os.makedirs(stagedContainersDir, exist_ok=True)
-        self.stagedContainersDir = cast("AbsPath", stagedContainersDir)
+        self.stagedContainersDir = pathlib.Path(stagedContainersDir)
 
         # Setting up common properties
         tools_config = local_config.get("tools", {})
@@ -529,17 +530,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.logger.debug(f"Instantiating container type {container_type}")
         # For materialized containers, we should use common directories
         # This for the containers themselves
-        containersCacheDir = cast(
-            "AnyPath",
-            os.path.join(cacheDir, "containers", container_factory_clazz.__name__),
+        containersCacheDir = (
+            pathlib.Path(cacheDir) / "containers" / container_factory_clazz.__name__
         )
         self.container_factory = container_factory_clazz(
             simpleFileNameMethod=self.simpleContainerFileName,
             containersCacheDir=containersCacheDir,
-            stagedContainersDir=stagedContainersDir,
+            stagedContainersDir=self.stagedContainersDir,
             tools_config=tools_config,
             engine_name=self.__class__.__name__,
-            tempDir=self.tempDir,
+            tempDir=pathlib.Path(self.tempDir),
         )
 
         isUserNS = self.container_factory.supportsFeature("userns")
@@ -772,13 +772,15 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         force: "bool" = False,
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         if containersDir is None:
-            containersDir = self.stagedContainersDir
+            containersDirPath = self.stagedContainersDir
+        else:
+            containersDirPath = pathlib.Path(containersDir)
 
         return (
             self.container_factory.engine_version(),
             self.container_factory.materializeContainers(
                 listOfContainerTags,
-                containers_dir=containersDir,
+                containers_dir=containersDirPath,
                 offline=offline,
                 force=force,
             ),
@@ -792,17 +794,19 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         force: "bool" = False,
     ) -> "Sequence[Container]":
         if containersDir is None:
-            containersDir = self.stagedContainersDir
+            containersDirPath = self.stagedContainersDir
+        else:
+            containersDirPath = pathlib.Path(containersDir)
 
         return self.container_factory.deployContainers(
             containers_list=containers_list,
-            containers_dir=containersDir,
+            containers_dir=containersDirPath,
             force=force,
         )
 
     @property
     def staged_containers_dir(self) -> "AnyPath":
-        return self.stagedContainersDir
+        return cast("AbsPath", self.stagedContainersDir.as_posix())
 
     def create_job_directories(self) -> "Tuple[str, AbsPath, AbsPath, AbsPath]":
         outputDirPostfix = "_" + str(int(time.time())) + "_" + str(os.getpid())
