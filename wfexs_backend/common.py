@@ -92,6 +92,14 @@ if TYPE_CHECKING:
     # This is either a relative or an absolute path
     AnyPath: TypeAlias = Union[RelPath, AbsPath]
 
+    # These declarations are for "new world"
+    # MaterializedPathContent, LocalPathWorkflow
+    # and indirectly MaterializedPathInput
+    import pathlib
+
+    PathlibLike: TypeAlias = pathlib.Path
+
+
 DEFAULT_DOCKER_CMD = cast("SymbolicName", "docker")
 DEFAULT_SINGULARITY_CMD = cast("SymbolicName", "singularity")
 DEFAULT_APPTAINER_CMD = cast("SymbolicName", "apptainer")
