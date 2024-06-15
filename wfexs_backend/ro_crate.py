@@ -1102,7 +1102,7 @@ you can find here an almost complete list of the possible ones:
             )
 
         readme_file = self._add_file_to_crate(
-            readme_md_path,
+            pathlib.Path(readme_md_path),
             the_uri=None,
             the_name=cast("RelPath", "README.md"),
             the_mime="text/markdown",
@@ -1271,16 +1271,16 @@ you can find here an almost complete list of the possible ones:
                 if crate_cont is None:
                     # Now, add container metadata, which is going to be
                     # consumed by WfExS or third parties
-                    metadataLocalPath: "Optional[str]" = None
+                    metadataLocalPath: "Optional[pathlib.Path]" = None
                     if container.metadataLocalPath is not None:
                         metadataLocalPath = container.metadataLocalPath
                     # This code is needed for old working directories
                     if metadataLocalPath is None and container.localPath is not None:
-                        metadataLocalPath = container.localPath + META_JSON_POSTFIX
+                        metadataLocalPath = container.localPath.with_name(
+                            container.localPath.name + META_JSON_POSTFIX
+                        )
 
-                    if metadataLocalPath is not None and os.path.exists(
-                        metadataLocalPath
-                    ):
+                    if metadataLocalPath is not None and metadataLocalPath.exists():
                         meta_file = self._add_file_to_crate(
                             the_path=metadataLocalPath,
                             the_uri=None,
@@ -1420,7 +1420,9 @@ you can find here an almost complete list of the possible ones:
                     ):
                         # TODO: embed metadata_array in some way
                         assert isinstance(itemInValues, MaterializedContent)
-                        itemInLocalSource = itemInValues.local  # local source
+                        itemInLocalSource = pathlib.Path(
+                            itemInValues.local
+                        )  # local source
                         itemInURISource = itemInValues.licensed_uri.uri  # uri source
 
                         itemInURILicences: "Optional[MutableSequence[LicenceDescription]]" = (
@@ -1442,7 +1444,7 @@ you can find here an almost complete list of the possible ones:
                                 if matched_licence is not None:
                                     itemInURILicences.append(matched_licence)
 
-                        if os.path.isfile(itemInLocalSource):
+                        if itemInLocalSource.is_file():
                             the_signature: "Optional[Fingerprint]" = None
                             if itemInValues.fingerprint is not None:
                                 digest, algo = extract_digest(itemInValues.fingerprint)
@@ -1456,7 +1458,9 @@ you can find here an almost complete list of the possible ones:
                                 the_uri=itemInURISource,
                                 the_name=cast(
                                     "RelPath",
-                                    os.path.relpath(itemInLocalSource, self.work_dir),
+                                    itemInLocalSource.relative_to(
+                                        self.work_dir
+                                    ).as_posix(),
                                 ),
                                 the_signature=the_signature,
                                 the_licences=itemInURILicences,
@@ -1466,7 +1470,9 @@ you can find here an almost complete list of the possible ones:
                             # An extrapolated input, which needs special handling
                             if itemInValues.extrapolated_local is not None:
                                 crate_extrapolated_file = self._add_file_to_crate(
-                                    the_path=itemInValues.extrapolated_local,
+                                    the_path=pathlib.Path(
+                                        itemInValues.extrapolated_local
+                                    ),
                                     the_uri=None,
                                     the_name=cast(
                                         "RelPath",
@@ -1522,13 +1528,15 @@ you can find here an almost complete list of the possible ones:
                             else:
                                 crate_coll = crate_extrapolated_file
 
-                        elif os.path.isdir(itemInLocalSource):
+                        elif itemInLocalSource.is_dir():
                             crate_dataset, _ = self._add_directory_as_dataset(
                                 itemInLocalSource,
                                 itemInURISource,
                                 the_name=cast(
                                     "RelPath",
-                                    os.path.relpath(itemInLocalSource, self.work_dir)
+                                    itemInLocalSource.relative_to(
+                                        self.work_dir
+                                    ).as_posix()
                                     + "/",
                                 ),
                                 do_attach=do_attach,
@@ -1741,7 +1749,7 @@ you can find here an almost complete list of the possible ones:
 
     def _add_file_to_crate(
         self,
-        the_path: "str",
+        the_path: "pathlib.Path",
         the_uri: "Optional[URIType]",
         the_id: "Optional[str]" = None,
         the_name: "Optional[RelPath]" = None,
@@ -1817,7 +1825,7 @@ you can find here an almost complete list of the possible ones:
 
     def _add_directory_as_dataset(
         self,
-        the_path: "str",
+        the_path: "pathlib.Path",
         the_uri: "URIType",
         the_id: "Optional[str]" = None,
         the_name: "Optional[RelPath]" = None,
@@ -1870,7 +1878,7 @@ you can find here an almost complete list of the possible ones:
                 )
                 if the_file.is_file():
                     the_file_crate = self._add_file_to_crate(
-                        the_path=the_file.path,
+                        the_path=pathlib.Path(the_file.path),
                         the_uri=the_item_uri,
                         the_size=the_file.stat().st_size,
                         do_attach=do_attach,
@@ -1885,7 +1893,7 @@ you can find here an almost complete list of the possible ones:
                         the_dir_crate,
                         the_subfiles_crates,
                     ) = self._add_directory_as_dataset(
-                        the_path=the_file.path,
+                        the_path=pathlib.Path(the_file.path),
                         the_uri=the_item_uri,
                         do_attach=do_attach,
                     )
@@ -2163,7 +2171,7 @@ you can find here an almost complete list of the possible ones:
                         self.staged_setup.workflow_dir,
                     )
                     the_entity = self._add_file_to_crate(
-                        the_path=os.path.join(the_workflow.dir, rel_file),
+                        the_path=pathlib.Path(the_workflow.dir) / rel_file,
                         the_name=the_s_name,
                         the_alternate_name=cast("RelPath", the_alternate_name),
                         the_uri=cast("URIType", rocrate_file_id),
@@ -2429,6 +2437,7 @@ you can find here an almost complete list of the possible ones:
 
         # Processing the log files
         if len(stagedExec.logfile) > 0:
+            work_dir = pathlib.Path(self.work_dir)
             crate_coll: "Union[Collection, FixedFile, None]"
             if len(stagedExec.logfile) > 1:
                 crate_coll = self._add_collection_to_crate()
@@ -2437,7 +2446,7 @@ you can find here an almost complete list of the possible ones:
 
             for logfile in stagedExec.logfile:
                 the_log_file = self._add_file_to_crate(
-                    os.path.join(self.work_dir, logfile), the_uri=None, the_name=logfile
+                    work_dir / logfile, the_uri=None, the_name=logfile
                 )
                 if crate_coll is None:
                     crate_coll = the_log_file
@@ -2675,7 +2684,7 @@ you can find here an almost complete list of the possible ones:
             the_content_uri = None
 
         crate_file = self._add_file_to_crate(
-            the_path=the_content.local,
+            the_path=pathlib.Path(the_content.local),
             the_uri=the_content_uri,
             the_name=cast("RelPath", dest_path),
             the_alternate_name=cast("RelPath", alternateName),

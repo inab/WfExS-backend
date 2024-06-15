@@ -225,8 +225,6 @@ if TYPE_CHECKING:
     WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
     WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
 
-    from .utils.zipfile_path import Path as ZipfilePath
-
 
 import urllib.parse
 
@@ -279,10 +277,6 @@ try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
-
-# This is needed to keep backward compatibility
-# with ancient working directories
-Container.RegisterYAMLConstructor(YAMLLoader)
 
 from .common import (
     AbstractWfExSException,
@@ -1452,7 +1446,7 @@ class WF:
 
     @staticmethod
     def _transferInputs(
-        payload_dir: "Union[pathlib.Path, ZipfilePath, zipfile.Path]",
+        payload_dir: "pathlib.Path",
         inputs_dir: "pathlib.Path",
         cached_inputs: "Sequence[MaterializedInput]",
     ) -> "Sequence[MaterializedInput]":
@@ -1543,6 +1537,9 @@ class WF:
             payload_dir=payload_dir,
         )
 
+        # logging.error(f"Containers {the_containers}")
+        # logging.error(f"Inputs {cached_inputs}")
+        # sys.exit(1)
         # Now, some postprocessing...
         if (
             reproducibility_level >= ReproducibilityLevel.Full

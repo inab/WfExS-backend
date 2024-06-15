@@ -30,8 +30,8 @@ import urllib.parse
 import zipfile
 
 # Older versions of Python do not have zipfile.Path
-if sys.version_info[:2] < (3, 8):
-    from .zipfile_path import Path as ZipfilePath
+# and newer do not inherit from pathlib.Path
+from .zipfile_path import ZipfilePath
 
 from typing import (
     cast,
@@ -56,16 +56,21 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
+        TypeAlias,
     )
 
     from ..common import (
         AbsPath,
+        EngineVersion,
         Fingerprint,
+        PathlibLike,
         RelPath,
         RepoURL,
         RepoTag,
         SymbolicParamName,
         URIType,
+        URIWithMetadata,
+        WFLangVersion,
     )
 
     from ..container_factories import (
@@ -89,8 +94,6 @@ if TYPE_CHECKING:
     from ..workflow_engines import (
         WorkflowType,
     )
-
-    from .zipfile_path import Path as ZipfilePath
 
 # Needed by pyld to detect it
 import aiohttp
@@ -132,6 +135,76 @@ from ..utils.misc import (
 
 magic = lazy_import("magic")
 # import magic
+
+
+# "New world" declarations
+
+
+class LocalPathWorkflow(NamedTuple):
+    """
+    dir: The path to the directory where the checkout was applied
+    relPath: Inside the checkout, the relative path to the workflow definition
+    effectiveCheckout: hex hash of the materialized checkout
+    langVersion: workflow language version / revision
+    relPathFiles: files composing the workflow, which can be either local
+    or remote ones (i.e. CWL)
+    """
+
+    dir: "PathlibLike"
+    relPath: "Optional[RelPath]"
+    effectiveCheckout: "Optional[RepoTag]"
+    langVersion: "Optional[Union[EngineVersion, WFLangVersion]]" = None
+    relPathFiles: "Optional[Sequence[RelPath]]" = None
+
+
+class MaterializedPathContent(NamedTuple):
+    """
+    local: Local absolute path of the content which was materialized. It
+      can be either a path in the cached inputs directory, or an absolute
+      path in the inputs directory of the execution
+    licensed_uri: Either an URL or a CURIE of the content which was materialized,
+      needed for the provenance
+    prettyFilename: The preferred filename to use in the inputs directory
+      of the execution environment
+    fingerprint: If it is available, propagate the computed fingerprint
+      from the cache.
+    """
+
+    local_path: "PathlibLike"
+    licensed_uri: "LicensedURI"
+    prettyFilename: "RelPath"
+    kind: "ContentKind" = ContentKind.File
+    metadata_array: "Optional[Sequence[URIWithMetadata]]" = None
+    extrapolated_local: "Optional[AbsPath]" = None
+    fingerprint: "Optional[Fingerprint]" = None
+
+    @classmethod
+    def _key_fixes(cls) -> "Mapping[str, str]":
+        return {"uri": "licensed_uri"}
+
+
+if TYPE_CHECKING:
+    MaterializedPathInputValues: TypeAlias = Union[
+        Sequence[bool],
+        Sequence[str],
+        Sequence[int],
+        Sequence[float],
+        Sequence[MaterializedPathContent],
+    ]
+
+
+class MaterializedPathInput(NamedTuple):
+    """
+    name: Name of the input
+    values: list of associated values, which can be literal ones or
+      instances from MaterializedContent
+    """
+
+    name: "SymbolicParamName"
+    values: "MaterializedPathInputValues"
+    secondaryInputs: "Optional[Sequence[MaterializedPathContent]]" = None
+    autoFilled: "bool" = False
+    implicit: "bool" = False
 
 
 class ReproducibilityLevel(enum.IntEnum):
@@ -222,10 +295,10 @@ LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
 
 def ReadROCrateMetadata(
     workflowROCrateFilename: "str", public_name: "str"
-) -> "Tuple[Any, Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]]":
+) -> "Tuple[Any, Optional[pathlib.Path]]":
     # Is it a bare file or an archive?
     jsonld_filename: "Optional[str]" = None
-    payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None
+    payload_dir: "Optional[pathlib.Path]" = None
     if os.path.isdir(workflowROCrateFilename):
         possible_jsonld_filename = os.path.join(
             workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
@@ -277,7 +350,7 @@ def ReadROCrateMetadata(
                 raise ROCrateToolboxException(
                     f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
                 )
-        payload_dir = zipfile.Path(workflowROCrateFilename)
+        payload_dir = ZipfilePath(workflowROCrateFilename)
     else:
         raise ROCrateToolboxException(
             f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
@@ -498,7 +571,7 @@ WHERE {
         return (resrow, g)
 
     OBTAIN_WORKFLOW_PID_SPARQL: "Final[str]" = """\
-SELECT  ?identifier ?workflow_repository ?workflow_version ?workflow_url ?workflow_alternate_name ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version
+SELECT  ?origmainentity ?identifier ?workflow_repository ?workflow_version ?workflow_url ?workflow_alternate_name ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version ?file_size ?file_sha256
 WHERE   {
     ?mainentity s:programmingLanguage ?programminglanguage .
     ?programminglanguage
@@ -513,55 +586,81 @@ WHERE   {
             s:identifier ?programminglanguage_identifier .
     }
     {
-        {
-            FILTER NOT EXISTS {
-                ?mainentity s:isBasedOn ?origmainentity .
-                ?origmainentity
-                    a bs:ComputationalWorkflow ;
-                    dcterms:conformsTo ?bsworkflowprofile .
-                FILTER (
-                    STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
-                ) .
-            }
-            OPTIONAL {
-                ?mainentity s:codeRepository ?workflow_repository .
-            }
-            OPTIONAL {
-                ?mainentity s:version ?workflow_version .
-            }
-            OPTIONAL {
-                ?mainentity s:url ?workflow_url .
-            }
-            OPTIONAL {
-                ?mainentity s:identifier ?identifier .
-            }
-            OPTIONAL {
-                ?mainentity s:alternateName ?workflow_alternate_name .
-            }
-        } UNION {
+        FILTER NOT EXISTS {
             ?mainentity s:isBasedOn ?origmainentity .
             ?origmainentity
                 a bs:ComputationalWorkflow ;
                 dcterms:conformsTo ?bsworkflowprofile .
-            OPTIONAL {
-                ?origmainentity s:codeRepository ?workflow_repository .
-            }
-            OPTIONAL {
-                ?origmainentity s:version ?workflow_version .
-            }
-            OPTIONAL {
-                ?origmainentity s:url ?workflow_url .
-            }
             FILTER (
                 STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
             ) .
-            OPTIONAL {
-                ?origmainentity s:identifier ?identifier .
-            }
-            OPTIONAL {
-                ?origmainentity s:alternateName ?workflow_alternate_name .
-            }
         }
+        BIND (?mainentity AS ?origmainentity)
+    } UNION {
+        ?mainentity s:isBasedOn ?origmainentity .
+        ?origmainentity
+            a bs:ComputationalWorkflow ;
+            dcterms:conformsTo ?bsworkflowprofile .
+        FILTER (
+            STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
+        )
+    }
+    OPTIONAL {
+        ?origmainentity s:codeRepository ?workflow_repository .
+    }
+    OPTIONAL {
+        ?origmainentity s:version ?workflow_version .
+    }
+    OPTIONAL {
+        ?origmainentity s:url ?workflow_url .
+    }
+    OPTIONAL {
+        ?origmainentity s:identifier ?identifier .
+    }
+    OPTIONAL {
+        ?origmainentity s:alternateName ?workflow_alternate_name .
+    }
+    OPTIONAL {
+        ?origmainentity
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?origmainentity
+            s:contentSize ?file_size .
+    }
+}
+"""
+
+    LIST_PARTS_SPARQL: "Final[str]" = """\
+SELECT  ?part_entity ?identifier ?part_repository ?part_version ?part_url ?part_name ?part_alternate_name ?file_size ?file_sha256
+WHERE   {
+    ?entity s:hasPart+ $part_entity .
+    ?part_entity a s:MediaObject .
+    OPTIONAL {
+        ?part_entity s:codeRepository ?part_repository .
+    }
+    OPTIONAL {
+        ?part_entity s:version ?part_version .
+    }
+    OPTIONAL {
+        ?part_entity s:url ?part_url .
+    }
+    OPTIONAL {
+        ?part_entity s:identifier ?identifier .
+    }
+    OPTIONAL {
+        ?part_entity s:name ?part_name .
+    }
+    OPTIONAL {
+        ?part_entity s:alternateName ?part_alternate_name .
+    }
+    OPTIONAL {
+        ?part_entity
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?part_entity
+            s:contentSize ?file_size .
     }
 }
 """
@@ -1120,7 +1219,7 @@ WHERE   {
         self,
         g: "rdflib.graph.Graph",
         main_entity: "rdflib.term.Identifier",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         # Get the list of containers
         qcontainers = rdflib.plugins.sparql.prepareQuery(
@@ -1144,7 +1243,7 @@ WHERE   {
         g: "rdflib.graph.Graph",
         execution: "rdflib.term.Identifier",
         main_entity: "rdflib.term.Identifier",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         # Get the list of containers
         qcontainers = rdflib.plugins.sparql.prepareQuery(
@@ -1167,7 +1266,7 @@ WHERE   {
         self,
         qcontainersres: "rdflib.query.Result",
         main_entity: "rdflib.term.Identifier",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         container_type: "Optional[ContainerType]" = None
         source_container_type: "Optional[ContainerType]" = None
@@ -1341,7 +1440,6 @@ WHERE   {
                     fingerprint = None
                     origTaggedName = ""
                     taggedName = ""
-                    image_signature = None
                     if source_container_type == ContainerType.Docker:
                         the_registry = (
                             str(containerrow.source_container_registry)
@@ -1367,200 +1465,45 @@ WHERE   {
                         fingerprint = origTaggedName
 
                     container_image_path: "Optional[str]" = None
+                    located_snapshot: "Optional[pathlib.Path]" = None
                     metadata_container_image_path: "Optional[str]" = None
+                    located_metadata: "Optional[pathlib.Path]" = None
+                    image_signature: "Optional[Fingerprint]" = None
                     if payload_dir is not None:
                         if containerrow.container != containerrow.source_container:
-                            container_image_uri = str(containerrow.container)
-                            container_image_parsed_uri = urllib.parse.urlparse(
-                                container_image_uri
+                            include_container_image = self.__processPayloadEntity(
+                                the_entity=containerrow.container,
+                                payload_dir=payload_dir,
+                                kindobj=ContentKind.File,
+                                entity_type="container image",
+                                entity_name=origTaggedName,
+                                the_file_size=containerrow.container_snapshot_size,
+                                the_file_sha256=containerrow.container_snapshot_sha256,
                             )
-                            if (
-                                container_image_parsed_uri.scheme
-                                == self.RELATIVE_ROCRATE_SCHEME
-                            ):
-                                container_image_path = container_image_parsed_uri.path
-                                if container_image_path.startswith("/"):
-                                    container_image_path = container_image_path[1:]
-
-                                located_snapshot = payload_dir / container_image_path
-                                include_container_image = located_snapshot.exists()
-                                if include_container_image:
-                                    include_container_image = located_snapshot.is_file()
-                                    if not include_container_image:
-                                        self.logger.warning(
-                                            f"Discarding container image payload {container_image_path} for {origTaggedName} (is not a file)"
-                                        )
-                                else:
-                                    self.logger.warning(
-                                        f"Discarding container image payload {container_image_path} for {origTaggedName} (not found)"
-                                    )
-
-                                if (
-                                    include_container_image
-                                    and containerrow.container_snapshot_size is not None
-                                ):
-                                    if hasattr(located_snapshot, "stat"):
-                                        the_size = located_snapshot.stat().st_size
-                                    else:
-                                        the_size = located_snapshot.root.getinfo(
-                                            container_image_path
-                                        ).file_size
-                                    if isinstance(
-                                        containerrow.container_snapshot_size,
-                                        rdflib.term.Literal,
-                                    ):
-                                        container_snapshot_size = int(
-                                            containerrow.container_snapshot_size.value
-                                        )
-                                    else:
-                                        container_snapshot_size = int(
-                                            str(containerrow.container_snapshot_size)
-                                        )
-                                    include_container_image = (
-                                        the_size == container_snapshot_size
-                                    )
-                                    if not include_container_image:
-                                        self.logger.warning(
-                                            f"Discarding container image payload {container_image_path} for {origTaggedName} (mismatching file size)"
-                                        )
-
-                                if include_container_image:
-                                    with located_snapshot.open(mode="rb") as lS:
-                                        computed_image_signature = (
-                                            ComputeDigestFromFileLike(
-                                                cast("IO[bytes]", lS),
-                                                digestAlgorithm="sha256",
-                                            )
-                                        )
-                                    if (
-                                        containerrow.container_snapshot_sha256
-                                        is not None
-                                    ):
-                                        image_signature = stringifyDigest(
-                                            "sha256",
-                                            bytes.fromhex(
-                                                str(
-                                                    containerrow.container_snapshot_sha256
-                                                )
-                                            ),
-                                        )
-
-                                        include_container_image = (
-                                            image_signature == computed_image_signature
-                                        )
-                                        if not include_container_image:
-                                            self.logger.warning(
-                                                f"Discarding payload {container_image_path} for {origTaggedName} (mismatching digest)"
-                                            )
-                                    else:
-                                        image_signature = computed_image_signature
-
-                                if not include_container_image:
-                                    container_image_path = None
+                            if include_container_image is not None:
+                                (
+                                    container_image_path,
+                                    located_snapshot,
+                                    image_signature,
+                                ) = include_container_image
 
                         if containerrow.source_container_metadata is not None:
-                            container_metadata_uri = str(
-                                containerrow.source_container_metadata
+                            include_metadata_container_image = self.__processPayloadEntity(
+                                the_entity=containerrow.source_container_metadata,
+                                payload_dir=payload_dir,
+                                kindobj=ContentKind.File,
+                                entity_type="container metadata",
+                                entity_name=origTaggedName,
+                                the_file_size=containerrow.source_container_metadata_size,
+                                the_file_sha256=containerrow.source_container_metadata_sha256,
                             )
-                            container_metadata_parsed_uri = urllib.parse.urlparse(
-                                container_metadata_uri
-                            )
-                            if (
-                                container_metadata_parsed_uri.scheme
-                                == self.RELATIVE_ROCRATE_SCHEME
-                            ):
-                                metadata_container_image_path = (
-                                    container_metadata_parsed_uri.path
-                                )
-                                if metadata_container_image_path.startswith("/"):
-                                    metadata_container_image_path = (
-                                        metadata_container_image_path[1:]
-                                    )
 
-                                located_metadata = (
-                                    payload_dir / metadata_container_image_path
-                                )
-                                include_metadata_container_image = (
-                                    located_metadata.exists()
-                                )
-                                if include_metadata_container_image:
-                                    include_metadata_container_image = (
-                                        located_metadata.is_file()
-                                    )
-                                    if not include_metadata_container_image:
-                                        self.logger.warning(
-                                            f"Discarding container metadata payload {metadata_container_image_path} for {origTaggedName} (is not a file)"
-                                        )
-                                else:
-                                    self.logger.warning(
-                                        f"Discarding container metadata payload {metadata_container_image_path} for {origTaggedName} (not found)"
-                                    )
-
-                                if (
-                                    include_metadata_container_image
-                                    and containerrow.source_container_metadata_size
-                                    is not None
-                                ):
-                                    if hasattr(located_metadata, "stat"):
-                                        the_size = located_metadata.stat().st_size
-                                    else:
-                                        the_size = located_metadata.root.getinfo(
-                                            metadata_container_image_path
-                                        ).file_size
-                                    if isinstance(
-                                        containerrow.source_container_metadata_size,
-                                        rdflib.term.Literal,
-                                    ):
-                                        source_container_metadata_size = int(
-                                            containerrow.source_container_metadata_size.value
-                                        )
-                                    else:
-                                        source_container_metadata_size = int(
-                                            str(
-                                                containerrow.source_container_metadata_size
-                                            )
-                                        )
-
-                                    include_metadata_container_image = (
-                                        the_size == source_container_metadata_size
-                                    )
-                                    if not include_metadata_container_image:
-                                        self.logger.warning(
-                                            f"Discarding container metadata payload {container_image_path} for {origTaggedName} (mismatching file size)"
-                                        )
-
-                                if include_metadata_container_image:
-                                    with located_metadata.open(mode="rb") as lM:
-                                        computed_source_container_metadata_signature = (
-                                            ComputeDigestFromFileLike(
-                                                cast("IO[bytes]", lM),
-                                                digestAlgorithm="sha256",
-                                            )
-                                        )
-                                    if (
-                                        containerrow.source_container_metadata_sha256
-                                        is not None
-                                    ):
-                                        source_container_metadata_signature = stringifyDigest(
-                                            "sha256",
-                                            bytes.fromhex(
-                                                str(
-                                                    containerrow.source_container_metadata_sha256
-                                                )
-                                            ),
-                                        )
-
-                                        include_metadata_container_image = (
-                                            source_container_metadata_signature
-                                            == computed_source_container_metadata_signature
-                                        )
-                                        if not include_metadata_container_image:
-                                            self.logger.warning(
-                                                f"Discarding container metadata payload {metadata_container_image_path} for {origTaggedName} (mismatching digest)"
-                                            )
-
-                                if not include_metadata_container_image:
-                                    metadata_container_image_path = None
+                            if include_metadata_container_image is not None:
+                                (
+                                    metadata_container_image_path,
+                                    located_metadata,
+                                    computed_source_container_metadata_signature,
+                                ) = include_metadata_container_image
 
                     the_containers.append(
                         Container(
@@ -1568,10 +1511,8 @@ WHERE   {
                             type=container_type,
                             registries=registries,
                             taggedName=cast("URIType", taggedName),
-                            localPath=cast("AbsPath", container_image_path),
-                            metadataLocalPath=cast(
-                                "AbsPath", metadata_container_image_path
-                            ),
+                            localPath=located_snapshot,
+                            metadataLocalPath=located_metadata,
                             architecture=None
                             if containerrow.source_container_arch is None
                             else cast(
@@ -1743,7 +1684,7 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qinputs = rdflib.plugins.sparql.prepareQuery(
@@ -1767,7 +1708,7 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwinputs = rdflib.plugins.sparql.prepareQuery(
@@ -1788,110 +1729,55 @@ WHERE   {
     def __processPayloadInput(
         self,
         inputrow: "rdflib.query.ResultRow",
-        payload_dir: "Union[pathlib.Path, ZipfilePath, zipfile.Path]",
+        payload_dir: "pathlib.Path",
         the_uri: "str",
         licences: "Sequence[str]",
         input_type: "str",
         kindobj: "ContentKind",
         cached_inputs_hash: "MutableMapping[str, MaterializedInput]",
     ) -> "MutableMapping[str, MaterializedInput]":
-        input_uri = str(inputrow.fileid)
         input_name = str(inputrow.name)
-        input_parsed_uri = urllib.parse.urlparse(input_uri)
-        if input_parsed_uri.scheme == self.RELATIVE_ROCRATE_SCHEME:
-            input_path = input_parsed_uri.path
-            if input_path.startswith("/"):
-                input_path = input_path[1:]
+        include_input = self.__processPayloadEntity(
+            the_entity=inputrow.fileid,
+            payload_dir=payload_dir,
+            kindobj=kindobj,
+            entity_type=input_type,
+            entity_name=input_name,
+            the_file_size=inputrow.file_size,
+            the_file_sha256=inputrow.file_sha256,
+        )
 
-            located_input = payload_dir / input_path
-            include_input = located_input.exists()
-            if include_input:
-                # Is it what it was claimed?
-                include_input = (
-                    kindobj == ContentKind.File and located_input.is_file()
-                ) or (kindobj == ContentKind.Directory and located_input.is_dir())
-                if not include_input:
-                    self.logger.warning(
-                        f"Discarding payload {input_path} for {input_type} {input_name} (not is a {kindobj.value})"
-                    )
+        if include_input is not None:
+            input_path, located_input, file_signature = include_input
+            licences_tuple = (
+                cast("Tuple[URIType, ...]", tuple(licences))
+                if len(licences) > 0
+                else DefaultNoLicenceTuple
+            )
+            mat_content = MaterializedContent(
+                local=cast("AbsPath", input_path),
+                licensed_uri=LicensedURI(
+                    uri=cast("URIType", the_uri),
+                    licences=licences_tuple,
+                ),
+                # TODO: better inference, as it might have a side effect
+                prettyFilename=cast("RelPath", located_input.name),
+                kind=kindobj,
+                fingerprint=file_signature,
+            )
+            cached_input = cached_inputs_hash.get(input_name)
+            if cached_input is None:
+                cached_input = MaterializedInput(
+                    name=cast("SymbolicParamName", input_name),
+                    values=[mat_content],
+                    # implicit=,
+                )
             else:
-                self.logger.warning(
-                    f"Discarding payload {input_path} for {input_type} {input_name} (not found)"
+                cached_input = cached_input._replace(
+                    values=[*cached_input.values, mat_content],
                 )
 
-            if (
-                include_input
-                and kindobj == ContentKind.File
-                and inputrow.file_size is not None
-            ):
-                # Does the recorded file size match?
-                if hasattr(located_input, "stat"):
-                    the_size = located_input.stat().st_size
-                else:
-                    the_size = located_input.root.getinfo(input_path).file_size
-                if isinstance(
-                    inputrow.file_size,
-                    rdflib.term.Literal,
-                ):
-                    file_size = int(inputrow.file_size.value)
-                else:
-                    file_size = int(str(inputrow.file_size))
-
-                include_input = the_size == file_size
-                if not include_input:
-                    self.logger.warning(
-                        f"Discarding payload {input_path} for {input_type} {input_name} (mismatching file size)"
-                    )
-
-            if include_input and kindobj == ContentKind.File:
-                with located_input.open(mode="rb") as lI:
-                    the_signature = ComputeDigestFromFileLike(
-                        cast("IO[bytes]", lI),
-                        digestAlgorithm="sha256",
-                    )
-                if inputrow.file_sha256 is not None:
-                    file_signature = stringifyDigest(
-                        "sha256",
-                        bytes.fromhex(str(inputrow.file_sha256)),
-                    )
-
-                    include_input = file_signature == the_signature
-                    if not include_input:
-                        self.logger.warning(
-                            f"Discarding payload {input_path} for {input_type} {input_name} (mismatching digest)"
-                        )
-                else:
-                    file_signature = the_signature
-
-            if include_input:
-                licences_tuple = (
-                    cast("Tuple[URIType, ...]", tuple(licences))
-                    if len(licences) > 0
-                    else DefaultNoLicenceTuple
-                )
-                mat_content = MaterializedContent(
-                    local=cast("AbsPath", input_path),
-                    licensed_uri=LicensedURI(
-                        uri=cast("URIType", the_uri),
-                        licences=licences_tuple,
-                    ),
-                    # TODO: better inference, as it might have a side effect
-                    prettyFilename=cast("RelPath", located_input.name),
-                    kind=kindobj,
-                )
-                cached_input = cached_inputs_hash.get(input_name)
-                if cached_input is None:
-                    cached_input = MaterializedInput(
-                        name=cast("SymbolicParamName", input_name),
-                        values=[mat_content],
-                        # implicit=,
-                    )
-                else:
-                    cached_input = cached_input._replace(
-                        values=[*cached_input.values, mat_content],
-                    )
-
-                cached_inputs_hash[input_name] = cached_input
+            cached_inputs_hash[input_name] = cached_input
 
         return cached_inputs_hash
 
@@ -1901,7 +1787,7 @@ WHERE   {
         g: "rdflib.graph.Graph",
         default_licences: "Sequence[str]",
         public_name: "str",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # TODO: implement this
         params: "MutableParamsBlock" = {}
@@ -2045,7 +1931,7 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qenv = rdflib.plugins.sparql.prepareQuery(
@@ -2069,7 +1955,7 @@ WHERE   {
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwenv = rdflib.plugins.sparql.prepareQuery(
@@ -2093,7 +1979,7 @@ WHERE   {
         g: "rdflib.graph.Graph",
         default_licences: "Sequence[str]",
         public_name: "str",
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         """
         This method is (almost) identical to __parseInputsResults
@@ -2261,15 +2147,104 @@ WHERE   {
 
         return licences
 
+    def __processPayloadEntity(
+        self,
+        the_entity: "rdflib.term.Identifier",
+        payload_dir: "pathlib.Path",
+        kindobj: "ContentKind",
+        entity_type: "str",
+        entity_name: "str",
+        the_file_size: "rdflib.term.Node",
+        the_file_sha256: "rdflib.term.Node",
+    ) -> "Optional[Tuple[str, pathlib.Path, Optional[Fingerprint]]]":
+        entity_uri = str(the_entity)
+        entity_parsed_uri = urllib.parse.urlparse(entity_uri)
+        include_entity = entity_parsed_uri.scheme == self.RELATIVE_ROCRATE_SCHEME
+
+        entity_path: "Optional[str]" = None
+        located_entity: "Optional[pathlib.Path]" = None
+        if include_entity:
+            entity_path = entity_parsed_uri.path
+            if entity_path.startswith("/"):
+                entity_path = entity_path[1:]
+
+            located_entity = payload_dir / entity_path
+            include_entity = located_entity.exists()
+            if not include_entity:
+                self.logger.warning(
+                    f"Discarding payload {entity_path} for {entity_type} {entity_name} (not found)"
+                )
+
+        if include_entity:
+            assert located_entity is not None
+            include_entity = (
+                kindobj == ContentKind.File and located_entity.is_file()
+            ) or (kindobj == ContentKind.Directory and located_entity.is_dir())
+
+            if not include_entity:
+                self.logger.warning(
+                    f"Discarding payload {entity_path} for {entity_type} {entity_name} (not is a {kindobj.value})"
+                )
+
+        if include_entity and kindobj == ContentKind.File and the_file_size is not None:
+            assert entity_path is not None
+            assert located_entity is not None
+            # Does the recorded file size match?
+            if isinstance(located_entity, ZipfilePath):
+                the_size = located_entity.zip_root.getinfo(entity_path).file_size
+            else:
+                the_size = located_entity.stat().st_size
+            if isinstance(the_file_size, rdflib.term.Literal):
+                file_size = int(the_file_size.value)
+            else:
+                file_size = int(str(the_file_size))
+
+            include_entity = the_size == file_size
+            if not include_entity:
+                self.logger.warning(
+                    f"Discarding payload {entity_path} for {entity_type} {entity_name} (mismatching file size {the_size} vs {file_size})"
+                )
+
+        file_signature: "Optional[Fingerprint]" = None
+        if include_entity and kindobj == ContentKind.File:
+            assert located_entity is not None
+            with located_entity.open(mode="rb") as lE:
+                the_signature = ComputeDigestFromFileLike(
+                    lE,
+                    digestAlgorithm="sha256",
+                )
+            if the_file_sha256 is not None:
+                file_signature = stringifyDigest(
+                    "sha256",
+                    bytes.fromhex(str(the_file_sha256)),
+                )
+
+                include_entity = file_signature == the_signature
+                if not include_entity:
+                    self.logger.warning(
+                        f"Discarding payload {entity_path} for {entity_type} {entity_name} (mismatching digest)"
+                    )
+            else:
+                file_signature = the_signature
+
+        if include_entity:
+            assert entity_path is not None
+            assert located_entity is not None
+            return (entity_path, located_entity, file_signature)
+        else:
+            return None
+
     def extractWorkflowMetadata(
         self,
         g: "rdflib.graph.Graph",
         main_entity: "rdflib.term.Identifier",
         default_repo: "Optional[str]",
         public_name: "str",
-    ) -> "Tuple[RemoteRepo, WorkflowType]":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[RemoteRepo, WorkflowType, Optional[LocalWorkflow]]":
         # This query will tell us where the original workflow was located,
         # its language and version
+        cached_workflow: "Optional[LocalWorkflow]" = None
         qlang = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_WORKFLOW_PID_SPARQL,
             initNs=self.SPARQL_NS,
@@ -2359,7 +2334,32 @@ WHERE   {
             programminglanguage_url, programminglanguage_identifier
         )
 
-        return repo, workflow_type
+        if payload_dir is not None:
+            include_main_entity = self.__processPayloadEntity(
+                the_entity=langrow.origmainentity,
+                payload_dir=payload_dir,
+                kindobj=ContentKind.File,
+                entity_type="main workflow component",
+                entity_name="PEPE",  # FIXME
+                the_file_size=langrow.file_size,
+                the_file_sha256=langrow.file_sha256,
+            )
+
+            if include_main_entity is not None:
+                main_entity_path = include_main_entity[0]
+
+                # TODO
+                # workflow_parts = self.__list_entity_parts(langrow.origmainentity, payload_dir)
+
+                # cached_workflow = LocalWorkflow(
+                #    dir=cast("AbsPath", ""),
+                #    relPath=cast("RelPath", main_entity_path),
+                #    effectiveCheckout=,
+                #    # langVersion=
+                #    relPathFiles=rel_path_files,
+                # )
+
+        return repo, workflow_type, cached_workflow
 
     def generateWorkflowMetaFromJSONLD(
         self,
@@ -2368,7 +2368,7 @@ WHERE   {
         retrospective_first: "bool" = True,
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
-        payload_dir: "Optional[Union[pathlib.Path, ZipfilePath, zipfile.Path]]" = None,
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
@@ -2392,18 +2392,20 @@ WHERE   {
                 f"JSON-LD from {public_name} is not a WRROC Workflow"
             )
 
-        cached_workflow: "Optional[LocalWorkflow]" = None
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None
 
         # The default crate licences
         crate_licences = self._getLicences(g, matched_crate.mainentity, public_name)
 
-        repo, workflow_type = self.extractWorkflowMetadata(
+        repo, workflow_type, cached_workflow = self.extractWorkflowMetadata(
             g,
             matched_crate.mainentity,
             default_repo=str(matched_crate.wfhrepourl),
             public_name=public_name,
+            payload_dir=payload_dir
+            if reproducibility_level >= ReproducibilityLevel.Full
+            else None,
         )
 
         # At this point we know WfExS supports the workflow engine.

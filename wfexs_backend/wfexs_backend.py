@@ -2621,7 +2621,7 @@ class WfExSBackend:
         # fetched content (needed by Nextflow)
 
         # Some RO-Crates might have this value missing or ill-built
-        repo, workflow_type = self.rocrate_toolbox.extractWorkflowMetadata(
+        repo, workflow_type, _ = self.rocrate_toolbox.extractWorkflowMetadata(
             g,
             matched_crate.mainentity,
             default_repo=str(matched_crate.wfhrepourl),
