@@ -46,6 +46,7 @@ from ..common import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from types import (
         ModuleType,
     )
@@ -287,7 +288,7 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
     def _load(
         self,
-        archivefile: "AbsPath",
+        archivefile: "pathlib.Path",
         dockerTag: "str",
         matEnv: "Mapping[str, str]",
     ) -> "Tuple[ExitVal, str, str]":
@@ -303,7 +304,7 @@ class AbstractDockerContainerFactory(ContainerFactory):
             )
 
         with package.open(
-            archivefile, mode="rb"
+            archivefile.as_posix(), mode="rb"
         ) as d_in, tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"loading {self.variant_name()} container {dockerTag}")
             with subprocess.Popen(
@@ -334,11 +335,11 @@ class AbstractDockerContainerFactory(ContainerFactory):
     def _save(
         self,
         dockerTag: "str",
-        destfile: "AbsPath",
+        destfile: "pathlib.Path",
         matEnv: "Mapping[str, str]",
     ) -> "Tuple[ExitVal, str]":
         with pgzip.open(
-            destfile, mode="wb"
+            destfile.as_posix(), mode="wb"
         ) as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"saving {self.variant_name()} container {dockerTag}")
             with subprocess.Popen(

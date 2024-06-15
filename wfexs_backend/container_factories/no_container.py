@@ -23,6 +23,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from typing import (
         Any,
         Mapping,
@@ -86,7 +87,7 @@ class NoContainerFactory(ContainerFactory):
     def materializeSingleContainer(
         self,
         tag: "ContainerTaggedName",
-        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Optional[Container]":
@@ -98,7 +99,7 @@ class NoContainerFactory(ContainerFactory):
     def deploySingleContainer(
         self,
         container: "ContainerTaggedName",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
     ) -> "Tuple[Container, bool]":
         """

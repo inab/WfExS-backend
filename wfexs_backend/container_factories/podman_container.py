@@ -25,6 +25,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from typing import (
         Any,
         Mapping,
@@ -95,11 +96,11 @@ class PodmanContainerFactory(AbstractDockerContainerFactory):
     def __init__(
         self,
         simpleFileNameMethod: "ContainerFileNamingMethod",
-        containersCacheDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
+        containersCacheDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
         tools_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
-        tempDir: "Optional[AnyPath]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
     ):
         super().__init__(
             simpleFileNameMethod=simpleFileNameMethod,
@@ -222,7 +223,7 @@ STDERR
     def materializeSingleContainer(
         self,
         tag: "ContainerTaggedName",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Optional[Container]":
@@ -241,8 +242,8 @@ STDERR
 
         fetch_metadata = True
         trusted_copy = False
-        localContainerPath: "Optional[AbsPath]" = None
-        localContainerPathMeta: "Optional[AbsPath]" = None
+        localContainerPath: "Optional[pathlib.Path]" = None
+        localContainerPathMeta: "Optional[pathlib.Path]" = None
         imageSignature: "Optional[Fingerprint]" = None
         image_id: "Optional[Fingerprint]" = None
         manifestsImageSignature: "Optional[Fingerprint]" = None
@@ -369,22 +370,22 @@ STDERR
                 )
 
                 # Removing partial dumps
-                if os.path.exists(tmpContainerPath):
+                if tmpContainerPath.exists():
                     try:
-                        os.unlink(tmpContainerPath)
+                        tmpContainerPath.unlink()
                     except:
                         pass
                 raise ContainerEngineException(errstr)
 
             # This is needed for the metadata
-            imageSignature = self.cc_handler._computeFingerprint(
-                cast("AnyPath", tmpContainerPath)
+            imageSignature = self.cc_handler._computeFingerprint(tmpContainerPath)
+
+            tmpContainerPathMeta = tmpContainerPath.with_name(
+                tmpContainerPath.name + META_JSON_POSTFIX
             )
 
-            tmpContainerPathMeta = tmpContainerPath + META_JSON_POSTFIX
-
             # Last, save the metadata itself for further usage
-            with open(tmpContainerPathMeta, mode="w", encoding="utf-8") as tcpM:
+            with tmpContainerPathMeta.open(mode="w", encoding="utf-8") as tcpM:
                 manifest_metadata: "DockerManifestMetadata" = {
                     "image_id": image_id,
                     "image_signature": imageSignature,
@@ -397,7 +398,7 @@ STDERR
             self.cc_handler.update(
                 tag,
                 image_path=tmpContainerPath,
-                image_metadata_path=cast("AbsPath", tmpContainerPathMeta),
+                image_metadata_path=tmpContainerPathMeta,
                 do_move=True,
             )
 
@@ -448,7 +449,7 @@ STDERR
     def deploySingleContainer(
         self,
         container: "ContainerTaggedName",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
     ) -> "Tuple[Container, bool]":
         # Should we load the image?
@@ -467,13 +468,13 @@ STDERR
         manifestsImageSignature: "Optional[Fingerprint]" = None
         manifests = None
         manifest = None
-        if not os.path.isfile(containerPath):
-            errmsg = f"Podman saved image {os.path.basename(containerPath)} is not in the staged working dir for {tag_name}"
+        if not containerPath.is_file():
+            errmsg = f"Podman saved image {containerPath.name} is not in the staged working dir for {tag_name}"
             self.logger.warning(errmsg)
             raise ContainerFactoryException(errmsg)
 
         if not os.path.isfile(containerPathMeta):
-            errmsg = f"FATAL ERROR: Podman saved image metadata {os.path.basename(containerPathMeta)} is not in the staged working dir for {tag_name}"
+            errmsg = f"FATAL ERROR: Podman saved image metadata {containerPathMeta.name} is not in the staged working dir for {tag_name}"
             self.logger.error(errmsg)
             raise ContainerFactoryException(errmsg)
 

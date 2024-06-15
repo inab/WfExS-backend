@@ -21,6 +21,7 @@ import copy
 from dataclasses import dataclass
 import json
 import os
+import pathlib
 import tempfile
 import atexit
 import platform
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
         AnyPath,
         ContainerTaggedName,
         Fingerprint,
+        PathlibLike,
         RelPath,
         URIType,
     )
@@ -92,12 +94,13 @@ if TYPE_CHECKING:
 
     import yaml
 
-    YAMLLoader: TypeAlias = Union[yaml.Loader, yaml.CLoader]
+    AnyYAMLLoader: TypeAlias = Union[yaml.Loader, yaml.CLoader]
 
 from .. import common
 
 from ..utils.contents import (
     link_or_copy,
+    link_or_copy_pathlib,
     real_unlink_if_exists,
 )
 
@@ -133,17 +136,19 @@ class Container(ContainerTaggedName):
     taggedName: "URIType" = cast("URIType", "")
     architecture: "Optional[ProcessorArchitecture]" = None
     operatingSystem: "Optional[ContainerOperatingSystem]" = None
-    localPath: "Optional[AbsPath]" = None
+    localPath: "Optional[PathlibLike]" = None
     signature: "Optional[Fingerprint]" = None
     fingerprint: "Optional[Fingerprint]" = None
-    metadataLocalPath: "Optional[AbsPath]" = None
+    metadataLocalPath: "Optional[PathlibLike]" = None
     source_type: "Optional[ContainerType]" = None
     image_signature: "Optional[Fingerprint]" = None
 
     def _value_defaults_fixes(self) -> None:
         # This code is needed for old working directories
         if self.metadataLocalPath is None and self.localPath is not None:
-            self.metadataLocalPath = cast("AbsPath", self.localPath + META_JSON_POSTFIX)
+            self.metadataLocalPath = self.localPath.with_name(
+                self.localPath.name + META_JSON_POSTFIX
+            )
 
         # And this is to tell the kind of source container type
         if self.source_type is None:
@@ -202,7 +207,9 @@ class Container(ContainerTaggedName):
             return None, tagged_name, None
 
     @classmethod
-    def ContainerYAMLConstructor(cls, loader: "YAMLLoader", node: "Any") -> "Container":
+    def ContainerYAMLConstructor(
+        cls, loader: "AnyYAMLLoader", node: "Any"
+    ) -> "Container":
         fields = loader.construct_mapping(node)
         # This could be a fix for old cases being parsed
         # where the concept of image_signature did not exist.
@@ -213,13 +220,26 @@ class Container(ContainerTaggedName):
         return cls(**fields)  # type: ignore[misc]
 
     @classmethod
-    def RegisterYAMLConstructor(cls, loader: "Type[YAMLLoader]") -> None:
+    def RegisterYAMLConstructor(cls, loader: "Type[AnyYAMLLoader]") -> None:
         # yaml.add_constructor('!python/object:wfexs_backend.common.Container', container_yaml_constructor)
         # yaml.constructor.Constructor.add_constructor('tag:yaml.org,2002:python/object:wfexs_backend.common.Container', container_yaml_constructor)
         loader.add_constructor(
             "tag:yaml.org,2002:python/object:wfexs_backend.common.Container",
             cls.ContainerYAMLConstructor,
         )
+
+
+REGISTER_CONSTRUCTOR = True
+if REGISTER_CONSTRUCTOR:
+    YAMLLoader: "Type[AnyYAMLLoader]"
+    try:
+        from yaml import CLoader as YAMLLoader
+    except ImportError:
+        from yaml import Loader as YAMLLoader
+    # This is needed to keep backward compatibility
+    # with ancient working directories
+    Container.RegisterYAMLConstructor(YAMLLoader)
+    REGISTER_CONSTRUCTOR = False
 
 
 class ContainerFactoryException(AbstractWfExSException):
@@ -255,7 +275,7 @@ class ContainerCacheHandler:
 
     def __init__(
         self,
-        containers_cache_dir: "Optional[AbsPath]",
+        containers_cache_dir: "Optional[pathlib.Path]",
         engine_name: "str",
         simple_file_name_method: "ContainerFileNamingMethod",
     ):
@@ -269,69 +289,60 @@ class ContainerCacheHandler:
         # TODO: create caching database???
         # containers_cache_dir
         if containers_cache_dir is None:
-            containers_cache_dir = cast(
-                "AbsPath", tempfile.mkdtemp(prefix="wfexs", suffix="backend")
+            containers_cache_dir = pathlib.Path(
+                tempfile.mkdtemp(prefix="wfexs", suffix="backend")
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, containers_cache_dir, True)
         else:
-            os.makedirs(containers_cache_dir, exist_ok=True)
+            containers_cache_dir.mkdir(parents=True, exist_ok=True)
 
         # But, for materialized containers, we should use common directories
         # This for the containers themselves
         self.containersCacheDir = containers_cache_dir
 
         # This for the symlinks to the containers, following the engine convention
-        self.engineContainersSymlinkDir = cast(
-            "AbsPath", os.path.join(self.containersCacheDir, engine_name)
-        )
-        os.makedirs(self.engineContainersSymlinkDir, exist_ok=True)
+        self.engineContainersSymlinkDir = self.containersCacheDir / engine_name
+        self.engineContainersSymlinkDir.mkdir(parents=True, exist_ok=True)
 
         self.simpleFileNameMethod = simple_file_name_method
 
-    def _genTmpContainerPath(self) -> "AbsPath":
+    def _genTmpContainerPath(self) -> "pathlib.Path":
         """
         This is a helper method
         """
-        return cast("AbsPath", os.path.join(self.containersCacheDir, str(uuid.uuid4())))
+        return self.containersCacheDir / str(uuid.uuid4())
 
     def _genContainerPaths(
         self, container: "ContainerTaggedName"
-    ) -> "Tuple[AbsPath, AbsPath]":
+    ) -> "Tuple[pathlib.Path, pathlib.Path]":
         containerFilename = self.simpleFileNameMethod(
             cast("URIType", container.origTaggedName)
         )
         containerFilenameMeta = containerFilename + META_JSON_POSTFIX
-        localContainerPath = cast(
-            "AbsPath",
-            os.path.join(self.engineContainersSymlinkDir, containerFilename),
-        )
-        localContainerPathMeta = cast(
-            "AbsPath",
-            os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
-        )
+        localContainerPath = self.engineContainersSymlinkDir / containerFilename
+        localContainerPathMeta = self.engineContainersSymlinkDir / containerFilenameMeta
 
         return localContainerPath, localContainerPathMeta
 
-    def _computeFingerprint(self, image_path: "AnyPath") -> "Fingerprint":
-        return cast("Fingerprint", ComputeDigestFromFile(image_path))
+    def _computeFingerprint(self, image_path: "pathlib.Path") -> "Fingerprint":
+        return cast("Fingerprint", ComputeDigestFromFile(image_path.as_posix()))
 
     def _computeCanonicalImagePath(
-        self, image_path: "AbsPath"
-    ) -> "Tuple[AbsPath, Fingerprint]":
+        self, image_path: "pathlib.Path"
+    ) -> "Tuple[pathlib.Path, Fingerprint]":
         imageSignature = self._computeFingerprint(image_path)
 
         # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-        canonical_image_path = os.path.join(
-            self.containersCacheDir,
-            imageSignature.replace("=", "~").replace("/", "-").replace("+", "_"),
-        )
+        canonical_image_path = self.containersCacheDir / imageSignature.replace(
+            "=", "~"
+        ).replace("/", "-").replace("+", "_")
 
-        return cast("AbsPath", canonical_image_path), imageSignature
+        return canonical_image_path, imageSignature
 
     def query(
         self, container: "ContainerTaggedName"
-    ) -> "Tuple[bool, AbsPath, AbsPath, Optional[Fingerprint]]":
+    ) -> "Tuple[bool, pathlib.Path, pathlib.Path, Optional[Fingerprint]]":
         """
         This method checks whether the container snapshot and its
         metadata are in the caching directory
@@ -340,11 +351,11 @@ class ContainerCacheHandler:
 
         trusted_copy = False
         imageSignature: "Optional[Fingerprint]" = None
-        if os.path.isfile(localContainerPath):
-            if os.path.islink(localContainerPath):
+        if localContainerPath.is_file():
+            if localContainerPath.is_symlink():
                 # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                unlinkedContainerPath = os.readlink(localContainerPath)
-                fsImageSignature = os.path.basename(unlinkedContainerPath)
+                unlinkedContainerPath = localContainerPath.readlink()
+                fsImageSignature = unlinkedContainerPath.name
                 imageSignature = cast(
                     "Fingerprint",
                     fsImageSignature.replace("~", "=")
@@ -353,14 +364,10 @@ class ContainerCacheHandler:
                 )
 
                 # Do not trust paths outside the caching directory
-                canonicalContainerPath = os.path.join(
-                    self.containersCacheDir,
-                    fsImageSignature,
-                )
+                canonicalContainerPath = self.containersCacheDir / fsImageSignature
 
-                trusted_copy = os.path.samefile(
-                    os.path.realpath(localContainerPath),
-                    os.path.realpath(canonicalContainerPath),
+                trusted_copy = localContainerPath.resolve().samefile(
+                    canonicalContainerPath.resolve()
                 )
             else:
                 (
@@ -368,9 +375,9 @@ class ContainerCacheHandler:
                     imageSignature,
                 ) = self._computeCanonicalImagePath(localContainerPath)
 
-                if os.path.samefile(localContainerPath, canonicalContainerPath):
+                if localContainerPath.samefile(canonicalContainerPath):
                     trusted_copy = True
-                elif os.path.isfile(canonicalContainerPath):
+                elif canonicalContainerPath.is_file():
                     canonicalImageSignature = self._computeFingerprint(
                         canonicalContainerPath
                     )
@@ -378,9 +385,9 @@ class ContainerCacheHandler:
                     trusted_copy = canonicalImageSignature == imageSignature
 
         if trusted_copy:
-            if os.path.isfile(localContainerPathMeta):
+            if localContainerPathMeta.is_file():
                 try:
-                    with open(localContainerPathMeta, mode="r", encoding="utf-8") as mH:
+                    with localContainerPathMeta.open(mode="r", encoding="utf-8") as mH:
                         signaturesAndManifest = cast(
                             "AbstractImageManifestMetadata", json.load(mH)
                         )
@@ -398,29 +405,25 @@ class ContainerCacheHandler:
     def genStagedContainersDirPaths(
         self,
         container: "ContainerTaggedName",
-        stagedContainersDir: "AnyPath",
-    ) -> "Tuple[AbsPath, AbsPath]":
+        stagedContainersDir: "pathlib.Path",
+    ) -> "Tuple[pathlib.Path, pathlib.Path]":
         containerFilename = self.simpleFileNameMethod(
             cast("URIType", container.origTaggedName)
         )
         containerFilenameMeta = containerFilename + META_JSON_POSTFIX
 
-        containerPath = cast(
-            "AbsPath", os.path.join(stagedContainersDir, containerFilename)
-        )
+        containerPath = stagedContainersDir / containerFilename
 
-        containerPathMeta = cast(
-            "AbsPath", os.path.join(stagedContainersDir, containerFilenameMeta)
-        )
+        containerPathMeta = stagedContainersDir / containerFilenameMeta
 
         return containerPath, containerPathMeta
 
     def transfer(
         self,
         container: "ContainerTaggedName",
-        stagedContainersDir: "AnyPath",
+        stagedContainersDir: "pathlib.Path",
         force: "bool" = False,
-    ) -> "Optional[Tuple[AbsPath, AbsPath]]":
+    ) -> "Optional[Tuple[pathlib.Path, pathlib.Path]]":
         """
         This method is used to transfer both the container snapshot and
         its metadata from the caching directory to stagedContainersDir
@@ -437,23 +440,23 @@ class ContainerCacheHandler:
 
         # Last, but not the least important
         # Hardlink or copy the container and its metadata
+        stagedContainersDir.mkdir(parents=True, exist_ok=True)
         containerPath, containerPathMeta = self.genStagedContainersDirPaths(
             container, stagedContainersDir
         )
 
-        os.makedirs(stagedContainersDir, exist_ok=True)
-        if force or not os.path.exists(containerPath):
-            link_or_copy(localContainerPath, containerPath)
-        if force or not os.path.exists(containerPathMeta):
-            link_or_copy(localContainerPathMeta, containerPathMeta)
+        if force or not containerPath.exists():
+            link_or_copy_pathlib(localContainerPath, containerPath)
+        if force or not containerPathMeta.exists():
+            link_or_copy_pathlib(localContainerPathMeta, containerPathMeta)
 
         return (containerPath, containerPathMeta)
 
     def update(
         self,
         container: "ContainerTaggedName",
-        image_path: "AbsPath",
-        image_metadata_path: "AbsPath",
+        image_path: "pathlib.Path",
+        image_metadata_path: "pathlib.Path",
         do_move: "bool" = True,
     ) -> "None":
         # First, let's remove what it is still there
@@ -466,8 +469,8 @@ class ContainerCacheHandler:
         canonicalContainerPath, imageSignature = self._computeCanonicalImagePath(
             image_path
         )
-        canonicalContainerPathMeta = cast(
-            "AbsPath", canonicalContainerPath + META_JSON_POSTFIX
+        canonicalContainerPathMeta = canonicalContainerPath.with_name(
+            canonicalContainerPath.name + META_JSON_POSTFIX
         )
 
         # And ..... transfer!!!
@@ -481,16 +484,12 @@ class ContainerCacheHandler:
             )
 
         # Last, the symbolic links
-        os.symlink(
-            os.path.relpath(canonicalContainerPath, self.engineContainersSymlinkDir),
-            localContainerPath,
+        localContainerPath.symlink_to(
+            os.path.relpath(canonicalContainerPath, self.engineContainersSymlinkDir)
         )
 
-        os.symlink(
-            os.path.relpath(
-                canonicalContainerPathMeta, self.engineContainersSymlinkDir
-            ),
-            localContainerPathMeta,
+        localContainerPathMeta.symlink_to(
+            os.path.relpath(canonicalContainerPathMeta, self.engineContainersSymlinkDir)
         )
 
     def invalidate(self, container: "ContainerTaggedName") -> "None":
@@ -509,11 +508,11 @@ class ContainerFactory(abc.ABC):
     def __init__(
         self,
         simpleFileNameMethod: "ContainerFileNamingMethod",
-        containersCacheDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
+        containersCacheDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
         tools_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
-        tempDir: "Optional[AnyPath]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
     ):
         """
         Abstract init method
@@ -539,19 +538,17 @@ class ContainerFactory(abc.ABC):
         # This for the containers themselves
         # containersCacheDir
         if containersCacheDir is None:
-            self.containersCacheDir = cast(
-                "AbsPath", tempfile.mkdtemp(prefix="wfexs", suffix="backend")
+            self.containersCacheDir = pathlib.Path(
+                tempfile.mkdtemp(prefix="wfexs", suffix="backend")
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, self.containersCacheDir, True)
         else:
-            self.containersCacheDir = cast(
-                "AbsPath", os.path.abspath(containersCacheDir)
-            )
+            self.containersCacheDir = containersCacheDir.absolute()
 
         if tempDir is None:
-            tempDir = cast(
-                "AbsPath", tempfile.mkdtemp(prefix="WfExS-container", suffix="tempdir")
+            tempDir = pathlib.Path(
+                tempfile.mkdtemp(prefix="WfExS-container", suffix="tempdir")
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, tempDir, True)
@@ -572,10 +569,7 @@ class ContainerFactory(abc.ABC):
         self.stagedContainersDir = stagedContainersDir
 
         # This for the symlinks to the containers, following the engine convention
-        self.engineContainersSymlinkDir = cast(
-            "AbsPath", os.path.join(self.containersCacheDir, engine_name)
-        )
-        os.makedirs(self.engineContainersSymlinkDir, exist_ok=True)
+        self.engineContainersSymlinkDir = self.cc_handler.engineContainersSymlinkDir
 
         # This variable contains the dictionary of set up environment
         # variables needed to run the tool with the proper setup
@@ -631,7 +625,7 @@ class ContainerFactory(abc.ABC):
         return self.runtime_cmd
 
     @property
-    def cacheDir(self) -> "AbsPath":
+    def cacheDir(self) -> "pathlib.Path":
         """
         This method returns the symlink dir instead of the cache dir
         as the entries following the naming convention of the engine
@@ -687,7 +681,7 @@ STDERR
     def materializeContainers(
         self,
         tagList: "Sequence[ContainerTaggedName]",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Sequence[Container]":
@@ -730,7 +724,7 @@ STDERR
     def materializeSingleContainer(
         self,
         tag: "ContainerTaggedName",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Optional[Container]":
@@ -742,7 +736,7 @@ STDERR
     def deployContainers(
         self,
         containers_list: "Sequence[Container]",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
     ) -> "Sequence[Container]":
         """
@@ -768,7 +762,7 @@ STDERR
     def deploySingleContainer(
         self,
         container: "ContainerTaggedName",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
     ) -> "Tuple[Container, bool]":
         """

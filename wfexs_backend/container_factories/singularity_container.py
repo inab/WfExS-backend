@@ -20,6 +20,7 @@ from __future__ import absolute_import
 import json
 import os
 import os.path
+import pathlib
 import re
 import shutil
 import subprocess
@@ -125,11 +126,11 @@ class SingularityContainerFactory(ContainerFactory):
     def __init__(
         self,
         simpleFileNameMethod: "ContainerFileNamingMethod",
-        containersCacheDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
+        containersCacheDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
         tools_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
-        tempDir: "Optional[AnyPath]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
     ):
         super().__init__(
             simpleFileNameMethod=simpleFileNameMethod,
@@ -145,15 +146,15 @@ class SingularityContainerFactory(ContainerFactory):
 
         # This is needed due a bug in singularity 3.6, where
         # singularity pull --disable-cache does not create a container
-        singularityCacheDir = os.path.join(self.stagedContainersDir, ".singularity")
-        os.makedirs(singularityCacheDir, exist_ok=True)
+        singularityCacheDir = self.stagedContainersDir / ".singularity"
+        singularityCacheDir.mkdir(parents=True, exist_ok=True)
 
         self._environment.update(
             {
-                "APPTAINER_TMPDIR": self.tempDir,
-                "APPTAINER_CACHEDIR": singularityCacheDir,
-                "SINGULARITY_TMPDIR": self.tempDir,
-                "SINGULARITY_CACHEDIR": singularityCacheDir,
+                "APPTAINER_TMPDIR": self.tempDir.as_posix(),
+                "APPTAINER_CACHEDIR": singularityCacheDir.as_posix(),
+                "SINGULARITY_TMPDIR": self.tempDir.as_posix(),
+                "SINGULARITY_CACHEDIR": singularityCacheDir.as_posix(),
             }
         )
 
@@ -199,7 +200,9 @@ class SingularityContainerFactory(ContainerFactory):
         )
 
     def _getContainerArchitecture(
-        self, container_filename: "AnyPath", matEnv: "Mapping[str, str]" = {}
+        self,
+        container_filename: "Union[AnyPath, os.PathLike[str]]",
+        matEnv: "Mapping[str, str]" = {},
     ) -> "Optional[ProcessorArchitecture]":
         if len(matEnv) == 0:
             matEnv = dict(os.environ)
@@ -360,7 +363,7 @@ STDERR
     def materializeSingleContainer(
         self,
         tag: "ContainerTaggedName",
-        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Optional[Container]":
@@ -474,7 +477,10 @@ STDERR
         return singTag, parsedTag, singPullTag, isDocker
 
     def _pull(
-        self, singTag: "str", tmpContainerPath: "str", matEnv: "Mapping[str, str]"
+        self,
+        singTag: "str",
+        tmpContainerPath: "Union[str, os.PathLike[str]]",
+        matEnv: "Mapping[str, str]",
     ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
             self.logger.debug(
@@ -507,7 +513,7 @@ STDERR
         tag: "ContainerTaggedName",
         matEnv: "Mapping[str, str]" = {},
         dhelp: "DockerHelper" = DockerHelper(),
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Union[Container, FailedContainerTag]":
@@ -521,8 +527,8 @@ STDERR
 
         fetch_metadata = True
         trusted_copy = False
-        localContainerPath: "Optional[AbsPath]" = None
-        localContainerPathMeta: "Optional[AbsPath]" = None
+        localContainerPath: "Optional[pathlib.Path]" = None
+        localContainerPathMeta: "Optional[pathlib.Path]" = None
         imageSignature: "Optional[Fingerprint]" = None
         fingerprint: "Optional[Fingerprint]" = None
         if not force:
@@ -535,9 +541,7 @@ STDERR
 
             if trusted_copy:
                 try:
-                    with open(
-                        localContainerPathMeta, mode="r", encoding="utf8"
-                    ) as tcpm:
+                    with localContainerPathMeta.open(mode="r", encoding="utf8") as tcpm:
                         raw_metadata = json.load(tcpm)
                         if isinstance(raw_metadata, dict) and (
                             "registryServer" in raw_metadata
@@ -596,7 +600,7 @@ STDERR
 
         # Now, time to fetch the container itself
         # (if it is needed)
-        tmpContainerPath: "Optional[str]" = None
+        tmpContainerPath: "Optional[pathlib.Path]" = None
         if not trusted_copy:
             if offline:
                 raise ContainerFactoryException(
@@ -610,7 +614,7 @@ STDERR
 
             # Reading the output and error for the report
             if s_retval == 0:
-                if not os.path.exists(tmpContainerPath):
+                if not tmpContainerPath.exists():
                     raise ContainerFactoryException(
                         "FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(
                             tag_name, tmpContainerPath
@@ -618,9 +622,7 @@ STDERR
                     )
 
                 # This is needed for the metadata
-                imageSignature = self.cc_handler._computeFingerprint(
-                    cast("AnyPath", tmpContainerPath)
-                )
+                imageSignature = self.cc_handler._computeFingerprint(tmpContainerPath)
             else:
                 errstr = f"""\
 Could not materialize singularity image {singTag} ({singPullTag}). Retval {s_retval}
@@ -634,9 +636,9 @@ STDERR
 ======
 {s_err_v}"""
 
-                if os.path.exists(tmpContainerPath):
+                if tmpContainerPath.exists():
                     try:
-                        os.unlink(tmpContainerPath)
+                        tmpContainerPath.unlink()
                     except:
                         pass
                 self.logger.error(errstr)
@@ -651,7 +653,7 @@ STDERR
 
         # When no metadata exists, we are bringing the metadata
         # to a temporary path
-        tmpContainerPathMeta: "Optional[str]" = None
+        tmpContainerPathMeta: "Optional[pathlib.Path]" = None
         if fetch_metadata:
             if offline:
                 raise ContainerFactoryException(
@@ -662,7 +664,9 @@ STDERR
                 assert localContainerPath is not None
                 tmpContainerPath = self.cc_handler._genTmpContainerPath()
                 link_or_copy(localContainerPath, tmpContainerPath)
-            tmpContainerPathMeta = tmpContainerPath + META_JSON_POSTFIX
+            tmpContainerPathMeta = tmpContainerPath.with_name(
+                tmpContainerPath.name + META_JSON_POSTFIX
+            )
 
             self.logger.debug(
                 f"downloading temporary container metadata: {tag_name} => {tmpContainerPathMeta}"
@@ -686,7 +690,7 @@ STDERR
                 tag_pull_details = tag_details
 
             # Save the temporary metadata
-            with open(tmpContainerPathMeta, mode="w", encoding="utf8") as tcpm:
+            with tmpContainerPathMeta.open(mode="w", encoding="utf8") as tcpm:
                 tmp_meta: "SingularityManifest"
                 if tag_details is not None:
                     assert tag_pull_details is not None
@@ -731,13 +735,13 @@ STDERR
         if tmpContainerPath is not None and tmpContainerPathMeta is not None:
             self.cc_handler.update(
                 tag,
-                image_path=cast("AbsPath", tmpContainerPath),
-                image_metadata_path=cast("AbsPath", tmpContainerPathMeta),
+                image_path=tmpContainerPath,
+                image_metadata_path=tmpContainerPathMeta,
                 do_move=True,
             )
 
         if containers_dir is None:
-            containers_dir = self.stagedContainersDir
+            containers_dir = pathlib.Path(self.stagedContainersDir)
 
         # Do not allow overwriting in offline mode
         transferred_image = self.cc_handler.transfer(
@@ -763,7 +767,7 @@ STDERR
     def materializeContainers(
         self,
         tagList: "Sequence[ContainerTaggedName]",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Sequence[Container]":
@@ -822,7 +826,7 @@ STDERR
     def deploySingleContainer(
         self,
         container: "ContainerTaggedName",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
     ) -> "Tuple[Container, bool]":
         """
@@ -835,18 +839,18 @@ STDERR
             container, containers_dir
         )
 
-        if not os.path.isfile(containerPath):
-            errmsg = f"SIF saved image {os.path.basename(containerPath)} is not in the staged working dir for {container.origTaggedName}"
+        if not containerPath.is_file():
+            errmsg = f"SIF saved image {containerPath.name} is not in the staged working dir for {container.origTaggedName}"
             self.logger.warning(errmsg)
             raise ContainerFactoryException(errmsg)
 
-        if not os.path.isfile(containerPathMeta):
-            errmsg = f"SIF saved image metadata {os.path.basename(containerPathMeta)} is not in the staged working dir for {container.origTaggedName}"
+        if not containerPathMeta.is_file():
+            errmsg = f"SIF saved image metadata {containerPathMeta.name} is not in the staged working dir for {container.origTaggedName}"
             self.logger.warning(errmsg)
             raise ContainerFactoryException(errmsg)
 
         try:
-            with open(containerPathMeta, mode="r", encoding="utf-8") as mH:
+            with containerPathMeta.open(mode="r", encoding="utf-8") as mH:
                 signaturesAndManifest = cast("SingularityManifest", json.load(mH))
                 imageSignature_in_metadata = signaturesAndManifest["image_signature"]
 
@@ -904,7 +908,7 @@ STDERR
         imageSignature = self.cc_handler._computeFingerprint(containerPath)
 
         if imageSignature != imageSignature_in_metadata:
-            errmsg = f"Image signature recorded in {os.path.basename(containerPathMeta)} does not match image signature of {os.path.basename(containerPath)}"
+            errmsg = f"Image signature recorded in {containerPathMeta.name} does not match image signature of {containerPath.name}"
             self.logger.exception(errmsg)
             raise ContainerFactoryException(errmsg)
 
