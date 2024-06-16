@@ -144,11 +144,18 @@ class Container(ContainerTaggedName):
     image_signature: "Optional[Fingerprint]" = None
 
     def _value_defaults_fixes(self) -> None:
+        if isinstance(self.localPath, str):
+            # Properly casting the path
+            self.localPath = pathlib.Path(self.localPath)
+
         # This code is needed for old working directories
         if self.metadataLocalPath is None and self.localPath is not None:
             self.metadataLocalPath = self.localPath.with_name(
                 self.localPath.name + META_JSON_POSTFIX
             )
+        elif isinstance(self.metadataLocalPath, str):
+            # Properly casting the path
+            self.metadataLocalPath = pathlib.Path(self.metadataLocalPath)
 
         # And this is to tell the kind of source container type
         if self.source_type is None:
