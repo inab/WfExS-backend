@@ -24,6 +24,7 @@ import collections.abc
 import copy
 import enum
 import logging
+import pathlib
 from typing import (
     TYPE_CHECKING,
     cast,
@@ -61,11 +62,14 @@ def marshall_namedtuple(obj: "Any") -> "Any":
             "_enum": obj.__class__.__name__,
             "value": obj.value,
         }
+    elif obj_is(pathlib.Path):
+        # Store the path, not the instance
+        return obj.as_posix()
     elif obj_is(tuple) and hasattr(obj, "_fields"):  # namedtuple
         fields = zip(obj._fields, recurse_m(obj))
         class_name = obj.__class__.__name__
         return dict(fields, **{"_type": class_name})
-    elif obj_is(abc.ABC) and hasattr(obj, "__dataclass_fields__"):  # dataclass
+    elif obj_is(object) and hasattr(obj, "__dataclass_fields__"):  # dataclass
         fields_m = map(
             lambda field: (field, marshall_namedtuple(getattr(obj, field))),
             obj.__dataclass_fields__.keys(),
