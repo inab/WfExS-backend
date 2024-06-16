@@ -438,53 +438,53 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, workDir, True)
-        self.workDir = workDir
+        self.workDir = pathlib.Path(workDir)
 
         # This directory should hold intermediate workflow steps results
         if intermediateDir is None:
-            intermediateDir = cast(
-                "AbsPath", os.path.join(workDir, WORKDIR_INTERMEDIATE_RELDIR)
-            )
-        os.makedirs(intermediateDir, exist_ok=True)
-        self.intermediateDir = intermediateDir
+            self.intermediateDir = self.workDir / WORKDIR_INTERMEDIATE_RELDIR
+        else:
+            self.intermediateDir = pathlib.Path(intermediateDir)
+        self.intermediateDir.mkdir(parents=True, exist_ok=True)
 
         # This directory will hold the final workflow results, which could
         # be either symbolic links to the intermediate results directory
         # or newly generated content
         if outputsDir is None:
-            outputsDir = cast("AbsPath", os.path.join(workDir, WORKDIR_OUTPUTS_RELDIR))
-        elif not os.path.isabs(outputsDir):
-            outputsDir = cast("AbsPath", os.path.abspath(outputsDir))
-        os.makedirs(outputsDir, exist_ok=True)
-        self.outputsDir = cast("AbsPath", outputsDir)
+            self.outputsDir = self.workDir / WORKDIR_OUTPUTS_RELDIR
+        else:
+            self.outputsDir = pathlib.Path(outputsDir)
+
+        if not self.outputsDir.is_absolute():
+            self.outputsDir = self.outputsDir.absolute()
+
+        self.outputsDir.mkdir(parents=True, exist_ok=True)
 
         # This directory will hold diverse metadata, like execution metadata
         # or newly generated content
         if outputMetaDir is None:
-            outputMetaDir = cast(
-                "AbsPath",
-                os.path.join(workDir, WORKDIR_META_RELDIR, WORKDIR_OUTPUTS_RELDIR),
+            self.outputMetaDir = (
+                self.workDir / WORKDIR_META_RELDIR / WORKDIR_OUTPUTS_RELDIR
             )
-        os.makedirs(outputMetaDir, exist_ok=True)
-        self.outputMetaDir = outputMetaDir
+        else:
+            self.outputMetaDir = pathlib.Path(outputMetaDir)
+
+        self.outputMetaDir.mkdir(parents=True, exist_ok=True)
 
         # This directory will hold stats metadata, as well as the dot representation
         # of the workflow execution
-        outputStatsDir = cast(
-            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
-        )
-        os.makedirs(outputStatsDir, exist_ok=True)
+        outputStatsDir = self.outputMetaDir / WORKDIR_STATS_RELDIR
+        outputStatsDir.mkdir(parents=True, exist_ok=True)
         self.outputStatsDir = outputStatsDir
 
         # This directory is here for those files which are created in order
         # to tweak or patch workflow executions
         # engine tweaks directory
         if engineTweaksDir is None:
-            engineTweaksDir = cast(
-                "AbsPath", os.path.join(workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
-            )
-        os.makedirs(engineTweaksDir, exist_ok=True)
-        self.engineTweaksDir = engineTweaksDir
+            self.engineTweaksDir = self.workDir / WORKDIR_ENGINE_TWEAKS_RELDIR
+        else:
+            self.engineTweaksDir = pathlib.Path(engineTweaksDir)
+        self.engineTweaksDir.mkdir(parents=True, exist_ok=True)
 
         # This directory is here for temporary files of any program launched from
         # WfExS or the engine itself. It should be set to TMPDIR on subprocess calls
@@ -808,18 +808,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def staged_containers_dir(self) -> "AnyPath":
         return cast("AbsPath", self.stagedContainersDir.as_posix())
 
-    def create_job_directories(self) -> "Tuple[str, AbsPath, AbsPath, AbsPath]":
+    def create_job_directories(
+        self,
+    ) -> "Tuple[str, pathlib.Path, pathlib.Path, pathlib.Path]":
         outputDirPostfix = "_" + str(int(time.time())) + "_" + str(os.getpid())
-        intermediateDir = cast(
-            "AbsPath", os.path.join(self.intermediateDir, outputDirPostfix)
-        )
-        os.makedirs(intermediateDir, exist_ok=True)
-        outputsDir = cast("AbsPath", os.path.join(self.outputsDir, outputDirPostfix))
-        os.makedirs(outputsDir, exist_ok=True)
-        outputMetaDir = cast(
-            "AbsPath", os.path.join(self.outputMetaDir, outputDirPostfix)
-        )
-        os.makedirs(outputMetaDir, exist_ok=True)
+        intermediateDir = self.intermediateDir / outputDirPostfix
+        intermediateDir.mkdir(parents=True, exist_ok=True)
+        outputsDir = self.outputsDir / outputDirPostfix
+        outputsDir.mkdir(parents=True, exist_ok=True)
+        outputMetaDir = self.outputMetaDir / outputDirPostfix
+        outputMetaDir.mkdir(parents=True, exist_ok=True)
 
         return outputDirPostfix, intermediateDir, outputsDir, outputMetaDir
 
@@ -924,7 +922,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self,
         matInputs: "Sequence[MaterializedInput]",
         expectedOutputs: "Sequence[ExpectedOutput]",
-        outputsDir: "AbsPath",
+        outputsDir: "pathlib.Path",
         outputsMapping: "Optional[Mapping[SymbolicOutputName, Any]]" = None,
     ) -> "Sequence[MaterializedOutput]":
         """
@@ -951,13 +949,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     guessedOutputKindDef: "ContentKind"
                     # We are avoiding to enter in loops around '.' and '..'
                     if entry.is_file():
+                        entry_path = pathlib.Path(entry.path)
                         matValuesDef = [
                             GeneratedContent(
-                                local=cast("AbsPath", entry.path),
+                                local=entry_path,
                                 signature=cast(
                                     "Fingerprint",
                                     ComputeDigestFromFile(
-                                        cast("AbsPath", entry.path),
+                                        entry_path,
                                         repMethod=nihDigester,
                                     ),
                                 ),
@@ -967,7 +966,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     elif entry.is_dir(follow_symlinks=False):
                         matValuesDef = [
                             GetGeneratedDirectoryContent(
-                                cast("AbsPath", entry.path), signatureMethod=nihDigester
+                                entry_path, signatureMethod=nihDigester
                             )
                         ]
                         guessedOutputKindDef = ContentKind.Directory
@@ -1025,14 +1024,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         # FIXME: Are these elements always paths??????
                         if isinstance(matchedPath, str):
                             if os.path.isabs(matchedPath):
-                                abs_matched_path = matchedPath
+                                abs_matched_path = pathlib.Path(matchedPath)
                             else:
-                                abs_matched_path = os.path.join(outputsDir, matchedPath)
+                                abs_matched_path = outputsDir / matchedPath
                             try:
                                 theContent: "AbstractGeneratedContent"
                                 if expectedOutput.kind == ContentKind.Directory:
                                     theContent = GetGeneratedDirectoryContent(
-                                        thePath=cast("AbsPath", abs_matched_path),
+                                        thePath=abs_matched_path,
                                         uri=None,  # TODO: generate URIs when it is advised
                                         preferredFilename=expectedOutput.preferredFilename,
                                         signatureMethod=nihDigester,
@@ -1040,7 +1039,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     expMatContents.append(theContent)
                                 elif expectedOutput.kind == ContentKind.File:
                                     theContent = GeneratedContent(
-                                        local=cast("AbsPath", abs_matched_path),
+                                        local=abs_matched_path,
                                         uri=None,  # TODO: generate URIs when it is advised
                                         signature=cast(
                                             "Fingerprint",
@@ -1056,8 +1055,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     )
                                 else:
                                     # Reading the value from a file, as the glob is telling that
-                                    with open(
-                                        matchedPath,
+                                    with abs_matched_path.open(
                                         mode="r",
                                         encoding="utf-8",
                                         errors="ignore",
@@ -1114,7 +1112,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                         expMatContents.append(matchedContent)
                     elif expectedOutput.kind == ContentKind.File:
                         matchedContent = GeneratedContent(
-                            local=matchedPath,
+                            local=pathlib.Path(matchedPath),
                             uri=None,  # TODO: generate URIs when it is advised
                             signature=cast(
                                 "Fingerprint",

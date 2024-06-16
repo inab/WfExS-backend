@@ -19,10 +19,12 @@
 from __future__ import absolute_import
 
 import abc
+import copy
 from dataclasses import dataclass
 import datetime
 import enum
 import os
+import pathlib
 from typing import (
     cast,
     NamedTuple,
@@ -91,11 +93,6 @@ if TYPE_CHECKING:
     AbsPath = NewType("AbsPath", str)
     # This is either a relative or an absolute path
     AnyPath: TypeAlias = Union[RelPath, AbsPath]
-
-    # These declarations are for "new world"
-    # MaterializedPathContent, LocalPathWorkflow
-    # and indirectly MaterializedPathInput
-    import pathlib
 
     PathlibLike: TypeAlias = pathlib.Path
 
@@ -370,13 +367,24 @@ class MaterializedContent(NamedTuple):
       from the cache.
     """
 
-    local: "AbsPath"
+    local: "PathlibLike"
     licensed_uri: "LicensedURI"
     prettyFilename: "RelPath"
     kind: "ContentKind" = ContentKind.File
     metadata_array: "Optional[Sequence[URIWithMetadata]]" = None
-    extrapolated_local: "Optional[AbsPath]" = None
+    extrapolated_local: "Optional[PathlibLike]" = None
     fingerprint: "Optional[Fingerprint]" = None
+
+    @classmethod
+    def _mapping_fixes(cls, orig: "Mapping[str, Any]") -> "Mapping[str, Any]":
+        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest["local"] = pathlib.Path(dest["local"])
+
+        extra = dest.get("extrapolated_local")
+        if extra is not None:
+            dest["extrapolated_local"] = pathlib.Path(extra)
+
+        return dest
 
     @classmethod
     def _key_fixes(cls) -> "Mapping[str, str]":
@@ -480,10 +488,17 @@ class AbstractGeneratedContent(abc.ABC):
       uploaded from the computational environment
     """
 
-    local: "AnyPath"
+    local: "PathlibLike"
     signature: "Optional[Fingerprint]" = None
     uri: "Optional[LicensedURI]" = None
     preferredFilename: "Optional[RelPath]" = None
+
+    @classmethod
+    def _mapping_fixes(cls, orig: "Mapping[str, Any]") -> "Mapping[str, Any]":
+        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest["local"] = pathlib.Path(dest["local"])
+
+        return dest
 
 
 @dataclass
@@ -554,11 +569,18 @@ class LocalWorkflow(NamedTuple):
     or remote ones (i.e. CWL)
     """
 
-    dir: "AbsPath"
+    dir: "PathlibLike"
     relPath: "Optional[RelPath]"
     effectiveCheckout: "Optional[RepoTag]"
     langVersion: "Optional[Union[EngineVersion, WFLangVersion]]" = None
     relPathFiles: "Optional[Sequence[Union[RelPath, URIType]]]" = None
+
+    @classmethod
+    def _mapping_fixes(cls, orig: "Mapping[str, Any]") -> "Mapping[str, Any]":
+        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest["dir"] = pathlib.Path(dest["dir"])
+
+        return dest
 
 
 if TYPE_CHECKING:
@@ -729,25 +751,3 @@ class StagedExecution(NamedTuple):
     outputMetaDir: "Optional[RelPath]" = None
     diagram: "Optional[RelPath]" = None
     logfile: "Sequence[RelPath]" = []
-
-
-# Next method has been borrowed from FlowMaps
-def scantree(path: "AnyPath") -> "Iterator[os.DirEntry[str]]":
-    """Recursively yield DirEntry objects for given directory."""
-
-    hasDirs = False
-    for entry in os.scandir(path):
-        # We are avoiding to enter in loops around '.' and '..'
-        if entry.is_dir(follow_symlinks=False):
-            if entry.name[0] != ".":
-                hasDirs = True
-        else:
-            yield entry
-
-    # We are leaving the dirs to the end
-    if hasDirs:
-        for entry in os.scandir(path):
-            # We are avoiding to enter in loops around '.' and '..'
-            if entry.is_dir(follow_symlinks=False) and entry.name[0] != ".":
-                yield entry
-                yield from scantree(cast("AbsPath", entry.path))

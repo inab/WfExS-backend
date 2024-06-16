@@ -137,76 +137,6 @@ magic = lazy_import("magic")
 # import magic
 
 
-# "New world" declarations
-
-
-class LocalPathWorkflow(NamedTuple):
-    """
-    dir: The path to the directory where the checkout was applied
-    relPath: Inside the checkout, the relative path to the workflow definition
-    effectiveCheckout: hex hash of the materialized checkout
-    langVersion: workflow language version / revision
-    relPathFiles: files composing the workflow, which can be either local
-    or remote ones (i.e. CWL)
-    """
-
-    dir: "PathlibLike"
-    relPath: "Optional[RelPath]"
-    effectiveCheckout: "Optional[RepoTag]"
-    langVersion: "Optional[Union[EngineVersion, WFLangVersion]]" = None
-    relPathFiles: "Optional[Sequence[RelPath]]" = None
-
-
-class MaterializedPathContent(NamedTuple):
-    """
-    local: Local absolute path of the content which was materialized. It
-      can be either a path in the cached inputs directory, or an absolute
-      path in the inputs directory of the execution
-    licensed_uri: Either an URL or a CURIE of the content which was materialized,
-      needed for the provenance
-    prettyFilename: The preferred filename to use in the inputs directory
-      of the execution environment
-    fingerprint: If it is available, propagate the computed fingerprint
-      from the cache.
-    """
-
-    local_path: "PathlibLike"
-    licensed_uri: "LicensedURI"
-    prettyFilename: "RelPath"
-    kind: "ContentKind" = ContentKind.File
-    metadata_array: "Optional[Sequence[URIWithMetadata]]" = None
-    extrapolated_local: "Optional[AbsPath]" = None
-    fingerprint: "Optional[Fingerprint]" = None
-
-    @classmethod
-    def _key_fixes(cls) -> "Mapping[str, str]":
-        return {"uri": "licensed_uri"}
-
-
-if TYPE_CHECKING:
-    MaterializedPathInputValues: TypeAlias = Union[
-        Sequence[bool],
-        Sequence[str],
-        Sequence[int],
-        Sequence[float],
-        Sequence[MaterializedPathContent],
-    ]
-
-
-class MaterializedPathInput(NamedTuple):
-    """
-    name: Name of the input
-    values: list of associated values, which can be literal ones or
-      instances from MaterializedContent
-    """
-
-    name: "SymbolicParamName"
-    values: "MaterializedPathInputValues"
-    secondaryInputs: "Optional[Sequence[MaterializedPathContent]]" = None
-    autoFilled: "bool" = False
-    implicit: "bool" = False
-
-
 class ReproducibilityLevel(enum.IntEnum):
     Minimal = enum.auto()  # Minimal / no reproducibility is requested
     Metadata = enum.auto()  # Metadata reproducibility is requested
@@ -1755,7 +1685,7 @@ WHERE   {
                 else DefaultNoLicenceTuple
             )
             mat_content = MaterializedContent(
-                local=cast("AbsPath", input_path),
+                local=located_input,
                 licensed_uri=LicensedURI(
                     uri=cast("URIType", the_uri),
                     licences=licences_tuple,

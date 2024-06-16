@@ -147,6 +147,7 @@ class Container(ContainerTaggedName):
         if isinstance(self.localPath, str):
             # Properly casting the path
             self.localPath = pathlib.Path(self.localPath)
+            print(f"localPath {self.localPath}")
 
         # This code is needed for old working directories
         if self.metadataLocalPath is None and self.localPath is not None:

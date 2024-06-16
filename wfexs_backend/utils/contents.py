@@ -74,7 +74,7 @@ from .digests import (
 
 
 def GetGeneratedDirectoryContent(
-    thePath: "AbsPath",
+    thePath: "Union[AbsPath, os.PathLike[str]]",
     uri: "Optional[LicensedURI]" = None,
     preferredFilename: "Optional[RelPath]" = None,
     signatureMethod: "Optional[FingerprintMethod]" = None,
@@ -90,7 +90,7 @@ def GetGeneratedDirectoryContent(
             if not entry.name.startswith("."):
                 theValue: "Optional[AbstractGeneratedContent]" = None
                 if entry.is_file():
-                    entry_path = cast("AbsPath", entry.path)
+                    entry_path = pathlib.Path(entry.path)
                     theValue = GeneratedContent(
                         local=entry_path,
                         # uri=None,
@@ -102,7 +102,7 @@ def GetGeneratedDirectoryContent(
                         ),
                     )
                 elif entry.is_dir():
-                    entry_path = cast("AbsPath", entry.path)
+                    entry_path = pathlib.Path(entry.path)
                     theValue = GetGeneratedDirectoryContent(
                         entry_path, signatureMethod=signatureMethod
                     )
@@ -118,7 +118,7 @@ def GetGeneratedDirectoryContent(
         signature = None
 
     return GeneratedDirectoryContent(
-        local=thePath,
+        local=thePath if isinstance(thePath, pathlib.Path) else pathlib.Path(thePath),
         uri=uri,
         preferredFilename=preferredFilename,
         values=theValues,
@@ -127,7 +127,7 @@ def GetGeneratedDirectoryContent(
 
 
 def GetGeneratedDirectoryContentFromList(
-    thePath: "AbsPath",
+    thePath: "Union[AbsPath, os.PathLike[str]]",
     theValues: "Sequence[AbstractGeneratedContent]",
     uri: "Optional[LicensedURI]" = None,
     preferredFilename: "Optional[RelPath]" = None,
@@ -149,7 +149,7 @@ def GetGeneratedDirectoryContentFromList(
         signature = None
 
     return GeneratedDirectoryContent(
-        local=thePath,
+        local=thePath if isinstance(thePath, pathlib.Path) else pathlib.Path(thePath),
         uri=uri,
         preferredFilename=preferredFilename,
         values=theValues,

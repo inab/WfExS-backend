@@ -325,6 +325,7 @@ from .workflow_engines import (
 from .utils.contents import (
     bin2dataurl,
     link_or_copy,
+    link_or_copy_pathlib,
 )
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import config_validate
@@ -1463,7 +1464,7 @@ class WF:
                     source_file = payload_dir / value.local
                     dest_file = inputs_dir / path_relative_to(source_file, payload_dir)
                     new_value = value._replace(
-                        local=cast("AbsPath", dest_file.as_posix())
+                        local=dest_file,
                     )
                     new_values.append(new_value)
 
@@ -1479,7 +1480,7 @@ class WF:
                     source_file = payload_dir / secondaryInput.local
                     dest_file = inputs_dir / path_relative_to(source_file, payload_dir)
                     new_secondaryInput = secondaryInput._replace(
-                        local=cast("AbsPath", dest_file.as_posix())
+                        local=dest_file,
                     )
                     new_secondaryInputs.append(new_secondaryInput)
 
@@ -1537,9 +1538,9 @@ class WF:
             payload_dir=payload_dir,
         )
 
-        # logging.error(f"Containers {the_containers}")
-        # logging.error(f"Inputs {cached_inputs}")
-        # sys.exit(1)
+        logging.error(f"Containers {the_containers}")
+        logging.error(f"Inputs {cached_inputs}")
+        sys.exit(1)
         # Now, some postprocessing...
         if (
             reproducibility_level >= ReproducibilityLevel.Full
@@ -1862,7 +1863,7 @@ class WF:
 
         # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
-            dir=self.workflowDir,
+            dir=pathlib.Path(self.workflowDir),
             relPath=self.repoRelPath,
             effectiveCheckout=self.repoEffectiveCheckout,
         )
@@ -2203,7 +2204,7 @@ class WF:
         offline: "bool",
         storeDir: "Union[AbsPath, CacheType]",
         cacheable: "bool",
-        inputDestDir: "AbsPath",
+        inputDestDir: "pathlib.Path",
         globExplode: "Optional[str]",
         prefix: "str" = "",
         hardenPrettyLocal: "bool" = False,
@@ -2230,38 +2231,36 @@ class WF:
         if prettyRelname is None:
             prettyRelname = matContent.prettyFilename
 
-        prettyLocal = cast("AbsPath", os.path.join(inputDestDir, prettyRelname))
+        prettyLocal = inputDestDir / prettyRelname
 
         # Protection against misbehaviours which could hijack the
         # execution environment
-        realPrettyLocal = os.path.realpath(prettyLocal)
-        realInputDestDir = os.path.realpath(inputDestDir)
-        if not realPrettyLocal.startswith(realInputDestDir):
-            prettyRelname = cast("RelPath", os.path.basename(realPrettyLocal))
-            prettyLocal = cast("AbsPath", os.path.join(inputDestDir, prettyRelname))
+        realPrettyLocal = prettyLocal.resolve()
+        realInputDestDir = inputDestDir.resolve()
+        if not realPrettyLocal.is_relative_to(realInputDestDir):
+            prettyRelname = cast("RelPath", realPrettyLocal.name)
+            prettyLocal = inputDestDir / prettyRelname
 
         # Checking whether local name hardening is needed
         if not hardenPrettyLocal:
-            if os.path.islink(prettyLocal):
-                oldLocal = os.readlink(prettyLocal)
+            if prettyLocal.is_symlink():
+                oldLocal = prettyLocal.readlink()
 
                 hardenPrettyLocal = oldLocal != matContent.local
-            elif os.path.exists(prettyLocal):
+            elif prettyLocal.exists():
                 hardenPrettyLocal = True
 
         if hardenPrettyLocal:
             # Trying to avoid collisions on input naming
-            prettyLocal = cast(
-                "AbsPath", os.path.join(inputDestDir, prefix + prettyRelname)
-            )
+            prettyLocal = inputDestDir / (prefix + prettyRelname)
 
         if not os.path.exists(prettyLocal):
             # We are either hardlinking or copying here
-            link_or_copy(matContent.local, prettyLocal)
+            link_or_copy_pathlib(matContent.local, prettyLocal)
 
         remote_pairs = []
         if globExplode is not None:
-            prettyLocalPath = pathlib.Path(prettyLocal)
+            prettyLocalPath = prettyLocal
             matParse = urllib.parse.urlparse(matContent.licensed_uri.uri)
             for exp in prettyLocalPath.glob(globExplode):
                 relPath = exp.relative_to(prettyLocalPath)
@@ -2290,7 +2289,7 @@ class WF:
                 )
                 remote_pairs.append(
                     MaterializedContent(
-                        local=cast("AbsPath", str(exp)),
+                        local=exp,
                         licensed_uri=lic_expUri,
                         prettyFilename=relName,
                         metadata_array=matContent.metadata_array,
@@ -2644,8 +2643,8 @@ class WF:
         t_split = tabconf["column-sep"].encode("utf-8").decode("unicode-escape")
         t_uri_cols: "Sequence[int]" = tabconf["uri-columns"]
 
-        inputDestDir = workflowInputs_destdir
-        extrapolatedInputDestDir = workflowExtrapolatedInputs_destdir
+        inputDestDir = pathlib.Path(workflowInputs_destdir)
+        extrapolatedInputDestDir = pathlib.Path(workflowExtrapolatedInputs_destdir)
 
         path_tokens = linearKey.split(".")
         # Filling in the defaults
@@ -2687,15 +2686,12 @@ class WF:
             relative_dir = None
 
         if relative_dir is not None:
-            newInputDestDir = os.path.realpath(os.path.join(inputDestDir, relative_dir))
-            if newInputDestDir.startswith(os.path.realpath(inputDestDir)):
-                inputDestDir = cast("AbsPath", newInputDestDir)
-                extrapolatedInputDestDir = cast(
-                    "AbsPath",
-                    os.path.realpath(
-                        os.path.join(extrapolatedInputDestDir, relative_dir)
-                    ),
-                )
+            newInputDestDir = (inputDestDir / relative_dir).resolve()
+            if newInputDestDir.is_relative_to(inputDestDir):
+                inputDestDir = newInputDestDir
+                extrapolatedInputDestDir = (
+                    extrapolatedInputDestDir / relative_dir
+                ).resolve()
 
         # The storage dir depends on whether it can be cached or not
         storeDir: "Union[CacheType, AbsPath]" = (
@@ -2775,7 +2771,7 @@ class WF:
 
             secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]"
             if len(these_secondary_uris) > 0:
-                secondary_uri_mapping: "MutableMapping[str, str]" = dict()
+                secondary_uri_mapping: "MutableMapping[str, pathlib.Path]" = dict()
                 secondary_remote_pairs = []
                 # Fetch each gathered URI
                 for secondary_remote_file in these_secondary_uris:
@@ -2812,18 +2808,15 @@ class WF:
 
                 # Now, reopen each file to replace URLs by paths
                 for i_remote_pair, remote_pair in enumerate(remote_pairs):
-                    extrapolated_local = os.path.join(
-                        extrapolatedInputDestDir,
-                        os.path.relpath(remote_pair.local, inputDestDir),
+                    extrapolated_local = extrapolatedInputDestDir / os.path.relpath(
+                        remote_pair.local, inputDestDir
                     )
-                    with open(
-                        remote_pair.local,
+                    with remote_pair.local.open(
                         mode="rt",
                         encoding="utf-8",
                         newline=t_newline,
                     ) as tH:
-                        with open(
-                            extrapolated_local,
+                        with extrapolated_local.open(
                             mode="wt",
                             encoding="utf-8",
                             newline=t_newline,
@@ -2850,7 +2843,7 @@ class WF:
                                         # Should we check whether it is a URI?
                                         cols[t_uri_col] = secondary_uri_mapping[
                                             cols[t_uri_col]
-                                        ]
+                                        ].as_posix()
                                         fixed_row = True
 
                                 if fixed_row:
@@ -2861,7 +2854,7 @@ class WF:
                     # Last, fix it
                     remote_pairs[i_remote_pair] = remote_pair._replace(
                         kind=ContentKind.ContentWithURIs,
-                        extrapolated_local=cast("AbsPath", extrapolated_local),
+                        extrapolated_local=extrapolated_local,
                     )
             else:
                 secondary_remote_pairs = None
@@ -2918,7 +2911,7 @@ class WF:
                         ContentKind.File.name,
                         ContentKind.Directory.name,
                     ):  # input files
-                        inputDestDir = workflowInputs_destdir
+                        inputDestDir = pathlib.Path(workflowInputs_destdir)
                         globExplode = None
 
                         path_tokens = linearKey.split(".")
@@ -3047,13 +3040,11 @@ class WF:
                                 relative_dir = None
 
                             if relative_dir is not None:
-                                newInputDestDir = os.path.realpath(
-                                    os.path.join(inputDestDir, relative_dir)
-                                )
-                                if newInputDestDir.startswith(
-                                    os.path.realpath(inputDestDir)
-                                ):
-                                    inputDestDir = cast("AbsPath", newInputDestDir)
+                                newInputDestDir = (
+                                    inputDestDir / relative_dir
+                                ).resolve()
+                                if newInputDestDir.relative_to(inputDestDir):
+                                    inputDestDir = newInputDestDir
 
                             # The storage dir depends on whether it can be cached or not
                             storeDir: "Union[CacheType, AbsPath]" = (
@@ -3165,16 +3156,12 @@ class WF:
                         else:
                             if inputClass == ContentKind.File.name:
                                 # Empty input, i.e. empty file
-                                inputDestPath = cast(
-                                    "AbsPath",
-                                    os.path.join(inputDestDir, *linearKey.split(".")),
+                                inputDestPath = inputDestDir.joinpath(
+                                    *linearKey.split(".")
                                 )
-                                os.makedirs(
-                                    os.path.dirname(inputDestPath), exist_ok=True
-                                )
+                                inputDestPath.parent.mkdir(parents=True, exist_ok=True)
                                 # Creating the empty file
-                                with open(inputDestPath, mode="wb") as idH:
-                                    pass
+                                inputDestPath.touch()
                                 contentKind = ContentKind.File
                             else:
                                 inputDestPath = inputDestDir
@@ -3191,7 +3178,7 @@ class WF:
                                             ),
                                             prettyFilename=cast(
                                                 "RelPath",
-                                                os.path.basename(inputDestPath),
+                                                inputDestPath.name,
                                             ),
                                             kind=contentKind,
                                         )
@@ -4608,7 +4595,7 @@ This is an enumeration of the types of collected contents:
                     )
                     retval.append(
                         MaterializedContent(
-                            local=self.staged_setup.inputs_dir,
+                            local=pathlib.Path(self.staged_setup.inputs_dir),
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
@@ -4701,12 +4688,8 @@ This is an enumeration of the types of collected contents:
                     prettyFilename = cast("RelPath", stagedExec.outputsDir)
                     retval.append(
                         MaterializedContent(
-                            local=cast(
-                                "AbsPath",
-                                os.path.join(
-                                    self.staged_setup.work_dir, stagedExec.outputsDir
-                                ),
-                            ),
+                            local=pathlib.Path(self.staged_setup.work_dir)
+                            / stagedExec.outputsDir,
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
@@ -4722,9 +4705,10 @@ This is an enumeration of the types of collected contents:
                     )
             elif item.type == ExportItemType.WorkingDirectory:
                 # The whole working directory
+                assert self.staged_setup.work_dir is not None
                 retval.append(
                     MaterializedContent(
-                        local=cast("AbsPath", self.staged_setup.work_dir),
+                        local=pathlib.Path(self.staged_setup.work_dir),
                         licensed_uri=LicensedURI(
                             uri=cast(
                                 "URIType", "wfexs:" + self.staged_setup.instance_id
@@ -4793,7 +4777,7 @@ This is an enumeration of the types of collected contents:
                 )
                 retval.append(
                     MaterializedContent(
-                        local=cast("AbsPath", temp_rocrate_file),
+                        local=pathlib.Path(temp_rocrate_file),
                         licensed_uri=LicensedURI(
                             uri=cast(
                                 "URIType",

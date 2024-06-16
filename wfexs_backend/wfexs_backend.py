@@ -27,6 +27,7 @@ import io
 import json
 import logging
 import os
+import pathlib
 import re
 import shutil
 import stat
@@ -2817,7 +2818,7 @@ class WfExSBackend:
             prettyFilename = cast("RelPath", firstParsedURI.path.split("/")[-1])
 
         return MaterializedContent(
-            local=cached_content.path,
+            local=pathlib.Path(cached_content.path),
             licensed_uri=firstLicensedURI,
             prettyFilename=prettyFilename,
             kind=cached_content.kind,

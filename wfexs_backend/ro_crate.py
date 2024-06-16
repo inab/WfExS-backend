@@ -748,7 +748,7 @@ class WorkflowRunROCrate:
         self.licence_matcher = licence_matcher
 
         if localWorkflow.relPath is not None:
-            wf_local_path = os.path.join(localWorkflow.dir, localWorkflow.relPath)
+            wf_local_path = localWorkflow.dir / localWorkflow.relPath
         else:
             wf_local_path = localWorkflow.dir
 
@@ -1923,12 +1923,12 @@ you can find here an almost complete list of the possible ones:
         was_workflow_run: "bool" = True,
     ) -> "FixedWorkflow":
         # Determining the absolute path of the workflow
-        the_path: "str"
+        the_path: "pathlib.Path"
         if the_workflow.relPath is not None:
             if os.path.isabs(the_workflow.relPath):
-                the_path = the_workflow.relPath
+                the_path = pathlib.Path(the_workflow.relPath)
             else:
-                the_path = os.path.join(the_workflow.dir, the_workflow.relPath)
+                the_path = the_workflow.dir / the_workflow.relPath
         else:
             the_path = the_workflow.dir
 
@@ -1943,7 +1943,7 @@ you can find here an almost complete list of the possible ones:
                 if remote_repo.tag is not None:
                     wf_url += "tree/" + remote_repo.tag
                 if the_workflow.relPath is not None:
-                    wf_url += the_workflow.dir.rsplit("workflow")[1]
+                    wf_url += the_workflow.dir.as_posix().rsplit("workflow")[1]
 
                 parsed_repo_url = urllib.parse.urlparse(remote_repo.repo_url)
                 if parsed_repo_url.netloc == "github.com":

@@ -22,6 +22,7 @@ import logging
 from pathlib import Path
 
 import os
+import pathlib
 import sys
 import urllib.error
 
@@ -147,7 +148,7 @@ def test_cache_push(tmpdir) -> "None":  # type: ignore[no-untyped-def]
     # Fourth, push file into the cache
     pushed_contents = cep.push(
         items=[
-            GeneratedContent(local=cast("AbsPath", naive_path)),
+            GeneratedContent(local=pathlib.Path(naive_path)),
         ],
         preferred_id=booked_entry.draft_id,
         licences=[
