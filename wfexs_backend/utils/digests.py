@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
+        AbsPath,
         AbstractGeneratedContent,
         AnyPath,
         Fingerprint,
@@ -63,7 +64,6 @@ if TYPE_CHECKING:
 
 
 from ..common import (
-    scantree,
     GeneratedContent,
 )
 
@@ -166,7 +166,7 @@ def ComputeDigestFromFileLike(
 
 @functools.lru_cache(maxsize=32)
 def ComputeDigestFromFile(
-    filename: "AnyPath",
+    filename: "Union[AnyPath, os.PathLike[str]]",
     digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
     bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
     repMethod: "Union[FingerprintMethod, RawFingerprintMethod]" = stringifyDigest,
@@ -293,8 +293,30 @@ def compute_sha1_git_from_any(path: "str") -> "Tuple[str, str]":
     raise FileNotFoundError(f"Unable to process path {path}")
 
 
+# Next method has been borrowed from FlowMaps
+def scantree(path: "Union[AnyPath, os.PathLike[str]]") -> "Iterator[os.DirEntry[str]]":
+    """Recursively yield DirEntry objects for given directory."""
+
+    hasDirs = False
+    for entry in os.scandir(path):
+        # We are avoiding to enter in loops around '.' and '..'
+        if entry.is_dir(follow_symlinks=False):
+            if entry.name[0] != ".":
+                hasDirs = True
+        else:
+            yield entry
+
+    # We are leaving the dirs to the end
+    if hasDirs:
+        for entry in os.scandir(path):
+            # We are avoiding to enter in loops around '.' and '..'
+            if entry.is_dir(follow_symlinks=False) and entry.name[0] != ".":
+                yield entry
+                yield from scantree(cast("AbsPath", entry.path))
+
+
 def ComputeDigestFromDirectory(
-    dirname: "AnyPath",
+    dirname: "Union[AnyPath, os.PathLike[str]]",
     digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
     bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
     repMethod: "FingerprintMethod" = stringifyDigest,
@@ -330,7 +352,7 @@ def ComputeDigestFromDirectory(
 
 
 def ComputeDigestFromGeneratedContentList(
-    dirname: "AnyPath",
+    dirname: "Union[AnyPath, os.PathLike[str]]",
     theValues: "Sequence[AbstractGeneratedContent]",
     digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
     bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
