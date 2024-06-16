@@ -407,7 +407,11 @@ class ZipfilePath(pathlib.Path):
         *_deprecated: "Union[str, os.PathLike[str]]",
         walk_up: bool = False,
     ) -> "pathlib.Path":
-        return pathlib.Path(path_relative_to(self, pathlib.Path(other)))
+        return pathlib.Path(
+            path_relative_to(
+                self, other if isinstance(other, pathlib.Path) else pathlib.Path(other)
+            )
+        )
 
     def with_name(self, name: "Union[str, os.PathLike[str]]") -> "ZipfilePath":
         return self.parent.joinpath(name)
