@@ -149,6 +149,12 @@ class ContainerTypeMetadata(NamedTuple):
     ct_applicationCategory: "str"
 
 
+class ROCratePayload(NamedTuple):
+    rel_path: "str"
+    path: "pathlib.Path"
+    signature: "Optional[Fingerprint]"
+
+
 ContainerTypeMetadataDetails: "Final[Mapping[ContainerType, ContainerTypeMetadata]]" = {
     ContainerType.Singularity: ContainerTypeMetadata(
         sa_id="https://apptainer.org/",
@@ -501,7 +507,7 @@ WHERE {
         return (resrow, g)
 
     OBTAIN_WORKFLOW_PID_SPARQL: "Final[str]" = """\
-SELECT  ?origmainentity ?identifier ?workflow_repository ?workflow_version ?workflow_url ?workflow_alternate_name ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version ?file_size ?file_sha256
+SELECT  ?origmainentity ?identifier ?workflow_repository ?workflow_version ?workflow_url ?workflow_name ?workflow_alternate_name ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version ?file_size ?file_sha256
 WHERE   {
     ?mainentity s:programmingLanguage ?programminglanguage .
     ?programminglanguage
@@ -546,6 +552,9 @@ WHERE   {
     }
     OPTIONAL {
         ?origmainentity s:identifier ?identifier .
+    }
+    OPTIONAL {
+        ?origmainentity s:name ?workflow_name .
     }
     OPTIONAL {
         ?origmainentity s:alternateName ?workflow_alternate_name .
@@ -1411,11 +1420,9 @@ WHERE   {
                                 the_file_sha256=containerrow.container_snapshot_sha256,
                             )
                             if include_container_image is not None:
-                                (
-                                    container_image_path,
-                                    located_snapshot,
-                                    image_signature,
-                                ) = include_container_image
+                                container_image_path = include_container_image.rel_path
+                                located_snapshot = include_container_image.path
+                                image_signature = include_container_image.signature
 
                         if containerrow.source_container_metadata is not None:
                             include_metadata_container_image = self.__processPayloadEntity(
@@ -1429,11 +1436,13 @@ WHERE   {
                             )
 
                             if include_metadata_container_image is not None:
-                                (
-                                    metadata_container_image_path,
-                                    located_metadata,
-                                    computed_source_container_metadata_signature,
-                                ) = include_metadata_container_image
+                                metadata_container_image_path = (
+                                    include_metadata_container_image.rel_path
+                                )
+                                located_metadata = include_metadata_container_image.path
+                                computed_source_container_metadata_signature = (
+                                    include_metadata_container_image.signature
+                                )
 
                     the_containers.append(
                         Container(
@@ -1678,7 +1687,9 @@ WHERE   {
         )
 
         if include_input is not None:
-            input_path, located_input, file_signature = include_input
+            input_path = include_input.rel_path
+            located_input = include_input.path
+            file_signature = include_input.signature
             licences_tuple = (
                 cast("Tuple[URIType, ...]", tuple(licences))
                 if len(licences) > 0
@@ -2086,7 +2097,7 @@ WHERE   {
         entity_name: "str",
         the_file_size: "rdflib.term.Node",
         the_file_sha256: "rdflib.term.Node",
-    ) -> "Optional[Tuple[str, pathlib.Path, Optional[Fingerprint]]]":
+    ) -> "Optional[ROCratePayload]":
         entity_uri = str(the_entity)
         entity_parsed_uri = urllib.parse.urlparse(entity_uri)
         include_entity = entity_parsed_uri.scheme == self.RELATIVE_ROCRATE_SCHEME
@@ -2160,9 +2171,73 @@ WHERE   {
         if include_entity:
             assert entity_path is not None
             assert located_entity is not None
-            return (entity_path, located_entity, file_signature)
+            return ROCratePayload(
+                rel_path=entity_path,
+                path=located_entity,
+                signature=file_signature,
+            )
         else:
             return None
+
+    def __list_entity_parts(
+        self,
+        g: "rdflib.graph.Graph",
+        entity: "rdflib.term.Identifier",
+        public_name: "str",
+    ) -> "rdflib.query.Result":
+        qlist = rdflib.plugins.sparql.prepareQuery(
+            self.LIST_PARTS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        try:
+            qlistres = g.query(
+                qlist,
+                initBindings={
+                    "entity": entity,
+                },
+            )
+        except Exception as e:
+            raise ROCrateToolboxException(
+                f"Unable to perform JSON-LD list entity parts query over {public_name} (see cascading exceptions)"
+            ) from e
+
+        return qlistres
+
+    def __list_payload_entity_parts(
+        self,
+        g: "rdflib.graph.Graph",
+        entity: "rdflib.term.Identifier",
+        public_name: "str",
+        payload_dir: "pathlib.Path",
+    ) -> "Sequence[ROCratePayload]":
+        entity_parts = self.__list_entity_parts(g, entity, public_name)
+
+        payload_entity_parts = []
+        for part_row in entity_parts:
+            assert isinstance(
+                part_row, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+
+            included_part_entity = self.__processPayloadEntity(
+                the_entity=part_row.part_entity,
+                payload_dir=payload_dir,
+                kindobj=ContentKind.File,
+                entity_type="secondary workflow component",
+                entity_name=str(part_row.part_name)
+                if part_row.part_name is not None
+                else "PACO",  # FIXME
+                the_file_size=part_row.file_size,
+                the_file_sha256=part_row.file_sha256,
+            )
+
+            if included_part_entity is not None:
+                payload_entity_parts.append(included_part_entity)
+            else:
+                self.logger.warning(
+                    f"Entity part {str(part_row.part_entity)} from {str(entity)} in {public_name} did not have a valid payload"
+                )
+
+        return payload_entity_parts
 
     def extractWorkflowMetadata(
         self,
@@ -2265,29 +2340,70 @@ WHERE   {
         )
 
         if payload_dir is not None:
+            workflow_name = langrow.workflow_name
+            if langrow.workflow_name is not None:
+                workflow_name = langrow.workflow_name
+            elif langrow.workflow_alternate_name is not None:
+                workflow_name = langrow.workflow_alternate_name
+            elif langrow.identifier is not None:
+                workflow_name = langrow.identifier
+            else:
+                workflow_name = None
             include_main_entity = self.__processPayloadEntity(
                 the_entity=langrow.origmainentity,
                 payload_dir=payload_dir,
                 kindobj=ContentKind.File,
                 entity_type="main workflow component",
-                entity_name="PEPE",  # FIXME
+                entity_name=str(workflow_name)
+                if workflow_name is not None
+                else "PEPE",  # FIXME
                 the_file_size=langrow.file_size,
                 the_file_sha256=langrow.file_sha256,
             )
 
             if include_main_entity is not None:
-                main_entity_path = include_main_entity[0]
+                main_entity_relpath = include_main_entity.rel_path
+                main_entity_path = include_main_entity.path
 
                 # TODO
-                # workflow_parts = self.__list_entity_parts(langrow.origmainentity, payload_dir)
+                workflow_parts = self.__list_payload_entity_parts(
+                    g, langrow.origmainentity, public_name, payload_dir
+                )
+                if len(workflow_parts) == 0:
+                    base_dir = main_entity_path.parent
+                    main_entity_relpath = main_entity_path.name
+                    rel_path_files = []
+                else:
+                    rel_path_files = list(
+                        map(lambda part: cast("RelPath", part.rel_path), workflow_parts)
+                    )
+                    common_prefix = os.path.commonpath(
+                        [main_entity_relpath, *rel_path_files]
+                    )
+                    if len(common_prefix) == 0:
+                        base_dir = payload_dir
+                    else:
+                        base_dir = payload_dir / common_prefix
+                        main_entity_relpath = main_entity_path.relative_to(
+                            base_dir
+                        ).as_posix()
+                        rel_path_files = [
+                            cast("RelPath", part.path.relative_to(base_dir).as_posix())
+                            for part in workflow_parts
+                        ]
 
-                # cached_workflow = LocalWorkflow(
-                #    dir=cast("AbsPath", ""),
-                #    relPath=cast("RelPath", main_entity_path),
-                #    effectiveCheckout=,
-                #    # langVersion=
-                #    relPathFiles=rel_path_files,
-                # )
+                cached_workflow = LocalWorkflow(
+                    dir=base_dir,
+                    relPath=cast("RelPath", main_entity_relpath),
+                    effectiveCheckout=repo.tag,
+                    langVersion=cast(
+                        "Union[EngineVersion, WFLangVersion]",
+                        str(langrow.programminglanguage_version),
+                    )
+                    if langrow.programminglanguage_version is not None
+                    else None,
+                    relPathFiles=rel_path_files,
+                )
 
         return repo, workflow_type, cached_workflow
 
