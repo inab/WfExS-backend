@@ -113,6 +113,7 @@ from ..common import (
     LocalWorkflow,
     MaterializedContent,
     MaterializedInput,
+    NoLicenceDescription,
 )
 
 from ..container_factories import (
@@ -1774,7 +1775,7 @@ WHERE   {
                 valobj = base.setdefault(
                     param_last,
                     {
-                        "c-l-a-s-s": kindobj.value,
+                        "c-l-a-s-s": kindobj.name,
                     },
                 )
 
@@ -1799,13 +1800,17 @@ WHERE   {
                 if len(licences) == 0:
                     licences = default_licences
 
+                expanded_licences = self.wfexs.curate_licence_list(
+                    licences, default_licence=NoLicenceDescription
+                )
+
                 the_url: "Union[str, Mapping[str, Any]]"
                 if len(licences) == 0:
                     the_url = the_uri
                 else:
                     the_url = {
                         "uri": the_uri,
-                        "licences": licences,
+                        "licences": list(map(lambda el: el.uris[0], expanded_licences)),
                     }
 
                 valurl = valobj.get("url")
@@ -1962,7 +1967,7 @@ WHERE   {
                 valobj = environment.setdefault(
                     env_name,
                     {
-                        "c-l-a-s-s": kindobj.value,
+                        "c-l-a-s-s": kindobj.name,
                     },
                 )
 
@@ -1986,13 +1991,18 @@ WHERE   {
                 licences = self._getLicences(g, envrow.env, public_name)
                 if len(licences) == 0:
                     licences = default_licences
+
+                expanded_licences = self.wfexs.curate_licence_list(
+                    licences, default_licence=NoLicenceDescription
+                )
+
                 the_url: "Union[str, Mapping[str, Any]]"
                 if len(licences) == 0:
                     the_url = str(envrow.fileuri)
                 else:
                     the_url = {
                         "uri": str(envrow.fileuri),
-                        "licences": licences,
+                        "licences": list(map(lambda el: el.uris[0], expanded_licences)),
                     }
 
                 valurl = valobj.get("url")

@@ -68,6 +68,7 @@ from .common import (
     DEFAULT_PROGS,
     LicensedURI,
     MaterializedContent,
+    NoLicenceDescription,
     URIWithMetadata,
 )
 
@@ -97,6 +98,11 @@ from .workflow_engines import (
 from .ro_crate import FixedROCrate
 
 from .security_context import SecurityContextVault
+
+from .utils.licences import (
+    AcceptableLicenceSchemes,
+    LicenceMatcherSingleton,
+)
 
 from .utils.marshalling_handling import (
     unmarshall_namedtuple,
@@ -188,6 +194,7 @@ if TYPE_CHECKING:
         AnyPath,
         ContainerType,
         ExitVal,
+        LicenceDescription,
         MarshallingStatus,
         ProgsMapping,
         RelPath,
@@ -209,6 +216,10 @@ if TYPE_CHECKING:
     from .fetchers import (
         RepoFetcher,
         StatefulFetcher,
+    )
+
+    from .utils.licences import (
+        LicenceMatcher,
     )
 
     from .utils.passphrase_wrapper import (
@@ -2825,3 +2836,46 @@ class WfExSBackend:
             metadata_array=cached_content.metadata_array,
             fingerprint=cached_content.fingerprint,
         )
+
+    _LicenceMatcher: "ClassVar[Optional[LicenceMatcher]]" = None
+
+    @classmethod
+    def GetLicenceMatcher(cls) -> "LicenceMatcher":
+        if cls._LicenceMatcher is None:
+            cls._LicenceMatcher = LicenceMatcherSingleton()
+            assert cls._LicenceMatcher is not None
+
+        return cls._LicenceMatcher
+
+    def curate_licence_list(
+        self,
+        licences: "Sequence[str]",
+        default_licence: "Optional[LicenceDescription]" = None,
+    ) -> "Sequence[LicenceDescription]":
+        # As these licences can be in short format, resolve them to URIs
+        expanded_licences: "MutableSequence[LicenceDescription]" = []
+        if len(licences) == 0:
+            expanded_licences.append(NoLicenceDescription)
+        else:
+            licence_matcher = self.GetLicenceMatcher()
+            rejected_licences: "MutableSequence[str]" = []
+            for lic in licences:
+                matched_licence = licence_matcher.matchLicence(lic)
+                if matched_licence is None:
+                    rejected_licences.append(lic)
+                    if default_licence is not None:
+                        expanded_licences.append(default_licence)
+                else:
+                    expanded_licences.append(matched_licence)
+
+            if len(rejected_licences) > 0:
+                if default_licence is None:
+                    raise WFException(
+                        f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
+                    )
+                else:
+                    self.logger.warning(
+                        f"Default license {default_licence} used instead of next unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
+                    )
+
+        return expanded_licences
