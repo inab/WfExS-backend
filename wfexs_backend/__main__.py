@@ -1505,6 +1505,9 @@ def main() -> None:
             strict_reproducibility_level=args.strict_reproducibility_level,
         )
 
+        # This is needed to be sure the encfs instance is unmounted
+        atexit.register(wfInstance.cleanup)
+
     wfSetup = wfInstance.getStagedSetup()
     print("\t- Working directory will be {}".format(wfSetup.work_dir), file=sys.stderr)
     sys.stderr.flush()
