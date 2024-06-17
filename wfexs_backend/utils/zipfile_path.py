@@ -413,6 +413,23 @@ class ZipfilePath(pathlib.Path):
             )
         )
 
+    def resolve(self, strict: "bool" = False) -> "ZipfilePath":
+        # TODO: better solution
+        return self.__class__(self._root, self._at)
+
+    def copy_to(self, dest: "pathlib.Path") -> "None":
+        if self.is_file():
+            self._root.extract(self._at, path=dest)
+        else:
+            the_members: "Optional[Sequence[str]]" = None
+            if self._at != "":
+                the_members = list(
+                    filter(
+                        lambda name: name.startswith(self._at), self._root.namelist()
+                    )
+                )
+            self._root.extractall(path=dest, members=the_members)
+
     def with_name(self, name: "Union[str, os.PathLike[str]]") -> "ZipfilePath":
         return self.parent.joinpath(name)
 
