@@ -34,6 +34,8 @@ from .misc import lazy_import
 magic = lazy_import("magic")
 # import magic
 
+from .zipfile_path import ZipfilePath
+
 from ..common import (
     ContentKind,
     GeneratedContent,
@@ -246,7 +248,11 @@ def link_or_copy(
     dest: "Union[AnyPath, os.PathLike[str]]",
     force_copy: "bool" = False,
 ) -> None:
-    link_or_copy_pathlib(pathlib.Path(src), pathlib.Path(dest), force_copy=force_copy)
+    link_or_copy_pathlib(
+        src if isinstance(src, pathlib.Path) else pathlib.Path(src),
+        dest if isinstance(dest, pathlib.Path) else pathlib.Path(dest),
+        force_copy=force_copy,
+    )
 
 
 def link_or_copy_pathlib(
@@ -281,7 +287,16 @@ def link_or_copy_pathlib(
             dest_parent.mkdir(parents=True)
 
     # Now, link or copy
-    if src.lstat().st_dev == dest_st_dev and not force_copy:
+    link_condition = False
+    try:
+        link_condition = (
+            not isinstance(src, ZipfilePath)
+            and src.lstat().st_dev == dest_st_dev
+            and not force_copy
+        )
+    except:
+        pass
+    if link_condition:
         try:
             if src.is_file():
                 if dest_exists:
@@ -326,13 +341,19 @@ def link_or_copy_pathlib(
             # as it is in a separated filesystem
             if dest_exists:
                 dest.unlink()
-            shutil.copy2(src, dest)
+            if isinstance(src, ZipfilePath):
+                src.copy_to(dest)
+            else:
+                shutil.copy2(src, dest)
         else:
             # Recursively copying the content
             # as it is in a separated filesystem
             if dest_exists:
                 shutil.rmtree(dest)
-            shutil.copytree(src, dest, copy_function=copy2_nofollow)
+            if isinstance(src, ZipfilePath):
+                src.copy_to(dest)
+            else:
+                shutil.copytree(src, dest, copy_function=copy2_nofollow)
 
 
 def real_unlink_if_exists(
