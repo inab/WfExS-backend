@@ -468,6 +468,7 @@ class WF:
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
         preferred_containers: "Sequence[Container]" = [],
+        preferred_operational_containers: "Sequence[Container]" = [],
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
     ):
@@ -527,6 +528,9 @@ class WF:
         self.cached_inputs = cached_inputs
         self.cached_environment = cached_environment
         self.preferred_containers = copy.copy(preferred_containers)
+        self.preferred_operational_containers = copy.copy(
+            preferred_operational_containers
+        )
         self.reproducibility_level = reproducibility_level
         self.strict_reproducibility_level = strict_reproducibility_level
 
@@ -1223,7 +1227,8 @@ class WF:
         wfexs: "WfExSBackend",
         base_workflow_meta: "WorkflowMetaConfigBlock",
         replaced_parameters_filename: "AnyPath",
-    ) -> "WritableWorkflowMetaConfigBlock":
+    ) -> "Tuple[WritableWorkflowMetaConfigBlock, Mapping[str, Set[str]]]":
+        transferrable_keys = ("params", "environment")
         new_params_meta = cls.__read_yaml_config(replaced_parameters_filename)
 
         if (
@@ -1241,7 +1246,10 @@ class WF:
 
         # Now, trim everything but what it is allowed
         existing_keys = set(new_params_meta.keys())
-        existing_keys.remove("params")
+        for t_key in transferrable_keys:
+            if t_key in existing_keys:
+                existing_keys.remove(t_key)
+
         if len(existing_keys) > 0:
             for key in existing_keys:
                 del new_params_meta[key]
@@ -1256,9 +1264,13 @@ class WF:
 
         # Last, merge
         workflow_meta = copy.deepcopy(base_workflow_meta)
-        workflow_meta["params"].update(new_params_meta["params"])
+        transferred_items: "MutableMapping[str, Set[str]]" = dict()
+        for t_key in transferrable_keys:
+            if t_key in new_params_meta:
+                workflow_meta.setdefault(t_key, {}).update(new_params_meta[t_key])
+                transferred_items[t_key] = set(new_params_meta[t_key].keys())
 
-        return workflow_meta
+        return workflow_meta, transferred_items
 
     @classmethod
     def FromWorkDir(
@@ -1344,6 +1356,7 @@ class WF:
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
         preferred_containers: "Sequence[Container]" = [],
+        preferred_operational_containers: "Sequence[Container]" = [],
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
     ) -> "WF":
@@ -1381,6 +1394,7 @@ class WF:
             cached_inputs=cached_inputs,
             cached_environment=cached_environment,
             preferred_containers=preferred_containers,
+            preferred_operational_containers=preferred_operational_containers,
             reproducibility_level=reproducibility_level,
             strict_reproducibility_level=strict_reproducibility_level,
         )
@@ -1415,9 +1429,67 @@ class WF:
         workflow_meta = copy.deepcopy(wfInstance.staging_recipe)
 
         if replaced_parameters_filename is not None:
-            workflow_meta = cls.__merge_params_from_file(
+            workflow_meta, replaced_items = cls.__merge_params_from_file(
                 wfexs, workflow_meta, replaced_parameters_filename
             )
+        else:
+            replaced_items = dict()
+
+        # Now, some postprocessing...
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None
+        the_containers: "Sequence[Container]" = []
+        the_operational_containers: "Sequence[Container]" = []
+        cached_workflow: "Optional[LocalWorkflow]" = None
+        if reproducibility_level >= ReproducibilityLevel.Full:
+            if wfInstance.materializedParams is not None:
+                cached_inputs = copy.copy(wfInstance.materializedParams)
+
+                # Let's invalidate several params
+                # as several parameters could be replaced
+                replaced_inputs = replaced_items.get("params")
+                if (
+                    replaced_inputs is not None
+                    and isinstance(cached_inputs, list)
+                    and len(cached_inputs) > 0
+                ):
+                    new_cached_inputs = list(
+                        filter(
+                            lambda m_i: m_i.name not in replaced_inputs, cached_inputs
+                        )
+                    )
+                    if len(new_cached_inputs) < len(cached_inputs):
+                        cached_inputs = new_cached_inputs
+
+            if wfInstance.materializedEnvironment is not None:
+                cached_environment = copy.copy(wfInstance.materializedEnvironment)
+
+                # Let's invalidate several environment variables
+                # as several parameters could be replaced
+                replaced_environment = replaced_items.get("environment")
+                if (
+                    replaced_environment is not None
+                    and isinstance(cached_environment, list)
+                    and len(cached_environment) > 0
+                ):
+                    new_cached_environment = list(
+                        filter(
+                            lambda m_i: m_i.name not in replaced_environment,
+                            cached_environment,
+                        )
+                    )
+                    if len(new_cached_environment) < len(cached_environment):
+                        cached_environment = new_cached_environment
+
+            if wfInstance.materializedEngine is not None:
+                if wfInstance.materializedEngine.containers is not None:
+                    the_containers = wfInstance.materializedEngine.containers
+                if wfInstance.materializedEngine.operational_containers is not None:
+                    the_operational_containers = (
+                        wfInstance.materializedEngine.operational_containers
+                    )
+
+            cached_workflow = wfInstance.getMaterializedWorkflow()
 
         # We have to reset the inherited paranoid mode and nickname
         for k_name in ("nickname", "paranoid_mode"):
@@ -1437,10 +1509,10 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
-            cached_workflow=wfInstance.getMaterializedWorkflow(),
-            cached_inputs=wfInstance.materializedParams,
-            cached_environment=wfInstance.materializedEnvironment,
-            preferred_containers=wfInstance.getMaterializedContainers(),
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
+            preferred_containers=the_containers,
             reproducibility_level=reproducibility_level,
             strict_reproducibility_level=strict_reproducibility_level,
         )
@@ -1538,111 +1610,6 @@ class WF:
             payload_dir=payload_dir,
         )
 
-        logging.error(f"Containers {the_containers}")
-        logging.error(f"Inputs {cached_inputs}")
-        sys.exit(1)
-        # Now, some postprocessing...
-        if (
-            reproducibility_level >= ReproducibilityLevel.Full
-            and payload_dir is not None
-            and not isinstance(payload_dir, pathlib.Path)
-        ):
-            # This one is needed when the payload_dir is defined and not a
-            # local path, like within a zip archive.
-            materialized_payload_dir = pathlib.Path(
-                tempfile.mkdtemp(prefix="wfexs", suffix="import")
-            )
-            atexit.register(shutil.rmtree, materialized_payload_dir, True)
-
-            # Fix cached workflow
-            if cached_workflow is not None:
-                workflow_dir = materialized_payload_dir / WORKDIR_WORKFLOW_RELDIR
-                workflow_dir.mkdir(parents=True, exist_ok=True)
-
-                # Transfer entrypoint
-                if cached_workflow.relPath is not None:
-                    dest_entrypoint = workflow_dir / cached_workflow.relPath
-                    dest_entrypoint.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(
-                        cast("PathLike[str]", payload_dir / cached_workflow.relPath),
-                        dest_entrypoint,
-                    )
-                if (
-                    cached_workflow.relPathFiles is not None
-                    and len(cached_workflow.relPathFiles) > 0
-                ):
-                    # And all the elements
-                    for rel_file in cached_workflow.relPathFiles:
-                        if rel_file == cached_workflow.relPath:
-                            continue
-                        p_rel_file = urllib.parse.urlparse(rel_file)
-                        if p_rel_file.scheme != "":
-                            continue
-
-                        dest_file = workflow_dir / rel_file
-                        dest_file.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(
-                            cast("PathLike[str]", payload_dir / rel_file), dest_file
-                        )
-
-                # Last, the reference
-                cached_workflow = cached_workflow._replace(
-                    dir=cast("AbsPath", workflow_dir.as_posix())
-                )
-
-            # Fix containers
-            if len(the_containers) > 0:
-                containers_dir = materialized_payload_dir / WORKDIR_CONTAINERS_RELDIR
-                containers_dir.mkdir(parents=True, exist_ok=True)
-                new_containers = []
-                for the_container in the_containers:
-                    new_container = the_container
-
-                    if new_container.localPath is not None:
-                        source_image = payload_dir / new_container.localPath
-                        dest_image = containers_dir / path_relative_to(
-                            source_image, payload_dir
-                        )
-                        dest_image.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(cast("PathLike[str]", source_image), dest_image)
-
-                        new_container = dataclasses.replace(
-                            new_container,
-                            localPath=cast("AbsPath", dest_image.as_posix()),
-                        )
-
-                    if new_container.metadataLocalPath is not None:
-                        source_meta = payload_dir / new_container.metadataLocalPath
-                        dest_meta = containers_dir / path_relative_to(
-                            source_meta, payload_dir
-                        )
-                        dest_meta.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(cast("PathLike[str]", source_meta), dest_meta)
-
-                        new_container = dataclasses.replace(
-                            new_container,
-                            metadataLocalPath=cast("AbsPath", dest_meta.as_posix()),
-                        )
-
-                    new_containers.append(new_container)
-
-                the_containers = new_containers
-
-            # Fix inputs
-            inputs_dir = materialized_payload_dir / WORKDIR_INPUTS_RELDIR
-            if cached_inputs is not None and len(cached_inputs) > 0:
-                inputs_dir.mkdir(parents=True, exist_ok=True)
-                cached_inputs = cls._transferInputs(
-                    payload_dir, inputs_dir, cached_inputs
-                )
-
-            # Fix environment
-            if cached_environment is not None and len(cached_environment) > 0:
-                inputs_dir.mkdir(parents=True, exist_ok=True)
-                cached_environment = cls._transferInputs(
-                    payload_dir, inputs_dir, cached_environment
-                )
-
         workflow_pid = wfexs.gen_workflow_pid(repo)
         logging.debug(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
@@ -1663,15 +1630,51 @@ class WF:
         logging.debug(f"{json.dumps(workflow_meta, indent=4)}")
 
         if replaced_parameters_filename is not None:
-            workflow_meta = cls.__merge_params_from_file(
+            workflow_meta, replaced_items = cls.__merge_params_from_file(
                 wfexs, workflow_meta, replaced_parameters_filename
             )
+        else:
+            replaced_items = dict()
 
         # Last, be sure that what it has been generated is correct
         if wfexs.validateConfigFiles(workflow_meta, securityContextsConfigFilename) > 0:
             raise WFException(
                 f"Generated WfExS description from {public_name} fails (have a look at the log messages for details)"
             )
+
+        # Now, some postprocessing...
+        if (
+            reproducibility_level >= ReproducibilityLevel.Full
+            and payload_dir is not None
+        ):
+            # Let's invalidate several params and environment
+            # as several parameters could be replaced
+            replaced_inputs = replaced_items.get("params")
+            if (
+                replaced_inputs is not None
+                and isinstance(cached_inputs, list)
+                and len(cached_inputs) > 0
+            ):
+                new_cached_inputs = list(
+                    filter(lambda m_i: m_i.name not in replaced_inputs, cached_inputs)
+                )
+                if len(new_cached_inputs) < len(cached_inputs):
+                    cached_inputs = new_cached_inputs
+
+            replaced_environment = replaced_items.get("environment")
+            if (
+                replaced_environment is not None
+                and isinstance(cached_environment, list)
+                and len(cached_environment) > 0
+            ):
+                new_cached_environment = list(
+                    filter(
+                        lambda m_i: m_i.name not in replaced_environment,
+                        cached_environment,
+                    )
+                )
+                if len(new_cached_environment) < len(cached_environment):
+                    cached_environment = new_cached_environment
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -1687,6 +1690,7 @@ class WF:
             cached_inputs=cached_inputs,
             cached_environment=cached_environment,
             preferred_containers=the_containers,
+            # TODO: preferred_operational_containers are not rescued (yet!)
             reproducibility_level=reproducibility_level,
             strict_reproducibility_level=strict_reproducibility_level,
         )
@@ -1706,6 +1710,7 @@ class WF:
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
         preferred_containers: "Sequence[Container]" = [],
+        preferred_operational_containers: "Sequence[Container]" = [],
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
     ) -> "WF":
@@ -1750,6 +1755,7 @@ class WF:
             cached_inputs=cached_inputs,
             cached_environment=cached_environment,
             preferred_containers=preferred_containers,
+            preferred_operational_containers=preferred_operational_containers,
             reproducibility_level=reproducibility_level,
             strict_reproducibility_level=strict_reproducibility_level,
         )
