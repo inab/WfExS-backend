@@ -52,7 +52,6 @@ from .common import (
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
-    NoLicenceDescription,
     ResolvedORCID,
     StagedExecution,
 )
@@ -246,10 +245,6 @@ from .pushers.abstract_contexted_export import (
 
 from .ro_crate import (
     WorkflowRunROCrate,
-)
-from .utils.licences import (
-    AcceptableLicenceSchemes,
-    LicenceMatcherSingleton,
 )
 from .utils.rocrate import (
     ReadROCrateMetadata,
@@ -2114,6 +2109,7 @@ class WF:
         formatted_params: "Union[ParamsBlock, Sequence[Mapping[str, Any]]]",
         offline: "bool" = False,
         ignoreCache: "bool" = False,
+        injectable_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         lastInput: "int" = 0,
     ) -> "Sequence[MaterializedInput]":
         assert (
@@ -2123,12 +2119,23 @@ class WF:
             self.extrapolatedInputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
 
+        injectable_inputs_dict: "Mapping[str, MaterializedInput]"
+        if injectable_inputs is not None and not ignoreCache:
+            injectable_inputs_dict = {
+                injectable_input.name: injectable_input
+                for injectable_input in injectable_inputs
+            }
+        else:
+            # Ignore injected inputs salvaged from elsewhere
+            injectable_inputs_dict = dict()
+
         theParams, numInputs, the_failed_uris = self.fetchInputs(
             formatted_params,
             workflowInputs_destdir=self.inputsDir,
             workflowExtrapolatedInputs_destdir=self.extrapolatedInputsDir,
             offline=offline,
             ignoreCache=ignoreCache,
+            injectable_inputs_dict=injectable_inputs_dict,
             lastInput=lastInput,
         )
 
@@ -2875,12 +2882,54 @@ class WF:
 
         return theNewInputs, lastInput, the_failed_uris
 
+    def _injectContent(
+        self,
+        injectable_content: "Sequence[MaterializedContent]",
+        dest_path: "pathlib.Path",
+        pretty_relname: "str",
+        last_input: "int" = 1,
+    ) -> "Tuple[MutableSequence[MaterializedContent], int]":
+        injected_content: "MutableSequence[MaterializedContent]" = []
+        for injectable in injectable_content:
+            # Detecting naming collisions
+            pretty_filename = injectable.prettyFilename
+            pretty_rel = pathlib.Path(pretty_filename)
+            dest_content = dest_path / pretty_rel
+            if dest_content.exists():
+                dest_content = dest_path / pretty_relname
+
+            # Stay here while collisions happen
+            while dest_content.exists():
+                prefix = str(last_input) + "_"
+                dest_content = dest_path / pretty_rel.with_name(
+                    prefix + pretty_rel.name
+                )
+                last_input += 1
+
+            # Transfer it
+            dest_content.parent.mkdir(parents=True, exist_ok=True)
+            link_or_copy_pathlib(injectable.local, dest_content, force_copy=True)
+            # Second, record it
+            injected_content.append(
+                MaterializedContent(
+                    local=dest_content,
+                    licensed_uri=injectable.licensed_uri,
+                    prettyFilename=pretty_filename,
+                    kind=injectable.kind,
+                    metadata_array=injectable.metadata_array,
+                    fingerprint=injectable.fingerprint,
+                )
+            )
+
+        return injected_content, last_input
+
     def fetchInputs(
         self,
         params: "Union[ParamsBlock, Sequence[ParamsBlock]]",
         workflowInputs_destdir: "AbsPath",
         workflowExtrapolatedInputs_destdir: "AbsPath",
         prefix: "str" = "",
+        injectable_inputs_dict: "Mapping[str, MaterializedInput]" = {},
         lastInput: "int" = 0,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
@@ -3052,105 +3101,131 @@ class WF:
                                 if newInputDestDir.relative_to(inputDestDir):
                                     inputDestDir = newInputDestDir
 
-                            # The storage dir depends on whether it can be cached or not
-                            storeDir: "Union[CacheType, AbsPath]" = (
-                                CacheType.Input if cacheable else workflowInputs_destdir
+                            remote_pairs: "MutableSequence[MaterializedContent]" = []
+                            secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]" = (
+                                None
                             )
 
-                            remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
-                            if remote_files is not None:
-                                if isinstance(
-                                    remote_files, list
-                                ):  # more than one input file
-                                    remote_files_f = remote_files
-                                else:
-                                    remote_files_f = [
-                                        cast("Sch_InputURI_Fetchable", remote_files)
-                                    ]
-                            else:
-                                inline_values_l: "Sequence[str]"
-                                if isinstance(inline_values, list):
-                                    # more than one inline content
-                                    inline_values_l = inline_values
-                                else:
-                                    inline_values_l = [cast("str", inline_values)]
-
-                                remote_files_f = [
-                                    # The storage dir is always the input
-                                    # Let's use the trick of translating the content into a data URL
-                                    bin2dataurl(inline_value.encode("utf-8"))
-                                    for inline_value in inline_values_l
-                                ]
-
-                            remote_pairs: "MutableSequence[MaterializedContent]" = []
-                            for remote_file in remote_files_f:
-                                lastInput += 1
-                                try:
-                                    t_remote_pairs = self._fetchRemoteFile(
-                                        remote_file,
-                                        contextName,
-                                        offline,
-                                        storeDir,
-                                        cacheable,
-                                        inputDestDir,
-                                        globExplode,
-                                        prefix=str(lastInput) + "_",
-                                        prettyRelname=pretty_relname,
-                                        ignoreCache=this_ignoreCache,
-                                    )
-                                    remote_pairs.extend(t_remote_pairs)
-                                except:
-                                    self.logger.exception(
-                                        f"Error while fetching primary URI {remote_file}"
-                                    )
-                                    the_failed_uris.append(remote_file)
-
-                            secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]"
-                            if (remote_files is not None) and (
-                                secondary_remote_files is not None
+                            injectable_input = injectable_inputs_dict.get(linearKey)
+                            if (
+                                injectable_input is not None
+                                and len(injectable_input.values) > 0
                             ):
-                                secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
-                                if isinstance(
-                                    secondary_remote_files, list
-                                ):  # more than one input file
-                                    secondary_remote_files_f = secondary_remote_files
+                                # Input being injected
+                                remote_pairs, lastInput = self._injectContent(
+                                    cast(
+                                        "Sequence[MaterializedContent]",
+                                        injectable_input.values,
+                                    ),
+                                    inputDestDir,
+                                    last_input=lastInput,
+                                    pretty_relname=pretty_relname,
+                                )
+
+                            if len(remote_pairs) == 0:
+                                # No injected content
+                                # The storage dir depends on whether it can be cached or not
+                                storeDir: "Union[CacheType, AbsPath]" = (
+                                    CacheType.Input
+                                    if cacheable
+                                    else workflowInputs_destdir
+                                )
+
+                                remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+                                if remote_files is not None:
+                                    if isinstance(
+                                        remote_files, list
+                                    ):  # more than one input file
+                                        remote_files_f = remote_files
+                                    else:
+                                        remote_files_f = [
+                                            cast("Sch_InputURI_Fetchable", remote_files)
+                                        ]
                                 else:
-                                    secondary_remote_files_f = [
-                                        cast(
-                                            "Sch_InputURI_Fetchable",
-                                            secondary_remote_files,
-                                        )
+                                    inline_values_l: "Sequence[str]"
+                                    if isinstance(inline_values, list):
+                                        # more than one inline content
+                                        inline_values_l = inline_values
+                                    else:
+                                        inline_values_l = [cast("str", inline_values)]
+
+                                    remote_files_f = [
+                                        # The storage dir is always the input
+                                        # Let's use the trick of translating the content into a data URL
+                                        bin2dataurl(inline_value.encode("utf-8"))
+                                        for inline_value in inline_values_l
                                     ]
 
-                                secondary_remote_pairs = []
-                                for secondary_remote_file in secondary_remote_files_f:
-                                    # The last fetched content prefix is the one used
-                                    # for all the secondaries
+                                for remote_file in remote_files_f:
+                                    lastInput += 1
                                     try:
-                                        t_secondary_remote_pairs = (
-                                            self._fetchRemoteFile(
-                                                secondary_remote_file,
-                                                contextName,
-                                                offline,
-                                                storeDir,
-                                                cacheable,
-                                                inputDestDir,
-                                                globExplode,
-                                                prefix=str(lastInput) + "_",
-                                                ignoreCache=ignoreCache,
-                                            )
+                                        t_remote_pairs = self._fetchRemoteFile(
+                                            remote_file,
+                                            contextName,
+                                            offline,
+                                            storeDir,
+                                            cacheable,
+                                            inputDestDir,
+                                            globExplode,
+                                            prefix=str(lastInput) + "_",
+                                            prettyRelname=pretty_relname,
+                                            ignoreCache=this_ignoreCache,
                                         )
-                                        secondary_remote_pairs.extend(
-                                            t_secondary_remote_pairs
-                                        )
+                                        remote_pairs.extend(t_remote_pairs)
                                     except:
                                         self.logger.exception(
-                                            f"Error while fetching secondary URI {secondary_remote_file}"
+                                            f"Error while fetching primary URI {remote_file}"
                                         )
-                                        the_failed_uris.append(secondary_remote_file)
+                                        the_failed_uris.append(remote_file)
 
-                            else:
-                                secondary_remote_pairs = None
+                                if (remote_files is not None) and (
+                                    secondary_remote_files is not None
+                                ):
+                                    secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+                                    if isinstance(
+                                        secondary_remote_files, list
+                                    ):  # more than one input file
+                                        secondary_remote_files_f = (
+                                            secondary_remote_files
+                                        )
+                                    else:
+                                        secondary_remote_files_f = [
+                                            cast(
+                                                "Sch_InputURI_Fetchable",
+                                                secondary_remote_files,
+                                            )
+                                        ]
+
+                                    secondary_remote_pairs = []
+                                    for (
+                                        secondary_remote_file
+                                    ) in secondary_remote_files_f:
+                                        # The last fetched content prefix is the one used
+                                        # for all the secondaries
+                                        try:
+                                            t_secondary_remote_pairs = (
+                                                self._fetchRemoteFile(
+                                                    secondary_remote_file,
+                                                    contextName,
+                                                    offline,
+                                                    storeDir,
+                                                    cacheable,
+                                                    inputDestDir,
+                                                    globExplode,
+                                                    prefix=str(lastInput) + "_",
+                                                    ignoreCache=ignoreCache,
+                                                )
+                                            )
+                                            secondary_remote_pairs.extend(
+                                                t_secondary_remote_pairs
+                                            )
+                                        except:
+                                            self.logger.exception(
+                                                f"Error while fetching secondary URI {secondary_remote_file}"
+                                            )
+                                            the_failed_uris.append(
+                                                secondary_remote_file
+                                            )
 
                             theInputs.append(
                                 MaterializedInput(
@@ -3235,6 +3310,7 @@ class WF:
                         workflowExtrapolatedInputs_destdir=workflowExtrapolatedInputs_destdir,
                         prefix=linearKey + ".",
                         lastInput=lastInput,
+                        injectable_inputs_dict=injectable_inputs_dict,
                         offline=offline,
                         ignoreCache=ignoreCache,
                     )
@@ -3266,12 +3342,18 @@ class WF:
 
         assert self.formatted_params is not None
         self.materializedParams = self.materializeInputs(
-            self.formatted_params, offline=offline, ignoreCache=ignoreCache
+            self.formatted_params,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_inputs=self.cached_inputs,
         )
 
         assert self.formatted_environment is not None
         self.materializedEnvironment = self.materializeInputs(
-            self.formatted_environment, offline=offline, ignoreCache=ignoreCache
+            self.formatted_environment,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_inputs=self.cached_environment,
         )
 
         self.marshallStage()
@@ -3497,30 +3579,6 @@ class WF:
 
         return self.exportResults(actions, vault, action_ids, fail_ok=fail_ok)
 
-    def _curate_licence_list(
-        self, licences: "Sequence[str]"
-    ) -> "Sequence[LicenceDescription]":
-        # As these licences can be in short format, resolve them to URIs
-        expanded_licences: "MutableSequence[LicenceDescription]" = []
-        if len(licences) == 0:
-            expanded_licences.append(NoLicenceDescription)
-        else:
-            licence_matcher = self.GetLicenceMatcher()
-            rejected_licences: "MutableSequence[str]" = []
-            for lic in licences:
-                matched_licence = licence_matcher.matchLicence(lic)
-                if matched_licence is None:
-                    rejected_licences.append(lic)
-                else:
-                    expanded_licences.append(matched_licence)
-
-            if len(rejected_licences) > 0:
-                raise WFException(
-                    f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
-                )
-
-        return expanded_licences
-
     def _curate_orcid_list(
         self, orcids: "Sequence[str]", fail_ok: "bool" = True
     ) -> "Sequence[ResolvedORCID]":
@@ -3684,7 +3742,7 @@ class WF:
                     else:
                         preferred_id = action.preferred_id
 
-                expanded_licences = self._curate_licence_list(the_licences)
+                expanded_licences = self.wfexs.curate_licence_list(the_licences)
                 curated_orcids = self._curate_orcid_list(the_orcids)
 
                 export_p = self._instantiate_export_plugin(
@@ -4953,13 +5011,3 @@ This is an enumeration of the types of collected contents:
         self.logger.info("Execution RO-Crate created: {}".format(filename))
 
         return filename
-
-    _LicenceMatcher: "ClassVar[Optional[LicenceMatcher]]" = None
-
-    @classmethod
-    def GetLicenceMatcher(cls) -> "LicenceMatcher":
-        if cls._LicenceMatcher is None:
-            cls._LicenceMatcher = LicenceMatcherSingleton()
-            assert cls._LicenceMatcher is not None
-
-        return cls._LicenceMatcher
