@@ -13,15 +13,21 @@
 
 import contextlib
 import functools
+import inspect
 import io
 import itertools
+import logging
+import os
 import pathlib
 import posixpath
+import shutil
+import sys
+
 from typing import (
     cast,
     TYPE_CHECKING,
 )
-import sys
+
 from zipfile import (
     ZipFile,
     ZipInfo,
@@ -299,6 +305,13 @@ class ZipfilePath(pathlib.Path):
         original type, the caller should either create a
         separate ZipFile object or pass a filename.
         """
+        # Getting a logger focused on specific classes
+        self.logger = logging.getLogger(
+            dict(inspect.getmembers(self))["__module__"]
+            + "::"
+            + self.__class__.__name__
+        )
+
         self._root = FastLookup.make(root)
         self._at = at
 
@@ -417,18 +430,77 @@ class ZipfilePath(pathlib.Path):
         # TODO: better solution
         return self.__class__(self._root, self._at)
 
+    def _extract_member(
+        self,
+        member: "Union[ZipInfo, str]",
+        targetpath: "Union[str, os.PathLike[str]]",
+        pwd: "Optional[bytes]" = None,
+    ) -> "str":
+        """
+        Method partially borrowed from python 3.12
+        """
+        """Extract the ZipInfo object 'member' to a physical
+           file on the path targetpath.
+        """
+        if not isinstance(member, ZipInfo):
+            member = self._root.getinfo(member)
+
+        # build the destination pathname, replacing
+        # forward slashes to platform specific separators.
+        arcname = member.filename.replace("/", os.path.sep)
+
+        if os.path.altsep:
+            arcname = arcname.replace(os.path.altsep, os.path.sep)
+        # interpret absolute pathname as relative, remove drive letter or
+        # UNC path, redundant separators, "." and ".." components.
+        arcname = os.path.splitdrive(arcname)[1]
+        invalid_path_parts = ("", os.path.curdir, os.path.pardir)
+        arcname = os.path.sep.join(
+            x for x in arcname.split(os.path.sep) if x not in invalid_path_parts
+        )
+        # if os.path.sep == "\\":
+        #    # filter illegal characters on Windows
+        #    arcname = self._root._sanitize_windows_name(arcname, os.path.sep)
+
+        if not arcname and not member.is_dir():
+            raise ValueError("Empty filename.")
+
+        targetpath = os.path.normpath(targetpath)
+
+        # Create all upper directories if necessary.
+        upperdirs = os.path.dirname(targetpath)
+        if upperdirs and not os.path.exists(upperdirs):
+            os.makedirs(upperdirs)
+
+        if member.is_dir():
+            if not os.path.isdir(targetpath):
+                os.mkdir(targetpath)
+            return targetpath
+
+        with self._root.open(member, pwd=pwd) as source, open(
+            targetpath, "wb"
+        ) as target:
+            shutil.copyfileobj(source, target)
+
+        return targetpath
+
     def copy_to(self, dest: "pathlib.Path") -> "None":
+        self.logger.error(f"UY {self._root.filename} {self._at} {dest}")
         if self.is_file():
-            self._root.extract(self._at, path=dest)
+            self._extract_member(self._at, dest)
         else:
-            the_members: "Optional[Sequence[str]]" = None
+            the_members: "Sequence[str]"
             if self._at != "":
                 the_members = list(
                     filter(
                         lambda name: name.startswith(self._at), self._root.namelist()
                     )
                 )
-            self._root.extractall(path=dest, members=the_members)
+            else:
+                the_members = self._root.namelist()
+            for the_member in the_members:
+                the_partial_member = the_member[len(self._at) :]
+                self._extract_member(the_member, dest / the_partial_member)
 
     def with_name(self, name: "Union[str, os.PathLike[str]]") -> "ZipfilePath":
         return self.parent.joinpath(name)
