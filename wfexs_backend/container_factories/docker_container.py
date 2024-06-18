@@ -76,7 +76,7 @@ from .abstract_docker_container import (
     DOCKER_PROTO,
 )
 from ..utils.contents import (
-    link_or_copy,
+    link_or_copy_pathlib,
     real_unlink_if_exists,
 )
 from ..utils.digests import ComputeDigestFromFile
@@ -461,10 +461,28 @@ STDERR
         manifestsImageSignature: "Optional[Fingerprint]" = None
         manifests = None
         manifest = None
+        if (
+            not containerPath.is_file()
+            and isinstance(container, Container)
+            and container.localPath is not None
+        ):
+            # Time to inject the image!
+            link_or_copy_pathlib(container.localPath, containerPath, force_copy=True)
+
         if not containerPath.is_file():
             errmsg = f"Docker saved image {containerPath.name} is not in the staged working dir for {tag_name}"
             self.logger.warning(errmsg)
             raise ContainerFactoryException(errmsg)
+
+        if (
+            not containerPathMeta.is_file()
+            and isinstance(container, Container)
+            and container.metadataLocalPath is not None
+        ):
+            # Time to inject the metadata!
+            link_or_copy_pathlib(
+                container.metadataLocalPath, containerPathMeta, force_copy=True
+            )
 
         if not containerPathMeta.is_file():
             errmsg = f"Docker saved image metadata {containerPathMeta.name} is not in the staged working dir for {tag_name}"

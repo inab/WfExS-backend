@@ -94,7 +94,9 @@ from . import (
     DOCKER_SCHEME,
 )
 
-from ..utils.contents import link_or_copy
+from ..utils.contents import (
+    link_or_copy_pathlib,
+)
 from ..utils.docker import DockerHelper
 
 
@@ -663,7 +665,7 @@ STDERR
             if tmpContainerPath is None:
                 assert localContainerPath is not None
                 tmpContainerPath = self.cc_handler._genTmpContainerPath()
-                link_or_copy(localContainerPath, tmpContainerPath)
+                link_or_copy_pathlib(localContainerPath, tmpContainerPath)
             tmpContainerPathMeta = tmpContainerPath.with_name(
                 tmpContainerPath.name + META_JSON_POSTFIX
             )
@@ -770,6 +772,7 @@ STDERR
         containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
+        injectable_containers: "Sequence[Container]" = [],
     ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
@@ -789,14 +792,24 @@ STDERR
             if not self.AcceptsContainer(tag):
                 continue
 
+            tag_to_use: "ContainerTaggedName" = tag
+            for injectable_container in injectable_containers:
+                if (
+                    injectable_container.origTaggedName == tag.origTaggedName
+                    and injectable_container.source_type == tag.type
+                    and injectable_container.registries == tag.registries
+                ):
+                    tag_to_use = injectable_container
+                    break
+
             matched_container: "Union[Container, FailedContainerTag]"
             try:
                 matched_container, was_redeployed = self.deploySingleContainer(
-                    tag, containers_dir=containers_dir, force=force
+                    tag_to_use, containers_dir=containers_dir, force=force
                 )
             except ContainerFactoryException as cfe:
                 matched_container = self._materializeSingleContainerSing(
-                    tag,
+                    tag_to_use,
                     matEnv=matEnv,
                     dhelp=dhelp,
                     containers_dir=containers_dir,
@@ -839,10 +852,31 @@ STDERR
             container, containers_dir
         )
 
+        was_redeployed = False
+        if (
+            not containerPath.is_file()
+            and isinstance(container, Container)
+            and container.localPath is not None
+        ):
+            # Time to inject the image!
+            link_or_copy_pathlib(container.localPath, containerPath, force_copy=True)
+            was_redeployed = True
+
         if not containerPath.is_file():
             errmsg = f"SIF saved image {containerPath.name} is not in the staged working dir for {container.origTaggedName}"
             self.logger.warning(errmsg)
             raise ContainerFactoryException(errmsg)
+
+        if (
+            not containerPathMeta.is_file()
+            and isinstance(container, Container)
+            and container.metadataLocalPath is not None
+        ):
+            # Time to inject the metadata!
+            link_or_copy_pathlib(
+                container.metadataLocalPath, containerPathMeta, force_copy=True
+            )
+            was_redeployed = True
 
         if not containerPathMeta.is_file():
             errmsg = f"SIF saved image metadata {containerPathMeta.name} is not in the staged working dir for {container.origTaggedName}"
@@ -912,4 +946,4 @@ STDERR
             self.logger.exception(errmsg)
             raise ContainerFactoryException(errmsg)
 
-        return rebuilt_container, False
+        return rebuilt_container, was_redeployed
