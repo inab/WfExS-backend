@@ -134,7 +134,8 @@ from ..fetchers import (
     RemoteRepo,
 )
 
-from ..utils.misc import (
+from .misc import (
+    is_uri,
     lazy_import,
 )
 
@@ -2225,7 +2226,7 @@ WHERE   {
         entity: "rdflib.term.Identifier",
         public_name: "str",
         payload_dir: "pathlib.Path",
-    ) -> "Sequence[ROCratePayload]":
+    ) -> "Sequence[Union[str, ROCratePayload]]":
         entity_parts = self.__list_entity_parts(g, entity, public_name)
 
         payload_entity_parts = []
@@ -2234,17 +2235,23 @@ WHERE   {
                 part_row, rdflib.query.ResultRow
             ), "Check the SPARQL code, as it should be a SELECT query"
 
-            included_part_entity = self.__processPayloadEntity(
-                the_entity=part_row.part_entity,
-                payload_dir=payload_dir,
-                kindobj=ContentKind.File,
-                entity_type="secondary workflow component",
-                entity_name=str(part_row.part_name)
-                if part_row.part_name is not None
-                else "PACO",  # FIXME
-                the_file_size=part_row.file_size,
-                the_file_sha256=part_row.file_sha256,
-            )
+            included_part_entity: "Optional[Union[str, ROCratePayload]]" = None
+            if is_uri(str(part_row.part_entity)) and not str(
+                part_row.part_entity
+            ).startswith(self.RELATIVE_ROCRATE_SCHEME + ":"):
+                included_part_entity = str(part_row.part_entity)
+            else:
+                included_part_entity = self.__processPayloadEntity(
+                    the_entity=part_row.part_entity,
+                    payload_dir=payload_dir,
+                    kindobj=ContentKind.File,
+                    entity_type="secondary workflow component",
+                    entity_name=str(part_row.part_name)
+                    if part_row.part_name is not None
+                    else "PACO",  # FIXME
+                    the_file_size=part_row.file_size,
+                    the_file_sha256=part_row.file_sha256,
+                )
 
             if included_part_entity is not None:
                 payload_entity_parts.append(included_part_entity)
@@ -2385,28 +2392,38 @@ WHERE   {
                 workflow_parts = self.__list_payload_entity_parts(
                     g, langrow.origmainentity, public_name, payload_dir
                 )
-                if len(workflow_parts) == 0:
-                    base_dir = main_entity_path.parent
-                    main_entity_relpath = main_entity_path.name
-                    rel_path_files = []
-                else:
-                    rel_path_files = list(
-                        map(lambda part: cast("RelPath", part.rel_path), workflow_parts)
-                    )
-                    common_prefix = os.path.commonpath(
-                        [main_entity_relpath, *rel_path_files]
-                    )
-                    if len(common_prefix) == 0:
-                        base_dir = payload_dir
-                    else:
-                        base_dir = payload_dir / common_prefix
-                        main_entity_relpath = main_entity_path.relative_to(
-                            base_dir
-                        ).as_posix()
-                        rel_path_files = [
-                            cast("RelPath", part.path.relative_to(base_dir).as_posix())
-                            for part in workflow_parts
-                        ]
+                rel_path_files: "MutableSequence[Union[RelPath, URIType]]" = []
+                base_dir = main_entity_path.parent
+                main_entity_relpath = main_entity_path.name
+                if len(workflow_parts) > 0:
+                    rel_path_str: "MutableSequence[str]" = []
+                    rel_path_index: "MutableSequence[int]" = []
+                    for i_part, part in enumerate(workflow_parts):
+                        rel_path_file = cast(
+                            "RelPath",
+                            part.rel_path if isinstance(part, ROCratePayload) else part,
+                        )
+                        rel_path_files.append(rel_path_file)
+                        if isinstance(part, ROCratePayload):
+                            rel_path_str.append(rel_path_file)
+                            rel_path_index.append(i_part)
+
+                    if len(rel_path_str) > 0:
+                        common_prefix = os.path.commonpath(
+                            [include_main_entity.rel_path, *rel_path_str]
+                        )
+                        if len(common_prefix) > 0:
+                            base_dir = payload_dir / common_prefix
+                            main_entity_relpath = main_entity_path.relative_to(
+                                base_dir
+                            ).as_posix()
+                            for i_part in rel_path_index:
+                                part = workflow_parts[i_part]
+                                assert isinstance(part, ROCratePayload)
+                                rel_path_files[i_part] = cast(
+                                    "RelPath",
+                                    part.path.relative_to(base_dir).as_posix(),
+                                )
 
                 cached_workflow = LocalWorkflow(
                     dir=base_dir,
@@ -2420,6 +2437,7 @@ WHERE   {
                     else None,
                     relPathFiles=rel_path_files,
                 )
+                self.logger.error(f"POZI {cached_workflow}")
 
         return repo, workflow_type, cached_workflow
 

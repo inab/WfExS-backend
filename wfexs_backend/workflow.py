@@ -323,7 +323,10 @@ from .utils.contents import (
     link_or_copy_pathlib,
 )
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
-from .utils.misc import config_validate
+from .utils.misc import (
+    config_validate,
+    is_uri,
+)
 from .utils.zipfile_path import path_relative_to
 
 from .fetchers.trs_files import (
@@ -1852,7 +1855,41 @@ class WF:
                     repoEffectiveCheckout = repo.checkout
                     repoDir = injectable_workflow.dir
                     injected_workflow = injectable_workflow
-                    rel_path_files = injectable_workflow.relPathFiles
+                    issue_warning = False
+                    rel_path_files = injected_workflow.relPathFiles
+                    if repo.rel_path is not None:
+                        if (
+                            injected_workflow.relPath is not None
+                            and repo.rel_path.endswith(injected_workflow.relPath)
+                        ):
+                            if (
+                                injected_workflow.relPathFiles is not None
+                                and repo.rel_path != injected_workflow.relPath
+                            ):
+                                repo_rel_prefix = repo.rel_path[
+                                    0 : -len(injected_workflow.relPath)
+                                ]
+                                rel_path_files = []
+                                for rel_path_file in injected_workflow.relPathFiles:
+                                    # Do not prefix URLs
+                                    if is_uri(rel_path_file):
+                                        rel_path_files.append(rel_path_file)
+                                    else:
+                                        rel_path_files.append(
+                                            cast(
+                                                "RelPath",
+                                                repo_rel_prefix + rel_path_file,
+                                            )
+                                        )
+                        elif repo.rel_path != injected_workflow.relPath:
+                            issue_warning = True
+                    elif injected_workflow.relPath is not None:
+                        issue_warning = True
+
+                    if issue_warning:
+                        self.logger.warning(
+                            f"Injected workflow has a different relPath from the injected repo"
+                        )
                 else:
                     repoDir, repoEffectiveCheckout = self.wfexs.doMaterializeRepo(
                         repo,
@@ -1894,19 +1931,25 @@ class WF:
                     injected_workflow.relPath is not None
                     and len(injected_workflow.relPath) > 0
                 ):
+                    assert repo.rel_path is not None
                     link_or_copy_pathlib(
                         injected_workflow.dir / injected_workflow.relPath,
-                        workflow_dir / injected_workflow.relPath,
+                        workflow_dir / repo.rel_path,
                         force_copy=True,
                     )
 
                 if rel_path_files is not None:
-                    for inj in rel_path_files:
-                        link_or_copy_pathlib(
-                            injected_workflow.dir / inj,
-                            workflow_dir / inj,
-                            force_copy=True,
-                        )
+                    assert injected_workflow.relPathFiles is not None
+                    for inj, dest_inj in zip(
+                        injected_workflow.relPathFiles, rel_path_files
+                    ):
+                        # Do not try copying URLs
+                        if not is_uri(inj):
+                            link_or_copy_pathlib(
+                                injected_workflow.dir / inj,
+                                workflow_dir / dest_inj,
+                                force_copy=True,
+                            )
             elif repoDir.is_dir():
                 link_or_copy_pathlib(repoDir, workflow_dir, force_copy=True)
             else:
