@@ -485,7 +485,6 @@ class ZipfilePath(pathlib.Path):
         return targetpath
 
     def copy_to(self, dest: "pathlib.Path") -> "None":
-        self.logger.error(f"UY {self._root.filename} {self._at} {dest}")
         if self.is_file():
             self._extract_member(self._at, dest)
         else:
