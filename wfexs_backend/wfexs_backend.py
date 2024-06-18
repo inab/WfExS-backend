@@ -1366,7 +1366,7 @@ class WfExSBackend:
         # or a remote RO-Crate
         parsedROCrateURI = urllib.parse.urlparse(workflowROCrateFilenameOrURI)
         if parsedROCrateURI.scheme == "":
-            workflowROCrateFilename = cast("AnyPath", workflowROCrateFilenameOrURI)
+            workflowROCrateFilename = pathlib.Path(workflowROCrateFilenameOrURI)
         else:
             self.logger.info(f"* Fetching RO-Crate {workflowROCrateFilenameOrURI}")
             local_content = self.cacheFetch(
@@ -1913,7 +1913,7 @@ class WfExSBackend:
             )
             return CachedContent(
                 kind=ContentKind.Directory
-                if os.path.isdir(workflow_dir)
+                if workflow_dir.is_dir()
                 else ContentKind.File,
                 path=workflow_dir,
                 metadata_array=[],
@@ -1964,7 +1964,7 @@ class WfExSBackend:
         registerInCache: "bool" = True,
         offline: "bool" = False,
         meta_dir: "Optional[AbsPath]" = None,
-    ) -> "Tuple[AbsPath, RemoteRepo, Optional[WorkflowType], Optional[RepoTag]]":
+    ) -> "Tuple[pathlib.Path, RemoteRepo, Optional[WorkflowType], Optional[RepoTag]]":
         """
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
@@ -1998,9 +1998,9 @@ class WfExSBackend:
         i_workflow: "Optional[IdentifiedWorkflow]" = None
         engineDesc: "Optional[WorkflowType]" = None
         guessedRepo: "Optional[RemoteRepo]" = None
-        repoDir: "Optional[AbsPath]" = None
+        repoDir: "Optional[pathlib.Path]" = None
         putative: "bool" = False
-        cached_putative_path: "Optional[AbsPath]" = None
+        cached_putative_path: "Optional[pathlib.Path]" = None
         if parsedRepoURL.scheme in ("", TRS_SCHEME_PREFIX):
             # Extracting the TRS endpoint details from the parsedRepoURL
             if parsedRepoURL.scheme == TRS_SCHEME_PREFIX:
@@ -2136,7 +2136,7 @@ class WfExSBackend:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         meta_dir: "Optional[AbsPath]" = None,
-    ) -> "Tuple[IdentifiedWorkflow, Optional[AbsPath]]":
+    ) -> "Tuple[IdentifiedWorkflow, Optional[pathlib.Path]]":
         """
 
         :return:
@@ -2413,7 +2413,7 @@ class WfExSBackend:
         repo: "RemoteRepo",
         doUpdate: "bool" = True,
         registerInCache: "bool" = True,
-    ) -> "Tuple[AbsPath, RepoTag]":
+    ) -> "Tuple[pathlib.Path, RepoTag]":
         if repo.repo_type not in (RepoType.Other, RepoType.SoftwareHeritage):
             (
                 remote_url,
@@ -2445,7 +2445,7 @@ class WfExSBackend:
                 inputKind=kind,
             )
 
-        return repo_path, repo_effective_checkout
+        return pathlib.Path(repo_path), repo_effective_checkout
 
     def _doMaterializeGitRepo(
         self,
@@ -2537,7 +2537,7 @@ class WfExSBackend:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
-    ) -> "Tuple[Optional[IdentifiedWorkflow], AbsPath, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[Optional[IdentifiedWorkflow], pathlib.Path, Sequence[URIWithMetadata]]":
         try:
             cached_content = self.cacheFetch(
                 remote_url,
@@ -2568,8 +2568,8 @@ class WfExSBackend:
             )
 
             crate_hashed_id = hashlib.sha1(remote_url.encode("utf-8")).hexdigest()
-            roCrateFile = os.path.join(
-                self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION
+            roCrateFile = pathlib.Path(self.cacheROCrateDir) / (
+                crate_hashed_id + self.DEFAULT_RO_EXTENSION
             )
             if not os.path.exists(roCrateFile):
                 if os.path.lexists(roCrateFile):
@@ -2580,10 +2580,8 @@ class WfExSBackend:
                 )
 
             return (
-                self.getWorkflowRepoFromROCrateFile(
-                    cast("AbsPath", roCrateFile), expectedEngineDesc
-                ),
-                cast("AbsPath", roCrateFile),
+                self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc),
+                roCrateFile,
                 cached_content.metadata_array,
             )
         else:
@@ -2595,7 +2593,7 @@ class WfExSBackend:
 
     def getWorkflowRepoFromROCrateFile(
         self,
-        roCrateFile: "AbsPath",
+        roCrateFile: "pathlib.Path",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
     ) -> "IdentifiedWorkflow":
         """
@@ -2605,7 +2603,7 @@ class WfExSBackend:
         :return:
         """
 
-        public_name = roCrateFile
+        public_name = str(roCrateFile)
         jsonld_obj, payload_dir = ReadROCrateMetadata(
             roCrateFile, public_name=public_name
         )

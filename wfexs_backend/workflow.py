@@ -459,12 +459,13 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
         cached_workflow: "Optional[LocalWorkflow]" = None,
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
         preferred_containers: "Sequence[Container]" = [],
         preferred_operational_containers: "Sequence[Container]" = [],
-        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Minimal,
         strict_reproducibility_level: "bool" = False,
     ):
         """
@@ -519,6 +520,7 @@ class WF:
         # These internal variables are needed for imports.
         # They are not preserved in the marshalled staging state, so
         # their effects are only in the initial session
+        self.cached_repo = cached_repo
         self.cached_workflow = cached_workflow
         self.cached_inputs = cached_inputs
         self.cached_environment = cached_environment
@@ -1347,6 +1349,7 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
         cached_workflow: "Optional[LocalWorkflow]" = None,
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
@@ -1385,6 +1388,7 @@ class WF:
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
+            cached_repo=cached_repo,
             cached_workflow=cached_workflow,
             cached_inputs=cached_inputs,
             cached_environment=cached_environment,
@@ -1436,6 +1440,7 @@ class WF:
         the_containers: "Sequence[Container]" = []
         the_operational_containers: "Sequence[Container]" = []
         cached_workflow: "Optional[LocalWorkflow]" = None
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None
         if reproducibility_level >= ReproducibilityLevel.Full:
             if wfInstance.materializedParams is not None:
                 cached_inputs = copy.copy(wfInstance.materializedParams)
@@ -1484,6 +1489,10 @@ class WF:
                         wfInstance.materializedEngine.operational_containers
                     )
 
+        if reproducibility_level >= ReproducibilityLevel.Metadata:
+            if wfInstance.remote_repo is not None and wfInstance.engineDesc is not None:
+                cached_repo = (wfInstance.remote_repo, wfInstance.engineDesc)
+
             cached_workflow = wfInstance.getMaterializedWorkflow()
 
         # We have to reset the inherited paranoid mode and nickname
@@ -1504,6 +1513,7 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            cached_repo=cached_repo,
             cached_workflow=cached_workflow,
             cached_inputs=cached_inputs,
             cached_environment=cached_environment,
@@ -1563,7 +1573,7 @@ class WF:
     def FromPreviousROCrate(
         cls,
         wfexs: "WfExSBackend",
-        workflowROCrateFilename: "AnyPath",
+        workflowROCrateFilename: "pathlib.Path",
         public_name: "str",  # Mainly used for provenance and exceptions
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
         replaced_parameters_filename: "Optional[AnyPath]" = None,
@@ -1681,6 +1691,7 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            cached_repo=(repo, workflow_type),
             cached_workflow=cached_workflow,
             cached_inputs=cached_inputs,
             cached_environment=cached_environment,
@@ -1701,6 +1712,7 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
         cached_workflow: "Optional[LocalWorkflow]" = None,
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
@@ -1746,6 +1758,7 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoid_mode=paranoidMode,
+            cached_repo=cached_repo,
             cached_workflow=cached_workflow,
             cached_inputs=cached_inputs,
             cached_environment=cached_environment,
@@ -1804,6 +1817,8 @@ class WF:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]",
         offline: "bool" = False,
         ignoreCache: "bool" = False,
+        injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        injectable_workflow: "Optional[LocalWorkflow]" = None,
     ) -> None:
         """
         Fetch the whole workflow description based on the data obtained
@@ -1815,24 +1830,51 @@ class WF:
         """
 
         assert self.metaDir is not None
-        assert self.workflowDir is not None
+        assert self.workflowDir is not None, "The workflow directory should be defined"
+        workflow_dir = pathlib.Path(self.workflowDir)
 
-        repoDir: "Optional[AbsPath]" = None
+        repoDir: "Optional[pathlib.Path]" = None
+        injected_workflow: "Optional[LocalWorkflow]" = None
+        rel_path_files: "Optional[Sequence[Union[RelPath, URIType]]]" = None
         if self.remote_repo is None or ignoreCache:
-            (
-                repoDir,
-                repo,
-                self.engineDesc,
-                repoEffectiveCheckout,
-            ) = self.wfexs.cacheWorkflow(
-                workflow_id=workflow_id,
-                version_id=version_id,
-                trs_endpoint=trs_endpoint,
-                descriptor_type=descriptor_type,
-                ignoreCache=ignoreCache,
-                offline=offline,
-                meta_dir=self.metaDir,
-            )
+            repoEffectiveCheckout: "Optional[RepoTag]"
+            # Injectable repo info is a precondition for injectable local workflow
+            if injectable_repo is not None:
+                repo, self.engineDesc = injectable_repo
+
+                parsedRepoURL = urllib.parse.urlparse(repo.repo_url)
+                assert (
+                    len(parsedRepoURL.scheme) > 0
+                ), f"Repository id {repo.repo_url} should be a parsable URI"
+
+                if not ignoreCache and injectable_workflow is not None:
+                    # Injectable repo info is a precondition for injectable local workflow
+                    repoEffectiveCheckout = repo.checkout
+                    repoDir = injectable_workflow.dir
+                    injected_workflow = injectable_workflow
+                    rel_path_files = injectable_workflow.relPathFiles
+                else:
+                    repoDir, repoEffectiveCheckout = self.wfexs.doMaterializeRepo(
+                        repo,
+                        doUpdate=ignoreCache,
+                        # registerInCache=True,
+                    )
+            else:
+                (
+                    repoDir,
+                    repo,
+                    self.engineDesc,
+                    repoEffectiveCheckout,
+                ) = self.wfexs.cacheWorkflow(
+                    workflow_id=workflow_id,
+                    version_id=version_id,
+                    trs_endpoint=trs_endpoint,
+                    descriptor_type=descriptor_type,
+                    ignoreCache=ignoreCache,
+                    offline=offline,
+                    meta_dir=self.metaDir,
+                )
+
             self.remote_repo = repo
             # These are kept for compatibility
             self.repoURL = repo.repo_url
@@ -1842,31 +1884,47 @@ class WF:
 
             # Workflow Language version cannot be assumed here yet
             # A copy of the workflows is kept
-            assert (
-                self.workflowDir is not None
-            ), "The workflow directory should be defined"
-            if os.path.isdir(self.workflowDir):
-                shutil.rmtree(self.workflowDir)
+            if workflow_dir.is_dir():
+                shutil.rmtree(workflow_dir)
             # force_copy is needed to isolate the copy of the workflow
             # so local modifications in a working directory does not
             # poison the cached workflow
-            if os.path.isdir(repoDir):
-                link_or_copy(repoDir, self.workflowDir, force_copy=True)
+            if injected_workflow is not None:
+                if (
+                    injected_workflow.relPath is not None
+                    and len(injected_workflow.relPath) > 0
+                ):
+                    link_or_copy_pathlib(
+                        injected_workflow.dir / injected_workflow.relPath,
+                        workflow_dir / injected_workflow.relPath,
+                        force_copy=True,
+                    )
+
+                if rel_path_files is not None:
+                    for inj in rel_path_files:
+                        link_or_copy_pathlib(
+                            injected_workflow.dir / inj,
+                            workflow_dir / inj,
+                            force_copy=True,
+                        )
+            elif repoDir.is_dir():
+                link_or_copy_pathlib(repoDir, workflow_dir, force_copy=True)
             else:
-                os.makedirs(self.workflowDir, exist_ok=True)
+                workflow_dir.mkdir(parents=True, exist_ok=True)
                 if self.repoRelPath is None:
                     self.repoRelPath = cast("RelPath", "workflow.entrypoint")
-                link_or_copy(
+                link_or_copy_pathlib(
                     repoDir,
-                    cast("AbsPath", os.path.join(self.workflowDir, self.repoRelPath)),
+                    workflow_dir / self.repoRelPath,
                     force_copy=True,
                 )
 
         # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
-            dir=pathlib.Path(self.workflowDir),
+            dir=workflow_dir,
             relPath=self.repoRelPath,
             effectiveCheckout=self.repoEffectiveCheckout,
+            relPathFiles=rel_path_files,
         )
         self.logger.info(
             "materialized workflow repository (checkout {}): {}".format(
@@ -1929,6 +1987,8 @@ class WF:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         initial_engine_version: "Optional[EngineVersion]" = None,
+        injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        injectable_workflow: "Optional[LocalWorkflow]" = None,
     ) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
@@ -1940,6 +2000,8 @@ class WF:
                 self.descriptor_type,
                 offline=offline,
                 ignoreCache=ignoreCache,
+                injectable_repo=injectable_repo,
+                injectable_workflow=injectable_workflow,
             )
 
         assert (
@@ -2002,10 +2064,22 @@ class WF:
         self.materializedEngine = matWfEngV2
 
     def materializeWorkflowAndContainers(
-        self, offline: "bool" = False, ignoreCache: "bool" = False
+        self,
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        injectable_workflow: "Optional[LocalWorkflow]" = None,
+        injectable_containers: "Sequence[Container]" = [],
+        injectable_operational_containers: "Sequence[Container]" = [],
     ) -> None:
         if self.materializedEngine is None:
-            self.setupEngine(offline=offline, ignoreCache=ignoreCache)
+            # Only inject on first try
+            self.setupEngine(
+                offline=offline,
+                ignoreCache=ignoreCache,
+                injectable_repo=injectable_repo,
+                injectable_workflow=injectable_workflow,
+            )
 
         assert (
             self.materializedEngine is not None
@@ -2031,6 +2105,8 @@ class WF:
                 self.containersDir,
                 self.consolidatedWorkflowDir,
                 offline=offline,
+                injectable_containers=injectable_containers,
+                injectable_operational_containers=injectable_operational_containers,
             )
 
     # DEPRECATED?
@@ -3338,14 +3414,31 @@ class WF:
         # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
         # This method is called from within materializeWorkflowAndContainers
         # self.setupEngine(offline=offline)
-        self.materializeWorkflowAndContainers(offline=offline, ignoreCache=ignoreCache)
+        self.materializeWorkflowAndContainers(
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_repo=self.cached_repo
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
+            injectable_workflow=self.cached_workflow
+            if self.reproducibility_level >= ReproducibilityLevel.Full
+            else None,
+            injectable_containers=self.preferred_containers
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else [],
+            injectable_operational_containers=self.preferred_operational_containers
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else [],
+        )
 
         assert self.formatted_params is not None
         self.materializedParams = self.materializeInputs(
             self.formatted_params,
             offline=offline,
             ignoreCache=ignoreCache,
-            injectable_inputs=self.cached_inputs,
+            injectable_inputs=self.cached_inputs
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
         )
 
         assert self.formatted_environment is not None
@@ -3353,7 +3446,9 @@ class WF:
             self.formatted_environment,
             offline=offline,
             ignoreCache=ignoreCache,
-            injectable_inputs=self.cached_environment,
+            injectable_inputs=self.cached_environment
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
         )
 
         self.marshallStage()

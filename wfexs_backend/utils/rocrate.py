@@ -231,28 +231,26 @@ LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
 
 
 def ReadROCrateMetadata(
-    workflowROCrateFilename: "str", public_name: "str"
+    workflowROCrateFilename: "pathlib.Path", public_name: "str"
 ) -> "Tuple[Any, Optional[pathlib.Path]]":
     # Is it a bare file or an archive?
-    jsonld_filename: "Optional[str]" = None
+    jsonld_filename: "Optional[pathlib.Path]" = None
     payload_dir: "Optional[pathlib.Path]" = None
-    if os.path.isdir(workflowROCrateFilename):
-        possible_jsonld_filename = os.path.join(
-            workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
+    if workflowROCrateFilename.is_dir():
+        possible_jsonld_filename = workflowROCrateFilename / ROCRATE_JSONLD_FILENAME
+        legacy_jsonld_filename = (
+            workflowROCrateFilename / LEGACY_ROCRATE_JSONLD_FILENAME
         )
-        legacy_jsonld_filename = os.path.join(
-            workflowROCrateFilename, LEGACY_ROCRATE_JSONLD_FILENAME
-        )
-        if os.path.exists(possible_jsonld_filename):
+        if possible_jsonld_filename.exists():
             jsonld_filename = possible_jsonld_filename
-        elif os.path.exists(legacy_jsonld_filename):
+        elif legacy_jsonld_filename.exists():
             jsonld_filename = legacy_jsonld_filename
         else:
             raise ROCrateToolboxException(
                 f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
             )
-        payload_dir = pathlib.Path(workflowROCrateFilename)
-    elif os.path.isfile(workflowROCrateFilename):
+        payload_dir = workflowROCrateFilename
+    elif workflowROCrateFilename.is_file():
         jsonld_filename = workflowROCrateFilename
     else:
         raise ROCrateToolboxException(
@@ -264,7 +262,7 @@ def ReadROCrateMetadata(
     putative_mime = mag.from_file(os.path.realpath(jsonld_filename))
     # Bare possible RO-Crate
     if putative_mime == "application/json":
-        with open(jsonld_filename, mode="rb") as jdf:
+        with jsonld_filename.open(mode="rb") as jdf:
             jsonld_bin = jdf.read()
     # Archived possible RO-Crate
     elif putative_mime == "application/zip":
@@ -524,12 +522,12 @@ WHERE   {
     }
     {
         FILTER NOT EXISTS {
-            ?mainentity s:isBasedOn ?origmainentity .
-            ?origmainentity
+            ?mainentity s:isBasedOn ?somemainentity .
+            ?somemainentity
                 a bs:ComputationalWorkflow ;
-                dcterms:conformsTo ?bsworkflowprofile .
+                dcterms:conformsTo ?somebsworkflowprofile .
             FILTER (
-                STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
+                STRSTARTS(str(?somebsworkflowprofile), str(bswfprofile:))
             ) .
         }
         BIND (?mainentity AS ?origmainentity)
