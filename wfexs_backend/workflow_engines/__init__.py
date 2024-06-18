@@ -251,6 +251,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         containersDir: "AnyPath",
         offline: "bool" = False,
         force: "bool" = False,
+        injectable_containers: "Sequence[Container]" = [],
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         pass
 
@@ -770,6 +771,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         containersDir: "Optional[AnyPath]" = None,
         offline: "bool" = False,
         force: "bool" = False,
+        injectable_containers: "Sequence[Container]" = [],
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         if containersDir is None:
             containersDirPath = self.stagedContainersDir
@@ -783,6 +785,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 containers_dir=containersDirPath,
                 offline=offline,
                 force=force,
+                injectable_containers=injectable_containers,
             ),
             *self.container_factory.architecture,
         )
@@ -863,6 +866,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         containersDir: "AbsPath",
         consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
+        injectable_containers: "Sequence[Container]" = [],
+        injectable_operational_containers: "Sequence[Container]" = [],
     ) -> "Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr, ContainerOperatingSystem, ProcessorArchitecture]":
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
             matWfEng, consolidatedWorkflowDir, offline=offline
@@ -874,7 +879,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             containerEngineOs,
             arch,
         ) = matWfEngV2.instance.materialize_containers(
-            listOfContainerTags, containersDir, offline=offline
+            listOfContainerTags,
+            containersDir,
+            offline=offline,
+            injectable_containers=injectable_containers,
         )
 
         # Next ones are needed by the workflow engine itself
@@ -887,7 +895,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     _,
                     _,
                 ) = matWfEngV2.instance.materialize_containers(
-                    listOfOperationalContainerTags, containersDir, offline=offline
+                    listOfOperationalContainerTags,
+                    containersDir,
+                    offline=offline,
+                    injectable_containers=injectable_operational_containers,
                 )
             except:
                 logging.debug("FIXME materializing containers")

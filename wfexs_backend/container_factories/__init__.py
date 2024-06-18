@@ -692,6 +692,7 @@ STDERR
         containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
+        injectable_containers: "Sequence[Container]" = [],
     ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
@@ -703,14 +704,25 @@ STDERR
             containers_dir = self.stagedContainersDir
         for tag in tagList:
             if self.AcceptsContainer(tag):
+                # This one can provide partial or complete information
+                tag_to_use: "ContainerTaggedName" = tag
+                for injectable_container in injectable_containers:
+                    if (
+                        injectable_container.origTaggedName == tag.origTaggedName
+                        and injectable_container.source_type == tag.type
+                        and injectable_container.registries == tag.registries
+                    ):
+                        tag_to_use = injectable_container
+                        break
+
                 container: "Optional[Container]"
                 try:
                     container, was_redeployed = self.deploySingleContainer(
-                        tag, containers_dir=containers_dir, force=force
+                        tag_to_use, containers_dir=containers_dir, force=force
                     )
                 except ContainerFactoryException as cfe:
                     container = self.materializeSingleContainer(
-                        tag,
+                        tag_to_use,
                         containers_dir=containers_dir,
                         offline=offline,
                         force=force,
