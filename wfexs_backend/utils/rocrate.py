@@ -96,10 +96,10 @@ if TYPE_CHECKING:
     )
 
 # Needed by pyld to detect it
-import aiohttp
 import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
+import xdg.BaseDirectory
 
 # This code needs exception groups
 if sys.version_info[:2] < (3, 11):
@@ -124,6 +124,10 @@ from ..container_factories import (
 from .digests import (
     ComputeDigestFromFileLike,
     stringifyDigest,
+)
+
+from .pyld_caching import (
+    hook_pyld_cache,
 )
 
 from ..fetchers import (
@@ -358,6 +362,10 @@ class ROCrateToolbox(abc.ABC):
         )
 
         self.wfexs = wfexs
+
+        # Caching path for the contexts
+        cache_path = xdg.BaseDirectory.save_cache_path("es.elixir.WfExSJSONLD")
+        hook_pyld_cache(os.path.join(cache_path, "contexts.db"))
 
         # This is needed for proper behaviour
         # https://stackoverflow.com/a/6264214
