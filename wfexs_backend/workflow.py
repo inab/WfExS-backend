@@ -2410,7 +2410,7 @@ class WF:
         if not hardenPrettyLocal:
             if prettyLocal.is_symlink():
                 # Path.readlink was added in Python 3.9
-                oldLocal = os.readlink(prettyLocal)
+                oldLocal = pathlib.Path(os.readlink(prettyLocal))
 
                 hardenPrettyLocal = oldLocal != matContent.local
             elif prettyLocal.exists():
