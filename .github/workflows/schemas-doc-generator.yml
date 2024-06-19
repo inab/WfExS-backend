@@ -3,6 +3,8 @@ name: schemas-doc-generator
 on:
   push:
     branches: [main]
+    paths:
+      - 'wfexs_backend/schemas/*.json'
 
 jobs:
   json-schema-validation:
@@ -10,7 +12,7 @@ jobs:
     name: JSON Schema validation through pre-commit
     steps:
       - uses: actions/checkout@v3
-      - uses: pre-commit/action@v3.0.0
+      - uses: pre-commit/action@v3.0.1
         with:
           extra_args: --all -c .pre-commit-config.yaml jsonschema_dir_validate
   

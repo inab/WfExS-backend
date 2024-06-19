@@ -4,6 +4,8 @@ on:
   pull_request:
   push:
     branches: [main]
+    paths-ignore:
+      - 'constraints-*.txt'
 
 jobs:
   pre-commit:
