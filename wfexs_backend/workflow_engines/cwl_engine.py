@@ -22,6 +22,7 @@ import datetime
 import json
 import logging
 import os
+import pathlib
 import re
 import shutil
 import stat
@@ -47,6 +48,7 @@ from ..common import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from typing import (
         Any,
         Mapping,
@@ -327,16 +329,16 @@ class CWLWorkflowEngine(WorkflowEngine):
         """
         cwlPath = localWf.dir
         if localWf.relPath is not None:
-            cwlPath = cast("AbsPath", os.path.join(cwlPath, localWf.relPath))
+            cwlPath = cwlPath / localWf.relPath
 
-        if os.path.isdir(cwlPath):
+        if cwlPath.is_dir():
             self.logger.warning("CWL entrypoint cannot be a directory")
             return None, None
 
         # Is this a yaml?
         cwlVersion = None
         try:
-            with open(cwlPath, mode="r", encoding="utf-8") as pCWL:
+            with cwlPath.open(mode="r", encoding="utf-8") as pCWL:
                 wf_yaml = yaml.safe_load(pCWL)  # parse possible CWL
                 cwlVersion = wf_yaml.get("cwlVersion")
         except Exception as e:
@@ -420,7 +422,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                 MaterializedWorkflowEngine(
                     instance=self,
                     workflow=LocalWorkflow(
-                        dir=cast("AbsPath", "/"),
+                        dir=pathlib.Path("/"),
                         relPath=None,
                         effectiveCheckout=None,
                     ),
@@ -700,31 +702,30 @@ STDERR
         """
         localWf = matWorkflowEngine.workflow
         localWorkflowDir = localWf.dir
+        consolidatedWorkflowPath = pathlib.Path(consolidatedWorkflowDir)
 
         assert (
             localWf.relPath is not None
         ), "CWL workflows should have a relative file path"
 
         if os.path.isabs(localWf.relPath):
-            localWorkflowFile = cast("AbsPath", localWf.relPath)
+            localWorkflowFile = pathlib.Path(localWf.relPath)
         else:
-            localWorkflowFile = cast(
-                "AbsPath", os.path.join(localWorkflowDir, localWf.relPath)
-            )
+            localWorkflowFile = localWorkflowDir / localWf.relPath
         engineVersion = matWorkflowEngine.version
         # CWLWorkflowEngine directory is needed
         cwltool_install_dir = matWorkflowEngine.engine_path
 
-        if not os.path.isfile(localWorkflowFile):
+        if not localWorkflowFile.is_file():
             raise WorkflowEngineException(
-                "CWL workflow {} has not been materialized.".format(localWorkflowFile)
+                f"CWL workflow {localWorkflowFile} has not been materialized (not a file)."
             )
 
         # Extract hashes directories from localWorkflow
         (
             localWorkflowUsedHashes_head,
             localWorkflowUsedHashes_tail,
-        ) = localWorkflowDir.split("/")[-2:]
+        ) = localWorkflowDir.parts[-2:]
 
         # Setting up workflow packed name
         localWorkflowPackedName = (
@@ -734,19 +735,18 @@ STDERR
 
         # TODO: check whether the repo is newer than the packed file
 
-        consolidatedPackedWorkflowFile = cast(
-            "AbsPath", os.path.join(consolidatedWorkflowDir, localWorkflowPackedName)
+        consolidatedPackedWorkflowFile = (
+            consolidatedWorkflowPath / localWorkflowPackedName
         )
         if (
-            not os.path.isfile(consolidatedPackedWorkflowFile)
+            not consolidatedPackedWorkflowFile.is_file()
             or os.path.getsize(consolidatedPackedWorkflowFile) == 0
         ):
-            packedLocalWorkflowFile = cast(
-                "AbsPath",
-                os.path.join(self.cacheWorkflowPackDir, localWorkflowPackedName),
+            packedLocalWorkflowFile = (
+                pathlib.Path(self.cacheWorkflowPackDir) / localWorkflowPackedName
             )
             if (
-                not os.path.isfile(packedLocalWorkflowFile)
+                not packedLocalWorkflowFile.is_file()
                 or os.path.getsize(packedLocalWorkflowFile) == 0
             ):
                 if offline:
@@ -755,7 +755,7 @@ STDERR
                     )
 
                 # Execute cwltool --pack
-                with open(packedLocalWorkflowFile, mode="wb") as packedH:
+                with packedLocalWorkflowFile.open(mode="wb") as packedH:
                     with tempfile.NamedTemporaryFile() as cwltool_pack_stderr:
                         # Writing straight to the file
                         retVal = subprocess.Popen(
@@ -763,7 +763,7 @@ STDERR
                                 f"{cwltool_install_dir}/bin/cwltool",
                                 "--no-doc-cache",
                                 "--pack",
-                                localWorkflowFile,
+                                localWorkflowFile.as_posix(),
                             ],
                             stdout=packedH,
                             stderr=cwltool_pack_stderr,
@@ -789,7 +789,7 @@ STDERR
         # Getting the identifiers
         cwlVersion = None
         # TODO: collect conda hints
-        with open(consolidatedPackedWorkflowFile, encoding="utf-8") as pLWH:
+        with consolidatedPackedWorkflowFile.open(mode="r", encoding="utf-8") as pLWH:
             wf_yaml = yaml.safe_load(pLWH)  # parse packed CWL
             cwlVersion = wf_yaml.get("cwlVersion", "v1.0")
             dockerExprParser = jsonpath_ng.ext.parse(
@@ -813,7 +813,7 @@ STDERR
                     containerTags.add(dockerPullId)
 
         newLocalWf = LocalWorkflow(
-            dir=consolidatedWorkflowDir,
+            dir=consolidatedWorkflowPath,
             relPath=cast("RelPath", localWorkflowPackedName),
             effectiveCheckout=localWf.effectiveCheckout,
             langVersion=cwlVersion,
@@ -1041,8 +1041,8 @@ STDERR
                     # the workflow
                     with open(stdoutFilename, mode="wb+") as cwl_yaml_stdout:
                         with open(stderrFilename, mode="ab+") as cwl_yaml_stderr:
-                            jobIntermediateDir = intermediateDir + "/"
-                            outputDir = outputsDir + "/"
+                            jobIntermediateDir = intermediateDir.as_posix() + "/"
+                            outputDir = outputsDir.as_posix() + "/"
 
                             # This is needed to isolate execution environment
                             # and teach cwltool where to find the cached images
@@ -1151,7 +1151,7 @@ STDERR
                                 )
 
                             # Now, the environment variables to include
-                            bindable_paths = []
+                            bindable_paths: "MutableSequence[pathlib.Path]" = []
                             for mat_env in matEnvironment:
                                 if len(mat_env.values) > 0:
                                     cmd_arr.append(
@@ -1166,7 +1166,7 @@ STDERR
                                                 else mat_val.extrapolated_local
                                             )
                                             bindable_paths.append(the_local)
-                                            env_vals.append(the_local)
+                                            env_vals.append(the_local.as_posix())
                                         else:
                                             env_vals.append(str(mat_val))
                                     # Now, assign it
@@ -1287,7 +1287,7 @@ STDERR
             execInputs = self.executionInputs(matInputs, cwlInputs)
             if len(execInputs) != 0:
                 with open(filename, mode="w+", encoding="utf-8") as yaml_file:
-                    yaml.dump(
+                    yaml.safe_dump(
                         execInputs,
                         yaml_file,
                         allow_unicode=True,
@@ -1407,7 +1407,7 @@ STDERR
                                 ContentKind.File,
                                 ContentKind.ContentWithURIs,
                             ):
-                                if not os.path.exists(value.local):
+                                if not value.local.exists():
                                     self.logger.warning(
                                         "Input {} is not materialized".format(name)
                                     )
@@ -1415,7 +1415,7 @@ STDERR
                                     value.local
                                     if value.extrapolated_local is None
                                     else value.extrapolated_local
-                                )
+                                ).as_posix()
 
                                 eInput: "MutableMapping[str, Any]" = {
                                     "class": classType,
@@ -1429,7 +1429,7 @@ STDERR
                                                     secInput.kind
                                                 )
                                             ],
-                                            "location": secInput.local,
+                                            "location": secInput.local.as_posix(),
                                         }
                                         for secInput in matInput.secondaryInputs
                                     ]

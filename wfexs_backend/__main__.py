@@ -79,8 +79,13 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .security_context import SecurityContextVault
+from .utils.rocrate import (
+    ReproducibilityLevel,
+)
 from .wfexs_backend import WfExSBackend
-from .workflow import WF
+from .workflow import (
+    WF,
+)
 from . import get_WfExS_version_str
 from .utils.licences import LicenceMatcherSingleton
 from .utils.misc import DatetimeEncoder
@@ -272,6 +277,31 @@ def genParserSub(
                 dest="secure",
                 action="store_true",
                 help="Make secured working directory (default)",
+            )
+
+            ap_.add_argument(
+                "--strict-reproducibility",
+                dest="strict_reproducibility_level",
+                action="store_true",
+                default=False,
+                help="Strict reproducibility",
+            )
+            ap_.add_argument(
+                "--no-strict-reproducibility",
+                dest="strict_reproducibility_level",
+                action="store_false",
+                help="Permissive reproducibility",
+            )
+
+            ap_.add_argument(
+                "--reproducibility-level",
+                dest="reproducibility_level",
+                default=ReproducibilityLevel.Metadata,
+                choices=range(
+                    min(ReproducibilityLevel).value, max(ReproducibilityLevel).value + 1
+                ),
+                type=int,
+                help="Max reproducibility level to be tried",
             )
 
     if preStageParams or exportParams or command == WfExS_Commands.ReStage:
@@ -1243,7 +1273,7 @@ def main() -> None:
     localConfigFilename = args.localConfigFilename
     if localConfigFilename and os.path.exists(localConfigFilename):
         with open(localConfigFilename, mode="r", encoding="utf-8") as cf:
-            local_config = yaml.load(cf, Loader=YAMLLoader)
+            local_config = yaml.safe_load(cf)
     else:
         local_config = {}
         if localConfigFilename and not os.path.exists(localConfigFilename):
@@ -1265,7 +1295,7 @@ def main() -> None:
         cacheDir = tempfile.mkdtemp(prefix="wfexs", suffix="tmpcache")
         local_config["cacheDir"] = cacheDir
         # Assuring this temporal directory is removed at the end
-        atexit.register(shutil.rmtree, cacheDir)
+        atexit.register(shutil.rmtree, cacheDir, True)
         print(
             f"[WARNING] Cache directory not defined. Created a temporary one at {cacheDir}",
             file=sys.stderr,
@@ -1436,6 +1466,8 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
             secure=args.secure,
+            reproducibility_level=ReproducibilityLevel(args.reproducibility_level),
+            strict_reproducibility_level=args.strict_reproducibility_level,
         )
     else:
         print(
@@ -1472,7 +1504,12 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
             secure=args.secure,
+            reproducibility_level=ReproducibilityLevel(args.reproducibility_level),
+            strict_reproducibility_level=args.strict_reproducibility_level,
         )
+
+        # This is needed to be sure the encfs instance is unmounted
+        atexit.register(wfInstance.cleanup)
 
     wfSetup = wfInstance.getStagedSetup()
     print("\t- Working directory will be {}".format(wfSetup.work_dir), file=sys.stderr)

@@ -24,6 +24,7 @@ import collections.abc
 import copy
 import enum
 import logging
+import pathlib
 from typing import (
     TYPE_CHECKING,
     cast,
@@ -61,11 +62,14 @@ def marshall_namedtuple(obj: "Any") -> "Any":
             "_enum": obj.__class__.__name__,
             "value": obj.value,
         }
+    elif obj_is(pathlib.Path):
+        # Store the path, not the instance
+        return obj.as_posix()
     elif obj_is(tuple) and hasattr(obj, "_fields"):  # namedtuple
         fields = zip(obj._fields, recurse_m(obj))
         class_name = obj.__class__.__name__
         return dict(fields, **{"_type": class_name})
-    elif obj_is(abc.ABC) and hasattr(obj, "__dataclass_fields__"):  # dataclass
+    elif obj_is(object) and hasattr(obj, "__dataclass_fields__"):  # dataclass
         fields_m = map(
             lambda field: (field, marshall_namedtuple(getattr(obj, field))),
             obj.__dataclass_fields__.keys(),
@@ -104,6 +108,7 @@ def unmarshall_namedtuple(
         return map(lambda l: unmarshall_namedtuple(l, myglobals), x)
 
     # recurse_orig = lambda x, myglobals: map(lambda l: unmarshall_namedtuple(l, myglobals), x)
+    objres = obj
     obj_is = partial(isinstance, obj)
     if obj_is((collections.abc.Mapping, dict)):
         if "_enum" in obj:  # originally an enum
@@ -150,10 +155,12 @@ def unmarshall_namedtuple(
             # theTypeName = clazz.__name__
 
         # Fixes where some key was added or removed along the development
+        c_objn = objn
+
         v_fixes_m = getattr(clazz, "_value_fixes", None)
         if callable(v_fixes_m):
-            v_fixes = v_fixes_m()
-            c_objn = copy.copy(objn)
+            v_fixes = cast("Callable[[], Mapping[str, str]]", v_fixes_m)()
+            c_objn = copy.copy(c_objn)
             for dest_key, source_key in v_fixes.items():
                 if source_key is None:
                     # Removal if it is there
@@ -163,8 +170,15 @@ def unmarshall_namedtuple(
                     # Addition if it is there
                     if source_key in c_objn:
                         c_objn[dest_key] = c_objn[source_key]
-        else:
-            c_objn = objn
+
+        # Complex fixes, like type change
+        # this is needed for namedtuples, where their values are immutable
+        # once the object is built
+        m_fixes_m = getattr(clazz, "_mapping_fixes", None)
+        if callable(m_fixes_m):
+            c_objn = cast(
+                "Callable[[Mapping[str, Any]], Mapping[str, Any]]", m_fixes_m
+            )(c_objn)
 
         # Fixes where some key was renamed along the development
         fixes_m = getattr(clazz, "_key_fixes", None)
@@ -186,17 +200,17 @@ def unmarshall_namedtuple(
         #    return clazz(**fields)
 
         try:
-            return clazz(**fields)
+            objres = clazz(**fields)
         except:
-            logger.error(f"Unmarshalling Error instantiating {clazz.__name__}")
+            logger.exception(f"Unmarshalling Error instantiating {clazz.__name__}")
             raise
     elif obj_is(collections.abc.Iterable) and not obj_is(str):
         # print(type(obj))
         return type(obj)(recurse_u(obj, myglobals))
-    else:
-        if isinstance(obj, object):
-            if hasattr(obj, "_value_defaults_fixes") and callable(
-                getattr(obj, "_value_defaults_fixes")
-            ):
-                obj._value_defaults_fixes()
-        return obj
+
+    if isinstance(objres, object):
+        if hasattr(objres, "_value_defaults_fixes") and callable(
+            getattr(objres, "_value_defaults_fixes")
+        ):
+            objres._value_defaults_fixes()
+    return objres

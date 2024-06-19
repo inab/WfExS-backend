@@ -21,6 +21,7 @@ from __future__ import absolute_import
 import datetime
 import logging
 import os
+import pathlib
 import shutil
 import tempfile
 from typing import (
@@ -661,7 +662,7 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
         try:
             mappings = [
                 MaterializedContent(
-                    local=cast("AbsPath", local_filename),
+                    local=pathlib.Path(local_filename),
                     licensed_uri=LicensedURI(uri=cast("URIType", "")),
                     prettyFilename=cast("RelPath", remote_filename),
                     kind=ContentKind.File,

@@ -20,6 +20,7 @@ from __future__ import absolute_import
 
 import logging
 import os
+import pathlib
 import shutil
 from typing import (
     cast,
@@ -32,6 +33,8 @@ from .misc import lazy_import
 
 magic = lazy_import("magic")
 # import magic
+
+from .zipfile_path import ZipfilePath
 
 from ..common import (
     ContentKind,
@@ -73,7 +76,7 @@ from .digests import (
 
 
 def GetGeneratedDirectoryContent(
-    thePath: "AbsPath",
+    thePath: "Union[AbsPath, os.PathLike[str]]",
     uri: "Optional[LicensedURI]" = None,
     preferredFilename: "Optional[RelPath]" = None,
     signatureMethod: "Optional[FingerprintMethod]" = None,
@@ -89,7 +92,7 @@ def GetGeneratedDirectoryContent(
             if not entry.name.startswith("."):
                 theValue: "Optional[AbstractGeneratedContent]" = None
                 if entry.is_file():
-                    entry_path = cast("AbsPath", entry.path)
+                    entry_path = pathlib.Path(entry.path)
                     theValue = GeneratedContent(
                         local=entry_path,
                         # uri=None,
@@ -101,7 +104,7 @@ def GetGeneratedDirectoryContent(
                         ),
                     )
                 elif entry.is_dir():
-                    entry_path = cast("AbsPath", entry.path)
+                    entry_path = pathlib.Path(entry.path)
                     theValue = GetGeneratedDirectoryContent(
                         entry_path, signatureMethod=signatureMethod
                     )
@@ -117,7 +120,7 @@ def GetGeneratedDirectoryContent(
         signature = None
 
     return GeneratedDirectoryContent(
-        local=thePath,
+        local=thePath if isinstance(thePath, pathlib.Path) else pathlib.Path(thePath),
         uri=uri,
         preferredFilename=preferredFilename,
         values=theValues,
@@ -126,7 +129,7 @@ def GetGeneratedDirectoryContent(
 
 
 def GetGeneratedDirectoryContentFromList(
-    thePath: "AbsPath",
+    thePath: "Union[AbsPath, os.PathLike[str]]",
     theValues: "Sequence[AbstractGeneratedContent]",
     uri: "Optional[LicensedURI]" = None,
     preferredFilename: "Optional[RelPath]" = None,
@@ -148,7 +151,7 @@ def GetGeneratedDirectoryContentFromList(
         signature = None
 
     return GeneratedDirectoryContent(
-        local=thePath,
+        local=thePath if isinstance(thePath, pathlib.Path) else pathlib.Path(thePath),
         uri=uri,
         preferredFilename=preferredFilename,
         values=theValues,
@@ -234,45 +237,73 @@ def CWLDesc2Content(
     return matValues
 
 
-def copy2_nofollow(src: "str", dest: "str") -> "None":
+def copy2_nofollow(
+    src: "Union[str, os.PathLike[str]]", dest: "Union[str, os.PathLike[str]]"
+) -> "None":
     shutil.copy2(src, dest, follow_symlinks=False)
 
 
-def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) -> None:
-    assert os.path.exists(
-        src
-    ), f"File {src} must exist to be linked or copied {os.path.exists(src)} {os.path.lexists(src)}"
+def link_or_copy(
+    src: "Union[AnyPath, os.PathLike[str]]",
+    dest: "Union[AnyPath, os.PathLike[str]]",
+    force_copy: "bool" = False,
+) -> None:
+    link_or_copy_pathlib(
+        src if isinstance(src, pathlib.Path) else pathlib.Path(src),
+        dest if isinstance(dest, pathlib.Path) else pathlib.Path(dest),
+        force_copy=force_copy,
+    )
+
+
+def link_or_copy_pathlib(
+    src: "pathlib.Path", dest: "pathlib.Path", force_copy: "bool" = False
+) -> None:
+    assert (
+        src.exists()
+    ), f"File {src.as_posix()} must exist to be linked or copied {src.exists()} {src.is_symlink()}"
 
     # We should not deal with symlinks
-    src = cast("AbsPath", os.path.realpath(src))
-    dest = cast("AbsPath", os.path.realpath(dest))
+    src = src.resolve()
+    dest = dest.resolve()
     # Avoid losing everything by overwriting itself
-    if os.path.exists(dest) and os.path.samefile(src, dest):
+    dest_exists = dest.exists()
+    if dest_exists and src.samefile(dest):
         return
 
     # First, check whether inputs and content
     # are in the same filesystem
     # as of https://unix.stackexchange.com/a/44250
-    dest_exists = os.path.exists(dest)
     dest_or_ancestor_exists = dest_exists
     dest_or_ancestor = dest
     while not dest_or_ancestor_exists:
-        dest_or_ancestor = cast("AbsPath", os.path.dirname(dest_or_ancestor))
-        dest_or_ancestor_exists = os.path.exists(dest_or_ancestor)
-    dest_st_dev = os.lstat(dest_or_ancestor).st_dev
+        dest_or_ancestor = dest_or_ancestor.parent
+        dest_or_ancestor_exists = dest_or_ancestor.exists()
+    dest_st_dev = dest_or_ancestor.lstat().st_dev
 
     # It could be a subtree of not existing directories
     if not dest_exists:
-        dest_parent = os.path.dirname(dest)
-        if not os.path.isdir(dest_parent):
-            os.makedirs(dest_parent)
+        dest_parent = dest.parent
+        if not dest_parent.is_dir():
+            dest_parent.mkdir(parents=True)
 
     # Now, link or copy
-    if os.lstat(src).st_dev == dest_st_dev and not force_copy:
+    link_condition = False
+    try:
+        link_condition = (
+            not isinstance(src, ZipfilePath)
+            and src.lstat().st_dev == dest_st_dev
+            and not force_copy
+        )
+    except:
+        pass
+    if link_condition:
         try:
-            if os.path.isfile(src):
+            if src.is_file():
                 if dest_exists:
-                    os.unlink(dest)
+                    dest.unlink()
+                # link_to appeared in Python 3.8
+                # hardlink_to appeared in Python 3.10
+                # dest.hardlink_to(src)
                 os.link(src, dest)
             else:
                 # Recursively hardlinking
@@ -287,9 +318,9 @@ def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) ->
             # device, it can happen both paths are in different
             # bind mounts, which forbid hard links
             if ose.errno != 18:
-                if ose.errno == 1 and os.path.isfile(src):
+                if ose.errno == 1 and src.is_file():
                     try:
-                        with open(src, mode="rb") as dummy:
+                        with src.open(mode="rb") as dummy:
                             readable = dummy.readable()
                     except OSError as dummy_err:
                         readable = False
@@ -308,21 +339,29 @@ def link_or_copy(src: "AnyPath", dest: "AnyPath", force_copy: "bool" = False) ->
         force_copy = True
 
     if force_copy:
-        if os.path.isfile(src):
+        if src.is_file():
             # Copying the content
             # as it is in a separated filesystem
             if dest_exists:
-                os.unlink(dest)
-            shutil.copy2(src, dest)
+                dest.unlink()
+            if isinstance(src, ZipfilePath):
+                src.copy_to(dest)
+            else:
+                shutil.copy2(src, dest)
         else:
             # Recursively copying the content
             # as it is in a separated filesystem
             if dest_exists:
                 shutil.rmtree(dest)
-            shutil.copytree(src, dest, copy_function=copy2_nofollow)
+            if isinstance(src, ZipfilePath):
+                src.copy_to(dest)
+            else:
+                shutil.copytree(src, dest, copy_function=copy2_nofollow)
 
 
-def real_unlink_if_exists(the_path: "AnyPath", fail_ok: "bool" = False) -> "None":
+def real_unlink_if_exists(
+    the_path: "Union[AnyPath, os.PathLike[str]]", fail_ok: "bool" = False
+) -> "None":
     if os.path.lexists(the_path):
         try:
             canonical_to_be_erased = os.path.realpath(the_path)

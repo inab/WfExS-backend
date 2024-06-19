@@ -43,7 +43,7 @@ jobs:
           path: .mypy_cache/${{ matrix.python-version }}
           key: mypy-${{ matrix.python-version }}
       - name: 'pre-commit'
-        uses: pre-commit/action@v3.0.0
+        uses: pre-commit/action@v3.0.1
 #        if: ${{ matrix.python-version != '3.6' }}
         with:
           extra_args: --all -c .pre-commit-config.yaml
@@ -70,6 +70,8 @@ jobs:
           path: constraints-${{ matrix.python-version }}.txt
 
   pull_request_changes:
+    # Do this only when it is not a pull request validation
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     name: Pull request with the newly generated contents
     needs:

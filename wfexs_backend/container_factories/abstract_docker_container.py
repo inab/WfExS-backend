@@ -46,6 +46,7 @@ from ..common import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from types import (
         ModuleType,
     )
@@ -79,15 +80,15 @@ if TYPE_CHECKING:
     )
 
     from . import (
+        AbstractImageManifestMetadata,
         Container,
     )
 
     DockerLikeManifest: TypeAlias = Mapping[str, Any]
     MutableDockerLikeManifest: TypeAlias = MutableMapping[str, Any]
 
-    class DockerManifestMetadata(TypedDict):
+    class DockerManifestMetadata(AbstractImageManifestMetadata):
         image_id: "Fingerprint"
-        image_signature: "Fingerprint"
         manifests_signature: "Fingerprint"
         manifests: "Sequence[DockerLikeManifest]"
 
@@ -181,14 +182,14 @@ class AbstractDockerContainerFactory(ContainerFactory):
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying {self.variant_name()} container {dockerTag}")
             d_retval = subprocess.Popen(
-                [self.runtime_cmd, "inspect", dockerTag],
+                [self.runtime_cmd, "image", "inspect", dockerTag],
                 env=matEnv,
                 stdout=d_out,
                 stderr=d_err,
             ).wait()
 
             self.logger.debug(
-                f"{self.variant_name()} inspect {dockerTag} retval: {d_retval}"
+                f"{self.variant_name()} image inspect {dockerTag} retval: {d_retval}"
             )
 
             with open(d_out.name, mode="rb") as c_stF:
@@ -216,6 +217,35 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
             self.logger.debug(
                 f"{self.variant_name()} pull {dockerTag} retval: {d_retval}"
+            )
+
+            with open(d_out.name, mode="r") as c_stF:
+                d_out_v = c_stF.read()
+            with open(d_err.name, "r") as c_stF:
+                d_err_v = c_stF.read()
+
+            self.logger.debug(f"{self.variant_name()} pull stdout: {d_out_v}")
+
+            self.logger.debug(f"{self.variant_name()} pull stderr: {d_err_v}")
+
+            return cast("ExitVal", d_retval), d_out_v, d_err_v
+
+    def _tag(
+        self, dockerPullTag: "str", dockerTag: "str", matEnv: "Mapping[str, str]"
+    ) -> "Tuple[ExitVal, str, str]":
+        with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
+            self.logger.debug(
+                f"tagging {self.variant_name()} container {dockerPullTag} as {dockerTag}"
+            )
+            d_retval = subprocess.Popen(
+                [self.runtime_cmd, "tag", dockerPullTag, dockerTag],
+                env=matEnv,
+                stdout=d_out,
+                stderr=d_err,
+            ).wait()
+
+            self.logger.debug(
+                f"{self.variant_name()} tag {dockerPullTag} {dockerTag} retval: {d_retval}"
             )
 
             with open(d_out.name, mode="r") as c_stF:
@@ -258,7 +288,7 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
     def _load(
         self,
-        archivefile: "AbsPath",
+        archivefile: "pathlib.Path",
         dockerTag: "str",
         matEnv: "Mapping[str, str]",
     ) -> "Tuple[ExitVal, str, str]":
@@ -274,7 +304,7 @@ class AbstractDockerContainerFactory(ContainerFactory):
             )
 
         with package.open(
-            archivefile, mode="rb"
+            archivefile.as_posix(), mode="rb"
         ) as d_in, tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"loading {self.variant_name()} container {dockerTag}")
             with subprocess.Popen(
@@ -305,11 +335,11 @@ class AbstractDockerContainerFactory(ContainerFactory):
     def _save(
         self,
         dockerTag: "str",
-        destfile: "AbsPath",
+        destfile: "pathlib.Path",
         matEnv: "Mapping[str, str]",
     ) -> "Tuple[ExitVal, str]":
         with pgzip.open(
-            destfile, mode="wb"
+            destfile.as_posix(), mode="wb"
         ) as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"saving {self.variant_name()} container {dockerTag}")
             with subprocess.Popen(

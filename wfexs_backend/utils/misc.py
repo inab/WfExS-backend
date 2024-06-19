@@ -55,6 +55,7 @@ if TYPE_CHECKING:
         RelPath,
     )
 
+import urllib.parse
 import urllib.request
 
 import jsonschema.validators
@@ -329,3 +330,14 @@ def lazy_import(name: "str") -> "ModuleType":
         raise ModuleNotFoundError(f"No module named '{name}'")
 
     return module
+
+
+def is_uri(the_uri: "str") -> "bool":
+    """
+    Inspired in https://stackoverflow.com/a/38020041
+    """
+    try:
+        result = urllib.parse.urlparse(the_uri)
+        return result.scheme != ""
+    except:
+        return False

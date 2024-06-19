@@ -21,9 +21,8 @@ import pytest
 import datetime
 import logging
 
-from pathlib import Path
-
 import os
+import pathlib
 import sys
 import urllib.error
 
@@ -728,10 +727,10 @@ def test_nextcloud_push(file_params: "ParamTestData") -> "None":
             preferred_id=booked_entry.draft_id,
             items=[
                 GeneratedContent(
-                    local=cast("AbsPath", naive_path),
+                    local=pathlib.Path(naive_path),
                 ),
                 GeneratedContent(
-                    local=cast("AbsPath", naive_path),
+                    local=pathlib.Path(naive_path),
                     preferredFilename=cast("RelPath", STREAM_FILENAME),
                 ),
             ],

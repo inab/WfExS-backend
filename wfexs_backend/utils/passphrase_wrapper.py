@@ -176,7 +176,7 @@ class WfExSPassphraseGenerator:
                     # Prepare the compressed index
                     with tempfile.NamedTemporaryFile() as tmp_indexed_filename:
                         CompressedIndexedText.IndexTextFile(
-                            i_cached_content.path,
+                            i_cached_content.path.as_posix(),
                             tmp_indexed_filename.name,
                             substart=remote_wordlist.substart,
                             subend=remote_wordlist.subend,
@@ -194,7 +194,9 @@ class WfExSPassphraseGenerator:
 
                 indexed_filenames.append(indexed_filename)
 
-            word_sets[wordlist_tag] = CompressedIndexedText(cfiles=indexed_filenames)
+            word_sets[wordlist_tag] = CompressedIndexedText(
+                cfiles=list(map(lambda infil: infil.as_posix(), indexed_filenames))
+            )
 
         return word_sets
 

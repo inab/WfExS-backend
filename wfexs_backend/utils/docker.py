@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import abc
+import hashlib
 import json
 import logging
 from typing import (
@@ -42,10 +43,14 @@ if TYPE_CHECKING:
 
 from dxf import (
     DXF,
-    _verify_manifest,
     hash_bytes as dxf_hash_bytes,
     _schema2_mimetype as DockerManifestV2MIMEType,
     _schema2_list_mimetype as DockerFAT_schema2_mimetype,
+    split_digest as dxf_split_digest,
+)
+
+from dxf.exceptions import (
+    DXFDigestMismatchError,
 )
 
 import dxf.exceptions
@@ -126,14 +131,24 @@ class DXFFat(DXF):
             # "A schema1 manifest should always produce the same image id but
             # defining the steps to produce directly from the manifest is not
             # straight forward."
-            dcd_h = r.headers.get("Docker-Content-Digest")
-            _, dcd = _verify_manifest(  # type: ignore[no-untyped-call]
-                manifest,
-                parsed_manifest,
-                content_digest=dcd_h,
-                verify=False,
-                get_content_digest=True,
-            )
+            dcd = r.headers.get("Docker-Content-Digest")
+
+            # Borrowed from https://github.com/davedoesdev/dxf/blob/9e733e98d00ff8c5c5ec579659a431449bc3a322/dxf/__init__.py#L622-L635
+            if content is not None:
+                if dcd is not None:
+                    method_h, expected_dgst_h = dxf_split_digest(dcd)  # type: ignore[no-untyped-call]
+                    hasher = hashlib.new(method_h)
+                    hasher.update(content)
+                    dgst_h = hasher.hexdigest()
+                    if dgst_h != expected_dgst_h:
+                        raise DXFDigestMismatchError(  # type: ignore[no-untyped-call]
+                            method_h + ":" + dgst_h, method_h + ":" + expected_dgst_h
+                        )
+                else:
+                    dcd = dxf_hash_bytes(content)
+            else:
+                dcd = dxf_hash_bytes(manifest.encode("utf8"))
+
             assert dcd is not None, f"Empty dcd for {alias}"
         else:
             dcd = dxf_hash_bytes(manifest.encode("utf8"))
@@ -235,10 +250,13 @@ class DockerHelper(abc.ABC):
             pathToParse = parsedTag.netloc + parsedTag.path
 
         splitSep = "@sha256:"
-        splitPos = pathToParse.find(splitSep)
+        splitPos = pathToParse.rfind(splitSep)
         if splitPos == -1:
             splitSep = ":"
-            splitPos = pathToParse.find(splitSep)
+            splitPos = pathToParse.rfind(splitSep)
+        else:
+            # We need to include 'sha256:' prefix in alias
+            splitSep = "@"
 
         if splitPos != -1:
             repo = pathToParse[0:splitPos]
@@ -280,6 +298,7 @@ class DockerHelper(abc.ABC):
 
             assert partial_fingerprint is not None
         except Exception as e:
+            self.logger.exception(f"Unable to obtain fingerprint from {tag}")
             raise DockerHelperException(
                 f"Unable to obtain fingerprint from {tag}. Reason {e}"
             ) from e

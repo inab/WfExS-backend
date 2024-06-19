@@ -19,6 +19,7 @@
 from __future__ import absolute_import
 
 import os
+import pathlib
 import shutil
 import tempfile
 from typing import (
@@ -157,12 +158,12 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
 
         # Create temporary destination directory (if needed)
         tmpdir = None
-        source = None
+        source: "Optional[pathlib.Path]" = None
         metadata = None
         try:
             if len(items) > 1:
                 tmpdir = tempfile.mkdtemp(dir=self.tempdir, suffix="export")
-                source = tmpdir
+                source = pathlib.Path(tmpdir)
 
                 # Now, transfer all of them
                 for i_item, item in enumerate(items):
@@ -182,7 +183,11 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
                     dest = cast("AbsPath", os.path.join(tmpdir, relitem))
                     link_or_copy(item.local, dest)
             else:
-                source = items[0].local
+                source = (
+                    items[0].local
+                    if isinstance(items[0].local, pathlib.Path)
+                    else pathlib.Path(items[0].local)
+                )
 
             # Generated file URI injecting the preferred id an scheme
             uri_to_fetch = LicensedURI(
@@ -192,7 +197,7 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
                         urllib.parse.ParseResult(
                             scheme="file",
                             netloc="",
-                            path=source,
+                            path=source.as_posix(),
                             params="",
                             query=urllib.parse.urlencode(
                                 {"inject_as": preferred_id},

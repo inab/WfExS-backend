@@ -19,6 +19,7 @@ from __future__ import absolute_import
 
 import atexit
 import copy
+import dataclasses
 import datetime
 import inspect
 import json
@@ -40,6 +41,7 @@ from typing import (
     cast,
     Dict,
     NamedTuple,
+    # This one might be needed for proper unmarshalling
     Pattern,
     TYPE_CHECKING,
     TypeVar,
@@ -50,7 +52,6 @@ from .common import (
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
-    NoLicenceDescription,
     ResolvedORCID,
     StagedExecution,
 )
@@ -68,6 +69,10 @@ from .utils.orcid import (
 )
 
 if TYPE_CHECKING:
+    from os import (
+        PathLike,
+    )
+
     from typing import (
         Any,
         ClassVar,
@@ -77,7 +82,6 @@ if TYPE_CHECKING:
         MutableMapping,
         MutableSequence,
         Optional,
-        Pattern,
         Sequence,
         Set,
         Tuple,
@@ -90,6 +94,7 @@ if TYPE_CHECKING:
         Literal,
         TypeAlias,
         TypedDict,
+        TypeGuard,
         Required,
         NotRequired,
     )
@@ -220,6 +225,7 @@ if TYPE_CHECKING:
     WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
     WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
 
+
 import urllib.parse
 
 # This is needed to assure yaml.safe_load unmarshalls gives no error
@@ -241,12 +247,9 @@ from .pushers.abstract_contexted_export import (
 from .ro_crate import (
     WorkflowRunROCrate,
 )
-from .utils.licences import (
-    AcceptableLicenceSchemes,
-    LicenceMatcherSingleton,
-)
 from .utils.rocrate import (
     ReadROCrateMetadata,
+    ReproducibilityLevel,
 )
 
 from .security_context import (
@@ -270,10 +273,6 @@ try:
     from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
 except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
-
-# This is needed to keep backward compatibility
-# with ancient working directories
-Container.RegisterYAMLConstructor(YAMLLoader)
 
 from .common import (
     AbstractWfExSException,
@@ -322,9 +321,14 @@ from .workflow_engines import (
 from .utils.contents import (
     bin2dataurl,
     link_or_copy,
+    link_or_copy_pathlib,
 )
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
-from .utils.misc import config_validate
+from .utils.misc import (
+    config_validate,
+    is_uri,
+)
+from .utils.zipfile_path import path_relative_to
 
 from .fetchers.trs_files import (
     TRS_SCHEME_PREFIX,
@@ -459,6 +463,14 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        cached_workflow: "Optional[LocalWorkflow]" = None,
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
+        preferred_containers: "Sequence[Container]" = [],
+        preferred_operational_containers: "Sequence[Container]" = [],
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Minimal,
+        strict_reproducibility_level: "bool" = False,
     ):
         """
         Init function
@@ -508,6 +520,21 @@ class WF:
         )
 
         self.wfexs = wfexs
+
+        # These internal variables are needed for imports.
+        # They are not preserved in the marshalled staging state, so
+        # their effects are only in the initial session
+        self.cached_repo = cached_repo
+        self.cached_workflow = cached_workflow
+        self.cached_inputs = cached_inputs
+        self.cached_environment = cached_environment
+        self.preferred_containers = copy.copy(preferred_containers)
+        self.preferred_operational_containers = copy.copy(
+            preferred_operational_containers
+        )
+        self.reproducibility_level = reproducibility_level
+        self.strict_reproducibility_level = strict_reproducibility_level
+
         self.encWorkDir: "Optional[AbsPath]" = None
         self.workDir: "Optional[AbsPath]" = None
 
@@ -1170,6 +1197,21 @@ class WF:
             else [],
         )
 
+    def getMaterializedWorkflow(self) -> "Optional[LocalWorkflow]":
+        return (
+            self.localWorkflow
+            if self.materializedEngine is None
+            else self.materializedEngine.workflow
+        )
+
+    def getMaterializedContainers(self) -> "Sequence[Container]":
+        containers: "Sequence[Container]" = []
+        if self.materializedEngine is not None:
+            if self.materializedEngine.containers is not None:
+                containers = self.materializedEngine.containers
+
+        return containers
+
     def enableParanoidMode(self) -> None:
         self.paranoidMode = True
 
@@ -1186,7 +1228,8 @@ class WF:
         wfexs: "WfExSBackend",
         base_workflow_meta: "WorkflowMetaConfigBlock",
         replaced_parameters_filename: "AnyPath",
-    ) -> "WritableWorkflowMetaConfigBlock":
+    ) -> "Tuple[WritableWorkflowMetaConfigBlock, Mapping[str, Set[str]]]":
+        transferrable_keys = ("params", "environment")
         new_params_meta = cls.__read_yaml_config(replaced_parameters_filename)
 
         if (
@@ -1204,7 +1247,10 @@ class WF:
 
         # Now, trim everything but what it is allowed
         existing_keys = set(new_params_meta.keys())
-        existing_keys.remove("params")
+        for t_key in transferrable_keys:
+            if t_key in existing_keys:
+                existing_keys.remove(t_key)
+
         if len(existing_keys) > 0:
             for key in existing_keys:
                 del new_params_meta[key]
@@ -1219,9 +1265,13 @@ class WF:
 
         # Last, merge
         workflow_meta = copy.deepcopy(base_workflow_meta)
-        workflow_meta["params"].update(new_params_meta["params"])
+        transferred_items: "MutableMapping[str, Set[str]]" = dict()
+        for t_key in transferrable_keys:
+            if t_key in new_params_meta:
+                workflow_meta.setdefault(t_key, {}).update(new_params_meta[t_key])
+                transferred_items[t_key] = set(new_params_meta[t_key].keys())
 
-        return workflow_meta
+        return workflow_meta, transferred_items
 
     @classmethod
     def FromWorkDir(
@@ -1288,6 +1338,7 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            reproducibility_level=ReproducibilityLevel.Minimal,
         )
 
     @classmethod
@@ -1302,6 +1353,14 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        cached_workflow: "Optional[LocalWorkflow]" = None,
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
+        preferred_containers: "Sequence[Container]" = [],
+        preferred_operational_containers: "Sequence[Container]" = [],
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1333,6 +1392,14 @@ class WF:
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
+            cached_repo=cached_repo,
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
+            preferred_containers=preferred_containers,
+            preferred_operational_containers=preferred_operational_containers,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     @classmethod
@@ -1349,6 +1416,8 @@ class WF:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1363,9 +1432,85 @@ class WF:
         workflow_meta = copy.deepcopy(wfInstance.staging_recipe)
 
         if replaced_parameters_filename is not None:
-            workflow_meta = cls.__merge_params_from_file(
+            workflow_meta, replaced_items = cls.__merge_params_from_file(
                 wfexs, workflow_meta, replaced_parameters_filename
             )
+        else:
+            replaced_items = dict()
+
+        # Now, some postprocessing...
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None
+        the_containers: "Sequence[Container]" = []
+        the_operational_containers: "Sequence[Container]" = []
+        cached_workflow: "Optional[LocalWorkflow]" = None
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None
+        if reproducibility_level >= ReproducibilityLevel.Full:
+            if wfInstance.materializedParams is not None:
+                cached_inputs = copy.copy(wfInstance.materializedParams)
+
+                # Let's invalidate several params
+                # as several parameters could be replaced
+                replaced_inputs = replaced_items.get("params")
+                if (
+                    replaced_inputs is not None
+                    and isinstance(cached_inputs, list)
+                    and len(cached_inputs) > 0
+                ):
+                    # This is overcomplicated to pass checks in python 3.7 mypy
+                    def filter_cached_inputs(
+                        m_i: "MaterializedInput",
+                    ) -> "TypeGuard[bool]":
+                        assert replaced_inputs is not None
+                        return m_i.name not in replaced_inputs
+
+                    new_cached_inputs = list(
+                        filter(filter_cached_inputs, cached_inputs)
+                    )
+                    if len(new_cached_inputs) < len(cached_inputs):
+                        cached_inputs = cast(
+                            "Sequence[MaterializedInput]", new_cached_inputs
+                        )
+
+            if wfInstance.materializedEnvironment is not None:
+                cached_environment = copy.copy(wfInstance.materializedEnvironment)
+
+                # Let's invalidate several environment variables
+                # as several parameters could be replaced
+                replaced_environment = replaced_items.get("environment")
+                if (
+                    replaced_environment is not None
+                    and isinstance(cached_environment, list)
+                    and len(cached_environment) > 0
+                ):
+                    # This is overcomplicated to pass checks in python 3.7 mypy
+                    def filter_cached_environment(
+                        m_i: "MaterializedInput",
+                    ) -> "TypeGuard[bool]":
+                        assert replaced_environment is not None
+                        return m_i.name not in replaced_environment
+
+                    new_cached_environment = list(
+                        filter(filter_cached_environment, cached_environment)
+                    )
+                    if len(new_cached_environment) < len(cached_environment):
+                        cached_environment = cast(
+                            "Sequence[MaterializedInput]", new_cached_environment
+                        )
+
+            if wfInstance.materializedEngine is not None:
+                if wfInstance.materializedEngine.containers is not None:
+                    the_containers = wfInstance.materializedEngine.containers
+                if wfInstance.materializedEngine.operational_containers is not None:
+                    the_operational_containers = (
+                        wfInstance.materializedEngine.operational_containers
+                    )
+
+        if reproducibility_level >= ReproducibilityLevel.Metadata:
+            if wfInstance.remote_repo is not None and wfInstance.engineDesc is not None:
+                cached_repo = (wfInstance.remote_repo, wfInstance.engineDesc)
+
+            cached_workflow = wfInstance.getMaterializedWorkflow()
 
         # We have to reset the inherited paranoid mode and nickname
         for k_name in ("nickname", "paranoid_mode"):
@@ -1385,13 +1530,67 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            cached_repo=cached_repo,
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
+            preferred_containers=the_containers,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
+
+    @staticmethod
+    def _transferInputs(
+        payload_dir: "pathlib.Path",
+        inputs_dir: "pathlib.Path",
+        cached_inputs: "Sequence[MaterializedInput]",
+    ) -> "Sequence[MaterializedInput]":
+        new_cached_inputs = []
+        for cached_input in cached_inputs:
+            new_cached_input = cached_input
+            if len(new_cached_input.values) > 0 and isinstance(
+                new_cached_input.values[0], MaterializedContent
+            ):
+                new_values: "MutableSequence[MaterializedContent]" = []
+                for value in cast(
+                    "Sequence[MaterializedContent]", new_cached_input.values
+                ):
+                    source_file = payload_dir / value.local
+                    dest_file = inputs_dir / path_relative_to(source_file, payload_dir)
+                    new_value = value._replace(
+                        local=dest_file,
+                    )
+                    new_values.append(new_value)
+
+                new_cached_input = new_cached_input._replace(values=new_values)
+
+            if (
+                new_cached_input.secondaryInputs is not None
+                and len(new_cached_input.secondaryInputs) > 0
+                and isinstance(new_cached_input.secondaryInputs[0], MaterializedContent)
+            ):
+                new_secondaryInputs: "MutableSequence[MaterializedContent]" = []
+                for secondaryInput in new_cached_input.secondaryInputs:
+                    source_file = payload_dir / secondaryInput.local
+                    dest_file = inputs_dir / path_relative_to(source_file, payload_dir)
+                    new_secondaryInput = secondaryInput._replace(
+                        local=dest_file,
+                    )
+                    new_secondaryInputs.append(new_secondaryInput)
+
+                new_cached_input = new_cached_input._replace(
+                    secondaryInputs=new_secondaryInputs
+                )
+
+            new_cached_inputs.append(new_cached_input)
+
+        return new_cached_inputs
 
     @classmethod
     def FromPreviousROCrate(
         cls,
         wfexs: "WfExSBackend",
-        workflowROCrateFilename: "AnyPath",
+        workflowROCrateFilename: "pathlib.Path",
         public_name: "str",  # Mainly used for provenance and exceptions
         securityContextsConfigFilename: "Optional[AnyPath]" = None,
         replaced_parameters_filename: "Optional[AnyPath]" = None,
@@ -1402,31 +1601,41 @@ class WF:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method creates a new staged working directory
         based on the declaration of an existing one
         """
 
-        jsonld_obj = ReadROCrateMetadata(workflowROCrateFilename, public_name)
+        jsonld_obj, payload_dir = ReadROCrateMetadata(
+            workflowROCrateFilename, public_name
+        )
 
         (
             repo,
             workflow_type,
             container_type,
-            the_containers,
             params,
             environment,
             outputs,
+            cached_workflow,
+            the_containers,
+            cached_inputs,
+            cached_environment,
         ) = wfexs.rocrate_toolbox.generateWorkflowMetaFromJSONLD(
-            jsonld_obj, public_name
+            jsonld_obj,
+            public_name,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
+            payload_dir=payload_dir,
         )
 
         workflow_pid = wfexs.gen_workflow_pid(repo)
         logging.debug(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
         )
-        logging.debug(f"Containers {the_containers}")
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
             "workflow_id": workflow_pid,
             "workflow_type": workflow_type.shortname,
@@ -1443,15 +1652,65 @@ class WF:
         logging.debug(f"{json.dumps(workflow_meta, indent=4)}")
 
         if replaced_parameters_filename is not None:
-            workflow_meta = cls.__merge_params_from_file(
+            workflow_meta, replaced_items = cls.__merge_params_from_file(
                 wfexs, workflow_meta, replaced_parameters_filename
             )
+        else:
+            replaced_items = dict()
 
         # Last, be sure that what it has been generated is correct
         if wfexs.validateConfigFiles(workflow_meta, securityContextsConfigFilename) > 0:
             raise WFException(
                 f"Generated WfExS description from {public_name} fails (have a look at the log messages for details)"
             )
+
+        # Now, some postprocessing...
+        if (
+            reproducibility_level >= ReproducibilityLevel.Full
+            and payload_dir is not None
+        ):
+            # Let's invalidate several params and environment
+            # as several parameters could be replaced
+            replaced_inputs = replaced_items.get("params")
+            if (
+                replaced_inputs is not None
+                and isinstance(cached_inputs, list)
+                and len(cached_inputs) > 0
+            ):
+                # This is overcomplicated to pass checks in python 3.7 mypy
+                def filter_cached_inputs(m_i: "MaterializedInput") -> "TypeGuard[bool]":
+                    assert replaced_inputs is not None
+                    return m_i.name not in replaced_inputs
+
+                new_cached_inputs = list(filter(filter_cached_inputs, cached_inputs))
+                if len(new_cached_inputs) < len(cached_inputs):
+                    cached_inputs = cast(
+                        "Sequence[MaterializedInput]", new_cached_inputs
+                    )
+
+            replaced_environment = replaced_items.get("environment")
+            if (
+                replaced_environment is not None
+                and isinstance(cached_environment, list)
+                and len(cached_environment) > 0
+            ):
+                # This is overcomplicated to pass checks in python 3.7 mypy
+                def filter_cached_environment(
+                    m_i: "MaterializedInput",
+                ) -> "TypeGuard[bool]":
+                    assert replaced_environment is not None
+                    return m_i.name not in replaced_environment
+
+                new_cached_environment = list(
+                    filter(
+                        filter_cached_environment,
+                        cast("Sequence[MaterializedInput]", cached_environment),
+                    )
+                )
+                if len(new_cached_environment) < len(cached_environment):
+                    cached_environment = cast(
+                        "Sequence[MaterializedInput]", new_cached_environment
+                    )
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -1463,6 +1722,14 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoidMode=paranoidMode,
+            cached_repo=(repo, workflow_type),
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
+            preferred_containers=the_containers,
+            # TODO: preferred_operational_containers are not rescued (yet!)
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     @classmethod
@@ -1476,6 +1743,14 @@ class WF:
         private_key_filename: "Optional[AnyPath]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
+        cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        cached_workflow: "Optional[LocalWorkflow]" = None,
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
+        preferred_containers: "Sequence[Container]" = [],
+        preferred_operational_containers: "Sequence[Container]" = [],
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         """
         This class method might create a new staged working directory
@@ -1514,6 +1789,14 @@ class WF:
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             paranoid_mode=paranoidMode,
+            cached_repo=cached_repo,
+            cached_workflow=cached_workflow,
+            cached_inputs=cached_inputs,
+            cached_environment=cached_environment,
+            preferred_containers=preferred_containers,
+            preferred_operational_containers=preferred_operational_containers,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     @classmethod
@@ -1565,6 +1848,8 @@ class WF:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]",
         offline: "bool" = False,
         ignoreCache: "bool" = False,
+        injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        injectable_workflow: "Optional[LocalWorkflow]" = None,
     ) -> None:
         """
         Fetch the whole workflow description based on the data obtained
@@ -1576,24 +1861,85 @@ class WF:
         """
 
         assert self.metaDir is not None
-        assert self.workflowDir is not None
+        assert self.workflowDir is not None, "The workflow directory should be defined"
+        workflow_dir = pathlib.Path(self.workflowDir)
 
-        repoDir: "Optional[AbsPath]" = None
+        repoDir: "Optional[pathlib.Path]" = None
+        injected_workflow: "Optional[LocalWorkflow]" = None
+        rel_path_files: "Optional[Sequence[Union[RelPath, URIType]]]" = None
         if self.remote_repo is None or ignoreCache:
-            (
-                repoDir,
-                repo,
-                self.engineDesc,
-                repoEffectiveCheckout,
-            ) = self.wfexs.cacheWorkflow(
-                workflow_id=workflow_id,
-                version_id=version_id,
-                trs_endpoint=trs_endpoint,
-                descriptor_type=descriptor_type,
-                ignoreCache=ignoreCache,
-                offline=offline,
-                meta_dir=self.metaDir,
-            )
+            repoEffectiveCheckout: "Optional[RepoTag]"
+            # Injectable repo info is a precondition for injectable local workflow
+            if injectable_repo is not None:
+                repo, self.engineDesc = injectable_repo
+
+                parsedRepoURL = urllib.parse.urlparse(repo.repo_url)
+                assert (
+                    len(parsedRepoURL.scheme) > 0
+                ), f"Repository id {repo.repo_url} should be a parsable URI"
+
+                if not ignoreCache and injectable_workflow is not None:
+                    # Injectable repo info is a precondition for injectable local workflow
+                    repoEffectiveCheckout = repo.checkout
+                    repoDir = injectable_workflow.dir
+                    injected_workflow = injectable_workflow
+                    issue_warning = False
+                    rel_path_files = injected_workflow.relPathFiles
+                    if repo.rel_path is not None:
+                        if (
+                            injected_workflow.relPath is not None
+                            and repo.rel_path.endswith(injected_workflow.relPath)
+                        ):
+                            if (
+                                injected_workflow.relPathFiles is not None
+                                and repo.rel_path != injected_workflow.relPath
+                            ):
+                                repo_rel_prefix = repo.rel_path[
+                                    0 : -len(injected_workflow.relPath)
+                                ]
+                                rel_path_files = []
+                                for rel_path_file in injected_workflow.relPathFiles:
+                                    # Do not prefix URLs
+                                    if is_uri(rel_path_file):
+                                        rel_path_files.append(rel_path_file)
+                                    else:
+                                        rel_path_files.append(
+                                            cast(
+                                                "RelPath",
+                                                repo_rel_prefix + rel_path_file,
+                                            )
+                                        )
+                        elif repo.rel_path != injected_workflow.relPath:
+                            issue_warning = True
+                    elif injected_workflow.relPath is not None:
+                        issue_warning = True
+
+                    if issue_warning:
+                        self.logger.warning(
+                            f"Injected workflow has a different relPath from the injected repo"
+                        )
+                else:
+                    repoDir, repoEffectiveCheckout = self.wfexs.doMaterializeRepo(
+                        repo,
+                        doUpdate=ignoreCache,
+                        # registerInCache=True,
+                    )
+            else:
+                (
+                    repoDir,
+                    repo,
+                    self.engineDesc,
+                    repoEffectiveCheckout,
+                ) = self.wfexs.cacheWorkflow(
+                    workflow_id=workflow_id,
+                    version_id=version_id,
+                    trs_endpoint=trs_endpoint,
+                    descriptor_type=descriptor_type,
+                    ignoreCache=ignoreCache,
+                    offline=offline,
+                    meta_dir=self.metaDir,
+                )
+
             self.remote_repo = repo
             # These are kept for compatibility
             self.repoURL = repo.repo_url
@@ -1603,31 +1949,53 @@ class WF:
 
             # Workflow Language version cannot be assumed here yet
             # A copy of the workflows is kept
-            assert (
-                self.workflowDir is not None
-            ), "The workflow directory should be defined"
-            if os.path.isdir(self.workflowDir):
-                shutil.rmtree(self.workflowDir)
+            if workflow_dir.is_dir():
+                shutil.rmtree(workflow_dir)
             # force_copy is needed to isolate the copy of the workflow
             # so local modifications in a working directory does not
             # poison the cached workflow
-            if os.path.isdir(repoDir):
-                link_or_copy(repoDir, self.workflowDir, force_copy=True)
+            if injected_workflow is not None:
+                if (
+                    injected_workflow.relPath is not None
+                    and len(injected_workflow.relPath) > 0
+                ):
+                    assert repo.rel_path is not None
+                    link_or_copy_pathlib(
+                        injected_workflow.dir / injected_workflow.relPath,
+                        workflow_dir / repo.rel_path,
+                        force_copy=True,
+                    )
+
+                if rel_path_files is not None:
+                    assert injected_workflow.relPathFiles is not None
+                    for inj, dest_inj in zip(
+                        injected_workflow.relPathFiles, rel_path_files
+                    ):
+                        # Do not try copying URLs
+                        if not is_uri(inj):
+                            link_or_copy_pathlib(
+                                injected_workflow.dir / inj,
+                                workflow_dir / dest_inj,
+                                force_copy=True,
+                            )
+            elif repoDir.is_dir():
+                link_or_copy_pathlib(repoDir, workflow_dir, force_copy=True)
             else:
-                os.makedirs(self.workflowDir, exist_ok=True)
+                workflow_dir.mkdir(parents=True, exist_ok=True)
                 if self.repoRelPath is None:
                     self.repoRelPath = cast("RelPath", "workflow.entrypoint")
-                link_or_copy(
+                link_or_copy_pathlib(
                     repoDir,
-                    cast("AbsPath", os.path.join(self.workflowDir, self.repoRelPath)),
+                    workflow_dir / self.repoRelPath,
                     force_copy=True,
                 )
 
         # We cannot know yet the dependencies
         localWorkflow = LocalWorkflow(
-            dir=self.workflowDir,
+            dir=workflow_dir,
             relPath=self.repoRelPath,
             effectiveCheckout=self.repoEffectiveCheckout,
+            relPathFiles=rel_path_files,
         )
         self.logger.info(
             "materialized workflow repository (checkout {}): {}".format(
@@ -1690,6 +2058,8 @@ class WF:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         initial_engine_version: "Optional[EngineVersion]" = None,
+        injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        injectable_workflow: "Optional[LocalWorkflow]" = None,
     ) -> None:
         # The engine is populated by self.fetchWorkflow()
         if self.engine is None:
@@ -1701,6 +2071,8 @@ class WF:
                 self.descriptor_type,
                 offline=offline,
                 ignoreCache=ignoreCache,
+                injectable_repo=injectable_repo,
+                injectable_workflow=injectable_workflow,
             )
 
         assert (
@@ -1763,10 +2135,22 @@ class WF:
         self.materializedEngine = matWfEngV2
 
     def materializeWorkflowAndContainers(
-        self, offline: "bool" = False, ignoreCache: "bool" = False
+        self,
+        offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
+        injectable_workflow: "Optional[LocalWorkflow]" = None,
+        injectable_containers: "Sequence[Container]" = [],
+        injectable_operational_containers: "Sequence[Container]" = [],
     ) -> None:
         if self.materializedEngine is None:
-            self.setupEngine(offline=offline, ignoreCache=ignoreCache)
+            # Only inject on first try
+            self.setupEngine(
+                offline=offline,
+                ignoreCache=ignoreCache,
+                injectable_repo=injectable_repo,
+                injectable_workflow=injectable_workflow,
+            )
 
         assert (
             self.materializedEngine is not None
@@ -1792,6 +2176,8 @@ class WF:
                 self.containersDir,
                 self.consolidatedWorkflowDir,
                 offline=offline,
+                injectable_containers=injectable_containers,
+                injectable_operational_containers=injectable_operational_containers,
             )
 
     # DEPRECATED?
@@ -1870,6 +2256,7 @@ class WF:
         formatted_params: "Union[ParamsBlock, Sequence[Mapping[str, Any]]]",
         offline: "bool" = False,
         ignoreCache: "bool" = False,
+        injectable_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         lastInput: "int" = 0,
     ) -> "Sequence[MaterializedInput]":
         assert (
@@ -1879,12 +2266,23 @@ class WF:
             self.extrapolatedInputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
 
+        injectable_inputs_dict: "Mapping[str, MaterializedInput]"
+        if injectable_inputs is not None and not ignoreCache:
+            injectable_inputs_dict = {
+                injectable_input.name: injectable_input
+                for injectable_input in injectable_inputs
+            }
+        else:
+            # Ignore injected inputs salvaged from elsewhere
+            injectable_inputs_dict = dict()
+
         theParams, numInputs, the_failed_uris = self.fetchInputs(
             formatted_params,
             workflowInputs_destdir=self.inputsDir,
             workflowExtrapolatedInputs_destdir=self.extrapolatedInputsDir,
             offline=offline,
             ignoreCache=ignoreCache,
+            injectable_inputs_dict=injectable_inputs_dict,
             lastInput=lastInput,
         )
 
@@ -1966,7 +2364,7 @@ class WF:
         offline: "bool",
         storeDir: "Union[AbsPath, CacheType]",
         cacheable: "bool",
-        inputDestDir: "AbsPath",
+        inputDestDir: "pathlib.Path",
         globExplode: "Optional[str]",
         prefix: "str" = "",
         hardenPrettyLocal: "bool" = False,
@@ -1993,38 +2391,42 @@ class WF:
         if prettyRelname is None:
             prettyRelname = matContent.prettyFilename
 
-        prettyLocal = cast("AbsPath", os.path.join(inputDestDir, prettyRelname))
+        prettyLocal = inputDestDir / prettyRelname
 
         # Protection against misbehaviours which could hijack the
         # execution environment
-        realPrettyLocal = os.path.realpath(prettyLocal)
-        realInputDestDir = os.path.realpath(inputDestDir)
-        if not realPrettyLocal.startswith(realInputDestDir):
-            prettyRelname = cast("RelPath", os.path.basename(realPrettyLocal))
-            prettyLocal = cast("AbsPath", os.path.join(inputDestDir, prettyRelname))
+        realPrettyLocal = prettyLocal.resolve()
+        realInputDestDir = inputDestDir.resolve()
+        # Path.is_relative_to was introduced in Python 3.9
+        # if not realPrettyLocal.is_relative_to(realInputDestDir):
+        common_path = pathlib.Path(
+            os.path.commonpath([realPrettyLocal, realInputDestDir])
+        )
+        if realInputDestDir != common_path:
+            prettyRelname = cast("RelPath", realPrettyLocal.name)
+            prettyLocal = inputDestDir / prettyRelname
 
         # Checking whether local name hardening is needed
         if not hardenPrettyLocal:
-            if os.path.islink(prettyLocal):
-                oldLocal = os.readlink(prettyLocal)
+            if prettyLocal.is_symlink():
+                # Path.readlink was added in Python 3.9
+                oldLocal = pathlib.Path(os.readlink(prettyLocal))
 
                 hardenPrettyLocal = oldLocal != matContent.local
-            elif os.path.exists(prettyLocal):
+            elif prettyLocal.exists():
                 hardenPrettyLocal = True
 
         if hardenPrettyLocal:
             # Trying to avoid collisions on input naming
-            prettyLocal = cast(
-                "AbsPath", os.path.join(inputDestDir, prefix + prettyRelname)
-            )
+            prettyLocal = inputDestDir / (prefix + prettyRelname)
 
-        if not os.path.exists(prettyLocal):
+        if not prettyLocal.exists():
             # We are either hardlinking or copying here
-            link_or_copy(matContent.local, prettyLocal)
+            link_or_copy_pathlib(matContent.local, prettyLocal)
 
         remote_pairs = []
         if globExplode is not None:
-            prettyLocalPath = pathlib.Path(prettyLocal)
+            prettyLocalPath = prettyLocal
             matParse = urllib.parse.urlparse(matContent.licensed_uri.uri)
             for exp in prettyLocalPath.glob(globExplode):
                 relPath = exp.relative_to(prettyLocalPath)
@@ -2053,7 +2455,7 @@ class WF:
                 )
                 remote_pairs.append(
                     MaterializedContent(
-                        local=cast("AbsPath", str(exp)),
+                        local=exp,
                         licensed_uri=lic_expUri,
                         prettyFilename=relName,
                         metadata_array=matContent.metadata_array,
@@ -2407,8 +2809,8 @@ class WF:
         t_split = tabconf["column-sep"].encode("utf-8").decode("unicode-escape")
         t_uri_cols: "Sequence[int]" = tabconf["uri-columns"]
 
-        inputDestDir = workflowInputs_destdir
-        extrapolatedInputDestDir = workflowExtrapolatedInputs_destdir
+        inputDestDir = pathlib.Path(workflowInputs_destdir)
+        extrapolatedInputDestDir = pathlib.Path(workflowExtrapolatedInputs_destdir)
 
         path_tokens = linearKey.split(".")
         # Filling in the defaults
@@ -2450,15 +2852,17 @@ class WF:
             relative_dir = None
 
         if relative_dir is not None:
-            newInputDestDir = os.path.realpath(os.path.join(inputDestDir, relative_dir))
-            if newInputDestDir.startswith(os.path.realpath(inputDestDir)):
-                inputDestDir = cast("AbsPath", newInputDestDir)
-                extrapolatedInputDestDir = cast(
-                    "AbsPath",
-                    os.path.realpath(
-                        os.path.join(extrapolatedInputDestDir, relative_dir)
-                    ),
-                )
+            newInputDestDir = (inputDestDir / relative_dir).resolve()
+            # Path.is_relative_to was introduced in Python 3.9
+            # if newInputDestDir.is_relative_to(inputDestDir):
+            common_path = pathlib.Path(
+                os.path.commonpath([newInputDestDir, inputDestDir])
+            )
+            if common_path == inputDestDir:
+                inputDestDir = newInputDestDir
+                extrapolatedInputDestDir = (
+                    extrapolatedInputDestDir / relative_dir
+                ).resolve()
 
         # The storage dir depends on whether it can be cached or not
         storeDir: "Union[CacheType, AbsPath]" = (
@@ -2538,7 +2942,7 @@ class WF:
 
             secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]"
             if len(these_secondary_uris) > 0:
-                secondary_uri_mapping: "MutableMapping[str, str]" = dict()
+                secondary_uri_mapping: "MutableMapping[str, pathlib.Path]" = dict()
                 secondary_remote_pairs = []
                 # Fetch each gathered URI
                 for secondary_remote_file in these_secondary_uris:
@@ -2575,18 +2979,15 @@ class WF:
 
                 # Now, reopen each file to replace URLs by paths
                 for i_remote_pair, remote_pair in enumerate(remote_pairs):
-                    extrapolated_local = os.path.join(
-                        extrapolatedInputDestDir,
-                        os.path.relpath(remote_pair.local, inputDestDir),
+                    extrapolated_local = extrapolatedInputDestDir / os.path.relpath(
+                        remote_pair.local, inputDestDir
                     )
-                    with open(
-                        remote_pair.local,
+                    with remote_pair.local.open(
                         mode="rt",
                         encoding="utf-8",
                         newline=t_newline,
                     ) as tH:
-                        with open(
-                            extrapolated_local,
+                        with extrapolated_local.open(
                             mode="wt",
                             encoding="utf-8",
                             newline=t_newline,
@@ -2613,7 +3014,7 @@ class WF:
                                         # Should we check whether it is a URI?
                                         cols[t_uri_col] = secondary_uri_mapping[
                                             cols[t_uri_col]
-                                        ]
+                                        ].as_posix()
                                         fixed_row = True
 
                                 if fixed_row:
@@ -2624,7 +3025,7 @@ class WF:
                     # Last, fix it
                     remote_pairs[i_remote_pair] = remote_pair._replace(
                         kind=ContentKind.ContentWithURIs,
-                        extrapolated_local=cast("AbsPath", extrapolated_local),
+                        extrapolated_local=extrapolated_local,
                     )
             else:
                 secondary_remote_pairs = None
@@ -2639,12 +3040,54 @@ class WF:
 
         return theNewInputs, lastInput, the_failed_uris
 
+    def _injectContent(
+        self,
+        injectable_content: "Sequence[MaterializedContent]",
+        dest_path: "pathlib.Path",
+        pretty_relname: "str",
+        last_input: "int" = 1,
+    ) -> "Tuple[MutableSequence[MaterializedContent], int]":
+        injected_content: "MutableSequence[MaterializedContent]" = []
+        for injectable in injectable_content:
+            # Detecting naming collisions
+            pretty_filename = injectable.prettyFilename
+            pretty_rel = pathlib.Path(pretty_filename)
+            dest_content = dest_path / pretty_rel
+            if dest_content.exists():
+                dest_content = dest_path / pretty_relname
+
+            # Stay here while collisions happen
+            while dest_content.exists():
+                prefix = str(last_input) + "_"
+                dest_content = dest_path / pretty_rel.with_name(
+                    prefix + pretty_rel.name
+                )
+                last_input += 1
+
+            # Transfer it
+            dest_content.parent.mkdir(parents=True, exist_ok=True)
+            link_or_copy_pathlib(injectable.local, dest_content, force_copy=True)
+            # Second, record it
+            injected_content.append(
+                MaterializedContent(
+                    local=dest_content,
+                    licensed_uri=injectable.licensed_uri,
+                    prettyFilename=pretty_filename,
+                    kind=injectable.kind,
+                    metadata_array=injectable.metadata_array,
+                    fingerprint=injectable.fingerprint,
+                )
+            )
+
+        return injected_content, last_input
+
     def fetchInputs(
         self,
         params: "Union[ParamsBlock, Sequence[ParamsBlock]]",
         workflowInputs_destdir: "AbsPath",
         workflowExtrapolatedInputs_destdir: "AbsPath",
         prefix: "str" = "",
+        injectable_inputs_dict: "Mapping[str, MaterializedInput]" = {},
         lastInput: "int" = 0,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
@@ -2681,7 +3124,7 @@ class WF:
                         ContentKind.File.name,
                         ContentKind.Directory.name,
                     ):  # input files
-                        inputDestDir = workflowInputs_destdir
+                        inputDestDir = pathlib.Path(workflowInputs_destdir)
                         globExplode = None
 
                         path_tokens = linearKey.split(".")
@@ -2810,113 +3253,137 @@ class WF:
                                 relative_dir = None
 
                             if relative_dir is not None:
-                                newInputDestDir = os.path.realpath(
-                                    os.path.join(inputDestDir, relative_dir)
-                                )
-                                if newInputDestDir.startswith(
-                                    os.path.realpath(inputDestDir)
-                                ):
-                                    inputDestDir = cast("AbsPath", newInputDestDir)
-
-                            # The storage dir depends on whether it can be cached or not
-                            storeDir: "Union[CacheType, AbsPath]" = (
-                                CacheType.Input if cacheable else workflowInputs_destdir
-                            )
-
-                            remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
-                            if remote_files is not None:
-                                if isinstance(
-                                    remote_files, list
-                                ):  # more than one input file
-                                    remote_files_f = remote_files
-                                else:
-                                    remote_files_f = [
-                                        cast("Sch_InputURI_Fetchable", remote_files)
-                                    ]
-                            else:
-                                inline_values_l: "Sequence[str]"
-                                if isinstance(inline_values, list):
-                                    # more than one inline content
-                                    inline_values_l = inline_values
-                                else:
-                                    inline_values_l = [cast("str", inline_values)]
-
-                                remote_files_f = [
-                                    # The storage dir is always the input
-                                    # Let's use the trick of translating the content into a data URL
-                                    bin2dataurl(inline_value.encode("utf-8"))
-                                    for inline_value in inline_values_l
-                                ]
+                                newInputDestDir = (
+                                    inputDestDir / relative_dir
+                                ).resolve()
+                                if newInputDestDir.relative_to(inputDestDir):
+                                    inputDestDir = newInputDestDir
 
                             remote_pairs: "MutableSequence[MaterializedContent]" = []
-                            for remote_file in remote_files_f:
-                                lastInput += 1
-                                try:
-                                    t_remote_pairs = self._fetchRemoteFile(
-                                        remote_file,
-                                        contextName,
-                                        offline,
-                                        storeDir,
-                                        cacheable,
-                                        inputDestDir,
-                                        globExplode,
-                                        prefix=str(lastInput) + "_",
-                                        prettyRelname=pretty_relname,
-                                        ignoreCache=this_ignoreCache,
-                                    )
-                                    remote_pairs.extend(t_remote_pairs)
-                                except:
-                                    self.logger.exception(
-                                        f"Error while fetching primary URI {remote_file}"
-                                    )
-                                    the_failed_uris.append(remote_file)
+                            secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]" = (
+                                None
+                            )
 
-                            secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]"
-                            if (remote_files is not None) and (
-                                secondary_remote_files is not None
+                            injectable_input = injectable_inputs_dict.get(linearKey)
+                            if (
+                                injectable_input is not None
+                                and len(injectable_input.values) > 0
                             ):
-                                secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
-                                if isinstance(
-                                    secondary_remote_files, list
-                                ):  # more than one input file
-                                    secondary_remote_files_f = secondary_remote_files
+                                # Input being injected
+                                remote_pairs, lastInput = self._injectContent(
+                                    cast(
+                                        "Sequence[MaterializedContent]",
+                                        injectable_input.values,
+                                    ),
+                                    inputDestDir,
+                                    last_input=lastInput,
+                                    pretty_relname=pretty_relname,
+                                )
+
+                            if len(remote_pairs) == 0:
+                                # No injected content
+                                # The storage dir depends on whether it can be cached or not
+                                storeDir: "Union[CacheType, AbsPath]" = (
+                                    CacheType.Input
+                                    if cacheable
+                                    else workflowInputs_destdir
+                                )
+
+                                remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+                                if remote_files is not None:
+                                    if isinstance(
+                                        remote_files, list
+                                    ):  # more than one input file
+                                        remote_files_f = remote_files
+                                    else:
+                                        remote_files_f = [
+                                            cast("Sch_InputURI_Fetchable", remote_files)
+                                        ]
                                 else:
-                                    secondary_remote_files_f = [
-                                        cast(
-                                            "Sch_InputURI_Fetchable",
-                                            secondary_remote_files,
-                                        )
+                                    inline_values_l: "Sequence[str]"
+                                    if isinstance(inline_values, list):
+                                        # more than one inline content
+                                        inline_values_l = inline_values
+                                    else:
+                                        inline_values_l = [cast("str", inline_values)]
+
+                                    remote_files_f = [
+                                        # The storage dir is always the input
+                                        # Let's use the trick of translating the content into a data URL
+                                        bin2dataurl(inline_value.encode("utf-8"))
+                                        for inline_value in inline_values_l
                                     ]
 
-                                secondary_remote_pairs = []
-                                for secondary_remote_file in secondary_remote_files_f:
-                                    # The last fetched content prefix is the one used
-                                    # for all the secondaries
+                                for remote_file in remote_files_f:
+                                    lastInput += 1
                                     try:
-                                        t_secondary_remote_pairs = (
-                                            self._fetchRemoteFile(
-                                                secondary_remote_file,
-                                                contextName,
-                                                offline,
-                                                storeDir,
-                                                cacheable,
-                                                inputDestDir,
-                                                globExplode,
-                                                prefix=str(lastInput) + "_",
-                                                ignoreCache=ignoreCache,
-                                            )
+                                        t_remote_pairs = self._fetchRemoteFile(
+                                            remote_file,
+                                            contextName,
+                                            offline,
+                                            storeDir,
+                                            cacheable,
+                                            inputDestDir,
+                                            globExplode,
+                                            prefix=str(lastInput) + "_",
+                                            prettyRelname=pretty_relname,
+                                            ignoreCache=this_ignoreCache,
                                         )
-                                        secondary_remote_pairs.extend(
-                                            t_secondary_remote_pairs
-                                        )
+                                        remote_pairs.extend(t_remote_pairs)
                                     except:
                                         self.logger.exception(
-                                            f"Error while fetching secondary URI {secondary_remote_file}"
+                                            f"Error while fetching primary URI {remote_file}"
                                         )
-                                        the_failed_uris.append(secondary_remote_file)
+                                        the_failed_uris.append(remote_file)
 
-                            else:
-                                secondary_remote_pairs = None
+                                if (remote_files is not None) and (
+                                    secondary_remote_files is not None
+                                ):
+                                    secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+                                    if isinstance(
+                                        secondary_remote_files, list
+                                    ):  # more than one input file
+                                        secondary_remote_files_f = (
+                                            secondary_remote_files
+                                        )
+                                    else:
+                                        secondary_remote_files_f = [
+                                            cast(
+                                                "Sch_InputURI_Fetchable",
+                                                secondary_remote_files,
+                                            )
+                                        ]
+
+                                    secondary_remote_pairs = []
+                                    for (
+                                        secondary_remote_file
+                                    ) in secondary_remote_files_f:
+                                        # The last fetched content prefix is the one used
+                                        # for all the secondaries
+                                        try:
+                                            t_secondary_remote_pairs = (
+                                                self._fetchRemoteFile(
+                                                    secondary_remote_file,
+                                                    contextName,
+                                                    offline,
+                                                    storeDir,
+                                                    cacheable,
+                                                    inputDestDir,
+                                                    globExplode,
+                                                    prefix=str(lastInput) + "_",
+                                                    ignoreCache=ignoreCache,
+                                                )
+                                            )
+                                            secondary_remote_pairs.extend(
+                                                t_secondary_remote_pairs
+                                            )
+                                        except:
+                                            self.logger.exception(
+                                                f"Error while fetching secondary URI {secondary_remote_file}"
+                                            )
+                                            the_failed_uris.append(
+                                                secondary_remote_file
+                                            )
 
                             theInputs.append(
                                 MaterializedInput(
@@ -2928,16 +3395,12 @@ class WF:
                         else:
                             if inputClass == ContentKind.File.name:
                                 # Empty input, i.e. empty file
-                                inputDestPath = cast(
-                                    "AbsPath",
-                                    os.path.join(inputDestDir, *linearKey.split(".")),
+                                inputDestPath = inputDestDir.joinpath(
+                                    *linearKey.split(".")
                                 )
-                                os.makedirs(
-                                    os.path.dirname(inputDestPath), exist_ok=True
-                                )
+                                inputDestPath.parent.mkdir(parents=True, exist_ok=True)
                                 # Creating the empty file
-                                with open(inputDestPath, mode="wb") as idH:
-                                    pass
+                                inputDestPath.touch()
                                 contentKind = ContentKind.File
                             else:
                                 inputDestPath = inputDestDir
@@ -2954,7 +3417,7 @@ class WF:
                                             ),
                                             prettyFilename=cast(
                                                 "RelPath",
-                                                os.path.basename(inputDestPath),
+                                                inputDestPath.name,
                                             ),
                                             kind=contentKind,
                                         )
@@ -3005,6 +3468,7 @@ class WF:
                         workflowExtrapolatedInputs_destdir=workflowExtrapolatedInputs_destdir,
                         prefix=linearKey + ".",
                         lastInput=lastInput,
+                        injectable_inputs_dict=injectable_inputs_dict,
                         offline=offline,
                         ignoreCache=ignoreCache,
                     )
@@ -3032,16 +3496,41 @@ class WF:
         # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
         # This method is called from within materializeWorkflowAndContainers
         # self.setupEngine(offline=offline)
-        self.materializeWorkflowAndContainers(offline=offline, ignoreCache=ignoreCache)
+        self.materializeWorkflowAndContainers(
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_repo=self.cached_repo
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
+            injectable_workflow=self.cached_workflow
+            if self.reproducibility_level >= ReproducibilityLevel.Full
+            else None,
+            injectable_containers=self.preferred_containers
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else [],
+            injectable_operational_containers=self.preferred_operational_containers
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else [],
+        )
 
         assert self.formatted_params is not None
         self.materializedParams = self.materializeInputs(
-            self.formatted_params, offline=offline, ignoreCache=ignoreCache
+            self.formatted_params,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_inputs=self.cached_inputs
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
         )
 
         assert self.formatted_environment is not None
         self.materializedEnvironment = self.materializeInputs(
-            self.formatted_environment, offline=offline, ignoreCache=ignoreCache
+            self.formatted_environment,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_inputs=self.cached_environment
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
         )
 
         self.marshallStage()
@@ -3267,30 +3756,6 @@ class WF:
 
         return self.exportResults(actions, vault, action_ids, fail_ok=fail_ok)
 
-    def _curate_licence_list(
-        self, licences: "Sequence[str]"
-    ) -> "Sequence[LicenceDescription]":
-        # As these licences can be in short format, resolve them to URIs
-        expanded_licences: "MutableSequence[LicenceDescription]" = []
-        if len(licences) == 0:
-            expanded_licences.append(NoLicenceDescription)
-        else:
-            licence_matcher = self.GetLicenceMatcher()
-            rejected_licences: "MutableSequence[str]" = []
-            for lic in licences:
-                matched_licence = licence_matcher.matchLicence(lic)
-                if matched_licence is None:
-                    rejected_licences.append(lic)
-                else:
-                    expanded_licences.append(matched_licence)
-
-            if len(rejected_licences) > 0:
-                raise WFException(
-                    f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
-                )
-
-        return expanded_licences
-
     def _curate_orcid_list(
         self, orcids: "Sequence[str]", fail_ok: "bool" = True
     ) -> "Sequence[ResolvedORCID]":
@@ -3454,7 +3919,7 @@ class WF:
                     else:
                         preferred_id = action.preferred_id
 
-                expanded_licences = self._curate_licence_list(the_licences)
+                expanded_licences = self.wfexs.curate_licence_list(the_licences)
                 curated_orcids = self._curate_orcid_list(the_orcids)
 
                 export_p = self._instantiate_export_plugin(
@@ -4371,7 +4836,7 @@ This is an enumeration of the types of collected contents:
                     )
                     retval.append(
                         MaterializedContent(
-                            local=self.staged_setup.inputs_dir,
+                            local=pathlib.Path(self.staged_setup.inputs_dir),
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
@@ -4464,12 +4929,8 @@ This is an enumeration of the types of collected contents:
                     prettyFilename = cast("RelPath", stagedExec.outputsDir)
                     retval.append(
                         MaterializedContent(
-                            local=cast(
-                                "AbsPath",
-                                os.path.join(
-                                    self.staged_setup.work_dir, stagedExec.outputsDir
-                                ),
-                            ),
+                            local=pathlib.Path(self.staged_setup.work_dir)
+                            / stagedExec.outputsDir,
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
@@ -4485,9 +4946,10 @@ This is an enumeration of the types of collected contents:
                     )
             elif item.type == ExportItemType.WorkingDirectory:
                 # The whole working directory
+                assert self.staged_setup.work_dir is not None
                 retval.append(
                     MaterializedContent(
-                        local=cast("AbsPath", self.staged_setup.work_dir),
+                        local=pathlib.Path(self.staged_setup.work_dir),
                         licensed_uri=LicensedURI(
                             uri=cast(
                                 "URIType", "wfexs:" + self.staged_setup.instance_id
@@ -4556,7 +5018,7 @@ This is an enumeration of the types of collected contents:
                 )
                 retval.append(
                     MaterializedContent(
-                        local=cast("AbsPath", temp_rocrate_file),
+                        local=pathlib.Path(temp_rocrate_file),
                         licensed_uri=LicensedURI(
                             uri=cast(
                                 "URIType",
@@ -4726,13 +5188,3 @@ This is an enumeration of the types of collected contents:
         self.logger.info("Execution RO-Crate created: {}".format(filename))
 
         return filename
-
-    _LicenceMatcher: "ClassVar[Optional[LicenceMatcher]]" = None
-
-    @classmethod
-    def GetLicenceMatcher(cls) -> "LicenceMatcher":
-        if cls._LicenceMatcher is None:
-            cls._LicenceMatcher = LicenceMatcherSingleton()
-            assert cls._LicenceMatcher is not None
-
-        return cls._LicenceMatcher

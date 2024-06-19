@@ -1,7 +1,7 @@
 pyyaml
 jsonpath-ng
 jsonschema[format_nongpl] >= 3.0.0
-jsonschema[format_nongpl] < 4.18.0 ; python_version <= '3.7'
+jsonschema[format_nongpl] < 4.18.0 ; python_version < '3.8'
 jsonpointer
 python-magic >= 0.4.27
 paramiko[ed25519]
@@ -9,6 +9,8 @@ certifi
 crypt4gh
 bagit
 aioftp
+aiohttp-client-cache[sqlite] >= 0.11.0 ; python_version >= '3.8'
+aiohttp-client-cache[sqlite] < 0.11.0 ; python_version < '3.8'
 openpyxl
 xlrd2
 dulwich

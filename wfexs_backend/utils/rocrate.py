@@ -24,9 +24,14 @@ import inspect
 import json
 import logging
 import os.path
+import pathlib
 import sys
 import urllib.parse
 import zipfile
+
+# Older versions of Python do not have zipfile.Path
+# and newer do not inherit from pathlib.Path
+from .zipfile_path import ZipfilePath
 
 from typing import (
     cast,
@@ -39,6 +44,7 @@ import warnings
 if TYPE_CHECKING:
     from typing import (
         Any,
+        IO,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -50,14 +56,21 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
+        TypeAlias,
     )
 
     from ..common import (
+        AbsPath,
+        EngineVersion,
         Fingerprint,
+        PathlibLike,
         RelPath,
         RepoURL,
         RepoTag,
+        SymbolicParamName,
         URIType,
+        URIWithMetadata,
+        WFLangVersion,
     )
 
     from ..container_factories import (
@@ -83,10 +96,10 @@ if TYPE_CHECKING:
     )
 
 # Needed by pyld to detect it
-import aiohttp
 import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
+import xdg.BaseDirectory
 
 # This code needs exception groups
 if sys.version_info[:2] < (3, 11):
@@ -95,6 +108,12 @@ if sys.version_info[:2] < (3, 11):
 from ..common import (
     ContainerType,
     ContentKind,
+    DefaultNoLicenceTuple,
+    LicensedURI,
+    LocalWorkflow,
+    MaterializedContent,
+    MaterializedInput,
+    NoLicenceDescription,
 )
 
 from ..container_factories import (
@@ -103,14 +122,20 @@ from ..container_factories import (
 )
 
 from .digests import (
+    ComputeDigestFromFileLike,
     stringifyDigest,
+)
+
+from .pyld_caching import (
+    hook_pyld_cache,
 )
 
 from ..fetchers import (
     RemoteRepo,
 )
 
-from ..utils.misc import (
+from .misc import (
+    is_uri,
     lazy_import,
 )
 
@@ -118,10 +143,22 @@ magic = lazy_import("magic")
 # import magic
 
 
+class ReproducibilityLevel(enum.IntEnum):
+    Minimal = enum.auto()  # Minimal / no reproducibility is requested
+    Metadata = enum.auto()  # Metadata reproducibility is requested
+    Full = enum.auto()  # Full reproducibility (metadata + payload) is required")
+
+
 class ContainerTypeMetadata(NamedTuple):
     sa_id: "str"
     applicationCategory: "str"
     ct_applicationCategory: "str"
+
+
+class ROCratePayload(NamedTuple):
+    rel_path: "str"
+    path: "pathlib.Path"
+    signature: "Optional[Fingerprint]"
 
 
 ContainerTypeMetadataDetails: "Final[Mapping[ContainerType, ContainerTypeMetadata]]" = {
@@ -198,25 +235,27 @@ ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.json"
 LEGACY_ROCRATE_JSONLD_FILENAME: "Final[str]" = "ro-crate-metadata.jsonld"
 
 
-def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "Any":
+def ReadROCrateMetadata(
+    workflowROCrateFilename: "pathlib.Path", public_name: "str"
+) -> "Tuple[Any, Optional[pathlib.Path]]":
     # Is it a bare file or an archive?
-    jsonld_filename: "Optional[str]" = None
-    if os.path.isdir(workflowROCrateFilename):
-        possible_jsonld_filename = os.path.join(
-            workflowROCrateFilename, ROCRATE_JSONLD_FILENAME
+    jsonld_filename: "Optional[pathlib.Path]" = None
+    payload_dir: "Optional[pathlib.Path]" = None
+    if workflowROCrateFilename.is_dir():
+        possible_jsonld_filename = workflowROCrateFilename / ROCRATE_JSONLD_FILENAME
+        legacy_jsonld_filename = (
+            workflowROCrateFilename / LEGACY_ROCRATE_JSONLD_FILENAME
         )
-        legacy_jsonld_filename = os.path.join(
-            workflowROCrateFilename, LEGACY_ROCRATE_JSONLD_FILENAME
-        )
-        if os.path.exists(possible_jsonld_filename):
+        if possible_jsonld_filename.exists():
             jsonld_filename = possible_jsonld_filename
-        elif os.path.exists(legacy_jsonld_filename):
+        elif legacy_jsonld_filename.exists():
             jsonld_filename = legacy_jsonld_filename
         else:
             raise ROCrateToolboxException(
                 f"{public_name} does not contain a member {ROCRATE_JSONLD_FILENAME} or {LEGACY_ROCRATE_JSONLD_FILENAME}"
             )
-    elif os.path.isfile(workflowROCrateFilename):
+        payload_dir = workflowROCrateFilename
+    elif workflowROCrateFilename.is_file():
         jsonld_filename = workflowROCrateFilename
     else:
         raise ROCrateToolboxException(
@@ -228,7 +267,7 @@ def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "
     putative_mime = mag.from_file(os.path.realpath(jsonld_filename))
     # Bare possible RO-Crate
     if putative_mime == "application/json":
-        with open(jsonld_filename, mode="rb") as jdf:
+        with jsonld_filename.open(mode="rb") as jdf:
             jsonld_bin = jdf.read()
     # Archived possible RO-Crate
     elif putative_mime == "application/zip":
@@ -251,6 +290,7 @@ def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "
                 raise ROCrateToolboxException(
                     f"{ROCRATE_JSONLD_FILENAME} from within {public_name} has unmanagable MIME {putative_mime_ld}"
                 )
+        payload_dir = ZipfilePath(workflowROCrateFilename)
     else:
         raise ROCrateToolboxException(
             f"The RO-Crate parsing code does not know how to parse {public_name} with MIME {putative_mime}"
@@ -264,7 +304,7 @@ def ReadROCrateMetadata(workflowROCrateFilename: "str", public_name: "str") -> "
             f"Content from {public_name} is not a valid JSON"
         ) from jde
 
-    return jsonld_obj
+    return jsonld_obj, payload_dir
 
 
 class ROCrateToolbox(abc.ABC):
@@ -323,6 +363,10 @@ class ROCrateToolbox(abc.ABC):
         )
 
         self.wfexs = wfexs
+
+        # Caching path for the contexts
+        cache_path = xdg.BaseDirectory.save_cache_path("es.elixir.WfExSJSONLD")
+        hook_pyld_cache(os.path.join(cache_path, "contexts.db"))
 
         # This is needed for proper behaviour
         # https://stackoverflow.com/a/6264214
@@ -471,7 +515,7 @@ WHERE {
         return (resrow, g)
 
     OBTAIN_WORKFLOW_PID_SPARQL: "Final[str]" = """\
-SELECT  ?identifier ?workflow_repository ?workflow_version ?workflow_url ?workflow_alternate_name ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version
+SELECT  ?origmainentity ?identifier ?workflow_repository ?workflow_version ?workflow_url ?workflow_name ?workflow_alternate_name ?programminglanguage_identifier ?programminglanguage_url ?programminglanguage_version ?file_size ?file_sha256
 WHERE   {
     ?mainentity s:programmingLanguage ?programminglanguage .
     ?programminglanguage
@@ -486,55 +530,84 @@ WHERE   {
             s:identifier ?programminglanguage_identifier .
     }
     {
-        {
-            FILTER NOT EXISTS {
-                ?mainentity s:isBasedOn ?origmainentity .
-                ?origmainentity
-                    a bs:ComputationalWorkflow ;
-                    dcterms:conformsTo ?bsworkflowprofile .
-                FILTER (
-                    STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
-                ) .
-            }
-            OPTIONAL {
-                ?mainentity s:codeRepository ?workflow_repository .
-            }
-            OPTIONAL {
-                ?mainentity s:version ?workflow_version .
-            }
-            OPTIONAL {
-                ?mainentity s:url ?workflow_url .
-            }
-            OPTIONAL {
-                ?mainentity s:identifier ?identifier .
-            }
-            OPTIONAL {
-                ?mainentity s:alternateName ?workflow_alternate_name .
-            }
-        } UNION {
-            ?mainentity s:isBasedOn ?origmainentity .
-            ?origmainentity
+        FILTER NOT EXISTS {
+            ?mainentity s:isBasedOn ?somemainentity .
+            ?somemainentity
                 a bs:ComputationalWorkflow ;
-                dcterms:conformsTo ?bsworkflowprofile .
-            OPTIONAL {
-                ?origmainentity s:codeRepository ?workflow_repository .
-            }
-            OPTIONAL {
-                ?origmainentity s:version ?workflow_version .
-            }
-            OPTIONAL {
-                ?origmainentity s:url ?workflow_url .
-            }
+                dcterms:conformsTo ?somebsworkflowprofile .
             FILTER (
-                STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
+                STRSTARTS(str(?somebsworkflowprofile), str(bswfprofile:))
             ) .
-            OPTIONAL {
-                ?origmainentity s:identifier ?identifier .
-            }
-            OPTIONAL {
-                ?origmainentity s:alternateName ?workflow_alternate_name .
-            }
         }
+        BIND (?mainentity AS ?origmainentity)
+    } UNION {
+        ?mainentity s:isBasedOn ?origmainentity .
+        ?origmainentity
+            a bs:ComputationalWorkflow ;
+            dcterms:conformsTo ?bsworkflowprofile .
+        FILTER (
+            STRSTARTS(str(?bsworkflowprofile), str(bswfprofile:))
+        )
+    }
+    OPTIONAL {
+        ?origmainentity s:codeRepository ?workflow_repository .
+    }
+    OPTIONAL {
+        ?origmainentity s:version ?workflow_version .
+    }
+    OPTIONAL {
+        ?origmainentity s:url ?workflow_url .
+    }
+    OPTIONAL {
+        ?origmainentity s:identifier ?identifier .
+    }
+    OPTIONAL {
+        ?origmainentity s:name ?workflow_name .
+    }
+    OPTIONAL {
+        ?origmainentity s:alternateName ?workflow_alternate_name .
+    }
+    OPTIONAL {
+        ?origmainentity
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?origmainentity
+            s:contentSize ?file_size .
+    }
+}
+"""
+
+    LIST_PARTS_SPARQL: "Final[str]" = """\
+SELECT  ?part_entity ?identifier ?part_repository ?part_version ?part_url ?part_name ?part_alternate_name ?file_size ?file_sha256
+WHERE   {
+    ?entity s:hasPart+ $part_entity .
+    ?part_entity a s:MediaObject .
+    OPTIONAL {
+        ?part_entity s:codeRepository ?part_repository .
+    }
+    OPTIONAL {
+        ?part_entity s:version ?part_version .
+    }
+    OPTIONAL {
+        ?part_entity s:url ?part_url .
+    }
+    OPTIONAL {
+        ?part_entity s:identifier ?identifier .
+    }
+    OPTIONAL {
+        ?part_entity s:name ?part_name .
+    }
+    OPTIONAL {
+        ?part_entity s:alternateName ?part_alternate_name .
+    }
+    OPTIONAL {
+        ?part_entity
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?part_entity
+            s:contentSize ?file_size .
     }
 }
 """
@@ -550,49 +623,92 @@ WHERE   {
 """
 
     OBTAIN_RUN_CONTAINERS_SPARQL: "Final[str]" = """\
-SELECT ?container ?container_additional_type ?type_of_container ?type_of_container_type ?container_registry ?container_name ?container_tag ?container_sha256 ?container_platform ?container_arch
+SELECT DISTINCT ?container ?container_snapshot_size ?container_snapshot_sha256 ?container_additional_type ?type_of_container ?type_of_container_type ?source_container ?source_container_additional_type ?source_container_registry ?source_container_name ?source_container_tag ?source_container_sha256 ?source_container_platform ?source_container_arch ?source_container_metadata ?source_container_metadata_size ?source_container_metadata_sha256 ?type_of_source_container ?type_of_source_container_type
 WHERE   {
     {
-        ?execution wrterm:containerImage ?container .
+        ?execution wrterm:containerImage ?source_container .
     } UNION {
-        ?entity s:softwareAddOn ?container.
+        ?entity s:softwareAddOn ?source_container.
     }
-    ?container
+    ?source_container
         a wrterm:ContainerImage ;
-        s:additionalType ?container_additional_type .
+        s:additionalType ?source_container_additional_type .
     OPTIONAL {
-        ?container
-            s:softwareRequirements ?container_type ;
-            s:applicationCategory ?type_of_container .
-        ?container_type
+        ?source_container
+            s:softwareRequirements ?source_container_type ;
+            s:applicationCategory ?type_of_source_container .
+        ?source_container_type
             a s:SoftwareApplication ;
-            s:applicationCategory ?type_of_container_type .
+            s:applicationCategory ?type_of_source_container_type .
         FILTER(
-            STRSTARTS(str(?type_of_container), str(wikidata:)) &&
-            STRSTARTS(str(?type_of_container_type), str(wikidata:))
+            STRSTARTS(str(?type_of_source_container), str(wikidata:)) &&
+            STRSTARTS(str(?type_of_source_container_type), str(wikidata:))
         ) .
     }
+
     OPTIONAL {
-        ?container wrterm:registry ?container_registry .
-    }
-    OPTIONAL {
-        ?container s:name ?container_name .
-    }
-    OPTIONAL {
-        ?container wrterm:tag ?container_tag .
-    }
-    OPTIONAL {
-        ?container wrterm:sha256 ?container_sha256 .
-    }
-    OPTIONAL {
+        ?create_snapshot_container
+            a s:CreateAction ;
+            s:object ?source_container ;
+            s:result ?container .
         ?container
-            a s:SoftwareApplication ;
-            s:operatingSystem ?container_platform .
+            a s:MediaObject ;
+            a wrterm:ContainerImage ;
+            s:additionalType ?container_additional_type .
+        OPTIONAL {
+            ?container wrterm:sha256 ?container_snapshot_sha256 .
+        }
+        OPTIONAL {
+            ?container
+                s:contentSize ?container_snapshot_size .
+        }
+        OPTIONAL {
+            ?container
+                s:softwareRequirements ?container_type ;
+                s:applicationCategory ?type_of_container .
+            ?container_type
+                a s:SoftwareApplication ;
+                s:applicationCategory ?type_of_container_type .
+            FILTER(
+                STRSTARTS(str(?type_of_container), str(wikidata:)) &&
+                STRSTARTS(str(?type_of_container_type), str(wikidata:))
+            ) .
+        }
     }
     OPTIONAL {
-        ?container
+        ?source_container wrterm:registry ?source_container_registry .
+    }
+    OPTIONAL {
+        ?source_container s:name ?source_container_name .
+    }
+    OPTIONAL {
+        ?source_container wrterm:tag ?source_container_tag .
+    }
+    OPTIONAL {
+        ?source_container wrterm:sha256 ?source_container_sha256 .
+    }
+    OPTIONAL {
+        ?source_container
             a s:SoftwareApplication ;
-            s:processorRequirements ?container_arch .
+            s:operatingSystem ?source_container_platform .
+    }
+    OPTIONAL {
+        ?source_container
+            a s:SoftwareApplication ;
+            s:processorRequirements ?source_container_arch .
+    }
+    OPTIONAL {
+        ?source_container_metadata
+            a s:MediaObject ;
+            s:about ?source_container .
+        OPTIONAL {
+            ?source_container_metadata
+                s:contentSize ?source_container_metadata_size .
+        }
+        OPTIONAL {
+            ?source_container_metadata
+                s:sha256 ?source_container_metadata_sha256 .
+        }
     }
 }
 """
@@ -600,7 +716,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_size ?file_sha256
 WHERE   {
     ?main_entity bsworkflow:input ?inputfp .
     ?inputfp
@@ -612,26 +728,12 @@ WHERE   {
         # A file, which is a schema.org MediaObject
         ?input
             a s:MediaObject .
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
+        BIND (?input AS ?fileid)
     } UNION {
         # A directory, which is a schema.org Dataset
         ?input
             a s:Dataset .
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
+        BIND (?input AS ?fileid)
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -644,9 +746,9 @@ WHERE   {
         }
     } UNION {
         # A single property value, which can be either Integer, Text, Boolean or Float
+        BIND (?input AS ?fileid)
         ?input
-            a s:PropertyValue ;
-            s:value ?value .
+            a s:PropertyValue .
     } UNION {
         # A combination of files or directories or property values
         VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
@@ -655,15 +757,24 @@ WHERE   {
             s:hasPart+ ?component .
         ?component
             a ?leaf_type .
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifier ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+        BIND (?component AS ?fileid)
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -671,7 +782,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
 WHERE   {
     ?main_entity wrterm:environment ?envfp .
     ?envfp
@@ -684,27 +795,13 @@ WHERE   {
         ?env
             a s:MediaObject ;
             s:name ?name_env .
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
+        BIND (?env AS ?fileid)
     } UNION {
         # A directory, which is a schema.org Dataset
         ?env
             a s:Dataset ;
             s:name ?name_env .
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
+        BIND (?env AS ?fileid)
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -719,8 +816,8 @@ WHERE   {
         # A single property value, which can be either Integer, Text, Boolean or Float
         ?env
             a s:PropertyValue ;
-            s:name ?name_env ;
-            s:value ?value .
+            s:name ?name_env .
+        BIND (?env AS ?fileid)
     } UNION {
         # A combination of files or directories or property values
         VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
@@ -730,15 +827,24 @@ WHERE   {
             s:hasPart+ ?component .
         ?component
             a ?leaf_type .
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifer ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+        BIND (?component AS ?fileid)
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -775,7 +881,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
 WHERE   {
     ?execution s:object ?input .
     {
@@ -784,14 +890,7 @@ WHERE   {
         ?input
             a s:MediaObject ;
             s:exampleOfWork ?inputfp .
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
+        BIND (?input AS ?fileid)
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -802,14 +901,7 @@ WHERE   {
         ?input
             a s:Dataset ;
             s:exampleOfWork ?inputfp .
-        OPTIONAL {
-            ?input
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?input
-                s:identifier ?filepid .
-        }
+        BIND (?input AS ?fileid)
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -829,8 +921,8 @@ WHERE   {
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
         ?input
             a s:PropertyValue ;
-            s:exampleOfWork ?inputfp ;
-            s:value ?value .
+            s:exampleOfWork ?inputfp .
+        BIND (?input AS ?fileid)
         ?inputfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -849,15 +941,24 @@ WHERE   {
             s:additionalType ?additional_type .
         ?component
             a ?leaf_type .
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifier ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+        BIND (?component AS ?fileid)
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -865,7 +966,7 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type
+SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
 WHERE   {
     ?execution wrterm:environment ?env .
     {
@@ -875,14 +976,7 @@ WHERE   {
             a s:MediaObject ;
             s:name ?name_env ;
             s:exampleOfWork ?envfp .
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
+        BIND (?env AS ?fileid)
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -894,14 +988,7 @@ WHERE   {
             a s:Dataset ;
             s:name ?name_env ;
             s:exampleOfWork ?envfp .
-        OPTIONAL {
-            ?env
-                s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?env
-                s:identifier ?filepid .
-        }
+        BIND (?env AS ?fileid)
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -922,8 +1009,8 @@ WHERE   {
         ?env
             a s:PropertyValue ;
             s:name ?name_env ;
-            s:exampleOfWork ?envfp ;
-            s:value ?value .
+            s:exampleOfWork ?envfp .
+        BIND (?env AS ?fileid)
         ?envfp
             a bs:FormalParameter ;
             s:name ?name ;
@@ -943,15 +1030,24 @@ WHERE   {
             s:additionalType ?additional_type .
         ?component
             a ?leaf_type .
-        OPTIONAL {
-            ?component s:contentUrl ?fileuri .
-        }
-        OPTIONAL {
-            ?component s:identifier ?filepid .
-        }
-        OPTIONAL {
-            ?component s:value ?value .
-        }
+        BIND (?component AS ?fileid)
+    }
+    OPTIONAL {
+        ?fileid s:contentUrl ?fileuri .
+    }
+    OPTIONAL {
+        ?fileid s:identifier ?filepid .
+    }
+    OPTIONAL {
+        ?fileid
+            wrterm:sha256 ?file_sha256 .
+    }
+    OPTIONAL {
+        ?fileid
+            s:contentSize ?file_size .
+    }
+    OPTIONAL {
+        ?fileid s:value ?value .
     }
 }
 """
@@ -1070,6 +1166,7 @@ WHERE   {
         self,
         g: "rdflib.graph.Graph",
         main_entity: "rdflib.term.Identifier",
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         # Get the list of containers
         qcontainers = rdflib.plugins.sparql.prepareQuery(
@@ -1084,13 +1181,16 @@ WHERE   {
             },
         )
 
-        return self.__parseContainersResults(qcontainersres, main_entity)
+        return self.__parseContainersResults(
+            qcontainersres, main_entity, payload_dir=payload_dir
+        )
 
     def _parseContainersFromExecution(
         self,
         g: "rdflib.graph.Graph",
         execution: "rdflib.term.Identifier",
         main_entity: "rdflib.term.Identifier",
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         # Get the list of containers
         qcontainers = rdflib.plugins.sparql.prepareQuery(
@@ -1105,15 +1205,20 @@ WHERE   {
             },
         )
 
-        return self.__parseContainersResults(qcontainersres, main_entity)
+        return self.__parseContainersResults(
+            qcontainersres, main_entity, payload_dir=payload_dir
+        )
 
     def __parseContainersResults(
         self,
         qcontainersres: "rdflib.query.Result",
         main_entity: "rdflib.term.Identifier",
+        payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Optional[Tuple[ContainerType, Sequence[Container]]]":
         container_type: "Optional[ContainerType]" = None
+        source_container_type: "Optional[ContainerType]" = None
         additional_container_type: "Optional[ContainerType]" = None
+        additional_source_container_type: "Optional[ContainerType]" = None
         the_containers: "MutableSequence[Container]" = []
         # This is the first pass, to learn about the kind of
         # container factory to use
@@ -1135,6 +1240,20 @@ WHERE   {
                 ):
                     self.logger.warning(
                         f"Not all the containers of execution {main_entity} were materialized with {container_type} factory (also found {putative_container_type})"
+                    )
+
+            if containerrow.type_of_source_container is not None:
+                putative_source_container_type = ApplicationCategory2ContainerType.get(
+                    str(containerrow.type_of_source_container)
+                )
+                if source_container_type is None:
+                    source_container_type = putative_source_container_type
+                elif (
+                    putative_source_container_type is not None
+                    and putative_source_container_type != source_container_type
+                ):
+                    self.logger.warning(
+                        f"Not all the source containers of execution {main_entity} were materialized with {source_container_type} factory (also found {putative_source_container_type})"
                     )
 
             # These hints should be left by any compliant WRROC
@@ -1170,10 +1289,57 @@ WHERE   {
                         f"Unable to map additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
                     )
 
+            # These hints should be left by any compliant WRROC
+            # implementation
+            if containerrow.source_container_additional_type is not None:
+                try:
+                    putative_additional_source_container_image_additional_type = (
+                        StrContainerAdditionalType2ContainerImageAdditionalType.get(
+                            str(containerrow.source_container_additional_type)
+                        )
+                    )
+                    putative_additional_source_container_type = (
+                        None
+                        if putative_additional_source_container_image_additional_type
+                        is None
+                        else (
+                            AdditionalType2ContainerType.get(
+                                putative_additional_source_container_image_additional_type
+                            )
+                        )
+                    )
+                    if additional_source_container_type is None:
+                        additional_source_container_type = (
+                            putative_additional_source_container_type
+                        )
+                    elif (
+                        putative_additional_source_container_type is not None
+                        and putative_additional_source_container_type
+                        not in (source_container_type, additional_source_container_type)
+                    ):
+                        self.logger.warning(
+                            f"Not all the source containers of execution {main_entity} were labelled with {additional_source_container_type} factory (also found {putative_additional_source_container_type})"
+                        )
+                except Exception as e:
+                    self.logger.error(
+                        f"Unable to map additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
+                    )
+
+        # Assigning this, as it is going to be used later to
+        # build the list of containers
+        if (
+            source_container_type is None
+            and additional_source_container_type is not None
+        ):
+            source_container_type = additional_source_container_type
+
         # Assigning this, as it is going to be used later to
         # build the list of containers
         if container_type is None and additional_container_type is not None:
             container_type = additional_container_type
+
+        if container_type is None and source_container_type is not None:
+            container_type = source_container_type
 
         if container_type is None:
             return None
@@ -1184,72 +1350,107 @@ WHERE   {
             assert isinstance(
                 containerrow, rdflib.query.ResultRow
             ), "Check the SPARQL code, as it should be a SELECT query"
-            self.logger.debug(
-                f"""\
-Container {containerrow.container}
-{containerrow.container_additional_type}
-{containerrow.type_of_container}
-{containerrow.type_of_container_type}
-{containerrow.container_registry}
-{containerrow.container_name}
-{containerrow.container_tag}
-{containerrow.container_sha256}
-{containerrow.container_platform}
-{containerrow.container_arch}
-"""
-            )
 
-            if (
-                containerrow.container_additional_type is not None
-                and containerrow.container_name is not None
-            ):
+            self.logger.debug("\nTuple")
+            for key, val in containerrow.asdict().items():
+                self.logger.debug(f"{key} => {val}")
+
+            source_container_type = None
+            if containerrow.source_container_additional_type is not None:
                 try:
-                    putative_additional_container_image_additional_type = (
+                    putative_additional_source_container_image_additional_type = (
                         StrContainerAdditionalType2ContainerImageAdditionalType.get(
-                            str(containerrow.container_additional_type)
+                            str(containerrow.source_container_additional_type)
                         )
                     )
-                    putative_additional_container_type = (
+                    source_container_type = (
                         None
-                        if putative_additional_container_image_additional_type is None
+                        if putative_additional_source_container_image_additional_type
+                        is None
                         else (
                             AdditionalType2ContainerType.get(
-                                putative_additional_container_image_additional_type
+                                putative_additional_source_container_image_additional_type
                             )
                         )
                     )
+                except Exception as e:
+                    self.logger.error(
+                        f"Unable to map additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
+                    )
+
+            if source_container_type is None:
+                source_container_type = container_type
+
+            if containerrow.source_container_name is not None:
+                try:
                     registries: "Optional[Mapping[ContainerType, str]]" = None
                     fingerprint = None
                     origTaggedName = ""
                     taggedName = ""
-                    image_signature = None
-                    if putative_additional_container_type == ContainerType.Docker:
+                    if source_container_type == ContainerType.Docker:
                         the_registry = (
-                            str(containerrow.container_registry)
-                            if containerrow.container_registry is not None
+                            str(containerrow.source_container_registry)
+                            if containerrow.source_container_registry is not None
                             else DEFAULT_DOCKER_REGISTRY
                         )
                         registries = {
                             ContainerType.Docker: the_registry,
                         }
-                        container_identifier = str(containerrow.container_name)
-                        assert containerrow.container_tag is not None
-                        if containerrow.container_sha256 is not None:
-                            fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.container_sha256)}"
+                        container_identifier = str(containerrow.source_container_name)
+                        if "/" not in container_identifier:
+                            container_identifier = "library/" + container_identifier
+                        assert containerrow.source_container_tag is not None
+                        if containerrow.source_container_sha256 is not None:
+                            fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.source_container_sha256)}"
                         else:
-                            fingerprint = f"{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
-                        origTaggedName = (
-                            f"{container_identifier}:{str(containerrow.container_tag)}"
-                        )
-                        taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.container_tag)}"
-                        # Disable for now
-                        # image_signature = stringifyDigest("sha256", bytes.fromhex(str(containerrow.container_sha256)))
-                    elif (
-                        putative_additional_container_type == ContainerType.Singularity
-                    ):
-                        origTaggedName = str(containerrow.container_name)
+                            fingerprint = f"{the_registry}/{container_identifier}:{str(containerrow.source_container_tag)}"
+                        origTaggedName = f"{container_identifier}:{str(containerrow.source_container_tag)}"
+                        taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.source_container_tag)}"
+                    elif source_container_type == ContainerType.Singularity:
+                        origTaggedName = str(containerrow.source_container_name)
                         taggedName = origTaggedName
                         fingerprint = origTaggedName
+
+                    container_image_path: "Optional[str]" = None
+                    located_snapshot: "Optional[pathlib.Path]" = None
+                    metadata_container_image_path: "Optional[str]" = None
+                    located_metadata: "Optional[pathlib.Path]" = None
+                    image_signature: "Optional[Fingerprint]" = None
+                    if payload_dir is not None:
+                        if containerrow.container != containerrow.source_container:
+                            include_container_image = self.__processPayloadEntity(
+                                the_entity=containerrow.container,
+                                payload_dir=payload_dir,
+                                kindobj=ContentKind.File,
+                                entity_type="container image",
+                                entity_name=origTaggedName,
+                                the_file_size=containerrow.container_snapshot_size,
+                                the_file_sha256=containerrow.container_snapshot_sha256,
+                            )
+                            if include_container_image is not None:
+                                container_image_path = include_container_image.rel_path
+                                located_snapshot = include_container_image.path
+                                image_signature = include_container_image.signature
+
+                        if containerrow.source_container_metadata is not None:
+                            include_metadata_container_image = self.__processPayloadEntity(
+                                the_entity=containerrow.source_container_metadata,
+                                payload_dir=payload_dir,
+                                kindobj=ContentKind.File,
+                                entity_type="container metadata",
+                                entity_name=origTaggedName,
+                                the_file_size=containerrow.source_container_metadata_size,
+                                the_file_sha256=containerrow.source_container_metadata_sha256,
+                            )
+
+                            if include_metadata_container_image is not None:
+                                metadata_container_image_path = (
+                                    include_metadata_container_image.rel_path
+                                )
+                                located_metadata = include_metadata_container_image.path
+                                computed_source_container_metadata_signature = (
+                                    include_metadata_container_image.signature
+                                )
 
                     the_containers.append(
                         Container(
@@ -1257,26 +1458,28 @@ Container {containerrow.container}
                             type=container_type,
                             registries=registries,
                             taggedName=cast("URIType", taggedName),
+                            localPath=located_snapshot,
+                            metadataLocalPath=located_metadata,
                             architecture=None
-                            if containerrow.container_arch is None
+                            if containerrow.source_container_arch is None
                             else cast(
                                 "ProcessorArchitecture",
-                                str(containerrow.container_arch),
+                                str(containerrow.source_container_arch),
                             ),
                             operatingSystem=None
-                            if containerrow.container_platform is None
+                            if containerrow.source_container_platform is None
                             else cast(
                                 "ContainerOperatingSystem",
-                                str(containerrow.container_platform),
+                                str(containerrow.source_container_platform),
                             ),
                             fingerprint=cast("Fingerprint", fingerprint),
-                            source_type=putative_additional_container_type,
+                            source_type=source_container_type,
                             image_signature=image_signature,
                         )
                     )
                 except Exception as e:
                     self.logger.exception(
-                        f"Unable to assign from additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
+                        f"Unable to assign from additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
                     )
 
         return container_type, the_containers
@@ -1428,7 +1631,8 @@ Container {containerrow.container}
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "ParamsBlock":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qinputs = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_EXECUTION_INPUTS_SPARQL,
@@ -1441,7 +1645,9 @@ Container {containerrow.container}
             },
         )
 
-        return self.__parseInputsResults(qinputsres, g, default_licences, public_name)
+        return self.__parseInputsResults(
+            qinputsres, g, default_licences, public_name, payload_dir=payload_dir
+        )
 
     def _parseInputsFromMainEntity(
         self,
@@ -1449,7 +1655,8 @@ Container {containerrow.container}
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "ParamsBlock":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwinputs = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_WORKFLOW_INPUTS_SPARQL,
@@ -1462,7 +1669,66 @@ Container {containerrow.container}
             },
         )
 
-        return self.__parseInputsResults(qwinputsres, g, default_licences, public_name)
+        return self.__parseInputsResults(
+            qwinputsres, g, default_licences, public_name, payload_dir=payload_dir
+        )
+
+    def __processPayloadInput(
+        self,
+        inputrow: "rdflib.query.ResultRow",
+        payload_dir: "pathlib.Path",
+        the_uri: "str",
+        licences: "Sequence[str]",
+        input_type: "str",
+        kindobj: "ContentKind",
+        cached_inputs_hash: "MutableMapping[str, MaterializedInput]",
+    ) -> "MutableMapping[str, MaterializedInput]":
+        input_name = str(inputrow.name)
+        include_input = self.__processPayloadEntity(
+            the_entity=inputrow.fileid,
+            payload_dir=payload_dir,
+            kindobj=kindobj,
+            entity_type=input_type,
+            entity_name=input_name,
+            the_file_size=inputrow.file_size,
+            the_file_sha256=inputrow.file_sha256,
+        )
+
+        if include_input is not None:
+            input_path = include_input.rel_path
+            located_input = include_input.path
+            file_signature = include_input.signature
+            licences_tuple = (
+                cast("Tuple[URIType, ...]", tuple(licences))
+                if len(licences) > 0
+                else DefaultNoLicenceTuple
+            )
+            mat_content = MaterializedContent(
+                local=located_input,
+                licensed_uri=LicensedURI(
+                    uri=cast("URIType", the_uri),
+                    licences=licences_tuple,
+                ),
+                # TODO: better inference, as it might have a side effect
+                prettyFilename=cast("RelPath", located_input.name),
+                kind=kindobj,
+                fingerprint=file_signature,
+            )
+            cached_input = cached_inputs_hash.get(input_name)
+            if cached_input is None:
+                cached_input = MaterializedInput(
+                    name=cast("SymbolicParamName", input_name),
+                    values=[mat_content],
+                    # implicit=,
+                )
+            else:
+                cached_input = cached_input._replace(
+                    values=[*cached_input.values, mat_content],
+                )
+
+            cached_inputs_hash[input_name] = cached_input
+
+        return cached_inputs_hash
 
     def __parseInputsResults(
         self,
@@ -1470,9 +1736,11 @@ Container {containerrow.container}
         g: "rdflib.graph.Graph",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "ParamsBlock":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # TODO: implement this
         params: "MutableParamsBlock" = {}
+        cached_inputs_hash: "MutableMapping[str, MaterializedInput]" = {}
         for inputrow in qinputsres:
             assert isinstance(
                 inputrow, rdflib.query.ResultRow
@@ -1491,6 +1759,7 @@ Container {containerrow.container}
             additional_type = str(inputrow.additional_type)
             valarr: "Optional[MutableSequence[Any]]" = None
             valobj: "Optional[MutableMapping[str, Any]]" = None
+            kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
             if additional_type == "Collection":
                 leaf_type = str(inputrow.leaf_type)
@@ -1505,32 +1774,42 @@ Container {containerrow.container}
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
-                if inputrow.fileuri is None and inputrow.filepid is None:
-                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found. Stopping."
-                    self.logger.error(errmsg)
-                    raise ROCrateToolboxException(errmsg)
+                kindobj = (
+                    ContentKind.Directory
+                    if additional_type == "Dataset"
+                    else ContentKind.File
+                )
                 valobj = base.setdefault(
                     param_last,
                     {
-                        "c-l-a-s-s": ContentKind.Directory.name
-                        if additional_type == "Dataset"
-                        else ContentKind.File.name,
+                        "c-l-a-s-s": kindobj.name,
                     },
                 )
 
             if isinstance(valobj, dict):
-                licences = self._getLicences(g, inputrow.input, public_name)
-                if len(licences) == 0:
-                    licences = default_licences
                 the_uri: "str"
                 if inputrow.fileuri is not None:
                     the_uri = str(inputrow.fileuri)
                 elif inputrow.filepid is not None:
                     the_uri = str(inputrow.filepid)
                 else:
-                    raise ROCrateToolboxException(
-                        "FATAL RO-Crate workflow input processing error. Check the code of WfExS"
-                    )
+                    the_uri = str(inputrow.fileid)
+
+                # Check it is not an originally relative URI
+                parsed_uri = urllib.parse.urlparse(the_uri)
+                if parsed_uri.scheme in ("", self.RELATIVE_ROCRATE_SCHEME):
+                    errmsg = f"Input parameter {inputrow.name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found, and its @id is a relative URI. Stopping."
+                    self.logger.error(errmsg)
+                    raise ROCrateToolboxException(errmsg)
+
+                # Now, the licence
+                licences = self._getLicences(g, inputrow.input, public_name)
+                if len(licences) == 0:
+                    licences = default_licences
+
+                expanded_licences = self.wfexs.curate_licence_list(
+                    licences, default_licence=NoLicenceDescription
+                )
 
                 the_url: "Union[str, Mapping[str, Any]]"
                 if len(licences) == 0:
@@ -1538,7 +1817,7 @@ Container {containerrow.container}
                 else:
                     the_url = {
                         "uri": the_uri,
-                        "licences": licences,
+                        "licences": list(map(lambda el: el.uris[0], expanded_licences)),
                     }
 
                 valurl = valobj.get("url")
@@ -1550,6 +1829,18 @@ Container {containerrow.container}
                     valurl.append(the_url)
                 else:
                     valobj["url"] = the_url
+
+                if payload_dir is not None and inputrow.fileid is not None:
+                    assert kindobj is not None
+                    self.__processPayloadInput(
+                        inputrow,
+                        payload_dir,
+                        the_uri,
+                        licences,
+                        "input",
+                        kindobj,
+                        cached_inputs_hash,
+                    )
             else:
                 the_value_node: "rdflib.term.Identifier" = inputrow.value
                 the_value: "Union[str, int, float, bool]"
@@ -1581,7 +1872,10 @@ Container {containerrow.container}
                 else:
                     base[param_last] = the_value
 
-        return params
+        return (
+            params,
+            list(cached_inputs_hash.values()) if payload_dir is not None else None,
+        )
 
     def _parseEnvFromExecution(
         self,
@@ -1590,7 +1884,8 @@ Container {containerrow.container}
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "EnvironmentBlock":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qenv = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_EXECUTION_ENV_SPARQL,
@@ -1603,7 +1898,9 @@ Container {containerrow.container}
             },
         )
 
-        return self.__parseEnvResults(qenvres, g, default_licences, public_name)
+        return self.__parseEnvResults(
+            qenvres, g, default_licences, public_name, payload_dir=payload_dir
+        )
 
     def _parseEnvFromMainEntity(
         self,
@@ -1611,7 +1908,8 @@ Container {containerrow.container}
         main_entity: "rdflib.term.Identifier",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "EnvironmentBlock":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwenv = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_WORKFLOW_ENV_SPARQL,
@@ -1624,7 +1922,9 @@ Container {containerrow.container}
             },
         )
 
-        return self.__parseEnvResults(qwenvres, g, default_licences, public_name)
+        return self.__parseEnvResults(
+            qwenvres, g, default_licences, public_name, payload_dir=payload_dir
+        )
 
     def __parseEnvResults(
         self,
@@ -1632,12 +1932,14 @@ Container {containerrow.container}
         g: "rdflib.graph.Graph",
         default_licences: "Sequence[str]",
         public_name: "str",
-    ) -> "EnvironmentBlock":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         """
         This method is (almost) identical to __parseInputsResults
         """
         # TODO: implement this
         environment: "MutableMapping[str, Any]" = {}
+        cached_environment_hash: "MutableMapping[str, MaterializedInput]" = {}
         for envrow in qenvres:
             assert isinstance(
                 envrow, rdflib.query.ResultRow
@@ -1649,6 +1951,7 @@ Container {containerrow.container}
             additional_type = str(envrow.additional_type)
             valarr: "Optional[MutableSequence[Any]]" = None
             valobj: "Optional[MutableMapping[str, Any]]" = None
+            kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
             if additional_type == "Collection":
                 leaf_type = str(envrow.leaf_type)
@@ -1663,26 +1966,50 @@ Container {containerrow.container}
 
             # Is it a file or a directory?
             if additional_type in ("File", "Dataset"):
+                kindobj = (
+                    ContentKind.Directory
+                    if additional_type == "Dataset"
+                    else ContentKind.File
+                )
                 valobj = environment.setdefault(
                     env_name,
                     {
-                        "c-l-a-s-s": ContentKind.Directory.name
-                        if additional_type == "Dataset"
-                        else ContentKind.File.name,
+                        "c-l-a-s-s": kindobj.name,
                     },
                 )
 
             if isinstance(valobj, dict):
+                the_uri: "str"
+                if envrow.fileuri is not None:
+                    the_uri = str(envrow.fileuri)
+                elif envrow.filepid is not None:
+                    the_uri = str(envrow.filepid)
+                else:
+                    the_uri = str(envrow.fileid)
+
+                # Check it is not an originally relative URI
+                parsed_uri = urllib.parse.urlparse(the_uri)
+                if parsed_uri.scheme in ("", self.RELATIVE_ROCRATE_SCHEME):
+                    errmsg = f"Environment variable {env_name} from {public_name} is of type {additional_type}, but no associated `contentUrl` or `identifier` were found, and its @id is a relative URI. Stopping."
+                    self.logger.error(errmsg)
+                    raise ROCrateToolboxException(errmsg)
+
+                # Now, the licence
                 licences = self._getLicences(g, envrow.env, public_name)
                 if len(licences) == 0:
                     licences = default_licences
+
+                expanded_licences = self.wfexs.curate_licence_list(
+                    licences, default_licence=NoLicenceDescription
+                )
+
                 the_url: "Union[str, Mapping[str, Any]]"
                 if len(licences) == 0:
                     the_url = str(envrow.fileuri)
                 else:
                     the_url = {
                         "uri": str(envrow.fileuri),
-                        "licences": licences,
+                        "licences": list(map(lambda el: el.uris[0], expanded_licences)),
                     }
 
                 valurl = valobj.get("url")
@@ -1694,6 +2021,18 @@ Container {containerrow.container}
                     valurl.append(the_url)
                 else:
                     valobj["url"] = the_url
+
+                if payload_dir is not None and envrow.fileid is not None:
+                    assert kindobj is not None
+                    self.__processPayloadInput(
+                        envrow,
+                        payload_dir,
+                        the_uri,
+                        licences,
+                        "environment variable",
+                        kindobj,
+                        cached_environment_hash,
+                    )
             else:
                 the_value_node: "rdflib.term.Identifier" = envrow.value
                 the_value: "Union[str, int, float, bool]"
@@ -1725,7 +2064,10 @@ Container {containerrow.container}
                 else:
                     environment[env_name] = the_value
 
-        return environment
+        return (
+            environment,
+            list(cached_environment_hash.values()) if payload_dir is not None else None,
+        )
 
     def _getLicences(
         self,
@@ -1763,15 +2105,174 @@ Container {containerrow.container}
 
         return licences
 
+    def __processPayloadEntity(
+        self,
+        the_entity: "rdflib.term.Identifier",
+        payload_dir: "pathlib.Path",
+        kindobj: "ContentKind",
+        entity_type: "str",
+        entity_name: "str",
+        the_file_size: "rdflib.term.Node",
+        the_file_sha256: "rdflib.term.Node",
+    ) -> "Optional[ROCratePayload]":
+        entity_uri = str(the_entity)
+        entity_parsed_uri = urllib.parse.urlparse(entity_uri)
+        include_entity = entity_parsed_uri.scheme == self.RELATIVE_ROCRATE_SCHEME
+
+        entity_path: "Optional[str]" = None
+        located_entity: "Optional[pathlib.Path]" = None
+        if include_entity:
+            entity_path = entity_parsed_uri.path
+            if entity_path.startswith("/"):
+                entity_path = entity_path[1:]
+
+            located_entity = payload_dir / entity_path
+            include_entity = located_entity.exists()
+            if not include_entity:
+                self.logger.warning(
+                    f"Discarding payload {entity_path} for {entity_type} {entity_name} (not found)"
+                )
+
+        if include_entity:
+            assert located_entity is not None
+            include_entity = (
+                kindobj == ContentKind.File and located_entity.is_file()
+            ) or (kindobj == ContentKind.Directory and located_entity.is_dir())
+
+            if not include_entity:
+                self.logger.warning(
+                    f"Discarding payload {entity_path} for {entity_type} {entity_name} (not is a {kindobj.value})"
+                )
+
+        if include_entity and kindobj == ContentKind.File and the_file_size is not None:
+            assert entity_path is not None
+            assert located_entity is not None
+            # Does the recorded file size match?
+            if isinstance(located_entity, ZipfilePath):
+                the_size = located_entity.zip_root.getinfo(entity_path).file_size
+            else:
+                the_size = located_entity.stat().st_size
+            if isinstance(the_file_size, rdflib.term.Literal):
+                file_size = int(the_file_size.value)
+            else:
+                file_size = int(str(the_file_size))
+
+            include_entity = the_size == file_size
+            if not include_entity:
+                self.logger.warning(
+                    f"Discarding payload {entity_path} for {entity_type} {entity_name} (mismatching file size {the_size} vs {file_size})"
+                )
+
+        file_signature: "Optional[Fingerprint]" = None
+        if include_entity and kindobj == ContentKind.File:
+            assert located_entity is not None
+            with located_entity.open(mode="rb") as lE:
+                the_signature = ComputeDigestFromFileLike(
+                    lE,
+                    digestAlgorithm="sha256",
+                )
+            if the_file_sha256 is not None:
+                file_signature = stringifyDigest(
+                    "sha256",
+                    bytes.fromhex(str(the_file_sha256)),
+                )
+
+                include_entity = file_signature == the_signature
+                if not include_entity:
+                    self.logger.warning(
+                        f"Discarding payload {entity_path} for {entity_type} {entity_name} (mismatching digest)"
+                    )
+            else:
+                file_signature = the_signature
+
+        if include_entity:
+            assert entity_path is not None
+            assert located_entity is not None
+            return ROCratePayload(
+                rel_path=entity_path,
+                path=located_entity,
+                signature=file_signature,
+            )
+        else:
+            return None
+
+    def __list_entity_parts(
+        self,
+        g: "rdflib.graph.Graph",
+        entity: "rdflib.term.Identifier",
+        public_name: "str",
+    ) -> "rdflib.query.Result":
+        qlist = rdflib.plugins.sparql.prepareQuery(
+            self.LIST_PARTS_SPARQL,
+            initNs=self.SPARQL_NS,
+        )
+        try:
+            qlistres = g.query(
+                qlist,
+                initBindings={
+                    "entity": entity,
+                },
+            )
+        except Exception as e:
+            raise ROCrateToolboxException(
+                f"Unable to perform JSON-LD list entity parts query over {public_name} (see cascading exceptions)"
+            ) from e
+
+        return qlistres
+
+    def __list_payload_entity_parts(
+        self,
+        g: "rdflib.graph.Graph",
+        entity: "rdflib.term.Identifier",
+        public_name: "str",
+        payload_dir: "pathlib.Path",
+    ) -> "Sequence[Union[str, ROCratePayload]]":
+        entity_parts = self.__list_entity_parts(g, entity, public_name)
+
+        payload_entity_parts = []
+        for part_row in entity_parts:
+            assert isinstance(
+                part_row, rdflib.query.ResultRow
+            ), "Check the SPARQL code, as it should be a SELECT query"
+
+            included_part_entity: "Optional[Union[str, ROCratePayload]]" = None
+            if is_uri(str(part_row.part_entity)) and not str(
+                part_row.part_entity
+            ).startswith(self.RELATIVE_ROCRATE_SCHEME + ":"):
+                included_part_entity = str(part_row.part_entity)
+            else:
+                included_part_entity = self.__processPayloadEntity(
+                    the_entity=part_row.part_entity,
+                    payload_dir=payload_dir,
+                    kindobj=ContentKind.File,
+                    entity_type="secondary workflow component",
+                    entity_name=str(part_row.part_name)
+                    if part_row.part_name is not None
+                    else "PACO",  # FIXME
+                    the_file_size=part_row.file_size,
+                    the_file_sha256=part_row.file_sha256,
+                )
+
+            if included_part_entity is not None:
+                payload_entity_parts.append(included_part_entity)
+            else:
+                self.logger.warning(
+                    f"Entity part {str(part_row.part_entity)} from {str(entity)} in {public_name} did not have a valid payload"
+                )
+
+        return payload_entity_parts
+
     def extractWorkflowMetadata(
         self,
         g: "rdflib.graph.Graph",
         main_entity: "rdflib.term.Identifier",
         default_repo: "Optional[str]",
         public_name: "str",
-    ) -> "Tuple[RemoteRepo, WorkflowType]":
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[RemoteRepo, WorkflowType, Optional[LocalWorkflow]]":
         # This query will tell us where the original workflow was located,
         # its language and version
+        cached_workflow: "Optional[LocalWorkflow]" = None
         qlang = rdflib.plugins.sparql.prepareQuery(
             self.OBTAIN_WORKFLOW_PID_SPARQL,
             initNs=self.SPARQL_NS,
@@ -1861,14 +2362,94 @@ Container {containerrow.container}
             programminglanguage_url, programminglanguage_identifier
         )
 
-        return repo, workflow_type
+        if payload_dir is not None:
+            workflow_name = langrow.workflow_name
+            if langrow.workflow_name is not None:
+                workflow_name = langrow.workflow_name
+            elif langrow.workflow_alternate_name is not None:
+                workflow_name = langrow.workflow_alternate_name
+            elif langrow.identifier is not None:
+                workflow_name = langrow.identifier
+            else:
+                workflow_name = None
+            include_main_entity = self.__processPayloadEntity(
+                the_entity=langrow.origmainentity,
+                payload_dir=payload_dir,
+                kindobj=ContentKind.File,
+                entity_type="main workflow component",
+                entity_name=str(workflow_name)
+                if workflow_name is not None
+                else "PEPE",  # FIXME
+                the_file_size=langrow.file_size,
+                the_file_sha256=langrow.file_sha256,
+            )
+
+            if include_main_entity is not None:
+                main_entity_relpath = include_main_entity.rel_path
+                main_entity_path = include_main_entity.path
+
+                # TODO
+                workflow_parts = self.__list_payload_entity_parts(
+                    g, langrow.origmainentity, public_name, payload_dir
+                )
+                rel_path_files: "MutableSequence[Union[RelPath, URIType]]" = []
+                base_dir = main_entity_path.parent
+                main_entity_relpath = main_entity_path.name
+                if len(workflow_parts) > 0:
+                    rel_path_str: "MutableSequence[str]" = []
+                    rel_path_index: "MutableSequence[int]" = []
+                    for i_part, part in enumerate(workflow_parts):
+                        rel_path_file = cast(
+                            "RelPath",
+                            part.rel_path if isinstance(part, ROCratePayload) else part,
+                        )
+                        rel_path_files.append(rel_path_file)
+                        if isinstance(part, ROCratePayload):
+                            rel_path_str.append(rel_path_file)
+                            rel_path_index.append(i_part)
+
+                    if len(rel_path_str) > 0:
+                        common_prefix = os.path.commonpath(
+                            [include_main_entity.rel_path, *rel_path_str]
+                        )
+                        if len(common_prefix) > 0:
+                            base_dir = payload_dir / common_prefix
+                            main_entity_relpath = main_entity_path.relative_to(
+                                base_dir
+                            ).as_posix()
+                            for i_part in rel_path_index:
+                                part = workflow_parts[i_part]
+                                assert isinstance(part, ROCratePayload)
+                                rel_path_files[i_part] = cast(
+                                    "RelPath",
+                                    part.path.relative_to(base_dir).as_posix(),
+                                )
+
+                cached_workflow = LocalWorkflow(
+                    dir=base_dir,
+                    relPath=cast("RelPath", main_entity_relpath),
+                    effectiveCheckout=repo.tag,
+                    langVersion=cast(
+                        "Union[EngineVersion, WFLangVersion]",
+                        str(langrow.programminglanguage_version),
+                    )
+                    if langrow.programminglanguage_version is not None
+                    else None,
+                    relPathFiles=rel_path_files,
+                )
+                self.logger.error(f"POZI {cached_workflow}")
+
+        return repo, workflow_type, cached_workflow
 
     def generateWorkflowMetaFromJSONLD(
         self,
         jsonld_obj: "Mapping[str, Any]",
         public_name: "str",
         retrospective_first: "bool" = True,
-    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, Sequence[Container], ParamsBlock, EnvironmentBlock, OutputsBlock]":
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
+        payload_dir: "Optional[pathlib.Path]" = None,
+    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -1891,14 +2472,20 @@ Container {containerrow.container}
                 f"JSON-LD from {public_name} is not a WRROC Workflow"
             )
 
+        cached_inputs: "Optional[Sequence[MaterializedInput]]" = None
+        cached_environment: "Optional[Sequence[MaterializedInput]]" = None
+
         # The default crate licences
         crate_licences = self._getLicences(g, matched_crate.mainentity, public_name)
 
-        repo, workflow_type = self.extractWorkflowMetadata(
+        repo, workflow_type, cached_workflow = self.extractWorkflowMetadata(
             g,
             matched_crate.mainentity,
             default_repo=str(matched_crate.wfhrepourl),
             public_name=public_name,
+            payload_dir=payload_dir
+            if reproducibility_level >= ReproducibilityLevel.Full
+            else None,
         )
 
         # At this point we know WfExS supports the workflow engine.
@@ -1918,7 +2505,7 @@ Container {containerrow.container}
             # also supported.
             # So, we are starting with the retrospective provenance
             # gathering the list of containers, to learn
-            # whi.
+            # which.
             try:
                 qexecs = rdflib.plugins.sparql.prepareQuery(
                     self.OBTAIN_RUNS_SPARQL,
@@ -1938,7 +2525,12 @@ Container {containerrow.container}
                     self.logger.debug(f"\tExecution {execrow.execution}")
 
                     contresult = self._parseContainersFromExecution(
-                        g, execrow.execution, main_entity=matched_crate.mainentity
+                        g,
+                        execrow.execution,
+                        main_entity=matched_crate.mainentity,
+                        payload_dir=payload_dir
+                        if reproducibility_level >= ReproducibilityLevel.Full
+                        else None,
                     )
                     # TODO: deal with more than one execution
                     if contresult is None:
@@ -1948,20 +2540,26 @@ Container {containerrow.container}
 
                     # TODO: which are the needed inputs, to be integrated
                     # into the latter workflow_meta?
-                    params = self._parseInputsFromExecution(
+                    params, cached_inputs = self._parseInputsFromExecution(
                         g,
                         execrow.execution,
                         main_entity=matched_crate.mainentity,
                         default_licences=crate_licences,
                         public_name=public_name,
+                        payload_dir=payload_dir
+                        if reproducibility_level >= ReproducibilityLevel.Full
+                        else None,
                     )
 
-                    environment = self._parseEnvFromExecution(
+                    environment, cached_environment = self._parseEnvFromExecution(
                         g,
                         execrow.execution,
                         main_entity=matched_crate.mainentity,
                         default_licences=crate_licences,
                         public_name=public_name,
+                        payload_dir=payload_dir
+                        if reproducibility_level >= ReproducibilityLevel.Full
+                        else None,
                     )
 
                     outputs = self._parseOutputsFromExecution(
@@ -1983,23 +2581,32 @@ Container {containerrow.container}
             contresult = self._parseContainersFromWorkflow(
                 g,
                 main_entity=matched_crate.mainentity,
+                payload_dir=payload_dir
+                if reproducibility_level >= ReproducibilityLevel.Full
+                else None,
             )
             # TODO: deal with more than one execution
             if contresult is not None:
                 container_type, the_containers = contresult
 
-            params = self._parseInputsFromMainEntity(
+            params, cached_inputs = self._parseInputsFromMainEntity(
                 g,
                 main_entity=matched_crate.mainentity,
                 default_licences=crate_licences,
                 public_name=public_name,
+                payload_dir=payload_dir
+                if reproducibility_level >= ReproducibilityLevel.Full
+                else None,
             )
 
-            environment = self._parseEnvFromMainEntity(
+            environment, cached_environment = self._parseEnvFromMainEntity(
                 g,
                 main_entity=matched_crate.mainentity,
                 default_licences=crate_licences,
                 public_name=public_name,
+                payload_dir=payload_dir
+                if reproducibility_level >= ReproducibilityLevel.Full
+                else None,
             )
 
         if len(outputs) == 0:
@@ -2037,8 +2644,11 @@ Container {containerrow.container}
             repo,
             workflow_type,
             container_type,
-            the_containers,
             params,
             environment,
             outputs,
+            cached_workflow,
+            the_containers,
+            cached_inputs,
+            cached_environment,
         )

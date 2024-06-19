@@ -27,6 +27,7 @@ import io
 import json
 import logging
 import os
+import pathlib
 import re
 import shutil
 import stat
@@ -67,6 +68,7 @@ from .common import (
     DEFAULT_PROGS,
     LicensedURI,
     MaterializedContent,
+    NoLicenceDescription,
     URIWithMetadata,
 )
 
@@ -96,6 +98,11 @@ from .workflow_engines import (
 from .ro_crate import FixedROCrate
 
 from .security_context import SecurityContextVault
+
+from .utils.licences import (
+    AcceptableLicenceSchemes,
+    LicenceMatcherSingleton,
+)
 
 from .utils.marshalling_handling import (
     unmarshall_namedtuple,
@@ -136,6 +143,10 @@ from .fetchers.swh import (
 )
 
 from .pushers import AbstractExportPlugin
+
+from .utils.rocrate import (
+    ReproducibilityLevel,
+)
 
 from .workflow import (
     WF,
@@ -183,6 +194,7 @@ if TYPE_CHECKING:
         AnyPath,
         ContainerType,
         ExitVal,
+        LicenceDescription,
         MarshallingStatus,
         ProgsMapping,
         RelPath,
@@ -204,6 +216,10 @@ if TYPE_CHECKING:
     from .fetchers import (
         RepoFetcher,
         StatefulFetcher,
+    )
+
+    from .utils.licences import (
+        LicenceMatcher,
     )
 
     from .utils.passphrase_wrapper import (
@@ -591,7 +607,7 @@ class WfExSBackend:
         else:
             cacheDir = tempfile.mkdtemp(prefix="WfExS", suffix="backend")
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, cacheDir)
+            atexit.register(shutil.rmtree, cacheDir, True)
 
         # Setting up caching directories
         self.cacheDir = cacheDir
@@ -624,7 +640,7 @@ class WfExSBackend:
         else:
             baseWorkDir = tempfile.mkdtemp(prefix="WfExS-workdir", suffix="backend")
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, baseWorkDir)
+            atexit.register(shutil.rmtree, baseWorkDir, True)
 
         self.baseWorkDir = baseWorkDir
         self.defaultParanoidMode = False
@@ -1331,6 +1347,8 @@ class WfExSBackend:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         return WF.FromPreviousInstanceDeclaration(
             self,
@@ -1344,6 +1362,8 @@ class WfExSBackend:
             private_key_passphrase=private_key_passphrase,
             secure=secure,
             paranoidMode=paranoidMode,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     def fromPreviousROCrate(
@@ -1358,12 +1378,14 @@ class WfExSBackend:
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
+        reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
+        strict_reproducibility_level: "bool" = False,
     ) -> "WF":
         # Let's check whether it is a local file
         # or a remote RO-Crate
         parsedROCrateURI = urllib.parse.urlparse(workflowROCrateFilenameOrURI)
         if parsedROCrateURI.scheme == "":
-            workflowROCrateFilename = cast("AnyPath", workflowROCrateFilenameOrURI)
+            workflowROCrateFilename = pathlib.Path(workflowROCrateFilenameOrURI)
         else:
             self.logger.info(f"* Fetching RO-Crate {workflowROCrateFilenameOrURI}")
             local_content = self.cacheFetch(
@@ -1389,6 +1411,8 @@ class WfExSBackend:
             private_key_passphrase=private_key_passphrase,
             secure=secure,
             paranoidMode=paranoidMode,
+            reproducibility_level=reproducibility_level,
+            strict_reproducibility_level=strict_reproducibility_level,
         )
 
     def parseAndValidateSecurityContextFile(
@@ -1910,7 +1934,7 @@ class WfExSBackend:
             )
             return CachedContent(
                 kind=ContentKind.Directory
-                if os.path.isdir(workflow_dir)
+                if workflow_dir.is_dir()
                 else ContentKind.File,
                 path=workflow_dir,
                 metadata_array=[],
@@ -1961,7 +1985,7 @@ class WfExSBackend:
         registerInCache: "bool" = True,
         offline: "bool" = False,
         meta_dir: "Optional[AbsPath]" = None,
-    ) -> "Tuple[AbsPath, RemoteRepo, Optional[WorkflowType], Optional[RepoTag]]":
+    ) -> "Tuple[pathlib.Path, RemoteRepo, Optional[WorkflowType], Optional[RepoTag]]":
         """
         Fetch the whole workflow description based on the data obtained
         from the TRS where it is being published.
@@ -1995,9 +2019,9 @@ class WfExSBackend:
         i_workflow: "Optional[IdentifiedWorkflow]" = None
         engineDesc: "Optional[WorkflowType]" = None
         guessedRepo: "Optional[RemoteRepo]" = None
-        repoDir: "Optional[AbsPath]" = None
+        repoDir: "Optional[pathlib.Path]" = None
         putative: "bool" = False
-        cached_putative_path: "Optional[AbsPath]" = None
+        cached_putative_path: "Optional[pathlib.Path]" = None
         if parsedRepoURL.scheme in ("", TRS_SCHEME_PREFIX):
             # Extracting the TRS endpoint details from the parsedRepoURL
             if parsedRepoURL.scheme == TRS_SCHEME_PREFIX:
@@ -2133,7 +2157,7 @@ class WfExSBackend:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         meta_dir: "Optional[AbsPath]" = None,
-    ) -> "Tuple[IdentifiedWorkflow, Optional[AbsPath]]":
+    ) -> "Tuple[IdentifiedWorkflow, Optional[pathlib.Path]]":
         """
 
         :return:
@@ -2145,7 +2169,7 @@ class WfExSBackend:
                 "AbsPath", tempfile.mkdtemp(prefix="WfExS", suffix="TRSFetched")
             )
             # Assuring this temporal directory is removed at the end
-            atexit.register(shutil.rmtree, meta_dir)
+            atexit.register(shutil.rmtree, meta_dir, True)
         else:
             # Assuring the destination directory does exist
             os.makedirs(meta_dir, exist_ok=True)
@@ -2410,7 +2434,7 @@ class WfExSBackend:
         repo: "RemoteRepo",
         doUpdate: "bool" = True,
         registerInCache: "bool" = True,
-    ) -> "Tuple[AbsPath, RepoTag]":
+    ) -> "Tuple[pathlib.Path, RepoTag]":
         if repo.repo_type not in (RepoType.Other, RepoType.SoftwareHeritage):
             (
                 remote_url,
@@ -2442,7 +2466,7 @@ class WfExSBackend:
                 inputKind=kind,
             )
 
-        return repo_path, repo_effective_checkout
+        return pathlib.Path(repo_path), repo_effective_checkout
 
     def _doMaterializeGitRepo(
         self,
@@ -2534,7 +2558,7 @@ class WfExSBackend:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
-    ) -> "Tuple[Optional[IdentifiedWorkflow], AbsPath, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[Optional[IdentifiedWorkflow], pathlib.Path, Sequence[URIWithMetadata]]":
         try:
             cached_content = self.cacheFetch(
                 remote_url,
@@ -2565,8 +2589,8 @@ class WfExSBackend:
             )
 
             crate_hashed_id = hashlib.sha1(remote_url.encode("utf-8")).hexdigest()
-            roCrateFile = os.path.join(
-                self.cacheROCrateDir, crate_hashed_id + self.DEFAULT_RO_EXTENSION
+            roCrateFile = pathlib.Path(self.cacheROCrateDir) / (
+                crate_hashed_id + self.DEFAULT_RO_EXTENSION
             )
             if not os.path.exists(roCrateFile):
                 if os.path.lexists(roCrateFile):
@@ -2577,10 +2601,8 @@ class WfExSBackend:
                 )
 
             return (
-                self.getWorkflowRepoFromROCrateFile(
-                    cast("AbsPath", roCrateFile), expectedEngineDesc
-                ),
-                cast("AbsPath", roCrateFile),
+                self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc),
+                roCrateFile,
                 cached_content.metadata_array,
             )
         else:
@@ -2592,7 +2614,7 @@ class WfExSBackend:
 
     def getWorkflowRepoFromROCrateFile(
         self,
-        roCrateFile: "AbsPath",
+        roCrateFile: "pathlib.Path",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
     ) -> "IdentifiedWorkflow":
         """
@@ -2602,8 +2624,10 @@ class WfExSBackend:
         :return:
         """
 
-        public_name = roCrateFile
-        jsonld_obj = ReadROCrateMetadata(roCrateFile, public_name=public_name)
+        public_name = str(roCrateFile)
+        jsonld_obj, payload_dir = ReadROCrateMetadata(
+            roCrateFile, public_name=public_name
+        )
         matched_crate, g = self.rocrate_toolbox.identifyROCrate(
             jsonld_obj, public_name=public_name
         )
@@ -2628,7 +2652,7 @@ class WfExSBackend:
         # fetched content (needed by Nextflow)
 
         # Some RO-Crates might have this value missing or ill-built
-        repo, workflow_type = self.rocrate_toolbox.extractWorkflowMetadata(
+        repo, workflow_type, _ = self.rocrate_toolbox.extractWorkflowMetadata(
             g,
             matched_crate.mainentity,
             default_repo=str(matched_crate.wfhrepourl),
@@ -2824,10 +2848,53 @@ class WfExSBackend:
             prettyFilename = cast("RelPath", firstParsedURI.path.split("/")[-1])
 
         return MaterializedContent(
-            local=cached_content.path,
+            local=pathlib.Path(cached_content.path),
             licensed_uri=firstLicensedURI,
             prettyFilename=prettyFilename,
             kind=cached_content.kind,
             metadata_array=cached_content.metadata_array,
             fingerprint=cached_content.fingerprint,
         )
+
+    _LicenceMatcher: "ClassVar[Optional[LicenceMatcher]]" = None
+
+    @classmethod
+    def GetLicenceMatcher(cls) -> "LicenceMatcher":
+        if cls._LicenceMatcher is None:
+            cls._LicenceMatcher = LicenceMatcherSingleton()
+            assert cls._LicenceMatcher is not None
+
+        return cls._LicenceMatcher
+
+    def curate_licence_list(
+        self,
+        licences: "Sequence[str]",
+        default_licence: "Optional[LicenceDescription]" = None,
+    ) -> "Sequence[LicenceDescription]":
+        # As these licences can be in short format, resolve them to URIs
+        expanded_licences: "MutableSequence[LicenceDescription]" = []
+        if len(licences) == 0:
+            expanded_licences.append(NoLicenceDescription)
+        else:
+            licence_matcher = self.GetLicenceMatcher()
+            rejected_licences: "MutableSequence[str]" = []
+            for lic in licences:
+                matched_licence = licence_matcher.matchLicence(lic)
+                if matched_licence is None:
+                    rejected_licences.append(lic)
+                    if default_licence is not None:
+                        expanded_licences.append(default_licence)
+                else:
+                    expanded_licences.append(matched_licence)
+
+            if len(rejected_licences) > 0:
+                if default_licence is None:
+                    raise WFException(
+                        f"Unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
+                    )
+                else:
+                    self.logger.warning(
+                        f"Default license {default_licence} used instead of next unsupported license URI scheme(s) or Workflow RO-Crate short license(s): {', '.join(rejected_licences)}"
+                    )
+
+        return expanded_licences

@@ -20,6 +20,7 @@ from __future__ import absolute_import
 import json
 import os
 import os.path
+import pathlib
 import re
 import shutil
 import subprocess
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Set,
+        Tuple,
         Union,
     )
     from typing_extensions import (
@@ -60,25 +62,26 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         ContainerTaggedName,
+        ExitVal,
         Fingerprint,
         RelPath,
         URIType,
     )
 
     from . import (
+        AbstractImageManifestMetadata,
         ContainerFileNamingMethod,
         ContainerLocalConfig,
         ProcessorArchitecture,
     )
 
-    class SingularityManifest(TypedDict):
+    class SingularityManifest(AbstractImageManifestMetadata):
         registryServer: Required[str]
         registryType: Required[str]
         repo: Required[str]
         alias: Required[Optional[str]]
         dcd: NotRequired[str]
         manifest: NotRequired[Mapping[str, Any]]
-        image_signature: NotRequired[Fingerprint]
 
 
 from . import (
@@ -87,11 +90,13 @@ from . import (
     ContainerEngineException,
     ContainerFactoryException,
     ContainerNotFoundException,
+    DEFAULT_DOCKER_REGISTRY,
     DOCKER_SCHEME,
 )
 
-from ..utils.contents import link_or_copy
-from ..utils.digests import ComputeDigestFromFile, nihDigester
+from ..utils.contents import (
+    link_or_copy_pathlib,
+)
 from ..utils.docker import DockerHelper
 
 
@@ -122,33 +127,36 @@ class SingularityContainerFactory(ContainerFactory):
 
     def __init__(
         self,
-        cacheDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
-        local_config: "Optional[ContainerLocalConfig]" = None,
+        simpleFileNameMethod: "ContainerFileNamingMethod",
+        containersCacheDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
+        tools_config: "Optional[ContainerLocalConfig]" = None,
         engine_name: "str" = "unset",
-        tempDir: "Optional[AnyPath]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
     ):
         super().__init__(
-            cacheDir=cacheDir,
+            simpleFileNameMethod=simpleFileNameMethod,
+            containersCacheDir=containersCacheDir,
             stagedContainersDir=stagedContainersDir,
-            local_config=local_config,
+            tools_config=tools_config,
             engine_name=engine_name,
             tempDir=tempDir,
         )
-        tools = local_config.get("tools", {}) if local_config else {}
-        self.runtime_cmd = tools.get("singularityCommand", DEFAULT_SINGULARITY_CMD)
+        self.runtime_cmd = self.tools_config.get(
+            "singularityCommand", DEFAULT_SINGULARITY_CMD
+        )
 
         # This is needed due a bug in singularity 3.6, where
         # singularity pull --disable-cache does not create a container
-        singularityCacheDir = os.path.join(self.stagedContainersDir, ".singularity")
-        os.makedirs(singularityCacheDir, exist_ok=True)
+        singularityCacheDir = self.stagedContainersDir / ".singularity"
+        singularityCacheDir.mkdir(parents=True, exist_ok=True)
 
         self._environment.update(
             {
-                "APPTAINER_TMPDIR": self.tempDir,
-                "APPTAINER_CACHEDIR": singularityCacheDir,
-                "SINGULARITY_TMPDIR": self.tempDir,
-                "SINGULARITY_CACHEDIR": singularityCacheDir,
+                "APPTAINER_TMPDIR": self.tempDir.as_posix(),
+                "APPTAINER_CACHEDIR": singularityCacheDir.as_posix(),
+                "SINGULARITY_TMPDIR": self.tempDir.as_posix(),
+                "SINGULARITY_CACHEDIR": singularityCacheDir.as_posix(),
             }
         )
 
@@ -194,8 +202,14 @@ class SingularityContainerFactory(ContainerFactory):
         )
 
     def _getContainerArchitecture(
-        self, container_filename: "AnyPath", matEnv: "Mapping[str, str]" = {}
+        self,
+        container_filename: "Union[AnyPath, os.PathLike[str]]",
+        matEnv: "Mapping[str, str]" = {},
     ) -> "Optional[ProcessorArchitecture]":
+        if len(matEnv) == 0:
+            matEnv = dict(os.environ)
+            matEnv.update(self.environment)
+
         with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
             self.logger.debug(
                 f"Checking {container_filename} looks like a singularity container"
@@ -213,18 +227,18 @@ class SingularityContainerFactory(ContainerFactory):
                     s_out_v = c_stF.read()
                 with open(s_err.name, "r") as c_stF:
                     s_err_v = c_stF.read()
-                errstr = """Could not inspect singularity image {}. Retval {}
+                errstr = f"""\
+Could not inspect singularity image {container_filename}. Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                    container_filename, s_retval, s_out_v, s_err_v
-                )
+{s_err_v}"""
+
                 self.logger.error(errstr)
                 raise ContainerEngineException(errstr)
 
@@ -250,18 +264,18 @@ STDERR
             self.logger.debug(f"singularity sif list stderr: {s_err_v}")
 
             if s_retval != 0:
-                errstr = """Could not describe singularity image {}. Retval {}
+                errstr = f"""\
+Could not describe singularity image {container_filename}. Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                    container_filename, s_retval, s_out_v, s_err_v
-                )
+{s_err_v}"""
+
                 self.logger.warning(errstr)
                 self.logger.warning(
                     f"Most probably, image {container_filename} was built using singularity older than 3.0.0"
@@ -321,18 +335,17 @@ STDERR
             self.logger.debug(f"singularity sif info stderr: {s_err_v}")
 
             if s_retval != 0:
-                errstr = """Could not describe bundle {}  from singularity image {}. Retval {}
+                errstr = f"""\
+Could not describe bundle {data_bundle_id} from singularity image {container_filename}. Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                    data_bundle_id, container_filename, s_retval, s_out_v, s_err_v
-                )
+{s_err_v}"""
                 raise ContainerEngineException(errstr)
 
             # Learning the architecture
@@ -352,8 +365,7 @@ STDERR
     def materializeSingleContainer(
         self,
         tag: "ContainerTaggedName",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[Union[RelPath, AbsPath]]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
     ) -> "Optional[Container]":
@@ -362,7 +374,6 @@ STDERR
         """
         the_cont = self._materializeSingleContainerSing(
             tag,
-            simpleFileNameMethod,
             containers_dir=containers_dir,
             offline=offline,
             force=force,
@@ -370,21 +381,45 @@ STDERR
 
         return the_cont if isinstance(the_cont, Container) else None
 
-    def _materializeSingleContainerSing(
+    def _genSingTag(
         self,
         tag: "ContainerTaggedName",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
-        matEnv: "Mapping[str, str]" = {},
-        dhelp: "DockerHelper" = DockerHelper(),
-        containers_dir: "Optional[AnyPath]" = None,
-        offline: "bool" = False,
-        force: "bool" = False,
-    ) -> "Union[Container, FailedContainerTag]":
-        if len(matEnv) == 0:
-            matEnvNew = dict(os.environ)
-            matEnvNew.update(self.environment)
-            matEnv = matEnvNew
+    ) -> "Tuple[str, parse.ParseResult, str, bool]":
+        # It is not an absolute URL, we are prepending the docker://
+        tag_name = tag.origTaggedName
+        parsedTag = parse.urlparse(tag_name)
+        if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
+            singTag = tag_name
+            isDocker = parsedTag.scheme == DOCKER_SCHEME
+        else:
+            if parsedTag.scheme == "":
+                singTag = "docker://" + tag_name
+                parsedTag = parse.urlparse(singTag)
+            else:
+                parsedTag = parsedTag._replace(
+                    scheme=DOCKER_SCHEME,
+                    netloc=parsedTag.scheme + ":" + parsedTag.path,
+                    path="",
+                )
+                singTag = parse.urlunparse(parsedTag)
+            # Assuming it is docker
+            isDocker = True
 
+        # Should we enrich the tag with the registry?
+        if (
+            isDocker
+            and isinstance(tag.registries, dict)
+            and (common.ContainerType.Docker in tag.registries)
+        ):
+            registry = tag.registries[common.ContainerType.Docker]
+            # Bare case
+            if len(parsedTag.path) <= 1:
+                singTag = f"docker://{registry}/library/{parsedTag.netloc}"
+                parsedTag = parse.urlparse(singTag)
+            elif "/" not in parsedTag.path[1:]:
+                singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
+                parsedTag = parse.urlparse(singTag)
+            # Last case, it already has a registry declared
         # It is not an absolute URL, we are prepending the docker://
         tag_name = tag.origTaggedName
         parsedTag = parse.urlparse(tag_name)
@@ -421,245 +456,206 @@ STDERR
                 parsedTag = parse.urlparse(singTag)
             # Last case, it already has a registry declared
 
-        containerFilename = simpleFileNameMethod(cast("URIType", tag_name))
-        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
-        localContainerPath = cast(
-            "AbsPath",
-            os.path.join(self.engineContainersSymlinkDir, containerFilename),
-        )
-        localContainerPathMeta = cast(
-            "AbsPath",
-            os.path.join(self.engineContainersSymlinkDir, containerFilenameMeta),
-        )
-
-        self.logger.info(
-            f"downloading singularity container: {tag_name} => {localContainerPath}"
-        )
-
-        # First, let's materialize the container image if it is needed
-        tmpContainerPath = None
-
-        # Does the metadata exist?
-        fetch_metadata = force or not os.path.isfile(localContainerPathMeta)
-
-        imageSignature = None
-        canonicalContainerPath = None
-
-        # Now it is time to check the local cache of the container
-        if not force and os.path.isfile(localContainerPath):
-            trusted_copy = False
-            if os.path.islink(localContainerPath):
-                # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                unlinkedContainerPath = os.readlink(localContainerPath)
-                fsImageSignature = os.path.basename(unlinkedContainerPath)
-                imageSignature = cast(
-                    "Fingerprint",
-                    fsImageSignature.replace("~", "=")
-                    .replace("-", "/")
-                    .replace("_", "+"),
-                )
-
-                canonicalContainerPath = os.path.join(
-                    self.containersCacheDir,
-                    fsImageSignature,
-                )
-
-                trusted_copy = os.path.samefile(
-                    os.path.realpath(localContainerPath),
-                    os.path.realpath(canonicalContainerPath),
-                )
+        # Now, the singPullTag
+        if isDocker and isinstance(tag, Container) and tag.fingerprint is not None:
+            shapos = singTag.rfind("@sha256:")
+            atpos = tag.fingerprint.rfind("@")
+            if shapos != -1 or atpos <= 0:
+                # The sha256 tag takes precedence over the recorded signature
+                singPullTag = singTag
             else:
-                imageSignature = cast(
-                    "Fingerprint", ComputeDigestFromFile(localContainerPath)
-                )
-                # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                canonicalContainerPath = os.path.join(
-                    self.containersCacheDir,
-                    imageSignature.replace("=", "~")
-                    .replace("/", "-")
-                    .replace("+", "_"),
-                )
+                partial_fingerprint = tag.fingerprint[atpos:]
+                colonpos = singTag.rfind(":")
+                slashpos = singTag.rfind("/")
+                if colonpos > slashpos:
+                    singPullTag = singTag[:colonpos]
+                else:
+                    singPullTag = singTag
 
-                if os.path.isfile(canonicalContainerPath):
-                    canonicalImageSignature = cast(
-                        "Fingerprint", ComputeDigestFromFile(canonicalContainerPath)
+                singPullTag += partial_fingerprint
+        else:
+            singPullTag = singTag
+
+        return singTag, parsedTag, singPullTag, isDocker
+
+    def _pull(
+        self,
+        singTag: "str",
+        tmpContainerPath: "Union[str, os.PathLike[str]]",
+        matEnv: "Mapping[str, str]",
+    ) -> "Tuple[ExitVal, str, str]":
+        with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
+            self.logger.debug(
+                f"downloading temporary container: {singTag} => {tmpContainerPath}"
+            )
+            # Singularity command line borrowed from
+            # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
+            s_retval = subprocess.Popen(
+                [self.runtime_cmd, "pull", "--name", tmpContainerPath, singTag],
+                env=matEnv,
+                stdout=s_out,
+                stderr=s_err,
+            ).wait()
+
+            self.logger.debug(f"singularity pull retval: {s_retval}")
+
+            with open(s_out.name, "r") as c_stF:
+                s_out_v = c_stF.read()
+            with open(s_err.name, "r") as c_stF:
+                s_err_v = c_stF.read()
+
+            self.logger.debug(f"singularity pull stdout: {s_out_v}")
+
+            self.logger.debug(f"singularity pull stderr: {s_err_v}")
+
+        return cast("ExitVal", s_retval), s_out_v, s_err_v
+
+    def _materializeSingleContainerSing(
+        self,
+        tag: "ContainerTaggedName",
+        matEnv: "Mapping[str, str]" = {},
+        dhelp: "DockerHelper" = DockerHelper(),
+        containers_dir: "Optional[pathlib.Path]" = None,
+        offline: "bool" = False,
+        force: "bool" = False,
+    ) -> "Union[Container, FailedContainerTag]":
+        if len(matEnv) == 0:
+            matEnvNew = dict(os.environ)
+            matEnvNew.update(self.environment)
+            matEnv = matEnvNew
+
+        tag_name = tag.origTaggedName
+        singTag, parsedTag, singPullTag, isDocker = self._genSingTag(tag)
+
+        fetch_metadata = True
+        trusted_copy = False
+        localContainerPath: "Optional[pathlib.Path]" = None
+        localContainerPathMeta: "Optional[pathlib.Path]" = None
+        imageSignature: "Optional[Fingerprint]" = None
+        fingerprint: "Optional[Fingerprint]" = None
+        if not force:
+            (
+                trusted_copy,
+                localContainerPath,
+                localContainerPathMeta,
+                imageSignature,
+            ) = self.cc_handler.query(tag)
+
+            if trusted_copy:
+                try:
+                    with localContainerPathMeta.open(mode="r", encoding="utf8") as tcpm:
+                        raw_metadata = json.load(tcpm)
+                        if isinstance(raw_metadata, dict) and (
+                            "registryServer" in raw_metadata
+                        ):
+                            metadata = cast("SingularityManifest", raw_metadata)
+                            registryServer = metadata["registryServer"]
+                            registryType = metadata.get("registryType", "docker")
+                            repo = metadata["repo"]
+                            alias = metadata.get("alias")
+                            partial_fingerprint = metadata.get("dcd")
+                            imageSignature_in_metadata = metadata.get("image_signature")
+                            manifest = metadata.get("manifest")
+                            if partial_fingerprint is not None:
+                                usableRegistryServer = (
+                                    DEFAULT_DOCKER_REGISTRY
+                                    if registryServer.endswith(
+                                        "." + DEFAULT_DOCKER_REGISTRY
+                                    )
+                                    else registryServer
+                                )
+                                fingerprint = cast(
+                                    # Maybe in the future registryServer + '/' + repo + "@" + partial_fingerprint
+                                    "Fingerprint",
+                                    usableRegistryServer
+                                    + "/"
+                                    + repo
+                                    + "@"
+                                    + partial_fingerprint,
+                                )
+                            else:
+                                # TODO: is there a better alternative?
+                                fingerprint = cast("Fingerprint", tag_name)
+
+                            if imageSignature_in_metadata is not None:
+                                # Do the signatures match?
+                                fetch_metadata = (
+                                    imageSignature != imageSignature_in_metadata
+                                )
+                        else:
+                            registryServer = ""
+                            registryType = None
+                            repo = ""
+                            alias = ""
+                            partial_fingerprint = ""
+                            imageSignature_in_metadata = None
+                            manifest = None
+                            fingerprint = cast("Fingerprint", tag_name)
+
+                except Exception as e:
+                    # Some problem happened parsing the existing metadata
+                    self.logger.exception(
+                        f"Error while reading or parsing {localContainerPathMeta}. Discarding it"
                     )
 
-                    trusted_copy = canonicalImageSignature == imageSignature
-
-            if not trusted_copy:
-                self.logger.warning(
-                    f"Unable to trust Singularity container {singTag} cached copy at {unlinkedContainerPath} pointed from {localContainerPath}. Discarding"
-                )
-                os.unlink(localContainerPath)
+        self.logger.info(f"downloading singularity container: {tag_name}")
 
         # Now, time to fetch the container itself
         # (if it is needed)
-        if force or not os.path.isfile(localContainerPath):
+        tmpContainerPath: "Optional[pathlib.Path]" = None
+        if not trusted_copy:
             if offline:
                 raise ContainerFactoryException(
-                    "Cannot download containers in offline mode from {} to {}".format(
-                        tag_name, localContainerPath
-                    )
+                    f"Cannot download containers in offline mode from {tag_name}"
                 )
 
-            with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
-                tmpContainerPath = os.path.join(
-                    self.containersCacheDir, str(uuid.uuid4())
-                )
+            tmpContainerPath = self.cc_handler._genTmpContainerPath()
+            s_retval, s_out_v, s_err_v = self._pull(
+                singPullTag, tmpContainerPath, matEnv
+            )
 
-                self.logger.debug(
-                    f"downloading temporary container: {tag_name} => {tmpContainerPath}"
-                )
-                # Singularity command line borrowed from
-                # https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L221
-                s_retval = subprocess.Popen(
-                    [self.runtime_cmd, "pull", "--name", tmpContainerPath, singTag],
-                    env=matEnv,
-                    stdout=s_out,
-                    stderr=s_err,
-                ).wait()
-
-                self.logger.debug(f"singularity pull retval: {s_retval}")
-
-                with open(s_out.name, "r") as c_stF:
-                    s_out_v = c_stF.read()
-                with open(s_err.name, "r") as c_stF:
-                    s_err_v = c_stF.read()
-
-                self.logger.debug(f"singularity pull stdout: {s_out_v}")
-
-                self.logger.debug(f"singularity pull stderr: {s_err_v}")
-
-                # Reading the output and error for the report
-                if s_retval == 0:
-                    if not os.path.exists(tmpContainerPath):
-                        raise ContainerFactoryException(
-                            "FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(
-                                tag_name, tmpContainerPath
-                            )
+            # Reading the output and error for the report
+            if s_retval == 0:
+                if not tmpContainerPath.exists():
+                    raise ContainerFactoryException(
+                        "FATAL ERROR: Singularity finished properly but it did not materialize {} into {}".format(
+                            tag_name, tmpContainerPath
                         )
-
-                    imageSignature = cast(
-                        "Fingerprint", ComputeDigestFromFile(tmpContainerPath)
-                    )
-                    # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                    canonicalContainerPath = os.path.join(
-                        self.containersCacheDir,
-                        imageSignature.replace("=", "~")
-                        .replace("/", "-")
-                        .replace("+", "_"),
                     )
 
-                    # There was already a materialized container
-                    if os.path.exists(canonicalContainerPath):
-                        tmpSize = os.path.getsize(tmpContainerPath)
-                        canonicalSize = os.path.getsize(canonicalContainerPath)
-
-                        if tmpSize != canonicalSize:
-                            # If files were not the same complain
-                            # This should not happen!!!!!
-                            raise ContainerFactoryException(
-                                f"FATAL ERROR: Singularity cache collision for {imageSignature}, with differing sizes ({tag_name} => local {canonicalSize} != remote {tmpSize})"
-                            )
-                        else:
-                            # Remove the temporary one, as the name contains the digest
-                            os.unlink(tmpContainerPath)
-                    else:
-                        shutil.move(tmpContainerPath, canonicalContainerPath)
-                        # The metadata should be invalidated
-                        if not fetch_metadata:
-                            fetch_metadata = True
-
-                    # At this point, the container is in the right canonical path
-                    # Now, create the relative symbolic link
-                    if os.path.lexists(localContainerPath):
-                        os.unlink(localContainerPath)
-                    os.symlink(
-                        os.path.relpath(
-                            canonicalContainerPath, self.engineContainersSymlinkDir
-                        ),
-                        localContainerPath,
-                    )
-
-                else:
-                    errstr = """Could not materialize singularity image {}. Retval {}
+                # This is needed for the metadata
+                imageSignature = self.cc_handler._computeFingerprint(tmpContainerPath)
+            else:
+                errstr = f"""\
+Could not materialize singularity image {singTag} ({singPullTag}). Retval {s_retval}
 ======
 STDOUT
 ======
-{}
+{s_out_v}
 
 ======
 STDERR
 ======
-{}""".format(
-                        singTag, s_retval, s_out_v, s_err_v
-                    )
-                    if os.path.exists(tmpContainerPath):
-                        try:
-                            os.unlink(tmpContainerPath)
-                        except:
-                            pass
-                    self.logger.error(errstr)
+{s_err_v}"""
 
-                    return FailedContainerTag(
-                        tag=tag_name,
-                        sing_tag=singTag,
-                    )
+                if tmpContainerPath.exists():
+                    try:
+                        tmpContainerPath.unlink()
+                    except:
+                        pass
+                self.logger.error(errstr)
+
+                return FailedContainerTag(
+                    tag=tag_name,
+                    sing_tag=singPullTag,
+                )
 
         # At this point we should always have a image signature
         assert imageSignature is not None
-        assert canonicalContainerPath is not None
-
-        fingerprint: "Optional[Fingerprint]" = None
-        if not fetch_metadata:
-            try:
-                with open(localContainerPathMeta, mode="r", encoding="utf8") as tcpm:
-                    raw_metadata = json.load(tcpm)
-                    if isinstance(raw_metadata, dict) and (
-                        "registryServer" in raw_metadata
-                    ):
-                        metadata = cast("SingularityManifest", raw_metadata)
-                        registryServer = metadata["registryServer"]
-                        registryType = metadata.get("registryType", "docker")
-                        repo = metadata["repo"]
-                        alias = metadata.get("alias")
-                        partial_fingerprint = metadata.get("dcd")
-                        imageSignature_in_metadata = metadata.get("image_signature")
-                        manifest = metadata.get("manifest")
-                        if partial_fingerprint is not None:
-                            fingerprint = cast(
-                                # Maybe in the future registryServer + '/' + repo + "@" + partial_fingerprint
-                                "Fingerprint",
-                                repo + "@" + partial_fingerprint,
-                            )
-                        else:
-                            # TODO: is there a better alternative?
-                            fingerprint = cast("Fingerprint", tag_name)
-
-                        if imageSignature_in_metadata is not None:
-                            # Do the signatures match?
-                            fetch_metadata = (
-                                imageSignature != imageSignature_in_metadata
-                            )
-                    else:
-                        registryServer = ""
-                        registryType = None
-                        repo = ""
-                        alias = ""
-                        partial_fingerprint = ""
-                        imageSignature_in_metadata = None
-                        manifest = None
-                        fingerprint = cast("Fingerprint", tag_name)
-            except Exception as e:
-                # Some problem happened parsing the existing metadata
-                self.logger.exception(
-                    f"Error while reading or parsing {localContainerPathMeta}. Discarding it"
-                )
-                fetch_metadata = True
 
         # When no metadata exists, we are bringing the metadata
         # to a temporary path
+        tmpContainerPathMeta: "Optional[pathlib.Path]" = None
         if fetch_metadata:
             if offline:
                 raise ContainerFactoryException(
@@ -667,10 +663,12 @@ STDERR
                 )
 
             if tmpContainerPath is None:
-                tmpContainerPath = os.path.join(
-                    self.containersCacheDir, str(uuid.uuid4())
-                )
-            tmpContainerPathMeta = tmpContainerPath + META_JSON_POSTFIX
+                assert localContainerPath is not None
+                tmpContainerPath = self.cc_handler._genTmpContainerPath()
+                link_or_copy_pathlib(localContainerPath, tmpContainerPath)
+            tmpContainerPathMeta = tmpContainerPath.with_name(
+                tmpContainerPath.name + META_JSON_POSTFIX
+            )
 
             self.logger.debug(
                 f"downloading temporary container metadata: {tag_name} => {tmpContainerPathMeta}"
@@ -681,24 +679,46 @@ STDERR
             if isDocker:
                 tag_details = dhelp.query_tag(singTag)
                 if tag_details is None:
+                    self.logger.error(f"FALLA {singTag}")
                     return FailedContainerTag(tag=tag_name, sing_tag=singTag)
+                if singTag != singPullTag:
+                    tag_pull_details = dhelp.query_tag(singPullTag)
+                    if tag_pull_details is None:
+                        self.logger.error(f"CANALLA {singPullTag}")
+                        return FailedContainerTag(tag=tag_name, sing_tag=singPullTag)
+                else:
+                    tag_pull_details = tag_details
+            else:
+                tag_pull_details = tag_details
 
             # Save the temporary metadata
-            with open(tmpContainerPathMeta, mode="w", encoding="utf8") as tcpm:
+            with tmpContainerPathMeta.open(mode="w", encoding="utf8") as tcpm:
                 tmp_meta: "SingularityManifest"
                 if tag_details is not None:
+                    assert tag_pull_details is not None
                     tmp_meta = {
                         "image_signature": imageSignature,
-                        "registryServer": tag_details.registryServer,
+                        "registryServer": tag_pull_details.registryServer,
                         "registryType": "docker",
-                        "repo": tag_details.repo,
+                        "repo": tag_pull_details.repo,
                         "alias": tag_details.alias,
-                        "dcd": tag_details.partial_fingerprint,
-                        "manifest": tag_details.manifest,
+                        "dcd": tag_pull_details.partial_fingerprint,
+                        "manifest": tag_pull_details.manifest,
                     }
+                    usableRegistryServer = (
+                        DEFAULT_DOCKER_REGISTRY
+                        if tag_pull_details.registryServer.endswith(
+                            "." + DEFAULT_DOCKER_REGISTRY
+                        )
+                        else tag_pull_details.registryServer
+                    )
                     fingerprint = cast(
                         "Fingerprint",
-                        tag_details.repo + "@" + tag_details.partial_fingerprint,
+                        usableRegistryServer
+                        + "/"
+                        + tag_pull_details.repo
+                        + "@"
+                        + tag_pull_details.partial_fingerprint,
                     )
                 else:
                     # TODO: Which metadata could we add for other schemes?
@@ -712,37 +732,25 @@ STDERR
                     fingerprint = cast("Fingerprint", tag_name)
                 json.dump(tmp_meta, tcpm)
 
-            canonicalContainerPathMeta = cast(
-                "AbsPath", canonicalContainerPath + META_JSON_POSTFIX
-            )
-            shutil.move(tmpContainerPathMeta, canonicalContainerPathMeta)
-
-            if os.path.lexists(localContainerPathMeta):
-                os.unlink(localContainerPathMeta)
-            os.symlink(
-                os.path.relpath(
-                    canonicalContainerPathMeta, self.engineContainersSymlinkDir
-                ),
-                localContainerPathMeta,
-            )
-
         # Last, but not the least important
         # Hardlink or copy the container and its metadata
-        if containers_dir is None:
-            containers_dir = self.stagedContainersDir
+        if tmpContainerPath is not None and tmpContainerPathMeta is not None:
+            self.cc_handler.update(
+                tag,
+                image_path=tmpContainerPath,
+                image_metadata_path=tmpContainerPathMeta,
+                do_move=True,
+            )
 
-        containerPath = cast("AbsPath", os.path.join(containers_dir, containerFilename))
+        if containers_dir is None:
+            containers_dir = pathlib.Path(self.stagedContainersDir)
 
         # Do not allow overwriting in offline mode
-        if not offline:
-            containerPathMeta = cast(
-                "AbsPath", os.path.join(containers_dir, containerFilenameMeta)
-            )
-            os.makedirs(containers_dir, exist_ok=True)
-            if force or not os.path.exists(containerPath):
-                link_or_copy(localContainerPath, containerPath)
-            if force or not os.path.exists(containerPathMeta):
-                link_or_copy(localContainerPathMeta, containerPathMeta)
+        transferred_image = self.cc_handler.transfer(
+            tag, stagedContainersDir=containers_dir, force=force and not offline
+        )
+        assert transferred_image is not None, f"Unexpected cache miss for {tag}"
+        containerPath, containerPathMeta = transferred_image
 
         return Container(
             origTaggedName=tag_name,
@@ -754,17 +762,17 @@ STDERR
             localPath=containerPath,
             registries=tag.registries,
             metadataLocalPath=containerPathMeta,
-            source_type=tag.type,
+            source_type=tag.source_type if isinstance(tag, Container) else tag.type,
             image_signature=imageSignature,
         )
 
     def materializeContainers(
         self,
         tagList: "Sequence[ContainerTaggedName]",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[AnyPath]" = None,
+        containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
+        injectable_containers: "Sequence[Container]" = [],
     ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
@@ -783,15 +791,31 @@ STDERR
             # If we cannot materialize it we cannot accept it
             if not self.AcceptsContainer(tag):
                 continue
-            matched_container = self._materializeSingleContainerSing(
-                tag,
-                simpleFileNameMethod=simpleFileNameMethod,
-                matEnv=matEnv,
-                dhelp=dhelp,
-                containers_dir=containers_dir,
-                offline=offline,
-                force=force,
-            )
+
+            tag_to_use: "ContainerTaggedName" = tag
+            for injectable_container in injectable_containers:
+                if (
+                    injectable_container.origTaggedName == tag.origTaggedName
+                    and injectable_container.source_type == tag.type
+                    and injectable_container.registries == tag.registries
+                ):
+                    tag_to_use = injectable_container
+                    break
+
+            matched_container: "Union[Container, FailedContainerTag]"
+            try:
+                matched_container, was_redeployed = self.deploySingleContainer(
+                    tag_to_use, containers_dir=containers_dir, force=force
+                )
+            except ContainerFactoryException as cfe:
+                matched_container = self._materializeSingleContainerSing(
+                    tag_to_use,
+                    matEnv=matEnv,
+                    dhelp=dhelp,
+                    containers_dir=containers_dir,
+                    offline=offline,
+                    force=force,
+                )
 
             if isinstance(matched_container, Container):
                 if matched_container not in containersList:
@@ -814,13 +838,112 @@ STDERR
 
     def deploySingleContainer(
         self,
-        container: "Container",
-        simpleFileNameMethod: "ContainerFileNamingMethod",
-        containers_dir: "Optional[AnyPath]" = None,
+        container: "ContainerTaggedName",
+        containers_dir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
-    ) -> "bool":
+    ) -> "Tuple[Container, bool]":
         """
         This is almost no-op, but it should check
         the integrity of the local images
         """
-        return force
+        if containers_dir is None:
+            containers_dir = self.stagedContainersDir
+        containerPath, containerPathMeta = self.cc_handler.genStagedContainersDirPaths(
+            container, containers_dir
+        )
+
+        was_redeployed = False
+        if (
+            not containerPath.is_file()
+            and isinstance(container, Container)
+            and container.localPath is not None
+        ):
+            # Time to inject the image!
+            link_or_copy_pathlib(container.localPath, containerPath, force_copy=True)
+            was_redeployed = True
+
+        if not containerPath.is_file():
+            errmsg = f"SIF saved image {containerPath.name} is not in the staged working dir for {container.origTaggedName}"
+            self.logger.warning(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        if (
+            not containerPathMeta.is_file()
+            and isinstance(container, Container)
+            and container.metadataLocalPath is not None
+        ):
+            # Time to inject the metadata!
+            link_or_copy_pathlib(
+                container.metadataLocalPath, containerPathMeta, force_copy=True
+            )
+            was_redeployed = True
+
+        if not containerPathMeta.is_file():
+            errmsg = f"SIF saved image metadata {containerPathMeta.name} is not in the staged working dir for {container.origTaggedName}"
+            self.logger.warning(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        try:
+            with containerPathMeta.open(mode="r", encoding="utf-8") as mH:
+                signaturesAndManifest = cast("SingularityManifest", json.load(mH))
+                imageSignature_in_metadata = signaturesAndManifest["image_signature"]
+
+                if isinstance(container, Container):
+                    # Reuse the input container instance
+                    rebuilt_container = container
+                else:
+                    singTag, parsedTag, singPullTag, isDocker = self._genSingTag(
+                        container
+                    )
+
+                    partial_fingerprint = signaturesAndManifest.get("dcd")
+                    repo = signaturesAndManifest["repo"]
+                    if partial_fingerprint is not None:
+                        registryServer = signaturesAndManifest["registryServer"]
+                        usableRegistryServer = (
+                            DEFAULT_DOCKER_REGISTRY
+                            if registryServer.endswith("." + DEFAULT_DOCKER_REGISTRY)
+                            else registryServer
+                        )
+                        fingerprint = cast(
+                            # Maybe in the future registryServer + '/' + repo + "@" + partial_fingerprint
+                            "Fingerprint",
+                            usableRegistryServer
+                            + "/"
+                            + repo
+                            + "@"
+                            + partial_fingerprint,
+                        )
+                    else:
+                        # TODO: is there a better alternative?
+                        fingerprint = cast("Fingerprint", container.origTaggedName)
+
+                    rebuilt_container = Container(
+                        origTaggedName=container.origTaggedName,
+                        taggedName=cast("URIType", singTag),
+                        signature=imageSignature_in_metadata,
+                        fingerprint=fingerprint,
+                        architecture=self._getContainerArchitecture(containerPath),
+                        type=self.containerType,
+                        localPath=containerPath,
+                        registries=container.registries,
+                        metadataLocalPath=containerPathMeta,
+                        source_type=container.source_type
+                        if isinstance(container, Container)
+                        else container.type,
+                        image_signature=imageSignature_in_metadata,
+                    )
+
+        except Exception as e:
+            errmsg = f"Problems extracting SIF metadata at {containerPathMeta} or {containerPath}"
+            self.logger.exception(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        imageSignature = self.cc_handler._computeFingerprint(containerPath)
+
+        if imageSignature != imageSignature_in_metadata:
+            errmsg = f"Image signature recorded in {containerPathMeta.name} does not match image signature of {containerPath.name}"
+            self.logger.exception(errmsg)
+            raise ContainerFactoryException(errmsg)
+
+        return rebuilt_container, was_redeployed

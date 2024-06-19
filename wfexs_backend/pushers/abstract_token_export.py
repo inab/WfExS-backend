@@ -201,7 +201,7 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
 
             try:
                 upload_response = self.upload_file_to_draft(
-                    booked_entry, item.local, prefname
+                    booked_entry, str(item.local), prefname
                 )
             except urllib.error.HTTPError as he:
                 failed = True

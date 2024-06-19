@@ -26,6 +26,7 @@ import json
 import logging
 import os
 import os.path
+import pathlib
 import shutil
 import traceback
 import types
@@ -140,7 +141,7 @@ from .utils.misc import (
 
 class CachedContent(NamedTuple):
     kind: "ContentKind"
-    path: "AbsPath"
+    path: "pathlib.Path"
     metadata_array: "Sequence[URIWithMetadata]"
     licences: "Tuple[URIType, ...]"
     fingerprint: "Optional[Fingerprint]" = None
@@ -565,7 +566,7 @@ class SchemeHandlerCacheHandler:
         finalCachedFilename: "Optional[AbsPath]" = None,
         tempCachedFilename: "Optional[AbsPath]" = None,
         inputKind: "Optional[ContentKind]" = None,
-    ) -> "Tuple[Optional[AbsPath], Optional[Fingerprint]]":
+    ) -> "Tuple[Optional[pathlib.Path], Optional[Fingerprint]]":
         if destdir is None:
             destdir = self.cacheDir
 
@@ -600,7 +601,12 @@ class SchemeHandlerCacheHandler:
             if do_copy:
                 link_or_copy(tempCachedFilename, newFinalCachedFilename)
 
-        return newFinalCachedFilename, fingerprint
+        return (
+            pathlib.Path(newFinalCachedFilename)
+            if newFinalCachedFilename is not None
+            else None,
+            fingerprint,
+        )
 
     def _inject(
         self,
@@ -1205,7 +1211,7 @@ class SchemeHandlerCacheHandler:
 
         return CachedContent(
             kind=inputKind,
-            path=finalCachedFilename,
+            path=pathlib.Path(finalCachedFilename),
             metadata_array=metadata_array,
             licences=tuple(licences),
             fingerprint=final_fingerprint,

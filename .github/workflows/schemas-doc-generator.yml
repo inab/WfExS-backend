@@ -1,7 +1,6 @@
 name: schemas-doc-generator
 
 on:
-  pull_request:
   push:
     branches: [main]
 
@@ -16,6 +15,8 @@ jobs:
           extra_args: --all -c .pre-commit-config.yaml jsonschema_dir_validate
   
   update_docs:
+    # Do this only when it is not a pull request validation
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     name: Update documentation if all worked properly
     needs:
