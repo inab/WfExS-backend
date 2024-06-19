@@ -15,7 +15,9 @@ jobs:
         python-version: [ "3.7", "3.8", "3.9", "3.10", "3.11", "3.12" ]
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
@@ -25,16 +27,27 @@ jobs:
             mypy-requirements.txt
             dev-requirements.txt
           architecture: x64
+      - name: Changed requirements.txt
+        id: changed-requirements-txt
+        uses: tj-actions/changed-files@v44
+        with:
+          files: requirements.txt
+
       - name: 'Install requirements (standard)'
-        if: ${{ matrix.python-version != '3.6' }}
+        if: ${{ matrix.python-version != '3.6' && steps.changed-requirements-txt.outputs.any_changed == 'true' }}
         run: |
           pip install --upgrade pip wheel
           pip install -r requirements.txt
-      - name: 'Install requirements  (custom Python ${{ matrix.python-version }})'
-        if: ${{ matrix.python-version == '3.6' }}
+      - name: 'Install requirements (constraints)'
+        if: ${{ matrix.python-version != '3.6' && steps.changed-requirements-txt.outputs.any_changed != 'true' }}
         run: |
-          pip install wheel
-          pip install -r requirements.txt -r requirements-additional-${{ matrix.python-version }}.txt
+          pip install --upgrade pip wheel
+          pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
+      #- name: 'Install requirements  (custom Python ${{ matrix.python-version }})'
+      #  if: ${{ matrix.python-version == '3.6' }}
+      #  run: |
+      #    pip install wheel
+      #    pip install -r requirements.txt -r requirements-additional-${{ matrix.python-version }}.txt
       - name: 'Freeze Python ${{ matrix.python-version }} constraints'
         run: |
           pip freeze > constraints-${{ matrix.python-version }}.txt
