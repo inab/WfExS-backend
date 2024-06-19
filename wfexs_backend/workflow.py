@@ -94,6 +94,7 @@ if TYPE_CHECKING:
         Literal,
         TypeAlias,
         TypedDict,
+        TypeGuard,
         Required,
         NotRequired,
     )
@@ -1456,13 +1457,20 @@ class WF:
                     and isinstance(cached_inputs, list)
                     and len(cached_inputs) > 0
                 ):
+                    # This is overcomplicated to pass checks in python 3.7 mypy
+                    def filter_cached_inputs(
+                        m_i: "MaterializedInput",
+                    ) -> "TypeGuard[bool]":
+                        assert replaced_inputs is not None
+                        return m_i.name not in replaced_inputs
+
                     new_cached_inputs = list(
-                        filter(
-                            lambda m_i: m_i.name not in replaced_inputs, cached_inputs
-                        )
+                        filter(filter_cached_inputs, cached_inputs)
                     )
                     if len(new_cached_inputs) < len(cached_inputs):
-                        cached_inputs = new_cached_inputs
+                        cached_inputs = cast(
+                            "Sequence[MaterializedInput]", new_cached_inputs
+                        )
 
             if wfInstance.materializedEnvironment is not None:
                 cached_environment = copy.copy(wfInstance.materializedEnvironment)
@@ -1475,14 +1483,20 @@ class WF:
                     and isinstance(cached_environment, list)
                     and len(cached_environment) > 0
                 ):
+                    # This is overcomplicated to pass checks in python 3.7 mypy
+                    def filter_cached_environment(
+                        m_i: "MaterializedInput",
+                    ) -> "TypeGuard[bool]":
+                        assert replaced_environment is not None
+                        return m_i.name not in replaced_environment
+
                     new_cached_environment = list(
-                        filter(
-                            lambda m_i: m_i.name not in replaced_environment,
-                            cached_environment,
-                        )
+                        filter(filter_cached_environment, cached_environment)
                     )
                     if len(new_cached_environment) < len(cached_environment):
-                        cached_environment = new_cached_environment
+                        cached_environment = cast(
+                            "Sequence[MaterializedInput]", new_cached_environment
+                        )
 
             if wfInstance.materializedEngine is not None:
                 if wfInstance.materializedEngine.containers is not None:
@@ -1663,11 +1677,16 @@ class WF:
                 and isinstance(cached_inputs, list)
                 and len(cached_inputs) > 0
             ):
-                new_cached_inputs = list(
-                    filter(lambda m_i: m_i.name not in replaced_inputs, cached_inputs)
-                )
+                # This is overcomplicated to pass checks in python 3.7 mypy
+                def filter_cached_inputs(m_i: "MaterializedInput") -> "TypeGuard[bool]":
+                    assert replaced_inputs is not None
+                    return m_i.name not in replaced_inputs
+
+                new_cached_inputs = list(filter(filter_cached_inputs, cached_inputs))
                 if len(new_cached_inputs) < len(cached_inputs):
-                    cached_inputs = new_cached_inputs
+                    cached_inputs = cast(
+                        "Sequence[MaterializedInput]", new_cached_inputs
+                    )
 
             replaced_environment = replaced_items.get("environment")
             if (
@@ -1675,14 +1694,23 @@ class WF:
                 and isinstance(cached_environment, list)
                 and len(cached_environment) > 0
             ):
+                # This is overcomplicated to pass checks in python 3.7 mypy
+                def filter_cached_environment(
+                    m_i: "MaterializedInput",
+                ) -> "TypeGuard[bool]":
+                    assert replaced_environment is not None
+                    return m_i.name not in replaced_environment
+
                 new_cached_environment = list(
                     filter(
-                        lambda m_i: m_i.name not in replaced_environment,
-                        cached_environment,
+                        filter_cached_environment,
+                        cast("Sequence[MaterializedInput]", cached_environment),
                     )
                 )
                 if len(new_cached_environment) < len(cached_environment):
-                    cached_environment = new_cached_environment
+                    cached_environment = cast(
+                        "Sequence[MaterializedInput]", new_cached_environment
+                    )
 
         return cls.FromStagedRecipe(
             wfexs,
@@ -2369,14 +2397,20 @@ class WF:
         # execution environment
         realPrettyLocal = prettyLocal.resolve()
         realInputDestDir = inputDestDir.resolve()
-        if not realPrettyLocal.is_relative_to(realInputDestDir):
+        # Path.is_relative_to was introduced in Python 3.9
+        # if not realPrettyLocal.is_relative_to(realInputDestDir):
+        common_path = pathlib.Path(
+            os.path.commonpath([realPrettyLocal, realInputDestDir])
+        )
+        if realInputDestDir != common_path:
             prettyRelname = cast("RelPath", realPrettyLocal.name)
             prettyLocal = inputDestDir / prettyRelname
 
         # Checking whether local name hardening is needed
         if not hardenPrettyLocal:
             if prettyLocal.is_symlink():
-                oldLocal = prettyLocal.readlink()
+                # Path.readlink was added in Python 3.9
+                oldLocal = os.readlink(prettyLocal)
 
                 hardenPrettyLocal = oldLocal != matContent.local
             elif prettyLocal.exists():
@@ -2386,7 +2420,7 @@ class WF:
             # Trying to avoid collisions on input naming
             prettyLocal = inputDestDir / (prefix + prettyRelname)
 
-        if not os.path.exists(prettyLocal):
+        if not prettyLocal.exists():
             # We are either hardlinking or copying here
             link_or_copy_pathlib(matContent.local, prettyLocal)
 
@@ -2819,7 +2853,12 @@ class WF:
 
         if relative_dir is not None:
             newInputDestDir = (inputDestDir / relative_dir).resolve()
-            if newInputDestDir.is_relative_to(inputDestDir):
+            # Path.is_relative_to was introduced in Python 3.9
+            # if newInputDestDir.is_relative_to(inputDestDir):
+            common_path = pathlib.Path(
+                os.path.commonpath([newInputDestDir, inputDestDir])
+            )
+            if common_path == inputDestDir:
                 inputDestDir = newInputDestDir
                 extrapolatedInputDestDir = (
                     extrapolatedInputDestDir / relative_dir

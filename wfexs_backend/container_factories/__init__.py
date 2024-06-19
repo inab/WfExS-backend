@@ -361,7 +361,8 @@ class ContainerCacheHandler:
         if localContainerPath.is_file():
             if localContainerPath.is_symlink():
                 # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                unlinkedContainerPath = localContainerPath.readlink()
+                # Path.readlink was added in Python 3.9
+                unlinkedContainerPath = pathlib.Path(os.readlink(localContainerPath))
                 fsImageSignature = unlinkedContainerPath.name
                 imageSignature = cast(
                     "Fingerprint",
@@ -482,8 +483,11 @@ class ContainerCacheHandler:
 
         # And ..... transfer!!!
         if do_move:
-            shutil.move(image_path, canonicalContainerPath)
-            shutil.move(image_metadata_path, canonicalContainerPathMeta)
+            # Python 3.7 and lower only accept str as parameters
+            shutil.move(image_path.as_posix(), canonicalContainerPath.as_posix())
+            shutil.move(
+                image_metadata_path.as_posix(), canonicalContainerPathMeta.as_posix()
+            )
         else:
             link_or_copy(image_path, canonicalContainerPath, force_copy=True)
             link_or_copy(

@@ -260,7 +260,7 @@ def link_or_copy_pathlib(
 ) -> None:
     assert (
         src.exists()
-    ), f"File {src.as_posix()} must exist to be linked or copied {src.exists()} {src.exists(follow_symlinks=False)}"
+    ), f"File {src.as_posix()} must exist to be linked or copied {src.exists()} {src.is_symlink()}"
 
     # We should not deal with symlinks
     src = src.resolve()
@@ -301,7 +301,10 @@ def link_or_copy_pathlib(
             if src.is_file():
                 if dest_exists:
                     dest.unlink()
-                dest.hardlink_to(src)
+                # link_to appeared in Python 3.8
+                # hardlink_to appeared in Python 3.10
+                # dest.hardlink_to(src)
+                os.link(src, dest)
             else:
                 # Recursively hardlinking
                 # as of https://stackoverflow.com/a/10778930

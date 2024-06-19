@@ -28,10 +28,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from zipfile import (
-    ZipFile,
-    ZipInfo,
-)
+import zipfile
 
 
 if TYPE_CHECKING:
@@ -53,7 +50,9 @@ if TYPE_CHECKING:
         Union,
     )
 
-    import zipfile
+    from typing_extensions import (
+        Literal,
+    )
 
 
 def _parents(path: "str") -> "Iterator[str]":
@@ -111,7 +110,7 @@ def _difference(
     return itertools.filterfalse(set(subtrahend).__contains__, minuend)
 
 
-class CompleteDirs(ZipFile):
+class CompleteDirs(zipfile.ZipFile):
     """
     A ZipFile subclass that ensures that implied directories
     are always included in the namelist.
@@ -140,7 +139,7 @@ class CompleteDirs(ZipFile):
         dir_match = name not in names and dirname in names
         return dirname if dir_match else name
 
-    def getinfo(self, name: "str") -> "ZipInfo":
+    def getinfo(self, name: "str") -> "zipfile.ZipInfo":
         """
         Supplement getinfo for implied dirs.
         """
@@ -149,11 +148,11 @@ class CompleteDirs(ZipFile):
         except KeyError:
             if not name.endswith("/") or name not in self._name_set():
                 raise
-            return ZipInfo(filename=name)
+            return zipfile.ZipInfo(filename=name)
 
     @classmethod
     def make(
-        cls, source: "Union[CompleteDirs, ZipFile, str, os.PathLike[str]]"
+        cls, source: "Union[CompleteDirs, zipfile.ZipFile, str, os.PathLike[str]]"
     ) -> "CompleteDirs":
         """
         Given a source (filename or zipfile), return an
@@ -162,7 +161,7 @@ class CompleteDirs(ZipFile):
         if isinstance(source, CompleteDirs):
             return source
 
-        if not isinstance(source, ZipFile):
+        if not isinstance(source, zipfile.ZipFile):
             return cls(source)
 
         # Only allow for FastPath when supplied zipfile is read-only
@@ -194,13 +193,6 @@ class FastLookup(CompleteDirs):
         return self.__lookup
 
 
-def _extract_text_encoding(
-    encoding: "Optional[str]" = None, *args: "Any", **kwargs: "Any"
-) -> "Tuple[str, Tuple[Any], Dict[str, Any]]":
-    # stacklevel=3 so that the caller of the caller see any warning.
-    return io.text_encoding(encoding, 3), args, kwargs
-
-
 def path_relative_to(
     path: "pathlib.Path", other: "pathlib.Path", *extra: "Union[str, os.PathLike[str]]"
 ) -> "str":
@@ -225,7 +217,7 @@ class ZipfilePath(pathlib.Path):
                 └── e.txt
 
     >>> data = io.BytesIO()
-    >>> zf = ZipFile(data, 'w')
+    >>> zf = zipfile.ZipFile(data, 'w')
     >>> zf.writestr('a.txt', 'content of a')
     >>> zf.writestr('b/c.txt', 'content of c')
     >>> zf.writestr('b/d/e.txt', 'content of e')
@@ -293,7 +285,7 @@ class ZipfilePath(pathlib.Path):
 
     def __init__(
         self,
-        root: "Union[str, CompleteDirs, os.PathLike[str], ZipFile]",
+        root: "Union[str, CompleteDirs, os.PathLike[str], zipfile.ZipFile]",
         at: "str" = "",
     ):
         """
@@ -333,14 +325,14 @@ class ZipfilePath(pathlib.Path):
         zip_mode = mode[0]
         if not self.exists() and zip_mode == "r":
             raise FileNotFoundError(self)
-        stream = self._root.open(self._at, mode=zip_mode, pwd=pwd)
+        stream = self._root.open(
+            self._at, mode=cast("Literal['r', 'w']", zip_mode), pwd=pwd
+        )
         if "b" in mode:
             # if args or kwargs:
             #    raise ValueError("encoding args invalid for binary operation")
             return stream
         # Text mode:
-        # encoding, args, kwargs = _extract_text_encoding(*args, **kwargs)
-        encoding = io.text_encoding(encoding, 2)
         return io.TextIOWrapper(
             stream,
             encoding=encoding,
@@ -410,13 +402,13 @@ class ZipfilePath(pathlib.Path):
         return self._next(parent_at)
 
     @property
-    def zip_root(self) -> "ZipFile":
+    def zip_root(self) -> "zipfile.ZipFile":
         return self._root
 
     def relative_to(  # type: ignore[override]
         self,
         other: "Union[str, os.PathLike[str]]",
-        /,
+        # /,
         *_deprecated: "Union[str, os.PathLike[str]]",
         walk_up: bool = False,
     ) -> "pathlib.Path":
@@ -432,7 +424,7 @@ class ZipfilePath(pathlib.Path):
 
     def _extract_member(
         self,
-        member: "Union[ZipInfo, str]",
+        member: "Union[zipfile.ZipInfo, str]",
         targetpath: "Union[str, os.PathLike[str]]",
         pwd: "Optional[bytes]" = None,
     ) -> "str":
@@ -442,7 +434,7 @@ class ZipfilePath(pathlib.Path):
         """Extract the ZipInfo object 'member' to a physical
            file on the path targetpath.
         """
-        if not isinstance(member, ZipInfo):
+        if not isinstance(member, zipfile.ZipInfo):
             member = self._root.getinfo(member)
 
         # build the destination pathname, replacing
@@ -503,10 +495,3 @@ class ZipfilePath(pathlib.Path):
 
     def with_name(self, name: "Union[str, os.PathLike[str]]") -> "ZipfilePath":
         return self.parent.joinpath(name)
-
-
-# Older versions of Python do not have zipfile.Path
-if sys.version_info[:2] < (3, 8):
-    import zipfile
-
-    zipfile.Path = ZipfilePath
