@@ -111,40 +111,54 @@ if [ -n "$failed" ] ; then
 	exit 1
 fi
 
-#if declare -F deactivate >& /dev/null ; then
+# Detect whether WfExS is already installed
 is_minimal_ver="$(python3 -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor)  if tuple(sys.version_info) >= (3, 7, 0, "final", 0)  else  "")')"
 if [ -z "$is_minimal_ver" ] ; then
 	echo "ERROR: Python 3.7 or newer is required, but $(python3 -V) was detected" 1>&2
 	exit 1
 fi
 
-envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
-if [ -n "${envDir}" ] ; then
-	echo "Using currently active environment ${envDir} to install the dependencies"
+# Is WfExS already installed??? (case of Docker)
+pip list --format freeze | grep '^wfexs_backend='
+retval=$?
+if [ "$retval" -eq 0 ] ; then
+	envDir="$(python3 -c 'import sys; print(sys.prefix)')"
 else
-	envDir="${wfexsDir}/.pyWEenv"
-
-	echo "Creating WfExS-backend python virtual environment at ${envDir}"
-
-	# Checking whether the environment exists
-	if [ ! -f "${envDir}" ] ; then
-		python3 -m venv "${envDir}"
-	fi
-
-	# Activating the python environment
-	envActivate="${envDir}/bin/activate"
-	source "${envActivate}"
-	pip install --upgrade pip wheel
+	envDir=""
 fi
 
-# Checking whether the modules were already installed
-echo "Installing WfExS-backend python dependencies"
-pip install -r "${wfexsDir}"/requirements.txt
+# Try installing WfExS in an environment in case it is not
+# already installed.
+if [ -z "$envDir" ]; then
+#if declare -F deactivate >& /dev/null ; then
+	envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
+	if [ -n "${envDir}" ] ; then
+		echo "Using currently active environment ${envDir} to install the dependencies"
+	else
+		envDir="${wfexsDir}/.pyWEenv"
 
-# Now, should we run something wrapped?
-if [ $# != 0 ] ; then
-	pip install -r "${wfexsDir}"/dev-requirements.txt -r "${wfexsDir}"/mypy-requirements.txt
-	"$@"
+		echo "Creating WfExS-backend python virtual environment at ${envDir}"
+
+		# Checking whether the environment exists
+		if [ ! -f "${envDir}" ] ; then
+			python3 -m venv "${envDir}"
+		fi
+
+		# Activating the python environment
+		envActivate="${envDir}/bin/activate"
+		source "${envActivate}"
+		pip install --require-virtualenv --upgrade pip wheel
+	fi
+
+	# Checking whether the modules were already installed
+	echo "Installing WfExS-backend python dependencies"
+	pip install --require-virtualenv -r "${wfexsDir}"/requirements.txt
+
+	# Now, should we run something wrapped?
+	if [ $# != 0 ] ; then
+		pip install --require-virtualenv -r "${wfexsDir}"/dev-requirements.txt -r "${wfexsDir}"/mypy-requirements.txt
+		"$@"
+	fi
 fi
 
 declare -a platformSuffixes=(

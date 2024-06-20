@@ -23,7 +23,7 @@ JDK_REV=9
 OPENJ9_VER=0.26.0
 
 GO_VER=1.17.13
-GOCRYPTFS_VER=v2.3.1
+GOCRYPTFS_VER=v2.4.0
 STATIC_BASH_VER=5.1.004-1.2.2
 BUSYBOX_VER=1.35.0
 
@@ -77,9 +77,6 @@ if [ $# -gt 0 ]; then
 	shift $#
 fi
 source "${wfexsDir}/basic-installer.bash"
-
-GO_VER=1.17.13
-
 
 
 declare -A archesJDK=(
