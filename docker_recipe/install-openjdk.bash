@@ -34,7 +34,7 @@ set -eu
 envDir=/usr/local
 if [ $# -ge 4 ] ;then
 	JDK_MAJOR_VER="$1"
-	JDK_VER="2"
+	JDK_VER="$2"
 	JDK_REV="$3"
 	OPENJ9_VER="$4"
 else

@@ -19,7 +19,7 @@ RUN	curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings
 	tee /etc/apt/sources.list.d/docker.list > /dev/null && \
 	apt-get update && \
 	apt-get install -y --no-install-recommends docker-ce-cli
-RUN	apt-get install -y podman
+RUN	apt-get install -y podman encfs
 COPY	install-openjdk.bash .
-RUN	bash install-openjdk.bash
+RUN	bash install-openjdk.bash "${JDK_MAJOR_VER}" "${JDK_VER}" "${JDK_REV}" "${OPENJ9_VER}"
 RUN	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}"
