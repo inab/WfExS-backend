@@ -1321,7 +1321,7 @@ def main() -> None:
         WfExS_Commands.Import,
         WfExS_Commands.Execute,
     ):
-        updated_config, local_config, config_directory = WfExSBackend.bootstrap(
+        updated_config, local_config, config_directory = WfExSBackend.bootstrap_config(
             local_config, config_directory, key_prefix=config_relname
         )
         # This is needed because config directory could have been empty

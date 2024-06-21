@@ -289,7 +289,7 @@ class WfExSBackend:
         )
 
     @classmethod
-    def bootstrap(
+    def bootstrap_config(
         cls,
         local_config_ro: "WfExSConfigBlock",
         config_directory: "Optional[AnyPath]" = None,
@@ -311,7 +311,7 @@ class WfExSBackend:
         valErrors = config_validate(local_config_ro, cls.CONFIG_SCHEMA)
         if len(valErrors) > 0:
             logging.error(
-                f"ERROR on incoming local configuration block for bootstrap: {valErrors}"
+                f"ERROR on incoming local configuration block for bootstrap config: {valErrors}"
             )
             sys.exit(1)
 
@@ -459,7 +459,7 @@ class WfExSBackend:
             stacklevel=2,
         )
 
-        _, updated_local_config, config_directory = cls.bootstrap(
+        _, updated_local_config, config_directory = cls.bootstrap_config(
             local_config, config_directory=config_directory
         )
 
@@ -499,7 +499,9 @@ class WfExSBackend:
 
         if not isinstance(local_config, dict):
             # Minimal bootstrapping for embedded cases
-            _, local_config, config_directory = self.bootstrap({}, config_directory)
+            _, local_config, config_directory = self.bootstrap_config(
+                {}, config_directory
+            )
 
         # validate the local configuration object
         valErrors = config_validate(local_config, self.CONFIG_SCHEMA)

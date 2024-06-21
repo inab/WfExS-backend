@@ -120,7 +120,7 @@ def test_cache_push(tmpdir) -> "None":  # type: ignore[no-untyped-def]
     # First, instantiate WfExS backend
     temppath = tmpdir.mkdir("TEMP")
 
-    bootstrap_ok, test_local_config, config_directory = WfExSBackend.bootstrap(
+    bootstrap_ok, test_local_config, config_directory = WfExSBackend.bootstrap_config(
         local_config_ro={
             "cacheDir": "CACHE",
             "workDir": "WORKDIRS",
