@@ -2,4 +2,5 @@ sphinx-rtd-theme
 sphinx-copybutton
 sphinx-argparse
 sphinxcontrib.datatemplates
-wfexs_backend @ git+https://github.com/inab/WfExS-backend.git@1ab2ff449a7168b3423d681cde78fd877364009f
+myst-parser
+wfexs_backend @ git+https://github.com/inab/WfExS-backend.git@13090f8aadecb2ecc1acf245f8936dadb0107b6b

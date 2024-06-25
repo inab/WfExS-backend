@@ -11,12 +11,14 @@ sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), '../
 
 # -- Project information
 
-project = 'WfExS-backend'
-copyright = '2022-2023, Barcelona Supercomputing Center'
-author = 'José Mª Fernández, Laura Rodríguez-Navas'
+import wfexs_backend
 
-release = '0.1'
-version = '0.1.0'
+project = 'WfExS-backend'
+copyright = wfexs_backend.__copyright__
+author = wfexs_backend.__author__
+
+release = wfexs_backend.__version__
+version = wfexs_backend.get_WfExS_version_str()
 
 # -- General configuration
 
@@ -29,6 +31,7 @@ extensions = [
     'sphinx_copybutton',
     'sphinxarg.ext',
     'sphinxcontrib.datatemplates',
+    'myst_parser',
 ]
 
 intersphinx_mapping = {
@@ -38,6 +41,13 @@ intersphinx_mapping = {
 intersphinx_disabled_domains = ['std']
 
 templates_path = ['_templates']
+
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.md': 'markdown',
+}
+
+myst_enable_extensions = ['colon_fence']
 
 # -- Options for HTML output
 

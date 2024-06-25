@@ -1,5 +1,5 @@
-CLI
-===
+CLI directives
+==============
 
 
 .. argparse::

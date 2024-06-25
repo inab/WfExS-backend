@@ -24,4 +24,6 @@ Contents
    contributing
    generalwebs
    available_features
+   command-line
    cli
+   writing-docs
