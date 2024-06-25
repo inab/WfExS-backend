@@ -99,7 +99,6 @@ if TYPE_CHECKING:
 import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
-import xdg.BaseDirectory
 
 # This code needs exception groups
 if sys.version_info[:2] < (3, 11):
@@ -127,7 +126,7 @@ from .digests import (
 )
 
 from .pyld_caching import (
-    hook_pyld_cache,
+    pyld_cache_initialize,
 )
 
 from ..fetchers import (
@@ -365,8 +364,7 @@ class ROCrateToolbox(abc.ABC):
         self.wfexs = wfexs
 
         # Caching path for the contexts
-        cache_path = xdg.BaseDirectory.save_cache_path("es.elixir.WfExSJSONLD")
-        hook_pyld_cache(os.path.join(cache_path, "contexts.db"))
+        pyld_cache_initialize()
 
         # This is needed for proper behaviour
         # https://stackoverflow.com/a/6264214

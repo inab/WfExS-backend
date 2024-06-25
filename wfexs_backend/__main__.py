@@ -79,6 +79,7 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .security_context import SecurityContextVault
+from .side_caches import populate_side_caches
 from .utils.rocrate import (
     ReproducibilityLevel,
 )
@@ -92,6 +93,10 @@ from .utils.misc import DatetimeEncoder
 
 
 class WfExS_Commands(StrDocEnum):
+    PopulateSideCaches = (
+        "populate-side-caches",
+        "Populate read-only side caches which live in XDG_CACHE_HOME (shared by all the WfExS instances of the very same user)",
+    )
     Init = ("init", "Init local setup")
     Cache = ("cache", "Cache handling subcommands")
     ConfigValidate = (
@@ -1089,6 +1094,8 @@ def _get_wfexs_argparse_internal(
 
     ap_i = genParserSub(sp, WfExS_Commands.Init)
 
+    ap_psd = genParserSub(sp, WfExS_Commands.PopulateSideCaches)
+
     ap_c = genParserSub(sp, WfExS_Commands.Cache)
     ap_c.add_argument(
         "cache_command",
@@ -1268,6 +1275,11 @@ def main() -> None:
         logging.getLogger("crypt4gh").setLevel(
             logLevel if logLevel > logging.WARNING else logging.WARNING
         )
+
+    # Very early command
+    if command == WfExS_Commands.PopulateSideCaches:
+        populate_side_caches()
+        sys.exit(0)
 
     # First, try loading the configuration file
     localConfigFilename = args.localConfigFilename
