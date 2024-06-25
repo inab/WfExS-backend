@@ -1,6 +1,23 @@
 # "Easy" install and setup a Workflow Execution Service backend instance
 
-## "Easy" setup of core and main software dependencies
+## Easy creation of WfExS container image
+
+If you already have docker properly setup and running, next command line will help you:
+
+```bash
+docker build -t inab/wfexs-backend:0.99.9 docker_recipe
+```
+
+alternatively, you can build the Docker image for an specific version
+even without fetching a copy of the repo first!
+
+```bash
+docker build -t inab/wfexs-backend:0.99.9 \
+--build-arg wfexs_checkout=b6cad3bc32e9481083c6c89ef82156f50123f18e \
+https://raw.githubusercontent.com/inab/WfExS-backend/full_circle/docker_recipe/Dockerfile
+```
+
+## "Easy" local setup of core and main software dependencies
 
 There is an automated installer at [full-installer.bash](docker_recipe/full-installer.bash):
 

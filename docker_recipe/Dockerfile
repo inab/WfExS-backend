@@ -1,7 +1,7 @@
 # The default images of python are based on debian
 FROM	python:3.12
 # These arguments help customizing what it is included in the generated image
-ARG	wfexs_checkout=0.99.9
+ARG	wfexs_checkout=b6cad3bc32e9481083c6c89ef82156f50123f18e
 ARG	apptainer_version=1.3.2
 # JDK version parameters
 ARG	JDK_MAJOR_VER=11
@@ -18,7 +18,7 @@ ARG	STATIC_BASH_VER=5.1.004-1.2.2
 ARG	BUSYBOX_VER=1.35.0
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
 # Install apptainer
-RUN	wget \
+RUN	wget -nv \
 	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}_amd64.deb \
 	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}_amd64.deb && \
 	apt-get update && \
@@ -26,7 +26,7 @@ RUN	wget \
 	rm -f *.deb
 # Install docker-ce-cli
 # hadolint ignore=DL3008
-RUN	wget -o /etc/apt/keyrings/docker.asc https://download.docker.com/linux/debian/gpg && \
+RUN	wget -nv -O /etc/apt/keyrings/docker.asc https://download.docker.com/linux/debian/gpg && \
 	chmod a+r /etc/apt/keyrings/docker.asc && \
 	echo \
 	"deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian \
@@ -37,11 +37,22 @@ RUN	wget -o /etc/apt/keyrings/docker.asc https://download.docker.com/linux/debia
 # Install both podman and encfs
 # hadolint ignore=DL3008
 RUN	apt-get install -y podman encfs
-# Install WfExS
-RUN	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}"
-# Transfer other third party installation script
+# Install WfExS, trusting the installers in the commit rather than the
+# one in the docker recipe
 WORKDIR	/
-COPY	basic-installer.bash full-installer.bash ./
+# hadolint ignore=DL3003
+RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-backend.git && \
+	cd WfExS-backend && \
+	git sparse-checkout init --cone && \
+	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))') && \
+	git sparse-checkout set constraints-${PYVER}.txt docker_recipe/basic-installer.bash docker_recipe/full-installer.bash && \
+	git checkout "${wfexs_checkout}" && \
+	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-${PYVER}.txt && \
+	mv docker_recipe/* / && \
+	cd .. && \
+	rm -rf WfExS-backend
+# Transfer other third party installation script
+# COPY	basic-installer.bash full-installer.bash ./
 # Install third party software
 RUN	JDK_MAJOR_VER="${JDK_MAJOR_VER}" \
 	JDK_VER="${JDK_VER}" \
@@ -51,5 +62,5 @@ RUN	JDK_MAJOR_VER="${JDK_MAJOR_VER}" \
 	GOCRYPTFS_VER="${GOCRYPTFS_VER}" \
 	STATIC_BASH_VER="${STATIC_BASH_VER}" \
 	BUSYBOX_VER="${BUSYBOX_VER}" \
-	bash full-installer.bash
+	bash /full-installer.bash
 CMD	["bash"]
