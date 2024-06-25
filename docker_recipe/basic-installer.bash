@@ -126,7 +126,7 @@ fi
 
 # Is WfExS already installed??? (case of Docker)
 set +e
-python3 -c "import sys"$'\n'"try:"$'\n'"  import wfexs_backend"$'\n'"except:"$'\n'"  sys.exit(1)"$'\n'"sys.exit(0)"
+python3 -P -c "import sys"$'\n'"try:"$'\n'"  import wfexs_backend"$'\n'"except:"$'\n'"  sys.exit(1)"$'\n'"sys.exit(0)"
 retval=$?
 set -e
 if [ "$retval" -eq 0 ] ; then
