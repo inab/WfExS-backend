@@ -42,8 +42,10 @@ esac
 
 failed=
 for cmd in mktemp ; do
+	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
+	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
 		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
@@ -165,10 +167,12 @@ if [ -x "${envDir}/bin/${staticBash}" ] ; then
 else
 	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/${staticBash}"
 	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
+	set +e
 	trap - ERR
 	( cd "${downloadDir}" && curl -f -L -O "${static_bash_url}" )
 	retval=$?
 	trap cleanup ERR
+	set -e
 	if [ "$retval" -eq 0 ] ; then
 		mv "${downloadDir}/${staticBash}" "${envDir}/bin/${staticBash}"
 		chmod +x "${envDir}/bin/${staticBash}"
@@ -185,10 +189,12 @@ for binName in ps ; do
 	else
 		static_bin_url="https://busybox.net/downloads/binaries/${BUSYBOX_VER}-${platformSuffixRev}-musl/busybox_${binName^^}"
 		echo "Installing busybox ${binName} ${BUSYBOX_VER} from ${static_bin_url}"
+		set +e
 		trap - ERR
 		( cd "${downloadDir}" && curl -f -L -o "${staticBin}" "${static_bin_url}" )
 		retval=$?
 		trap cleanup ERR
+		set -e
 		if [ "$retval" -eq 0 ] ; then
 			mv "${downloadDir}/${staticBin}" "${envDir}/bin/${staticBin}"
 			chmod +x "${envDir}/bin/${staticBin}"

@@ -32,8 +32,10 @@ set -eu
 
 failed=
 for cmd in curl tar gzip mktemp grep ; do
+	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
+	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
 		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
@@ -89,8 +91,10 @@ checkInstallGO() {
 }
 
 for cmd in python3 pip ; do
+	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
+	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
 		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
@@ -99,8 +103,10 @@ done
 
 failed=
 for lib in libmagic.so ; do
+	set +e
 	ldconfig -p | grep -qF "/${lib}"
 	retval=$?
+	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
 		echo "ERROR: Library $lib found in ldconfig cache and needed for the installation"
@@ -119,8 +125,10 @@ if [ -z "$is_minimal_ver" ] ; then
 fi
 
 # Is WfExS already installed??? (case of Docker)
+set +e
 pip list --format freeze | grep '^wfexs_backend='
 retval=$?
+set -e
 if [ "$retval" -eq 0 ] ; then
 	envDir="$(python3 -c 'import sys; print(sys.prefix)')"
 else
