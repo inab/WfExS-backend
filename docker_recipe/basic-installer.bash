@@ -125,10 +125,10 @@ if [ -z "$is_minimal_ver" ] ; then
 fi
 
 # Is WfExS already installed??? (case of Docker)
-set +e
+set +eu
 python3 -P -c "import sys"$'\n'"try:"$'\n'"  import wfexs_backend"$'\n'"except:"$'\n'"  sys.exit(1)"$'\n'"sys.exit(0)"
 retval=$?
-set -e
+set -eu
 if [ "$retval" -eq 0 ] ; then
 	envDir="$(python3 -c 'import sys; print(sys.prefix)')"
 else

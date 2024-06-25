@@ -68,7 +68,13 @@ cleanup() {
 	rm -rf "${downloadDir}"
 }
 
-trap cleanup EXIT ERR
+cleanuperr() {
+	cleanup
+	exit 1
+}
+
+trap cleanup EXIT
+trap cleanuperr ERR
 
 set -eu
 
@@ -78,8 +84,9 @@ declare -a input_params=( "$@" )
 if [ $# -gt 0 ]; then
 	shift $#
 fi
+trap - ERR
 source "${scriptDir}/basic-installer.bash"
-
+trap cleanuperr ERR
 
 declare -A archesJDK=(
 	[x86_64]=x64
@@ -146,10 +153,8 @@ else
 	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_${platformOS}-static_${platformArchGO}.tar.gz"
 	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
 	set +e
-	trap - ERR
 	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${gocryptfs_url}" && tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz )
 	retval=$?
-	trap cleanup ERR
 	set -e
 	if [ "$retval" -ne 0 ] ; then
 		# Get compiler
@@ -168,10 +173,8 @@ else
 	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/${staticBash}"
 	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
 	set +e
-	trap - ERR
-	( cd "${downloadDir}" && curl -f -L -O "${static_bash_url}" )
+	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${static_bash_url}" )
 	retval=$?
-	trap cleanup ERR
 	set -e
 	if [ "$retval" -eq 0 ] ; then
 		mv "${downloadDir}/${staticBash}" "${envDir}/bin/${staticBash}"
@@ -190,10 +193,8 @@ for binName in ps ; do
 		static_bin_url="https://busybox.net/downloads/binaries/${BUSYBOX_VER}-${platformSuffixRev}-musl/busybox_${binName^^}"
 		echo "Installing busybox ${binName} ${BUSYBOX_VER} from ${static_bin_url}"
 		set +e
-		trap - ERR
-		( cd "${downloadDir}" && curl -f -L -o "${staticBin}" "${static_bin_url}" )
+		( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -o "${staticBin}" "${static_bin_url}" )
 		retval=$?
-		trap cleanup ERR
 		set -e
 		if [ "$retval" -eq 0 ] ; then
 			mv "${downloadDir}/${staticBin}" "${envDir}/bin/${staticBin}"
