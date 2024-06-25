@@ -27,3 +27,4 @@ Contents
    command-line
    cli
    writing-docs
+   apidocs/index

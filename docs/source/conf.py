@@ -23,6 +23,7 @@ version = wfexs_backend.get_WfExS_version_str()
 # -- General configuration
 
 extensions = [
+    'autodoc2',
     'sphinx.ext.duration',
     'sphinx.ext.doctest',
     'sphinx.ext.autodoc',
@@ -33,6 +34,15 @@ extensions = [
     'sphinxcontrib.datatemplates',
     'myst_parser',
 ]
+
+autodoc2_packages = [
+    {
+        "path": os.path.relpath(os.path.dirname(wfexs_backend.__file__)),
+        "module": "wfexs_backend",
+    },
+]
+
+autodoc2_output_dir = "apidocs"
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
