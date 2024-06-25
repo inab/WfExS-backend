@@ -1,1 +1,1 @@
-full-installer.bash
+docker_recipe/full-installer.bash

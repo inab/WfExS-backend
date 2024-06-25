@@ -16,15 +16,15 @@
 # limitations under the License.
 
 # Getting the installation directory
-wfexsDir="$(dirname "$0")"
-case "${wfexsDir}" in
+scriptDir="$(dirname "$0")"
+case "${scriptDir}" in
 	/*)
 		# Path is absolute
 		true
 		;;
 	*)
 		# Path is relative
-		wfexsDir="$(readlink -f "${wfexsDir}")"
+		scriptDir="$(readlink -f "${scriptDir}")"
 		;;
 esac
 
@@ -131,9 +131,15 @@ fi
 # already installed.
 if [ -z "$envDir" ]; then
 #if declare -F deactivate >& /dev/null ; then
+	requirementsFile="$(readlink -f "${scriptDir}"/../requirements.txt)"
+	wfexsDir="$(dirname "${requirementsFile}")"
+
 	envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
 	if [ -n "${envDir}" ] ; then
 		echo "Using currently active environment ${envDir} to install the dependencies"
+	elif [ ! -f "${requirementsFile}" ] ; then
+		echo "ERROR: Requirements file needed for the installation is not available at $requirementsFile."
+		exit 1
 	else
 		envDir="${wfexsDir}/.pyWEenv"
 
@@ -152,7 +158,7 @@ if [ -z "$envDir" ]; then
 
 	# Checking whether the modules were already installed
 	echo "Installing WfExS-backend python dependencies"
-	pip install --require-virtualenv -r "${wfexsDir}"/requirements.txt
+	pip install --require-virtualenv -r "${requirementsFile}"
 
 	# Now, should we run something wrapped?
 	if [ $# != 0 ] ; then

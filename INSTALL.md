@@ -2,10 +2,10 @@
 
 ## "Easy" setup of core and main software dependencies
 
-There is an automated installer at [full-installer.bash](full-installer.bash):
+There is an automated installer at [full-installer.bash](docker_recipe/full-installer.bash):
 
 ```bash
-./full-installer.bash
+docker_recipe/full-installer.bash
 ```
 
 which assumes both essential build dependencies
@@ -17,8 +17,8 @@ The automated installer installs both core dependencies and it fetches and insta
   * A static bash copy: needed by Nextflow runner to monkey-patch some containers which do not have bash, or whose bash copy is buggy.
 
 If you also want to install [singularity](https://sylabs.io/singularity/) or
-[apptainer](https://apptainer.org) at the WfExS-backend virtual environment, and you are using Ubuntu Linux, a rootless setup is achieved using either [singularity-local-installer.bash](singularity-local-installer.bash)
-or [apptainer-local-installer.bash](apptainer-local-installer.bash).
+[apptainer](https://apptainer.org) at the WfExS-backend virtual environment, and you are using Ubuntu Linux, a rootless setup is achieved using either [singularity-local-installer.bash](docker_recipe/singularity-local-installer.bash)
+or [apptainer-local-installer.bash](docker_recipe/apptainer-local-installer.bash).
 At most only one of them can be locally installed, because as of
 September 2022 workflow engines like `cwltool` or `nextflow` still use the
 hardcoded name of `singularity`. So, the apptainer installer has to create
@@ -26,12 +26,12 @@ a "singularity" symlink pointing to "apptainer".
 
 ```bash
 # For singularity
-./singularity-local-installer.bash
+docker_recipe/singularity-local-installer.bash
 ```
 
 ```bash
 # For apptainer
-./apptainer-local-installer.bash
+docker_recipe/apptainer-local-installer.bash
 ```
 
 This setup will only work on Linux systems with cgroups v2 enabled. You will also need to install the package which provides `mksquashfs`, which is `squashfs-tools` both in Debian and Ubuntu.
@@ -40,12 +40,12 @@ The scripts only install singularity or apptainer when it is not available. If y
 
 ```bash
 # For singularity
-./singularity-local-installer.bash force
+docker_recipe/singularity-local-installer.bash force
 ```
 
 ```bash
 # For apptainer
-./apptainer-local-installer.bash force
+docker_recipe/apptainer-local-installer.bash force
 ```
 
 ## Core Dependencies
@@ -59,7 +59,7 @@ This workflow execution service backend is written for Python 3.7 and later.
 * The creation of a virtual environment where to install WfExS backend dependencies can be done running:
   
 ```bash
-./basic-installer.bash
+docker_recipe/basic-installer.bash
 ```
 
 * If you upgrade your Python installation (from version 3.8 to 3.9 or later, for instance), or you move this folder to a different location after following this instructions, you may need to remove and reinstall the virtual environment.
@@ -101,10 +101,8 @@ All the development dependencies are declared at [dev-requirements.txt](dev-requ
 ```bash
 python3 -m venv .pyWEenv
 source .pyWEenv/bin/activate
-pip install --upgrade pip wheel
-pip install -r requirements.txt
-pip install -r dev-requirements.txt
-pip install -r mypy-requirements.txt
+pip install --require-virtualenv --upgrade pip wheel
+pip install --require-virtualenv -r requirements.txt -r dev-requirements.txt -r mypy-requirements.txt
 ```
 
 One of these dependencies is [pre-commit](https://pre-commit.com/), whose rules are declared at [.pre-commit-config.yaml](.pre-commit-config.yaml) (there are special versions of these rules for GitHub).
@@ -147,6 +145,6 @@ flake8 --ignore E501 wfexs_backend
 ```
 
 # License
-* © 2020-2022 Barcelona Supercomputing Center (BSC), ES
+* © 2020-2024 Barcelona Supercomputing Center (BSC), ES
 
 Licensed under the Apache License, version 2.0 <https://www.apache.org/licenses/LICENSE-2.0>, see the file `LICENSE.txt` for details.

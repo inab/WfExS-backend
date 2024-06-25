@@ -17,26 +17,26 @@
 
 # These are the software versions being installed
 # in the virtual environment
-JDK_MAJOR_VER=11
-JDK_VER=${JDK_MAJOR_VER}.0.11
-JDK_REV=9
-OPENJ9_VER=0.26.0
+: ${JDK_MAJOR_VER:=11}
+: ${JDK_VER:=${JDK_MAJOR_VER}.0.11}
+: ${JDK_REV:=9}
+: ${OPENJ9_VER:=0.26.0}
 
-GO_VER=1.17.13
-GOCRYPTFS_VER=v2.4.0
-STATIC_BASH_VER=5.1.004-1.2.2
-BUSYBOX_VER=1.35.0
+: ${GO_VER:=1.17.13}
+: ${GOCRYPTFS_VER:=v2.4.0}
+: ${STATIC_BASH_VER:=5.1.004-1.2.2}
+: ${BUSYBOX_VER:=1.35.0}
 
 # Getting the installation directory
-wfexsDir="$(dirname "$0")"
-case "${wfexsDir}" in
+scriptDir="$(dirname "$0")"
+case "${scriptDir}" in
 	/*)
 		# Path is absolute
 		true
 		;;
 	*)
 		# Path is relative
-		wfexsDir="$(readlink -f "${wfexsDir}")"
+		scriptDir="$(readlink -f "${scriptDir}")"
 		;;
 esac
 
@@ -76,7 +76,7 @@ declare -a input_params=( "$@" )
 if [ $# -gt 0 ]; then
 	shift $#
 fi
-source "${wfexsDir}/basic-installer.bash"
+source "${scriptDir}/basic-installer.bash"
 
 
 declare -A archesJDK=(
