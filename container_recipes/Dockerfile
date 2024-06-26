@@ -1,7 +1,7 @@
 # The default images of python are based on debian
 FROM	python:3.12
 # These arguments help customizing what it is included in the generated image
-ARG	wfexs_checkout=2ee79a73dcea90948df460edb14889dc82d538a5
+ARG	wfexs_checkout=574fe343c0b59eecd95afbc67894456359ebe649
 ARG	apptainer_version=1.3.2
 # JDK version parameters
 ARG	JDK_MAJOR_VER=11

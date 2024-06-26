@@ -14,7 +14,7 @@ just using next bash pattern:
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
 docker build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
 https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -25,7 +25,7 @@ a local copy of the recipe, and next command line from the project root will hel
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
 mkdir WfExS_docker_build
 cd WfExS_docker_build
 curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -46,7 +46,7 @@ just using next bash pattern:
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
 podman build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
 https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -57,7 +57,7 @@ a local copy of the recipe, and next command line from the project root will hel
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
 mkdir WfExS_podman_build
 cd WfExS_podman_build
 curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -77,7 +77,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # WFEXS_VER can be either a branch, a tag or a commit hash
-  WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
   mkdir WfExS_SIF_build
   cd WfExS_SIF_build
   curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Singularity.def
@@ -88,7 +88,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # WFEXS_VER can be either a branch, a tag or a commit hash
-  WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
   singularity build \
   --build-arg wfexs_checkout="${WFEXS_VER}" \
   wfexs-backend-${WFEXS_VER}.sif container_recipes/Singularity.def
@@ -100,7 +100,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # Remember to use the correct tag!!!
-  WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
   singularity build wfexs-${WFEXS_VER}.sif docker-daemon://inab/wfexs-backend:${WFEXS_VER}
   ```
 
@@ -117,7 +117,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
   cd WfExS_SIF_build
   
   # Remember to use the correct tag!!!
-  WFEXS_VER=2ee79a73dcea90948df460edb14889dc82d538a5
+  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
 
   # Next command should be used if you used podman to build the local image
   podman save -o wfexs-backend-${WFEXS_VER}.tar inab/wfexs-backend:${WFEXS_VER}
