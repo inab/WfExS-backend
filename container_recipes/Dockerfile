@@ -1,7 +1,7 @@
 # The default images of python are based on debian
 FROM	python:3.12
 # These arguments help customizing what it is included in the generated image
-ARG	wfexs_checkout=b6cad3bc32e9481083c6c89ef82156f50123f18e
+ARG	wfexs_checkout=0969cd94c1f7cebd30f1bd7b54b0c1f3a1273e4a
 ARG	apptainer_version=1.3.2
 # JDK version parameters
 ARG	JDK_MAJOR_VER=11
@@ -18,9 +18,10 @@ ARG	STATIC_BASH_VER=5.1.004-1.2.2
 ARG	BUSYBOX_VER=1.35.0
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
 # Install apptainer
-RUN	wget -nv \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}_amd64.deb \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}_amd64.deb && \
+RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
+	wget -nv \
+	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}_${DPKG_ARCH}.deb \
+	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}_${DPKG_ARCH}.deb && \
 	apt-get update && \
 	apt-get install -y ./*.deb && \
 	rm -f *.deb
@@ -45,10 +46,10 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-bac
 	cd WfExS-backend && \
 	git sparse-checkout init --cone && \
 	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))') && \
-	git sparse-checkout set constraints-${PYVER}.txt docker_recipe/basic-installer.bash docker_recipe/full-installer.bash && \
+	git sparse-checkout set constraints-${PYVER}.txt container_recipes/basic-installer.bash container_recipes/full-installer.bash && \
 	git checkout "${wfexs_checkout}" && \
 	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-${PYVER}.txt && \
-	mv docker_recipe/* / && \
+	mv container_recipes/* / && \
 	cd .. && \
 	rm -rf WfExS-backend
 # Transfer other third party installation script

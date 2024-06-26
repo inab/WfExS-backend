@@ -2,24 +2,86 @@
 
 ## Easy creation of WfExS container image
 
-If you already have docker properly setup and running, next command line will help you:
+This section describes how to build a container image containing WfExS and its preconditions.
+
+### Docker
+
+The precondition is having Docker properly setup and running.
+
+You can build the Docker image for an specific version (release, tag, branch or commit)
+without fetching a full copy of the repo or the Dockerfile recipe,
+just using next bash pattern:
 
 ```bash
-docker build -t inab/wfexs-backend:0.99.9 docker_recipe
+# WFEXS_VER can be either a branch, a tag or a commit hash
+WFEXS_VER=0969cd94c1f7cebd30f1bd7b54b0c1f3a1273e4a
+docker build -t inab/wfexs-backend:${WFEXS_VER} \
+--build-arg wfexs_checkout="${WFEXS_VER}" \
+https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
 ```
 
-alternatively, you can build the Docker image for an specific version
-even without fetching a copy of the repo first!
+Alternatively, if the docker client does not accept URLs, you need to have
+a local copy of the repo, and next command line from the project root will help you:
 
 ```bash
-docker build -t inab/wfexs-backend:0.99.9 \
---build-arg wfexs_checkout=b6cad3bc32e9481083c6c89ef82156f50123f18e \
-https://raw.githubusercontent.com/inab/WfExS-backend/full_circle/docker_recipe/Dockerfile
+# You can tag the image revision as you prefer
+docker build -t inab/wfexs-backend:local container_recipes
 ```
+
+### Podman
+
+The precondition is having Podman properly setup and running.
+
+Mimicking what it can be performed with Docker, you can build the Podman
+image for an specific version (release, tag, branch or commit)
+without fetching a full copy of the repo or the recipe,
+just using next bash pattern:
+
+```bash
+# WFEXS_VER can be either a branch, a tag or a commit hash
+WFEXS_VER=0969cd94c1f7cebd30f1bd7b54b0c1f3a1273e4a
+podman build -t inab/wfexs-backend:${WFEXS_VER} \
+--build-arg wfexs_checkout="${WFEXS_VER}" \
+https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
+```
+
+Alternatively, if the podman client does not accept URLs, you need to have
+a local copy of the repo, and next command line from the project root will help you:
+
+```bash
+# You can tag the image revision as you prefer
+podman build -t inab/wfexs-backend:local container_recipes
+```
+
+### SIF image
+
+The precondition is having either Apptainer or Singularity properly setup. There are two different routes to create a SIF image of WfExS:
+
+* First one requires either using curl or having a local copy of the repository
+  and a modern enough version of either apptainer (1.3 or later)
+  or singularity (4.0 or later). 
+
+  ```bash
+  # WFEXS_VER can be either a branch, a tag or a commit hash
+  WFEXS_VER=0969cd94c1f7cebd30f1bd7b54b0c1f3a1273e4a
+  curl -O 
+  singularity build \
+  --build-arg wfexs_checkout="${WFEXS_VER}" \
+  wfexs-backend-${WFEXS_VER}.sif \
+  https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Singularity.def
+  ```
+
+* Second one involves to first create the WfExS docker image locally,
+following the pattern previously described, and then telling apptainer / singularity
+to build it:
+
+  ```bash
+  singularity build wfexs-0.99.9.sif docker-daemon://inab/wfexs-backend:0.99.9
+  ```
 
 ## "Easy" local setup of core and main software dependencies
 
-There is an automated installer at [full-installer.bash](docker_recipe/full-installer.bash):
+There is an automated installer at [full-installer.bash](docker_recipe/full-installer.bash), which is also used inside the docker:
 
 ```bash
 docker_recipe/full-installer.bash
