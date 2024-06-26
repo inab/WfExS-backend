@@ -49,6 +49,8 @@ Installation
 This workflow execution service backend is written for Python 3.7 and later.
 Follow the installation instructions to get WfExS running in your system. 
 
+.. asciinema:: 452311
+
 .. note:: 
    In this document there is a small section with :ref:`gearshift specific installation
    instructions<installation_gearshift>`. If you want to install WfExS on gearshift please 

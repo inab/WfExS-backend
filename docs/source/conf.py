@@ -33,6 +33,7 @@ extensions = [
     'sphinxarg.ext',
     'sphinxcontrib.datatemplates',
     'myst_parser',
+    'sphinxcontrib.asciinema',
 ]
 
 autodoc2_packages = [
