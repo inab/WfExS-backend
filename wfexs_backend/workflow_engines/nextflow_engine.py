@@ -691,6 +691,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         candidateNf = cast("RelPath", os.path.relpath(entrypoint, nfDir))
 
+        # Last, we should include ./bin , ./templates and ./lib directories
+        # https://training.nextflow.io/advanced/structure/
+        for special_dir in ("bin", "templates", "lib"):
+            abs_special_dir = nfDir / special_dir
+            if abs_special_dir.is_dir():
+                nxfScripts.append(cast("RelPath", special_dir))
+
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(
             dir=nfDir,
@@ -1434,9 +1441,13 @@ STDERR
             if not relNxfScript.endswith(".nf"):
                 continue
 
-            nxfScript = os.path.normpath(os.path.join(nfDir, relNxfScript))
+            nxfScript = (nfDir / relNxfScript).resolve(strict=False)
+            # If it is an special directory, skip it!
+            if nxfScript.is_dir():
+                continue
+
             self.logger.debug(f"Searching container declarations at {relNxfScript}")
-            with open(nxfScript, encoding="utf-8") as wfH:
+            with nxfScript.open(mode="rt", encoding="utf-8") as wfH:
                 # This is needed for multi-line pattern matching
                 content = wfH.read()
 

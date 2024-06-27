@@ -2155,7 +2155,7 @@ you can find here an almost complete list of the possible ones:
             the_workflow_crate["url"] = wf_url
 
         if the_workflow.relPathFiles:
-            rel_entities: "MutableSequence[Union[FixedFile, rocrate.model.creativework.CreativeWork]]" = (
+            rel_entities: "MutableSequence[Union[FixedFile, rocrate.model.creativework.CreativeWork, FixedDataset]]" = (
                 []
             )
             for rel_file in the_workflow.relPathFiles:
@@ -2165,7 +2165,7 @@ you can find here an almost complete list of the possible ones:
 
                 # First, are we dealing with relative files or with URIs?
                 p_rel_file = urllib.parse.urlparse(rel_file)
-                the_entity: "Union[FixedFile, rocrate.model.creativework.CreativeWork]"
+                the_entity: "Union[FixedFile, rocrate.model.creativework.CreativeWork, FixedDataset]"
                 if p_rel_file.scheme != "":
                     the_entity = rocrate.model.creativework.CreativeWork(
                         self.crate,
@@ -2181,14 +2181,37 @@ you can find here an almost complete list of the possible ones:
                         os.path.join(the_workflow.dir, rel_file),
                         self.staged_setup.workflow_dir,
                     )
-                    the_entity = self._add_file_to_crate(
-                        the_path=pathlib.Path(the_workflow.dir) / rel_file,
-                        the_name=the_s_name,
-                        the_alternate_name=cast("RelPath", the_alternate_name),
-                        the_uri=cast("URIType", rocrate_file_id),
-                        do_attach=do_attach,
-                        is_soft_source=True,
-                    )
+                    abs_file = pathlib.Path(the_workflow.dir) / rel_file
+                    if abs_file.is_file():
+                        the_entity = self._add_file_to_crate(
+                            the_path=abs_file,
+                            the_name=the_s_name,
+                            the_alternate_name=cast("RelPath", the_alternate_name),
+                            the_uri=cast("URIType", rocrate_file_id),
+                            do_attach=do_attach,
+                            is_soft_source=True,
+                        )
+                    elif abs_file.is_dir():
+                        (
+                            the_possible_entity,
+                            the_files_within_the_entity,
+                        ) = self._add_directory_as_dataset(
+                            the_path=abs_file,
+                            the_name=the_s_name,
+                            the_alternate_name=cast("RelPath", the_alternate_name),
+                            the_uri=cast("URIType", rocrate_file_id),
+                            do_attach=do_attach,
+                        )
+                        if the_possible_entity is None:
+                            raise ROCrateGenerationException(
+                                f"Unable to include {abs_file} directory into the RO-Crate being generated"
+                            )
+
+                        the_entity = the_possible_entity
+                    else:
+                        raise ROCrateGenerationException(
+                            f"Unable to include {abs_file} into the RO-Crate being generated (unmanaged file object)"
+                        )
 
                 rel_entities.append(the_entity)
 
