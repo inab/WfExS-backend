@@ -1850,6 +1850,9 @@ you can find here an almost complete list of the possible ones:
         if not os.path.isdir(the_path):
             return None, None
 
+        if the_name is not None and not the_name.endswith("/"):
+            the_name = cast("RelPath", the_name + "/")
+
         assert not do_attach or (
             the_name is not None
         ), "A name must be provided for local directories"
