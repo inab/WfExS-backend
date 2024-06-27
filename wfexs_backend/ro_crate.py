@@ -933,25 +933,25 @@ class WorkflowRunROCrate:
         RO_licences = self._process_licences(licences)
 
         # Add extra terms
-        self.crate.metadata.extra_terms.update(
-            {
-                # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
-                # # Next ones are experimental
-                # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
-                # + ContainerImageAdditionalType.Docker.value,
-                # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
-                # + ContainerImageAdditionalType.Singularity.value,
-                # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
-                # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
-                # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
-                # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
-                "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
-                "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
-                "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
-            }
-        )
+        # self.crate.metadata.extra_terms.update(
+        #    {
+        #        # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
+        #        # # Next ones are experimental
+        #        # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
+        #        # + ContainerImageAdditionalType.Docker.value,
+        #        # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
+        #        # + ContainerImageAdditionalType.Singularity.value,
+        #        # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
+        #        # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
+        #        # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
+        #        # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
+        #        "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
+        #        "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
+        #        "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
+        #    }
+        # )
         self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
-        # self.crate.metadata.extra_contexts.append(WFEXS_TERMS_CONTEXT)
+        self.crate.metadata.extra_contexts.append(WFEXS_TERMS_CONTEXT)
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
@@ -1022,20 +1022,20 @@ class WorkflowRunROCrate:
         wrroc_profiles = [
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/process/0.3",
-                properties={"name": "ProcessRun Crate", "version": "0.3"},
+                identifier="https://w3id.org/ro/wfrun/process/0.5",
+                properties={"name": "ProcessRun Crate", "version": "0.5"},
             ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/workflow/0.3",
-                properties={"name": "Workflow Run Crate", "version": "0.3"},
+                identifier="https://w3id.org/ro/wfrun/workflow/0.5",
+                properties={"name": "Workflow Run Crate", "version": "0.5"},
             ),
             # TODO: This one can be enabled only when proper provenance
             # describing the execution steps is implemented
             # rocrate.model.creativework.CreativeWork(
             #     self.crate,
-            #     identifier="https://w3id.org/ro/wfrun/provenance/0.3",
-            #     properties={"name": "Provenance Run Crate", "version": "0.3"},
+            #     identifier="https://w3id.org/ro/wfrun/provenance/0.5",
+            #     properties={"name": "Provenance Run Crate", "version": "0.5"},
             # ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
@@ -2342,7 +2342,7 @@ you can find here an almost complete list of the possible ones:
         )
         crate_action["object"] = crate_inputs
 
-        # Add environment, according to WRROC 0.4
+        # Add environment, according to WRROC 0.5
         if len(stagedExec.environment) > 0:
             crate_envvars = self.addWorkflowInputs(
                 stagedExec.environment,

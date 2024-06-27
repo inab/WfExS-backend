@@ -188,11 +188,15 @@ ApplicationCategory2ContainerType: "Final[Mapping[str, ContainerType]]" = {
     for container_type, container_type_metadata in ContainerTypeMetadataDetails.items()
 }
 
-WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
-WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
+WORKFLOW_RUN_BASE: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
+WORKFLOW_RUN_CONTEXT: "Final[str]" = WORKFLOW_RUN_BASE + "/context"
+WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_BASE + "#"
 
-WFEXS_TERMS_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
-WFEXS_TERMS_NAMESPACE: "Final[str]" = WFEXS_TERMS_CONTEXT + "#"
+WFEXS_TERMS_BASE: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
+# Not yet ....
+# WFEXS_TERMS_CONTEXT: "Final[str]" = WFEXS_TERMS_BASE + "/context"
+WFEXS_TERMS_CONTEXT: "Final[str]" = WFEXS_TERMS_BASE
+WFEXS_TERMS_NAMESPACE: "Final[str]" = WFEXS_TERMS_BASE + "#"
 
 CONTAINER_DOCKERIMAGE_SHORT: "Final[str]" = "DockerImage"
 CONTAINER_SIFIMAGE_SHORT: "Final[str]" = "SIFImage"
