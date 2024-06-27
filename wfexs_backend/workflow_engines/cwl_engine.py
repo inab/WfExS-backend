@@ -693,6 +693,7 @@ STDERR
         matWorkflowEngine: "MaterializedWorkflowEngine",
         consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. In the case
@@ -920,6 +921,7 @@ STDERR
         matInputs: "Sequence[MaterializedInput]",
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "StagedExecution":
         """
         Method to execute the workflow

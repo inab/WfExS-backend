@@ -59,7 +59,6 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
-        MaterializedInput,
         MaterializedOutput,
         ProgsMapping,
         RelPath,
@@ -67,6 +66,7 @@ if TYPE_CHECKING:
         RepoURL,
         StagedExecution,
         StagedSetup,
+        SymbolicParamName,
         SymbolicOutputName,
         URIType,
         WFLangVersion,
@@ -161,6 +161,7 @@ from .common import (
     GeneratedDirectoryContent,
     LicenceDescription,
     MaterializedContent,
+    MaterializedInput,
     META_JSON_POSTFIX,
     NoCratableItem,
     NoLicence,
@@ -2258,11 +2259,23 @@ you can find here an almost complete list of the possible ones:
         inputs: "Sequence[MaterializedInput]",
         environment: "Sequence[MaterializedInput]",
         outputs: "Optional[Sequence[ExpectedOutput]]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> None:
         """
         This method is used for WRROCs with only prospective provenance
         """
-        self.addWorkflowInputs(inputs, are_envvars=False)
+        augmented_inputs: "Sequence[MaterializedInput]"
+        if profiles:
+            augmented_inputs = [
+                MaterializedInput(
+                    name=cast("SymbolicParamName", "-profile"),
+                    values=profiles,
+                ),
+                *inputs,
+            ]
+        else:
+            augmented_inputs = inputs
+        self.addWorkflowInputs(augmented_inputs, are_envvars=False)
 
         if len(environment) > 0:
             self.addWorkflowInputs(environment, are_envvars=True)
@@ -2312,8 +2325,19 @@ you can find here an almost complete list of the possible ones:
 
         crate_action.append_to("actionStatus", {"@id": action_status}, compact=True)
 
+        augmented_inputs: "Sequence[MaterializedInput]"
+        if stagedExec.profiles:
+            augmented_inputs = [
+                MaterializedInput(
+                    name=cast("SymbolicParamName", "-profile"),
+                    values=stagedExec.profiles,
+                ),
+                *stagedExec.augmentedInputs,
+            ]
+        else:
+            augmented_inputs = stagedExec.augmentedInputs
         crate_inputs = self.addWorkflowInputs(
-            stagedExec.augmentedInputs,
+            augmented_inputs,
             are_envvars=False,
         )
         crate_action["object"] = crate_inputs

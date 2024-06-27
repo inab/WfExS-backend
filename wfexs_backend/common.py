@@ -751,3 +751,4 @@ class StagedExecution(NamedTuple):
     outputMetaDir: "Optional[RelPath]" = None
     diagram: "Optional[RelPath]" = None
     logfile: "Sequence[RelPath]" = []
+    profiles: "Optional[Sequence[str]]" = None

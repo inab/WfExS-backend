@@ -1336,6 +1336,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         matWorkflowEngine: "MaterializedWorkflowEngine",
         consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. In the case
@@ -1348,8 +1349,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # nextflow config -flat
         localWf = matWorkflowEngine.workflow
         nxf_params = ["config", "-flat"]
-        if self.nxf_profile:
-            nxf_params.extend(["-profile", ",".join(self.nxf_profile)])
+        if profiles is None:
+            profiles = self.nxf_profile
+        if profiles:
+            nxf_params.extend(["-profile", ",".join(profiles)])
         else:
             nxf_params.extend(["-show-profiles"])
         nxf_params.append(localWf.dir.as_posix())
@@ -1603,6 +1606,7 @@ STDERR
         matInputs: "Sequence[MaterializedInput]",
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "StagedExecution":
         # TODO: implement usage of materialized environment variables
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
@@ -1874,10 +1878,12 @@ wfexs_allParams()
         ]
 
         profile_input: "Optional[MaterializedInput]" = None
-        if self.nxf_profile:
+        if profiles is None:
+            profiles = self.nxf_profile
+        if profiles:
             profile_input = MaterializedInput(
                 name=cast("SymbolicParamName", "-profile"),
-                values=[",".join(self.nxf_profile)],
+                values=[",".join(profiles)],
             )
             nxf_params.extend(
                 [profile_input.name, cast("str", profile_input.values[0])]
@@ -1947,4 +1953,5 @@ wfexs_allParams()
                 cast("RelPath", os.path.relpath(stdoutFilename, self.workDir)),
                 cast("RelPath", os.path.relpath(stderrFilename, self.workDir)),
             ],
+            profiles=profiles,
         )

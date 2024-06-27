@@ -463,12 +463,21 @@ class WfExSBackend:
             local_config, config_directory=config_directory
         )
 
+        profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get("profile")
+        enabled_profiles: "Optional[Sequence[str]]" = None
+        if profiles is not None:
+            if isinstance(enabled_profiles, list):
+                enabled_profiles = profiles
+            else:
+                enabled_profiles = [cast("str", profiles)]
+
         return cls(updated_local_config, config_directory=config_directory).newSetup(
             workflow_meta["workflow_id"],
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", WF.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", {}),
             outputs=workflow_meta.get("outputs", {}),
             default_actions=workflow_meta.get("default_actions", []),
@@ -1125,6 +1134,7 @@ class WfExSBackend:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "str" = WF.DEFAULT_TRS_ENDPOINT,
         params: "Optional[ParamsBlock]" = None,
+        enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
         outputs: "Optional[OutputsBlock]" = None,
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
@@ -1144,6 +1154,7 @@ class WfExSBackend:
             descriptor_type=descriptor_type,
             trs_endpoint=trs_endpoint,
             params=params,
+            enabled_profiles=enabled_profiles,
             environment=environment,
             outputs=outputs,
             default_actions=default_actions,

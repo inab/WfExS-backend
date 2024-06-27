@@ -447,6 +447,7 @@ class WF:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "str" = DEFAULT_TRS_ENDPOINT,
         params: "Optional[ParamsBlock]" = None,
+        enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
         outputs: "Optional[OutputsBlock]" = None,
         placeholders: "Optional[PlaceHoldersBlock]" = None,
@@ -560,6 +561,7 @@ class WF:
         # This property should mutate after unmarshalling the config
         self.container_type_str = container_type_str
 
+        self.enabled_profiles: "Optional[Sequence[str]]" = None
         self.expected_outputs: "Optional[Sequence[ExpectedOutput]]" = None
         self.default_actions: "Optional[Sequence[ExportAction]]"
         self.trs_endpoint: "Optional[str]"
@@ -594,6 +596,8 @@ class WF:
                 workflow_meta["workflow_config"] = workflow_config
             if params is not None:
                 workflow_meta["params"] = params
+            if enabled_profiles is not None:
+                workflow_meta["profile"] = enabled_profiles
             if outputs is not None:
                 workflow_meta["outputs"] = outputs
             if placeholders is not None:
@@ -627,6 +631,7 @@ class WF:
             self.version_id = str(version_id) if version_id is not None else None
             self.descriptor_type = descriptor_type
             self.params = params
+            self.enabled_profiles = enabled_profiles
             self.environment = environment
             self.placeholders = placeholders
             self.formatted_params, self.outputs_to_inject = self.formatParams(params)
@@ -1770,6 +1775,14 @@ class WF:
         if preserved_paranoid_mode is not None:
             paranoidMode = preserved_paranoid_mode
 
+        profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get("profile")
+        enabled_profiles: "Optional[Sequence[str]]" = None
+        if profiles is not None:
+            if isinstance(enabled_profiles, list):
+                enabled_profiles = profiles
+            else:
+                enabled_profiles = [cast("str", profiles)]
+
         return cls(
             wfexs,
             workflow_meta["workflow_id"],
@@ -1777,6 +1790,7 @@ class WF:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", dict()),
+            enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
             outputs=workflow_meta.get("outputs", dict()),
             placeholders=workflow_meta.get("placeholders", dict()),
@@ -1821,6 +1835,14 @@ class WF:
         :return: Workflow configuration
         """
 
+        profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get("profile")
+        enabled_profiles: "Optional[Sequence[str]]" = None
+        if profiles is not None:
+            if isinstance(enabled_profiles, list):
+                enabled_profiles = profiles
+            else:
+                enabled_profiles = [cast("str", profiles)]
+
         return cls(
             wfexs,
             workflow_meta["workflow_id"],
@@ -1828,6 +1850,7 @@ class WF:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", dict()),
+            enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
             placeholders=workflow_meta.get("placeholders", dict()),
             default_actions=workflow_meta.get("default_actions"),
@@ -2049,6 +2072,25 @@ class WF:
                     )
                 )
 
+        enabled_profiles: "Optional[Sequence[str]]" = None
+        if self.enabled_profiles is not None:
+            enabled_profiles = self.enabled_profiles
+        elif (
+            self.staged_setup.workflow_config is not None
+            and self.engineDesc is not None
+        ):
+            profiles = self.staged_setup.workflow_config.get(
+                self.engineDesc.engineName, {}
+            ).get("profile")
+            if profiles is not None:
+                if isinstance(enabled_profiles, list):
+                    enabled_profiles = profiles
+                else:
+                    enabled_profiles = [cast("str", profiles)]
+
+                # Backward <=> forward compatibility
+                self.enabled_profiles = enabled_profiles
+
         self.engine = engine
         self.engineVer = engineVer
         self.localWorkflow = candidateLocalWorkflow
@@ -2178,6 +2220,7 @@ class WF:
                 offline=offline,
                 injectable_containers=injectable_containers,
                 injectable_operational_containers=injectable_operational_containers,
+                profiles=self.enabled_profiles,
             )
 
     # DEPRECATED?
@@ -3708,6 +3751,7 @@ class WF:
             self.materializedParams,
             self.materializedEnvironment,
             self.expected_outputs,
+            self.enabled_profiles,
         )
 
         self.stagedExecutions.append(stagedExec)
@@ -4155,6 +4199,17 @@ This is an enumeration of the types of collected contents:
                     self.trs_endpoint = workflow_meta.get("trs_endpoint")
                     self.workflow_config = workflow_meta.get("workflow_config")
                     self.params = workflow_meta.get("params")
+                    profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get(
+                        "profile"
+                    )
+                    enabled_profiles: "Optional[Sequence[str]]" = None
+                    if profiles is not None:
+                        if isinstance(enabled_profiles, list):
+                            enabled_profiles = profiles
+                        else:
+                            enabled_profiles = [cast("str", profiles)]
+
+                    self.enabled_profiles = enabled_profiles
                     self.environment = workflow_meta.get("environment")
                     self.placeholders = workflow_meta.get("placeholders")
                     self.outputs = workflow_meta.get("outputs")
@@ -4412,6 +4467,22 @@ This is an enumeration of the types of collected contents:
                     if do_full_setup:
                         self.setupEngine(offline=True)
                     elif self.engineDesc is not None:
+                        enabled_profiles: "Optional[Sequence[str]]" = None
+                        if self.enabled_profiles is not None:
+                            enabled_profiles = self.enabled_profiles
+                        elif self.staged_setup.workflow_config is not None:
+                            profiles = self.staged_setup.workflow_config.get(
+                                self.engineDesc.engineName, {}
+                            ).get("profile")
+                            if profiles is not None:
+                                if isinstance(enabled_profiles, list):
+                                    enabled_profiles = profiles
+                                else:
+                                    enabled_profiles = [cast("str", profiles)]
+
+                                # Backward <=> forward compatibility
+                                self.enabled_profiles = enabled_profiles
+
                         self.engine = self.wfexs.instantiateEngine(
                             self.engineDesc, self.staged_setup
                         )
@@ -4639,6 +4710,11 @@ This is an enumeration of the types of collected contents:
                                         os.path.relpath(putative_diagram, self.workDir),
                                     )
 
+                        profiles: "Optional[Sequence[str]]" = execution.get("profiles")
+                        # Backward <=> forward compatibility
+                        if profiles is None:
+                            profiles = self.enabled_profiles
+
                         stagedExec = StagedExecution(
                             exitVal=execution["exitVal"],
                             augmentedInputs=execution["augmentedInputs"],
@@ -4648,6 +4724,7 @@ This is an enumeration of the types of collected contents:
                             ended=execution.get("ended", executionMarshalled),
                             logfile=logfile,
                             diagram=diagram,
+                            profiles=profiles,
                         )
                         self.stagedExecutions.append(stagedExec)
             except Exception as e:
@@ -5101,6 +5178,7 @@ This is an enumeration of the types of collected contents:
             self.materializedParams,
             self.materializedEnvironment,
             self.expected_outputs,
+            profiles=self.enabled_profiles,
         )
 
         # Save RO-crate as execution.crate.zip

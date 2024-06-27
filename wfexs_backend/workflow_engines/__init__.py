@@ -294,6 +294,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         matWorfklowEngine: "MaterializedWorkflowEngine",
         consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns a
@@ -311,6 +312,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         inputs: "Sequence[MaterializedInput]",
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "StagedExecution":
         pass
 
@@ -740,6 +742,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         matWorfklowEngine: "MaterializedWorkflowEngine",
         consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
@@ -831,6 +834,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         inputs: "Sequence[MaterializedInput]",
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "StagedExecution":
         pass
 
@@ -841,6 +845,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         inputs: "Sequence[MaterializedInput]",
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "StagedExecution":
         # Now, deploy the containers to the local registry (needed for Docker)
         if matWfEng.containers is not None:
@@ -854,7 +859,11 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         # And once deployed, let's run the workflow!
         stagedExec = matWfEng.instance.launchWorkflow(
-            matWfEng, inputs, environment, outputs
+            matWfEng,
+            inputs,
+            environment,
+            outputs,
+            profiles,
         )
 
         return stagedExec
@@ -868,9 +877,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         offline: "bool" = False,
         injectable_containers: "Sequence[Container]" = [],
         injectable_operational_containers: "Sequence[Container]" = [],
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr, ContainerOperatingSystem, ProcessorArchitecture]":
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
-            matWfEng, consolidatedWorkflowDir, offline=offline
+            matWfEng,
+            consolidatedWorkflowDir,
+            offline=offline,
+            profiles=profiles,
         )
 
         (

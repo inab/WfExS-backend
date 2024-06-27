@@ -622,7 +622,7 @@
 							]
 						},
 						"profile": {
-							"description": "If defined, the profile/s to enable",
+							"description": "(deprecated) If defined, the profile/s to enable",
 							"oneOf": [
 								{
 									"type": "string",
@@ -666,6 +666,25 @@
 		},
 		"params": {
 			"$ref": "#/definitions/Params"
+		},
+		"profile": {
+			"description": "For engines which support profiles, like Nextflow or snakemake, if defined, the profile/s to enable",
+			"oneOf": [
+				{
+					"type": "string",
+					"pattern": "^[^, \t]+[ \t]*(,[ \t]*[^, \t]+[ \t]*)*$",
+					"minLength": 1
+				},
+				{
+					"type": "array",
+					"items": {
+						"type": "string",
+						"pattern": "^[^,]+$",
+						"minLength": 1
+					},
+					"minItems": 1
+				}
+			]
 		},
 		"environment": {
 			"type": "object",
