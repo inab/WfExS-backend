@@ -107,6 +107,10 @@ from .utils.rocrate import (
     WORKFLOW_RUN_NAMESPACE,
 )
 
+from .workflow_engines import (
+    WorkflowEngine,
+)
+
 magic = lazy_import("magic")
 # import magic
 
@@ -136,6 +140,10 @@ from .utils.orcid import (
     validate_orcid,
 )
 
+from .utils.contents import (
+    MaterializedContent2AbstractGeneratedContent,
+)
+
 from .utils.digests import (
     ComputeDigestFromDirectory,
     ComputeDigestFromFile,
@@ -162,6 +170,7 @@ from .common import (
     LicenceDescription,
     MaterializedContent,
     MaterializedInput,
+    MaterializedOutput,
     META_JSON_POSTFIX,
     NoCratableItem,
     NoLicence,
@@ -765,8 +774,8 @@ class WorkflowRunROCrate:
 
         self.crate: "FixedROCrate"
         self.compLang: "rocrate.model.computerlanguage.ComputerLanguage"
+        self.workflow_type = materializedEngine.instance.workflowType
         self._init_empty_crate_and_ComputerLanguage(
-            materializedEngine.instance.workflowType,
             localWorkflow.langVersion,
             licences,
             crate_pid=crate_pid,
@@ -915,11 +924,11 @@ class WorkflowRunROCrate:
 
     def _init_empty_crate_and_ComputerLanguage(
         self,
-        wf_type: "WorkflowType",
         langVersion: "Optional[Union[EngineVersion, WFLangVersion]]",
         licences: "Sequence[LicenceDescription]",
         crate_pid: "Optional[str]",
     ) -> "None":
+        wf_type = self.workflow_type
         """
         Due the internal synergies between an instance of ComputerLanguage
         and the RO-Crate it is attached to, both of them should be created
@@ -2286,6 +2295,7 @@ you can find here an almost complete list of the possible ones:
     def addWorkflowExecution(
         self,
         stagedExec: "StagedExecution",
+        expected_outputs: "Optional[Sequence[ExpectedOutput]]" = None,
     ) -> None:
         # TODO: Add a new CreateAction for each stagedExec
         # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
@@ -2327,6 +2337,8 @@ you can find here an almost complete list of the possible ones:
 
         augmented_inputs: "Sequence[MaterializedInput]"
         if stagedExec.profiles:
+            # Profiles are represented as this custom parameter
+            # assuming no parameter name can start with a minus
             augmented_inputs = [
                 MaterializedInput(
                     name=cast("SymbolicParamName", "-profile"),
@@ -2354,8 +2366,73 @@ you can find here an almost complete list of the possible ones:
         # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces
         # TODO: Add "augmented environment variables"
 
+        augmented_outputs: "Sequence[MaterializedOutput]"
+        if not self.workflow_type.has_explicit_outputs:
+            if expected_outputs is None:
+                expected_outputs = []
+            expected_outputs_h: "Mapping[str, ExpectedOutput]" = {
+                expected_output.name: expected_output
+                for expected_output in expected_outputs
+            }
+            # This code is needed to heal old nextflow-like executions.
+            # First, identify what it should be transferred,
+            # in case it does not appear yet
+            not_synthetic_inputs: "MutableMapping[str, MaterializedInput]" = {}
+            for augmented_input in stagedExec.augmentedInputs:
+                if augmented_input.autoFilled:
+                    not_synthetic_inputs[augmented_input.name] = augmented_input
+
+            the_augmented_outputs: "MutableSequence[MaterializedOutput]" = []
+            for mat_output in stagedExec.matCheckOutputs:
+                if (
+                    mat_output.name not in not_synthetic_inputs
+                    and mat_output.syntheticOutput is None
+                ):
+                    augmented_output = mat_output._replace(syntheticOutput=True)
+                else:
+                    del not_synthetic_inputs[mat_output.name]
+                    augmented_output = mat_output
+
+                the_augmented_outputs.append(augmented_output)
+
+            # What it is still in not_synthetic_inputs is what
+            # it has to be injected as an output
+            for augmented_input in not_synthetic_inputs.values():
+                preferred_filename: "Optional[RelPath]" = None
+                expected_output = expected_outputs_h.get(augmented_input.name)
+                if expected_output is not None:
+                    preferred_filename = expected_output.preferredFilename
+
+                assert len(augmented_input.values) > 0 and isinstance(
+                    augmented_input.values[0], MaterializedContent
+                )
+                kind = augmented_input.values[0].kind
+                non_synthetic_values: "Sequence[AbstractGeneratedContent]" = [
+                    MaterializedContent2AbstractGeneratedContent(
+                        mat_content, preferred_filename
+                    )
+                    for mat_content in cast(
+                        "Sequence[MaterializedContent]", augmented_input.values
+                    )
+                ]
+                the_augmented_outputs.append(
+                    MaterializedOutput(
+                        name=cast("SymbolicOutputName", augmented_input.name),
+                        kind=kind,
+                        expectedCardinality=WorkflowEngine.GuessedCardinalityMapping[
+                            len(non_synthetic_values) > 1
+                        ],
+                        values=non_synthetic_values,
+                        syntheticOutput=False,
+                        filledFrom=augmented_input.name,
+                    )
+                )
+        else:
+            # No healing should be needed
+            augmented_outputs = stagedExec.matCheckOutputs
+
         crate_outputs = self._add_workflow_execution_outputs(
-            stagedExec.matCheckOutputs,
+            augmented_outputs,
             rel_work_dir=stagedExec.outputsDir,
         )
 

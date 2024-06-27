@@ -5281,6 +5281,7 @@ This is an enumeration of the types of collected contents:
         for stagedExec in self.stagedExecutions:
             wrroc.addWorkflowExecution(
                 stagedExec=stagedExec,
+                expected_outputs=self.expected_outputs,
             )
 
         # Save RO-crate as execution.crate.zip
