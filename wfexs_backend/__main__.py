@@ -701,6 +701,7 @@ def processStagedWorkdirCommand(
         private_key_passphrase = ""
 
     # Getting the list of licences (in case they are needed)
+    op_licences: "Sequence[str]"
     if hasattr(args, "licences") and args.licences is not None:
         op_licences = args.licences
     else:
@@ -933,10 +934,11 @@ def processStagedWorkdirCommand(
                                     wfSetup.nickname,
                                 )
                             )
+                            expanded_licences = wB.curate_licence_list(op_licences)
                             wfInstance.createStageResearchObject(
                                 filename=args.staged_workdir_command_args[1],
                                 payloads=doMaterializedROCrate,
-                                licences=op_licences,
+                                licences=expanded_licences,
                                 resolved_orcids=resolved_orcids,
                                 crate_pid=op_crate_pid,
                             )
@@ -949,10 +951,11 @@ def processStagedWorkdirCommand(
                                         wfSetup.nickname,
                                     )
                                 )
+                                expanded_licences = wB.curate_licence_list(op_licences)
                                 wfInstance.createResultsResearchObject(
                                     filename=args.staged_workdir_command_args[1],
                                     payloads=doMaterializedROCrate,
-                                    licences=op_licences,
+                                    licences=expanded_licences,
                                     resolved_orcids=resolved_orcids,
                                     crate_pid=op_crate_pid,
                                 )
