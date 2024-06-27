@@ -142,6 +142,7 @@ from .utils.orcid import (
 
 from .utils.contents import (
     MaterializedContent2AbstractGeneratedContent,
+    Path2AbstractGeneratedContent,
 )
 
 from .utils.digests import (
@@ -2403,18 +2404,37 @@ you can find here an almost complete list of the possible ones:
                 if expected_output is not None:
                     preferred_filename = expected_output.preferredFilename
 
-                assert len(augmented_input.values) > 0 and isinstance(
-                    augmented_input.values[0], MaterializedContent
-                )
-                kind = augmented_input.values[0].kind
-                non_synthetic_values: "Sequence[AbstractGeneratedContent]" = [
-                    MaterializedContent2AbstractGeneratedContent(
-                        mat_content, preferred_filename
+                assert len(augmented_input.values) > 0
+                if isinstance(augmented_input.values[0], MaterializedContent):
+                    kind = augmented_input.values[0].kind
+                elif isinstance(augmented_input.values[0], str):
+                    # It is a bare path (sigh, technical debt)
+                    the_path = augmented_input.values[0]
+                    assert os.path.exists(the_path)
+                    kind = (
+                        ContentKind.Directory
+                        if os.path.isdir(the_path)
+                        else ContentKind.File
                     )
-                    for mat_content in cast(
-                        "Sequence[MaterializedContent]", augmented_input.values
+                else:
+                    raise ROCrateGenerationException(
+                        "Unexpected type of augmented input for expected output healing"
                     )
-                ]
+
+                non_synthetic_values: "MutableSequence[AbstractGeneratedContent]" = []
+                for mat_content in cast(
+                    "Sequence[Union[str, MaterializedContent]]", augmented_input.values
+                ):
+                    non_synthetic_values.append(
+                        MaterializedContent2AbstractGeneratedContent(
+                            mat_content, preferred_filename
+                        )
+                        if isinstance(mat_content, MaterializedContent)
+                        else Path2AbstractGeneratedContent(
+                            pathlib.Path(mat_content), preferred_filename
+                        )
+                    )
+
                 the_augmented_outputs.append(
                     MaterializedOutput(
                         name=cast("SymbolicOutputName", augmented_input.name),

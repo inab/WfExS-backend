@@ -162,7 +162,9 @@ def GetGeneratedDirectoryContentFromList(
 
 
 def MaterializedContent2AbstractGeneratedContent(
-    mat_content: "MaterializedContent", preferredFilename: "Optional[RelPath]" = None
+    mat_content: "MaterializedContent",
+    preferredFilename: "Optional[RelPath]" = None,
+    signatureMethod: "Optional[FingerprintMethod]" = nihDigester,
 ) -> "AbstractGeneratedContent":
     """
     This method generates either a GeneratedContent
@@ -177,6 +179,7 @@ def MaterializedContent2AbstractGeneratedContent(
         return GeneratedContent(
             local=local,
             uri=mat_content.licensed_uri,
+            # This might be in the wrong representation
             signature=mat_content.fingerprint,
             preferredFilename=preferredFilename,
         )
@@ -185,7 +188,33 @@ def MaterializedContent2AbstractGeneratedContent(
             thePath=local,
             uri=mat_content.licensed_uri,
             preferredFilename=preferredFilename,
-            signatureMethod=nihDigester,
+            signatureMethod=signatureMethod,
+        )
+
+
+def Path2AbstractGeneratedContent(
+    content: "pathlib.Path",
+    preferredFilename: "Optional[RelPath]" = None,
+    signatureMethod: "Optional[FingerprintMethod]" = nihDigester,
+) -> "AbstractGeneratedContent":
+    """
+    This method generates either a GeneratedContent
+    or a GeneratedDirectoryContent from a MaterializedContent
+    """
+    if content.is_dir():
+        return GetGeneratedDirectoryContent(
+            thePath=content,
+            preferredFilename=preferredFilename,
+            signatureMethod=signatureMethod,
+        )
+    else:
+        return GeneratedContent(
+            local=content,
+            signature=cast(
+                "Optional[Fingerprint]",
+                ComputeDigestFromFile(content, repMethod=signatureMethod),
+            ),
+            preferredFilename=preferredFilename,
         )
 
 
