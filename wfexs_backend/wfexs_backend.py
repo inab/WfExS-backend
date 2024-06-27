@@ -466,10 +466,14 @@ class WfExSBackend:
         profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get("profile")
         enabled_profiles: "Optional[Sequence[str]]" = None
         if profiles is not None:
-            if isinstance(enabled_profiles, list):
+            if isinstance(profiles, list):
                 enabled_profiles = profiles
+            elif isinstance(profiles, str):
+                split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                enabled_profiles = split_by_comma.split(profiles)
             else:
-                enabled_profiles = [cast("str", profiles)]
+                # It should not happen
+                enabled_profiles = [str(profiles)]
 
         return cls(updated_local_config, config_directory=config_directory).newSetup(
             workflow_meta["workflow_id"],

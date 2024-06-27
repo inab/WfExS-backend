@@ -1781,10 +1781,14 @@ class WF:
         profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get("profile")
         enabled_profiles: "Optional[Sequence[str]]" = None
         if profiles is not None:
-            if isinstance(enabled_profiles, list):
+            if isinstance(profiles, list):
                 enabled_profiles = profiles
+            elif isinstance(profiles, str):
+                split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                enabled_profiles = split_by_comma.split(profiles)
             else:
-                enabled_profiles = [cast("str", profiles)]
+                # It should not happen
+                enabled_profiles = [str(profiles)]
 
         return cls(
             wfexs,
@@ -1841,10 +1845,14 @@ class WF:
         profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get("profile")
         enabled_profiles: "Optional[Sequence[str]]" = None
         if profiles is not None:
-            if isinstance(enabled_profiles, list):
+            if isinstance(profiles, list):
                 enabled_profiles = profiles
+            elif isinstance(profiles, str):
+                split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                enabled_profiles = split_by_comma.split(profiles)
             else:
-                enabled_profiles = [cast("str", profiles)]
+                # It should not happen
+                enabled_profiles = [str(profiles)]
 
         return cls(
             wfexs,
@@ -2082,14 +2090,20 @@ class WF:
             self.staged_setup.workflow_config is not None
             and self.engineDesc is not None
         ):
-            profiles = self.staged_setup.workflow_config.get(
-                self.engineDesc.engineName, {}
-            ).get("profile")
+            profiles: "Optional[Union[str, Sequence[str]]]" = (
+                self.staged_setup.workflow_config.get(
+                    self.engineDesc.engineName, {}
+                ).get("profile")
+            )
             if profiles is not None:
-                if isinstance(enabled_profiles, list):
+                if isinstance(profiles, list):
                     enabled_profiles = profiles
+                elif isinstance(profiles, str):
+                    split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                    enabled_profiles = split_by_comma.split(profiles)
                 else:
-                    enabled_profiles = [cast("str", profiles)]
+                    # It should not happen
+                    enabled_profiles = [str(profiles)]
 
                 # Backward <=> forward compatibility
                 self.enabled_profiles = enabled_profiles
@@ -4209,10 +4223,14 @@ This is an enumeration of the types of collected contents:
                     )
                     enabled_profiles: "Optional[Sequence[str]]" = None
                     if profiles is not None:
-                        if isinstance(enabled_profiles, list):
+                        if isinstance(profiles, list):
                             enabled_profiles = profiles
+                        elif isinstance(profiles, str):
+                            split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                            enabled_profiles = split_by_comma.split(profiles)
                         else:
-                            enabled_profiles = [cast("str", profiles)]
+                            # It should not happen
+                            enabled_profiles = [str(profiles)]
 
                     self.enabled_profiles = enabled_profiles
                     self.environment = workflow_meta.get("environment")
@@ -4476,14 +4494,20 @@ This is an enumeration of the types of collected contents:
                         if self.enabled_profiles is not None:
                             enabled_profiles = self.enabled_profiles
                         elif self.staged_setup.workflow_config is not None:
-                            profiles = self.staged_setup.workflow_config.get(
-                                self.engineDesc.engineName, {}
-                            ).get("profile")
+                            profiles: "Optional[Union[str, Sequence[str]]]" = (
+                                self.staged_setup.workflow_config.get(
+                                    self.engineDesc.engineName, {}
+                                ).get("profile")
+                            )
                             if profiles is not None:
-                                if isinstance(enabled_profiles, list):
+                                if isinstance(profiles, list):
                                     enabled_profiles = profiles
+                                elif isinstance(profiles, str):
+                                    split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                                    enabled_profiles = split_by_comma.split(profiles)
                                 else:
-                                    enabled_profiles = [cast("str", profiles)]
+                                    # It should not happen
+                                    enabled_profiles = [str(profiles)]
 
                                 # Backward <=> forward compatibility
                                 self.enabled_profiles = enabled_profiles

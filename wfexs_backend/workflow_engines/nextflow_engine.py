@@ -298,8 +298,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.nxf_profile: "Sequence[str]"
         if isinstance(nxf_profile, list):
             self.nxf_profile = nxf_profile
+        elif isinstance(nxf_profile, str):
+            split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+            self.nxf_profile = split_by_comma.split(nxf_profile)
         else:
-            self.nxf_profile = [cast("str", nxf_profile)]
+            # It should not happen
+            self.nxf_profile = [str(nxf_profile)]
 
         # Setting the assets directory
         self.nxf_assets = os.path.join(self.engineTweaksDir, "assets")
