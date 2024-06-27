@@ -1623,6 +1623,7 @@ class WF:
             workflow_type,
             container_type,
             params,
+            profiles,
             environment,
             outputs,
             cached_workflow,
@@ -1651,6 +1652,8 @@ class WF:
                 "secure": secure,
             },
         }
+        if profiles is not None:
+            workflow_meta["profile"] = profiles
         if container_type is not None:
             workflow_meta["workflow_config"]["containerType"] = container_type.value
 
@@ -4094,6 +4097,8 @@ This is an enumeration of the types of collected contents:
             workflow_meta["workflow_config"] = self.workflow_config
         if self.params is not None:
             workflow_meta["params"] = self.params
+        if self.enabled_profiles is not None:
+            workflow_meta["profile"] = self.enabled_profiles
         if self.environment is not None:
             workflow_meta["environment"] = self.environment
         if self.placeholders is not None:

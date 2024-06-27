@@ -2447,7 +2447,7 @@ WHERE   {
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
         payload_dir: "Optional[pathlib.Path]" = None,
-    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
+    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, Optional[Sequence[str]], EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -2638,11 +2638,19 @@ WHERE   {
                     }
             params = new_params
 
+        # Beware!! This is a tweak!!
+        profiles: "Optional[Sequence[str]]" = params.get("-profile")
+        if profiles is not None:
+            new_params = cast("MutableParamsBlock", copy.copy(params))
+            del new_params["-profile"]
+            params = new_params
+
         return (
             repo,
             workflow_type,
             container_type,
             params,
+            profiles,
             environment,
             outputs,
             cached_workflow,
