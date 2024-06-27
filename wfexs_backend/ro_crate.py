@@ -2447,6 +2447,7 @@ you can find here an almost complete list of the possible ones:
                         filledFrom=augmented_input.name,
                     )
                 )
+            augmented_outputs = the_augmented_outputs
         else:
             # No healing should be needed
             augmented_outputs = stagedExec.matCheckOutputs
