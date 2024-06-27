@@ -59,6 +59,7 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LicensedURI,
+        MaterializedContent,
         RelPath,
         URIType,
     )
@@ -158,6 +159,34 @@ def GetGeneratedDirectoryContentFromList(
         signature=signature,
         secondaryFiles=secondaryFiles,
     )
+
+
+def MaterializedContent2AbstractGeneratedContent(
+    mat_content: "MaterializedContent", preferredFilename: "Optional[RelPath]" = None
+) -> "AbstractGeneratedContent":
+    """
+    This method generates either a GeneratedContent
+    or a GeneratedDirectoryContent from a MaterializedContent
+    """
+    local = (
+        mat_content.extrapolated_local
+        if mat_content.extrapolated_local is not None
+        else mat_content.local
+    )
+    if mat_content.kind == ContentKind.File:
+        return GeneratedContent(
+            local=local,
+            uri=mat_content.licensed_uri,
+            signature=mat_content.fingerprint,
+            preferredFilename=preferredFilename,
+        )
+    else:
+        return GetGeneratedDirectoryContent(
+            thePath=local,
+            uri=mat_content.licensed_uri,
+            preferredFilename=preferredFilename,
+            signatureMethod=nihDigester,
+        )
 
 
 CWLClass2WfExS = {
