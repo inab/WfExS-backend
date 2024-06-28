@@ -19,10 +19,14 @@ from __future__ import absolute_import
 
 import atexit
 import copy
+import errno
+import http.client
 import inspect
+import io
 import logging
 import os
 import pathlib
+import shutil
 import subprocess
 import tempfile
 from typing import (
@@ -96,7 +100,10 @@ if TYPE_CHECKING:
 import urllib.parse
 import uuid
 
-from .utils.misc import lazy_import
+from .utils.misc import (
+    is_uri,
+    lazy_import,
+)
 from .utils.rocrate import (
     ContainerType2AdditionalType,
     ContainerTypeMetadata,
@@ -129,7 +136,7 @@ import rocrate.rocrate
 
 from rocrate.utils import (
     get_norm_value,
-    is_url,
+    iso_now,
 )
 
 from .fetchers import (
@@ -345,6 +352,7 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
         self.fetch_remote = fetch_remote
         self.validate_url = validate_url
         self.source = source
+        self.dest_path = dest_path
         if dest_path is not None:
             dest_path = pathlib.Path(dest_path)
             if dest_path.is_absolute():
@@ -356,7 +364,7 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
                 raise ValueError(
                     "dest_path must be provided if source is not a path or URI"
                 )
-            elif is_url(str(source)):
+            elif is_uri(str(source)):
                 identifier = os.path.basename(source) if fetch_remote else str(source)
             else:
                 identifier = "./" if source == "./" else os.path.basename(source)
@@ -366,7 +374,47 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
 
 
 class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
-    pass
+    def write(self, base_path: "Union[str, os.PathLike[str]]") -> "None":
+        base_path_p: "pathlib.Path"
+        if isinstance(base_path, pathlib.Path):
+            base_path_p = base_path
+        else:
+            base_path_p = pathlib.Path(base_path)
+        if self.dest_path is not None:
+            out_file_path = base_path_p / self.dest_path
+        else:
+            out_file_path = base_path_p / self.id
+        if isinstance(self.source, (io.BytesIO, io.StringIO)):
+            out_file_path.parent.mkdir(parents=True, exist_ok=True)
+            mode = "w" + ("b" if isinstance(self.source, io.BytesIO) else "t")
+            with out_file_path.open(mode=mode) as out_file:
+                out_file.write(self.source.getvalue())
+        elif self.source is None:
+            # Allows to record a File entity whose @id does not exist, see #73
+            warnings.warn(f"No source for {self.id}")
+        elif is_uri(str(self.source)):
+            if self.fetch_remote or self.validate_url:
+                with urllib.request.urlopen(str(self.source)) as response:
+                    if self.validate_url:
+                        if isinstance(response, http.client.HTTPResponse):
+                            self._jsonld.update(  # type: ignore[attr-defined]
+                                {
+                                    "contentSize": response.getheader("Content-Length"),
+                                    "encodingFormat": response.getheader(
+                                        "Content-Type"
+                                    ),
+                                }
+                            )
+                        if not self.fetch_remote:
+                            self._jsonld["sdDatePublished"] = iso_now()  # type: ignore[attr-defined]
+                    if self.fetch_remote:
+                        out_file_path.parent.mkdir(parents=True, exist_ok=True)
+                        urllib.request.urlretrieve(response.url, out_file_path)
+                        self._jsonld["contentUrl"] = str(self.source)  # type: ignore[attr-defined]
+        else:
+            out_file_path.parent.mkdir(parents=True, exist_ok=True)
+            if not out_file_path.exists() or not out_file_path.samefile(self.source):
+                shutil.copy(self.source, out_file_path)
 
 
 class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
@@ -485,7 +533,31 @@ class SourceCodeFile(FixedFile):  # type: ignore[misc]
 
 
 class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[misc]
-    pass
+    def write(self, base_path: "Union[str, os.PathLike[str]]") -> "None":
+        if isinstance(base_path, pathlib.Path):
+            base_path_p = base_path
+        else:
+            base_path_p = pathlib.Path(base_path)
+        if self.dest_path is not None:
+            out_path = base_path_p / self.dest_path
+        else:
+            out_path = base_path_p / self.id
+        if self.source is None:
+            out_path.mkdir(parents=True, exist_ok=True)
+        elif is_uri(str(self.source)):
+            if self.validate_url and not self.fetch_remote:
+                with urllib.request.urlopen(str(self.source)) as _:
+                    self._jsonld["sdDatePublished"] = iso_now()  # type: ignore[attr-defined]
+            if self.fetch_remote:
+                self.__get_parts(out_path)  # type: ignore[attr-defined]
+        else:
+            if not pathlib.Path(self.source).exists():
+                raise FileNotFoundError(
+                    errno.ENOENT, os.strerror(errno.ENOENT), str(self.source)
+                )
+            out_path.mkdir(parents=True, exist_ok=True)
+            if not self.crate.source:
+                self.crate._copy_unlisted(self.source, out_path)  # type: ignore[attr-defined]
 
 
 class FixedWorkflow(FixedMixin, rocrate.model.computationalworkflow.ComputationalWorkflow):  # type: ignore[misc]
@@ -1847,7 +1919,7 @@ you can find here an almost complete list of the possible ones:
         # Describe datasets referred from DOIs
         # as in https://github.com/ResearchObject/ro-crate/pull/255/files
 
-        if not os.path.isdir(the_path):
+        if not the_path.is_dir():
             return None, None
 
         if the_name is not None and not the_name.endswith("/"):
