@@ -693,10 +693,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         # Last, we should include ./bin , ./templates and ./lib directories
         # https://training.nextflow.io/advanced/structure/
-        for special_dir in ("bin", "templates", "lib"):
-            abs_special_dir = nfDir / special_dir
-            if abs_special_dir.is_dir():
-                nxfScripts.append(cast("RelPath", special_dir))
+        for special_path in ("bin", "templates", "lib", "nextflow_schema.json"):
+            abs_special_path = nfDir / special_path
+            if abs_special_path.is_dir() or abs_special_path.is_file():
+                nxfScripts.append(cast("RelPath", special_path))
 
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(
