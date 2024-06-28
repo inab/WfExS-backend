@@ -543,7 +543,8 @@ class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[m
         else:
             out_path = base_path_p / self.id
         if self.source is None:
-            out_path.mkdir(parents=True, exist_ok=True)
+            pass
+            # out_path.mkdir(parents=True, exist_ok=True)
         elif is_uri(str(self.source)):
             if self.validate_url and not self.fetch_remote:
                 with urllib.request.urlopen(str(self.source)) as _:
