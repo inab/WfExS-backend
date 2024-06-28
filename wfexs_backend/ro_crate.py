@@ -1443,12 +1443,13 @@ you can find here an almost complete list of the possible ones:
 
             itemInValue0 = in_item.values[0]
             additional_type: "Optional[str]" = None
-            if isinstance(itemInValue0, int):
+            # A bool is an instance of int in Python
+            if isinstance(itemInValue0, bool):
+                additional_type = "Boolean"
+            elif isinstance(itemInValue0, int):
                 additional_type = "Integer"
             elif isinstance(itemInValue0, str):
                 additional_type = "Text"
-            elif isinstance(itemInValue0, bool):
-                additional_type = "Boolean"
             elif isinstance(itemInValue0, float):
                 additional_type = "Float"
             elif isinstance(itemInValue0, MaterializedContent):
@@ -2760,12 +2761,12 @@ you can find here an almost complete list of the possible ones:
                 )
             elif len(out_item.values) > 0:
                 itemOutValue0 = out_item.values[0]
-                if isinstance(itemOutValue0, int):
+                if isinstance(itemOutValue0, bool):
+                    additional_type = "Boolean"
+                elif isinstance(itemOutValue0, int):
                     additional_type = "Integer"
                 elif isinstance(itemOutValue0, str):
                     additional_type = "Text"
-                elif isinstance(itemOutValue0, bool):
-                    additional_type = "Boolean"
                 elif isinstance(itemOutValue0, float):
                     additional_type = "Float"
 
