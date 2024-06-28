@@ -2439,7 +2439,6 @@ WHERE   {
                     else None,
                     relPathFiles=rel_path_files,
                 )
-                self.logger.error(f"POZI {cached_workflow}")
 
         return repo, workflow_type, cached_workflow
 
