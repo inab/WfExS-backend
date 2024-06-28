@@ -700,7 +700,7 @@ STDERR
         """
         It is assured the containers are materialized
         """
-        materialized_containers: "MutableSequence[Container]" = []
+        materialized_containers_h: "MutableMapping[str, Container]" = {}
         not_found_containers: "MutableSequence[str]" = []
 
         if containers_dir is None:
@@ -709,13 +709,16 @@ STDERR
             if self.AcceptsContainer(tag):
                 # This one can provide partial or complete information
                 tag_to_use: "ContainerTaggedName" = tag
+                contTag = self.generateCanonicalTag(tag)
+                if contTag in materialized_containers_h:
+                    continue
                 for injectable_container in injectable_containers:
-                    if (
-                        injectable_container.origTaggedName == tag.origTaggedName
-                        and injectable_container.source_type == tag.type
-                        and injectable_container.registries == tag.registries
-                    ):
+                    if injectable_container.source_type != tag.type:
+                        continue
+                    inj_tag = self.generateCanonicalTag(injectable_container)
+                    if contTag == inj_tag:
                         tag_to_use = injectable_container
+                        self.logger.info(f"Matched injected container {contTag}")
                         break
 
                 container: "Optional[Container]"
@@ -730,18 +733,19 @@ STDERR
                         offline=offline,
                         force=force,
                     )
-                    if container is not None:
-                        if container not in materialized_containers:
-                            materialized_containers.append(container)
-                    else:
-                        not_found_containers.append(tag.origTaggedName)
+                if container is not None:
+                    matched_tag = self.generateCanonicalTag(container)
+                    if matched_tag not in materialized_containers_h:
+                        materialized_containers_h[matched_tag] = container
+                else:
+                    not_found_containers.append(tag.origTaggedName)
 
         if len(not_found_containers) > 0:
             raise ContainerNotFoundException(
                 f"Could not fetch metadata for next tags because they were not found:\n{', '.join(not_found_containers)}"
             )
 
-        return materialized_containers
+        return list(materialized_containers_h.values())
 
     @abc.abstractmethod
     def materializeSingleContainer(
@@ -790,6 +794,13 @@ STDERR
     ) -> "Tuple[Container, bool]":
         """
         It is assured the container is properly deployed
+        """
+        pass
+
+    @abc.abstractmethod
+    def generateCanonicalTag(self, container: "ContainerTaggedName") -> "str":
+        """
+        It provides a way to help comparing two container tags
         """
         pass
 

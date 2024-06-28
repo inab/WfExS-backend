@@ -762,11 +762,13 @@ STDERR
                 continue
 
             tag_to_use: "ContainerTaggedName" = tag
-            singTag, parsedTag, singPullTag, isDocker = self._genSingTag(tag)
+            singTag = self.generateCanonicalTag(tag)
+            if singTag in containersHash:
+                continue
             for injectable_container in injectable_containers:
                 if injectable_container.source_type != tag.type:
                     continue
-                inj_tag, _, _, _ = self._genSingTag(injectable_container)
+                inj_tag = self.generateCanonicalTag(injectable_container)
                 if singTag == inj_tag:
                     tag_to_use = injectable_container
                     self.logger.info(f"Matched injected container {singTag}")
@@ -788,7 +790,7 @@ STDERR
                 )
 
             if isinstance(matched_container, Container):
-                matched_tag, _, _, _ = self._genSingTag(matched_container)
+                matched_tag = self.generateCanonicalTag(matched_container)
                 if matched_tag not in containersHash:
                     containersHash[matched_tag] = matched_container
             else:
@@ -940,3 +942,10 @@ STDERR
             raise ContainerFactoryException(errmsg)
 
         return rebuilt_container, was_redeployed
+
+    def generateCanonicalTag(self, container: "ContainerTaggedName") -> "str":
+        """
+        It provides a way to help comparing two container tags
+        """
+        retval, _, _, _ = self._genSingTag(container)
+        return retval
