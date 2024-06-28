@@ -691,12 +691,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         candidateNf = cast("RelPath", os.path.relpath(entrypoint, nfDir))
 
-        # Last, we should include ./bin , ./templates and ./lib directories
+        # Last, as there is no safe way to learn about other needed
+        # files and directories, just include all the ones which are not
+        # hidden. In previous iterations the code was looking for bin,
+        # templates, lib and nextflow_schema.json , in part based on
         # https://training.nextflow.io/advanced/structure/
-        for special_path in ("bin", "templates", "lib", "nextflow_schema.json"):
-            abs_special_path = nfDir / special_path
-            if abs_special_path.is_dir() or abs_special_path.is_file():
-                nxfScripts.append(cast("RelPath", special_path))
+        # But real life workflows were using local files and directories
+        # relative to the workflow directory, from custom locations.
+        for child in nfDir.iterdir():
+            if child.name.startswith("."):
+                continue
+            if child.name not in nxfScripts:
+                nxfScripts.append(cast("RelPath", child.name))
 
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(
