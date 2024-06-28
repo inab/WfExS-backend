@@ -341,6 +341,7 @@ class ROCrateToolbox(abc.ABC):
         SCHEMA_ORG_PREFIX + "Text": "Text",
         SCHEMA_ORG_PREFIX + "Boolean": "Boolean",
         SCHEMA_ORG_PREFIX + "Float": "Float",
+        SCHEMA_ORG_PREFIX + "PropertyValue": "PropertyValue",
         SCHEMA_ORG_PREFIX + "MediaObject": "File",
         SCHEMA_ORG_PREFIX + "Dataset": "Directory",
     }
@@ -1772,7 +1773,8 @@ WHERE   {
                     raise ROCrateToolboxException(
                         f"Unable to handle contents of type {leaf_type} in input Collection {str(inputrow.name)}"
                     )
-                additional_type = leaf_additional_type
+                if additional_type == "Collection":
+                    additional_type = leaf_additional_type
                 if leaf_additional_type not in ("File", "Dataset"):
                     valarr = base.setdefault(param_last, [])
 
@@ -1964,7 +1966,8 @@ WHERE   {
                     raise ROCrateToolboxException(
                         f"Unable to handle contents of type {leaf_type} in Collection reflecting contents pointed by environment variable {env_name}"
                     )
-                additional_type = leaf_additional_type
+                if additional_type == "Collection":
+                    additional_type = leaf_additional_type
                 if leaf_additional_type not in ("File", "Dataset"):
                     valarr = environment.setdefault(env_name, [])
 
