@@ -538,7 +538,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                     putativeEngineVerVal[1]
                                 )
                                 if matched:
-                                    if engineVer is None or engineVer < matched.group(
+                                    if engineVer is None or engineVer <= matched.group(
                                         1
                                     ):
                                         engineVer = cast(
