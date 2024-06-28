@@ -2992,7 +2992,7 @@ you can find here an almost complete list of the possible ones:
             crate_dataset = self.crate.add_dataset_ext(
                 identifier=the_id,
                 source=the_content.local if do_attach else None,
-                dest_path=dest_path if do_attach else None,
+                dest_path=dest_path,
                 fetch_remote=False,
                 validate_url=False,
                 # properties=file_properties,
