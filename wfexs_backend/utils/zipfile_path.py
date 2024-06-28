@@ -281,7 +281,12 @@ class ZipfilePath(pathlib.Path):
     'mem'
     """
 
+    # _flavour = pathlib._posix_flavour
     __repr = "{self.__class__.__name__}({self._root.filename!r}, {self._at!r})"
+
+    def __new__(cls, *args: "Any", **kwargs: "Any") -> "ZipfilePath":
+        self = object.__new__(cls)
+        return self
 
     def __init__(
         self,
@@ -306,6 +311,7 @@ class ZipfilePath(pathlib.Path):
 
         self._root = FastLookup.make(root)
         self._at = at
+        # super().__init__(self._root.filename)
 
     def open(  # type: ignore[override]
         self,
