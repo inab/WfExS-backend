@@ -1859,7 +1859,7 @@ you can find here an almost complete list of the possible ones:
         the_file_crate = self.crate.add_file_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
-            dest_path=the_name if do_attach else None,
+            dest_path=the_name,
             clazz=SourceCodeFile if is_soft_source else FixedFile,
         )
         if the_uri is not None:
@@ -1937,7 +1937,7 @@ you can find here an almost complete list of the possible ones:
         crate_dataset = self.crate.add_dataset_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
-            dest_path=the_name if do_attach else None,
+            dest_path=the_name,
             fetch_remote=False,
             validate_url=False,
             # properties=file_properties,
@@ -2128,7 +2128,7 @@ you can find here an almost complete list of the possible ones:
         the_workflow_crate = self.crate.add_workflow_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
-            dest_path=the_name if do_attach else None,
+            dest_path=the_name,
             main=main,
             lang=lang,
             gen_cwl=gen_cwl,
