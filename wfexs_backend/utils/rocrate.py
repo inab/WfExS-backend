@@ -2129,7 +2129,7 @@ WHERE   {
         entity_path: "Optional[str]" = None
         located_entity: "Optional[pathlib.Path]" = None
         if include_entity:
-            entity_path = entity_parsed_uri.path
+            entity_path = urllib.parse.unquote(entity_parsed_uri.path)
             if entity_path.startswith("/"):
                 entity_path = entity_path[1:]
 

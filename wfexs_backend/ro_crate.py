@@ -358,7 +358,7 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
             if dest_path.is_absolute():
                 raise ValueError("if provided, dest_path must be relative")
             if identifier is None:
-                identifier = dest_path.as_posix()
+                identifier = urllib.parse.quote(dest_path.as_posix())
         elif identifier is None:
             if not isinstance(source, (str, pathlib.Path)):
                 raise ValueError(
