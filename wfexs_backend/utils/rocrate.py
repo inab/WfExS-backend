@@ -1553,7 +1553,9 @@ WHERE   {
             additional_type = str(outputrow.additional_type)
             # Is it a nested one?
             cardinality = "1"
-            if additional_type == "Collection":
+            if (
+                hasattr(outputrow, "leaf_type") and outputrow.leaf_type is not None
+            ) or additional_type == "Collection":
                 if not hasattr(outputrow, "leaf_type"):
                     raise ROCrateToolboxException(
                         f"Unable to handle Collections of unknown type in output {str(outputrow.name)}"
@@ -1763,7 +1765,7 @@ WHERE   {
             valobj: "Optional[MutableMapping[str, Any]]" = None
             kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
-            if additional_type == "Collection":
+            if inputrow.leaf_type is not None:
                 leaf_type = str(inputrow.leaf_type)
                 leaf_additional_type = self.LEAF_TYPE_2_ADDITIONAL_TYPE.get(leaf_type)
                 if leaf_additional_type is None:
@@ -1955,7 +1957,7 @@ WHERE   {
             valobj: "Optional[MutableMapping[str, Any]]" = None
             kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
-            if additional_type == "Collection":
+            if envrow.leaf_type is not None:
                 leaf_type = str(envrow.leaf_type)
                 leaf_additional_type = self.LEAF_TYPE_2_ADDITIONAL_TYPE.get(leaf_type)
                 if leaf_additional_type is None:
