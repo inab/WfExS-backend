@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import dataclasses
 import json
 import os
 import os.path
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Mapping,
+        MutableMapping,
         MutableSequence,
         Optional,
         Sequence,
@@ -744,7 +746,7 @@ STDERR
         """
         It is assured the containers are materialized
         """
-        containersList: "MutableSequence[Container]" = []
+        containersHash: "MutableMapping[str, Container]" = {}
         notFoundContainersList: "MutableSequence[FailedContainerTag]" = []
 
         if containers_dir is None:
@@ -762,10 +764,10 @@ STDERR
             tag_to_use: "ContainerTaggedName" = tag
             singTag, parsedTag, singPullTag, isDocker = self._genSingTag(tag)
             for injectable_container in injectable_containers:
-                if injectable_container.source_type == tag.type and singTag in (
-                    injectable_container.origTaggedName,
-                    injectable_container.taggedName,
-                ):
+                if injectable_container.source_type != tag.type:
+                    continue
+                inj_tag, _, _, _ = self._genSingTag(injectable_container)
+                if singTag == inj_tag:
                     tag_to_use = injectable_container
                     self.logger.info(f"Matched injected container {singTag}")
                     break
@@ -786,8 +788,9 @@ STDERR
                 )
 
             if isinstance(matched_container, Container):
-                if matched_container not in containersList:
-                    containersList.append(matched_container)
+                matched_tag, _, _, _ = self._genSingTag(matched_container)
+                if matched_tag not in containersHash:
+                    containersHash[matched_tag] = matched_container
             else:
                 notFoundContainersList.append(matched_container)
 
@@ -802,7 +805,7 @@ STDERR
                 )
             )
 
-        return containersList
+        return list(containersHash.values())
 
     def deploySingleContainer(
         self,
@@ -869,8 +872,18 @@ STDERR
                     )
 
                 if isinstance(container, Container):
-                    # Reuse the input container instance
-                    rebuilt_container = container
+                    if was_redeployed:
+                        rebuilt_container = dataclasses.replace(
+                            container,
+                            signature=imageSignature_in_metadata,
+                            architecture=self._getContainerArchitecture(containerPath),
+                            localPath=containerPath,
+                            metadataLocalPath=containerPathMeta,
+                            image_signature=imageSignature_in_metadata,
+                        )
+                    else:
+                        # Reuse the input container instance
+                        rebuilt_container = container
                 else:
                     singTag, parsedTag, singPullTag, isDocker = self._genSingTag(
                         container
