@@ -1967,6 +1967,9 @@ you can find here an almost complete list of the possible ones:
                     the_file_crate = self._add_file_to_crate(
                         the_path=pathlib.Path(the_file.path),
                         the_uri=the_item_uri,
+                        the_name=None
+                        if the_name is None
+                        else cast("RelPath", the_name + the_file.name),
                         the_size=the_file.stat().st_size,
                         do_attach=do_attach,
                     )
@@ -1982,6 +1985,9 @@ you can find here an almost complete list of the possible ones:
                     ) = self._add_directory_as_dataset(
                         the_path=pathlib.Path(the_file.path),
                         the_uri=the_item_uri,
+                        the_name=None
+                        if the_name is None
+                        else cast("RelPath", the_name + the_file.name),
                         do_attach=do_attach,
                     )
                     if the_dir_crate is not None:
