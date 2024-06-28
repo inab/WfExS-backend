@@ -931,7 +931,7 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
-        BIND ( "Collection" AS ?additional_type )
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
         VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?input
             a s:Collection ;
@@ -1019,7 +1019,7 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
-        BIND ( "Collection" AS ?additional_type )
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
         VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?env
             a s:Collection ;
@@ -1119,7 +1119,7 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
-        BIND ( "Collection" AS ?additional_type )
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
         VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?output
             a s:Collection ;
