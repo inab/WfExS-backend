@@ -1998,6 +1998,7 @@ class WF:
                         injected_workflow.dir / injected_workflow.relPath,
                         workflow_dir / repo.rel_path,
                         force_copy=True,
+                        preserve_attrs=True,
                     )
 
                 if rel_path_files is not None:
@@ -2011,6 +2012,7 @@ class WF:
                                 injected_workflow.dir / inj,
                                 workflow_dir / dest_inj,
                                 force_copy=True,
+                                preserve_attrs=True,
                             )
             elif repoDir.is_dir():
                 link_or_copy_pathlib(repoDir, workflow_dir, force_copy=True)
