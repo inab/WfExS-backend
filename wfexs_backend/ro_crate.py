@@ -1926,6 +1926,9 @@ you can find here an almost complete list of the possible ones:
         if the_name is not None and not the_name.endswith("/"):
             the_name = cast("RelPath", the_name + "/")
 
+        if the_alternate_name is not None and not the_alternate_name.endswith("/"):
+            the_alternate_name = cast("RelPath", the_alternate_name + "/")
+
         assert not do_attach or (
             the_name is not None
         ), "A name must be provided for local directories"
@@ -1970,6 +1973,9 @@ you can find here an almost complete list of the possible ones:
                         the_name=None
                         if the_name is None
                         else cast("RelPath", the_name + the_file.name),
+                        the_alternate_name=None
+                        if the_alternate_name is None
+                        else cast("RelPath", the_alternate_name + the_file.name),
                         the_size=the_file.stat().st_size,
                         do_attach=do_attach,
                     )
@@ -1988,6 +1994,9 @@ you can find here an almost complete list of the possible ones:
                         the_name=None
                         if the_name is None
                         else cast("RelPath", the_name + the_file.name),
+                        the_alternate_name=None
+                        if the_alternate_name is None
+                        else cast("RelPath", the_alternate_name + the_file.name),
                         do_attach=do_attach,
                     )
                     if the_dir_crate is not None:
