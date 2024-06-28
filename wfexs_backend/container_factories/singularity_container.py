@@ -405,56 +405,23 @@ STDERR
             # Assuming it is docker
             isDocker = True
 
-        # Should we enrich the tag with the registry?
-        if (
-            isDocker
-            and isinstance(tag.registries, dict)
-            and (common.ContainerType.Docker in tag.registries)
-        ):
-            registry = tag.registries[common.ContainerType.Docker]
-            # Bare case
-            if len(parsedTag.path) <= 1:
-                singTag = f"docker://{registry}/library/{parsedTag.netloc}"
-                parsedTag = parse.urlparse(singTag)
-            elif "/" not in parsedTag.path[1:]:
-                singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
-                parsedTag = parse.urlparse(singTag)
-            # Last case, it already has a registry declared
-        # It is not an absolute URL, we are prepending the docker://
-        tag_name = tag.origTaggedName
-        parsedTag = parse.urlparse(tag_name)
-        if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
-            singTag = tag_name
-            isDocker = parsedTag.scheme == DOCKER_SCHEME
-        else:
-            if parsedTag.scheme == "":
-                singTag = "docker://" + tag_name
-                parsedTag = parse.urlparse(singTag)
-            else:
-                parsedTag = parsedTag._replace(
-                    scheme=DOCKER_SCHEME,
-                    netloc=parsedTag.scheme + ":" + parsedTag.path,
-                    path="",
-                )
-                singTag = parse.urlunparse(parsedTag)
-            # Assuming it is docker
-            isDocker = True
-
-        # Should we enrich the tag with the registry?
-        if (
-            isDocker
-            and isinstance(tag.registries, dict)
-            and (common.ContainerType.Docker in tag.registries)
-        ):
-            registry = tag.registries[common.ContainerType.Docker]
-            # Bare case
-            if len(parsedTag.path) <= 1:
-                singTag = f"docker://{registry}/library/{parsedTag.netloc}"
-                parsedTag = parse.urlparse(singTag)
-            elif "/" not in parsedTag.path[1:]:
-                singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
-                parsedTag = parse.urlparse(singTag)
-            # Last case, it already has a registry declared
+        registries = tag.registries
+        if isDocker:
+            if registries is None:
+                registries = {
+                    common.ContainerType.Docker: DEFAULT_DOCKER_REGISTRY,
+                }
+            # Should we enrich the tag with the registry?
+            registry = registries.get(common.ContainerType.Docker)
+            if registry is not None:
+                # Bare case
+                if len(parsedTag.path) <= 1:
+                    singTag = f"docker://{registry}/library/{parsedTag.netloc}"
+                    parsedTag = parse.urlparse(singTag)
+                elif "/" not in parsedTag.path[1:]:
+                    singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
+                    parsedTag = parse.urlparse(singTag)
+                # Last case, it already has a registry declared
 
         # Now, the singPullTag
         if isDocker and isinstance(tag, Container) and tag.fingerprint is not None:
@@ -793,13 +760,14 @@ STDERR
                 continue
 
             tag_to_use: "ContainerTaggedName" = tag
+            singTag, parsedTag, singPullTag, isDocker = self._genSingTag(tag)
             for injectable_container in injectable_containers:
-                if (
-                    injectable_container.origTaggedName == tag.origTaggedName
-                    and injectable_container.source_type == tag.type
-                    and injectable_container.registries == tag.registries
+                if injectable_container.source_type == tag.type and singTag in (
+                    injectable_container.origTaggedName,
+                    injectable_container.taggedName,
                 ):
                     tag_to_use = injectable_container
+                    self.logger.info(f"Matched injected container {singTag}")
                     break
 
             matched_container: "Union[Container, FailedContainerTag]"
@@ -886,7 +854,19 @@ STDERR
         try:
             with containerPathMeta.open(mode="r", encoding="utf-8") as mH:
                 signaturesAndManifest = cast("SingularityManifest", json.load(mH))
-                imageSignature_in_metadata = signaturesAndManifest["image_signature"]
+                imageSignature_in_metadata = signaturesAndManifest.get(
+                    "image_signature"
+                )
+                # Degraded paths
+                if imageSignature_in_metadata is None and isinstance(
+                    container, Container
+                ):
+                    imageSignature_in_metadata = container.image_signature
+                # Last resort
+                if imageSignature_in_metadata is None:
+                    imageSignature_in_metadata = self.cc_handler._computeFingerprint(
+                        containerPath
+                    )
 
                 if isinstance(container, Container):
                     # Reuse the input container instance
