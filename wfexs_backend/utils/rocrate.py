@@ -753,7 +753,7 @@ WHERE   {
             a s:PropertyValue .
     } UNION {
         # A combination of files or directories or property values
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?input
             a s:Collection ;
             s:hasPart+ ?component .
@@ -822,7 +822,7 @@ WHERE   {
         BIND (?env AS ?fileid)
     } UNION {
         # A combination of files or directories or property values
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?env
             a s:Collection ;
             s:name ?name_env ;
@@ -932,7 +932,7 @@ WHERE   {
     } UNION {
         # A combination of files or directories or property values
         BIND ( "Collection" AS ?additional_type )
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?input
             a s:Collection ;
             s:exampleOfWork ?inputfp ;
@@ -1020,7 +1020,7 @@ WHERE   {
     } UNION {
         # A combination of files or directories or property values
         BIND ( "Collection" AS ?additional_type )
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?env
             a s:Collection ;
             s:name ?name_env ;
@@ -1120,7 +1120,7 @@ WHERE   {
     } UNION {
         # A combination of files or directories or property values
         BIND ( "Collection" AS ?additional_type )
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?output
             a s:Collection ;
             s:exampleOfWork ?outputfp ;
