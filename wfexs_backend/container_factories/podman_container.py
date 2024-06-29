@@ -197,7 +197,12 @@ STDERR
             if "/" not in dockerTag:
                 dockerTag = f"{registry}/library/{dockerTag}"
             elif dockerTag.find("/") == dockerTag.rfind("/"):
-                dockerTag = f"{registry}/{dockerTag}"
+                slash_pos = dockerTag.find("/")
+                possible_registry = dockerTag[0:slash_pos]
+                if "." in possible_registry:
+                    dockerTag = f"{possible_registry}/library/{dockerTag[slash_pos+1:]}"
+                else:
+                    dockerTag = f"{registry}/{dockerTag}"
             # Last case, it already has a registry declared
 
         # This is needed ....
