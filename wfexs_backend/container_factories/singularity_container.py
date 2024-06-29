@@ -495,6 +495,7 @@ STDERR
 
         tag_name = tag.origTaggedName
         singTag, parsedTag, singPullTag, isDocker = self._genSingTag(tag)
+        singPullTagOrig = singPullTag
 
         fetch_metadata = True
         trusted_copy = False
@@ -583,6 +584,15 @@ STDERR
                 singPullTag, tmpContainerPath, matEnv
             )
 
+            if s_retval != 0 and singPullTag != singTag:
+                self.logger.warning(
+                    f"Unable to pull {singPullTag}. Degrading to {singTag}"
+                )
+                singPullTag = singTag
+                s_retval, s_out_v, s_err_v = self._pull(
+                    singTag, tmpContainerPath, matEnv
+                )
+
             # Reading the output and error for the report
             if s_retval == 0:
                 if not tmpContainerPath.exists():
@@ -596,7 +606,7 @@ STDERR
                 imageSignature = self.cc_handler._computeFingerprint(tmpContainerPath)
             else:
                 errstr = f"""\
-Could not materialize singularity image {singTag} ({singPullTag}). Retval {s_retval}
+Could not materialize singularity image {singTag} ({singPullTagOrig}). Retval {s_retval}
 ======
 STDOUT
 ======
@@ -616,7 +626,7 @@ STDERR
 
                 return FailedContainerTag(
                     tag=tag_name,
-                    sing_tag=singPullTag,
+                    sing_tag=singTag,
                 )
 
         # At this point we should always have a image signature
@@ -648,12 +658,10 @@ STDERR
             if isDocker:
                 tag_details = dhelp.query_tag(singTag)
                 if tag_details is None:
-                    self.logger.error(f"FALLA {singTag}")
                     return FailedContainerTag(tag=tag_name, sing_tag=singTag)
                 if singTag != singPullTag:
                     tag_pull_details = dhelp.query_tag(singPullTag)
                     if tag_pull_details is None:
-                        self.logger.error(f"CANALLA {singPullTag}")
                         return FailedContainerTag(tag=tag_name, sing_tag=singPullTag)
                 else:
                     tag_pull_details = tag_details

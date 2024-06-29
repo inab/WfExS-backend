@@ -174,7 +174,7 @@ STDERR
     def _genPodmanTag(
         self,
         tag: "ContainerTaggedName",
-    ) -> "Tuple[URIType, str, str]":
+    ) -> "Tuple[URIType, str, str, str]":
         # It is an absolute URL, we are removing the docker://
         tag_name = tag.origTaggedName
         if tag_name.startswith(DOCKER_PROTO):
@@ -219,9 +219,10 @@ STDERR
         else:
             dockerPullTag = dockerTag
 
+        podmanTag = DOCKER_PROTO + dockerTag
         podmanPullTag = DOCKER_PROTO + dockerPullTag
 
-        return cast("URIType", dockerTag), dockerPullTag, podmanPullTag
+        return cast("URIType", dockerTag), dockerPullTag, podmanTag, podmanPullTag
 
     def materializeSingleContainer(
         self,
@@ -239,7 +240,7 @@ STDERR
 
         # It is an absolute URL, we are removing the docker://
         tag_name = tag.origTaggedName
-        dockerTag, dockerPullTag, podmanPullTag = self._genPodmanTag(tag)
+        dockerTag, dockerPullTag, podmanTag, podmanPullTag = self._genPodmanTag(tag)
 
         self.logger.info(f"downloading podman container: {tag_name} => {podmanPullTag}")
 
@@ -314,6 +315,13 @@ STDERR
 
             # And now, let's materialize the new world
             d_retval, d_out_v, d_err_v = self._pull(podmanPullTag, matEnv)
+
+            if d_retval != 0 and dockerTag != dockerPullTag:
+                self.logger.warning(
+                    f"Unable to pull {podmanPullTag}. Degrading to {podmanTag}"
+                )
+                dockerPullTag = dockerTag
+                d_retval, d_out_v, d_err_v = self._pull(podmanTag, matEnv)
 
             if d_retval == 0 and dockerTag != dockerPullTag:
                 # Second try
@@ -524,9 +532,12 @@ STDERR
                 else:
                     manifest = manifests[0]
 
-                    dockerTag, dockerPullTag, podmanPullTag = self._genPodmanTag(
-                        container
-                    )
+                    (
+                        dockerTag,
+                        dockerPullTag,
+                        podmanTag,
+                        podmanPullTag,
+                    ) = self._genPodmanTag(container)
 
                     image_id = signaturesAndManifest["image_id"]
 
@@ -628,5 +639,5 @@ STDERR
         """
         It provides a way to help comparing two container tags
         """
-        retval, _, _ = self._genPodmanTag(container)
+        retval, _, _, _ = self._genPodmanTag(container)
         return retval

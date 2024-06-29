@@ -310,6 +310,13 @@ STDERR
             # And now, let's materialize the new world
             d_retval, d_out_v, d_err_v = self._pull(dockerPullTag, matEnv)
 
+            if d_retval != 0 and dockerTag != dockerPullTag:
+                self.logger.warning(
+                    f"Unable to pull {dockerPullTag}. Degrading to {dockerTag}"
+                )
+                dockerPullTag = dockerTag
+                d_retval, d_out_v, d_err_v = self._pull(dockerTag, matEnv)
+
             if d_retval == 0 and dockerTag != dockerPullTag:
                 # Second try
                 d_retval, d_out_v, d_err_v = self._tag(dockerPullTag, dockerTag, matEnv)
@@ -331,6 +338,7 @@ STDERR
 {}""".format(
                     dockerTag, d_retval, d_out_v, d_err_v
                 )
+                self.logger.error(errstr)
                 raise ContainerEngineException(errstr)
 
             # Parsing the output from docker inspect
