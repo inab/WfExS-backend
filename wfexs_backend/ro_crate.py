@@ -63,7 +63,6 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
-        MaterializedOutput,
         ProgsMapping,
         RelPath,
         RepoTag,
