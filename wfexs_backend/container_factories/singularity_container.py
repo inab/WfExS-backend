@@ -421,7 +421,12 @@ STDERR
                     singTag = f"docker://{registry}/library/{parsedTag.netloc}"
                     parsedTag = parse.urlparse(singTag)
                 elif "/" not in parsedTag.path[1:]:
-                    singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
+                    if "." in parsedTag.netloc:
+                        singTag = f"docker://{parsedTag.netloc}/library{parsedTag.path}"
+                    else:
+                        singTag = (
+                            f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
+                        )
                     parsedTag = parse.urlparse(singTag)
                 # Last case, it already has a registry declared
 
