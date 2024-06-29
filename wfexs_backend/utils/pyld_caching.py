@@ -27,16 +27,19 @@ if TYPE_CHECKING:
         Callable,
         Mapping,
         Optional,
+        Sequence,
     )
 
 import asyncio
 import aiohttp
 from aiohttp_client_cache.session import CachedSession
 from aiohttp_client_cache.backends.sqlite import SQLiteBackend
+import os.path
 import pyld  # type: ignore[import, import-untyped]
 import re
 import string
 import urllib.parse
+import xdg.BaseDirectory
 
 
 def aiohttp_caching_document_loader(
@@ -193,3 +196,23 @@ def hook_pyld_cache(cache_file: "str") -> "None":
             timeout=10,
         )
     )
+
+
+def pyld_cache_initialize(initial_contexts: "Sequence[str]" = []) -> "None":
+    """
+    This method hooks the caching system to pyld, so context resolution
+    does not need to connect to internet.
+    And, if the list of initial contexts is not empty, populate the cache
+    with them.
+    """
+    cache_path = xdg.BaseDirectory.save_cache_path("es.elixir.WfExSJSONLD")
+    hook_pyld_cache(os.path.join(cache_path, "contexts.db"))
+
+    if len(initial_contexts) > 0:
+        mock_jsonld = {
+            "@context": initial_contexts,
+            "@graph": [],
+        }
+
+        # This line should perform the magic
+        pyld.jsonld.expand(mock_jsonld, {"keepFreeFloatingNodes": True})

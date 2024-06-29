@@ -1,1 +1,1 @@
-full-installer.bash
+container_recipes/full-installer.bash

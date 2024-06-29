@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import dataclasses
 import json
 import os
 from typing import (
@@ -163,16 +164,24 @@ STDERR
             else tag_name
         )
 
+        registries = tag.registries
+        if registries is None:
+            registries = {
+                ContainerType.Docker: DEFAULT_DOCKER_REGISTRY,
+            }
         # Should we enrich the tag with the registry?
-        if isinstance(tag.registries, dict) and (
-            ContainerType.Docker in tag.registries
-        ):
-            registry = tag.registries[ContainerType.Docker]
+        registry = registries.get(ContainerType.Docker)
+        if registry is not None:
             # Bare case
             if "/" not in dockerTag:
                 dockerTag = f"{registry}/library/{dockerTag}"
             elif dockerTag.find("/") == dockerTag.rfind("/"):
-                dockerTag = f"{registry}/{dockerTag}"
+                slash_pos = dockerTag.find("/")
+                possible_registry = dockerTag[0:slash_pos]
+                if "." in possible_registry:
+                    dockerTag = f"{possible_registry}/library/{dockerTag[slash_pos+1:]}"
+                else:
+                    dockerTag = f"{registry}/{dockerTag}"
             # Last case, it already has a registry declared
 
         # This is needed ....
@@ -306,6 +315,13 @@ STDERR
             # And now, let's materialize the new world
             d_retval, d_out_v, d_err_v = self._pull(dockerPullTag, matEnv)
 
+            if d_retval != 0 and dockerTag != dockerPullTag:
+                self.logger.warning(
+                    f"Unable to pull {dockerPullTag}. Degrading to {dockerTag}"
+                )
+                dockerPullTag = dockerTag
+                d_retval, d_out_v, d_err_v = self._pull(dockerTag, matEnv)
+
             if d_retval == 0 and dockerTag != dockerPullTag:
                 # Second try
                 d_retval, d_out_v, d_err_v = self._tag(dockerPullTag, dockerTag, matEnv)
@@ -327,6 +343,7 @@ STDERR
 {}""".format(
                     dockerTag, d_retval, d_out_v, d_err_v
                 )
+                self.logger.error(errstr)
                 raise ContainerEngineException(errstr)
 
             # Parsing the output from docker inspect
@@ -461,6 +478,7 @@ STDERR
         manifestsImageSignature: "Optional[Fingerprint]" = None
         manifests = None
         manifest = None
+        was_redeployed = False
         if (
             not containerPath.is_file()
             and isinstance(container, Container)
@@ -468,6 +486,7 @@ STDERR
         ):
             # Time to inject the image!
             link_or_copy_pathlib(container.localPath, containerPath, force_copy=True)
+            was_redeployed = True
 
         if not containerPath.is_file():
             errmsg = f"Docker saved image {containerPath.name} is not in the staged working dir for {tag_name}"
@@ -483,6 +502,7 @@ STDERR
             link_or_copy_pathlib(
                 container.metadataLocalPath, containerPathMeta, force_copy=True
             )
+            was_redeployed = True
 
         if not containerPathMeta.is_file():
             errmsg = f"Docker saved image metadata {containerPathMeta.name} is not in the staged working dir for {tag_name}"
@@ -497,8 +517,16 @@ STDERR
                 manifests = signaturesAndManifest["manifests"]
 
                 if isinstance(container, Container):
-                    # Reuse the input container instance
-                    rebuilt_container = container
+                    if was_redeployed:
+                        rebuilt_container = dataclasses.replace(
+                            container,
+                            localPath=containerPath,
+                            metadataLocalPath=containerPathMeta,
+                            image_signature=imageSignature_in_metadata,
+                        )
+                    else:
+                        # Reuse the input container instance
+                        rebuilt_container = container
                     dockerTag = rebuilt_container.taggedName
                 else:
                     manifest = manifests[0]
@@ -601,3 +629,10 @@ STDERR
                 raise ContainerEngineException(errstr)
 
         return rebuilt_container, do_redeploy
+
+    def generateCanonicalTag(self, container: "ContainerTaggedName") -> "str":
+        """
+        It provides a way to help comparing two container tags
+        """
+        retval, _ = self._genDockerTag(container)
+        return retval

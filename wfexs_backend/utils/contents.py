@@ -59,6 +59,7 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LicensedURI,
+        MaterializedContent,
         RelPath,
         URIType,
     )
@@ -160,6 +161,63 @@ def GetGeneratedDirectoryContentFromList(
     )
 
 
+def MaterializedContent2AbstractGeneratedContent(
+    mat_content: "MaterializedContent",
+    preferredFilename: "Optional[RelPath]" = None,
+    signatureMethod: "Optional[FingerprintMethod]" = nihDigester,
+) -> "AbstractGeneratedContent":
+    """
+    This method generates either a GeneratedContent
+    or a GeneratedDirectoryContent from a MaterializedContent
+    """
+    local = (
+        mat_content.extrapolated_local
+        if mat_content.extrapolated_local is not None
+        else mat_content.local
+    )
+    if mat_content.kind == ContentKind.File:
+        return GeneratedContent(
+            local=local,
+            uri=mat_content.licensed_uri,
+            # This might be in the wrong representation
+            signature=mat_content.fingerprint,
+            preferredFilename=preferredFilename,
+        )
+    else:
+        return GetGeneratedDirectoryContent(
+            thePath=local,
+            uri=mat_content.licensed_uri,
+            preferredFilename=preferredFilename,
+            signatureMethod=signatureMethod,
+        )
+
+
+def Path2AbstractGeneratedContent(
+    content: "pathlib.Path",
+    preferredFilename: "Optional[RelPath]" = None,
+    signatureMethod: "Optional[FingerprintMethod]" = nihDigester,
+) -> "AbstractGeneratedContent":
+    """
+    This method generates either a GeneratedContent
+    or a GeneratedDirectoryContent from a MaterializedContent
+    """
+    if content.is_dir():
+        return GetGeneratedDirectoryContent(
+            thePath=content,
+            preferredFilename=preferredFilename,
+            signatureMethod=signatureMethod,
+        )
+    else:
+        return GeneratedContent(
+            local=content,
+            signature=cast(
+                "Optional[Fingerprint]",
+                ComputeDigestFromFile(content, repMethod=signatureMethod),
+            ),
+            preferredFilename=preferredFilename,
+        )
+
+
 CWLClass2WfExS = {
     "Directory": ContentKind.Directory,
     "File": ContentKind.File
@@ -243,20 +301,31 @@ def copy2_nofollow(
     shutil.copy2(src, dest, follow_symlinks=False)
 
 
+def copy_nofollow(
+    src: "Union[str, os.PathLike[str]]", dest: "Union[str, os.PathLike[str]]"
+) -> "None":
+    shutil.copy(src, dest, follow_symlinks=False)
+
+
 def link_or_copy(
     src: "Union[AnyPath, os.PathLike[str]]",
     dest: "Union[AnyPath, os.PathLike[str]]",
     force_copy: "bool" = False,
+    preserve_attrs: "bool" = True,
 ) -> None:
     link_or_copy_pathlib(
         src if isinstance(src, pathlib.Path) else pathlib.Path(src),
         dest if isinstance(dest, pathlib.Path) else pathlib.Path(dest),
         force_copy=force_copy,
+        preserve_attrs=preserve_attrs,
     )
 
 
 def link_or_copy_pathlib(
-    src: "pathlib.Path", dest: "pathlib.Path", force_copy: "bool" = False
+    src: "pathlib.Path",
+    dest: "pathlib.Path",
+    force_copy: "bool" = False,
+    preserve_attrs: "bool" = True,
 ) -> None:
     assert (
         src.exists()
@@ -345,18 +414,24 @@ def link_or_copy_pathlib(
             if dest_exists:
                 dest.unlink()
             if isinstance(src, ZipfilePath):
-                src.copy_to(dest)
-            else:
+                src.copy_to(dest, preserve_attrs=preserve_attrs)
+            elif preserve_attrs:
                 shutil.copy2(src, dest)
+            else:
+                shutil.copy(src, dest)
         else:
             # Recursively copying the content
             # as it is in a separated filesystem
             if dest_exists:
                 shutil.rmtree(dest)
             if isinstance(src, ZipfilePath):
-                src.copy_to(dest)
+                src.copy_to(dest, preserve_attrs=preserve_attrs)
             else:
-                shutil.copytree(src, dest, copy_function=copy2_nofollow)
+                shutil.copytree(
+                    src,
+                    dest,
+                    copy_function=copy2_nofollow if preserve_attrs else copy_nofollow,
+                )
 
 
 def real_unlink_if_exists(

@@ -21,7 +21,9 @@ import os
 import pathlib
 import posixpath
 import shutil
+import stat
 import sys
+import time
 
 from typing import (
     cast,
@@ -281,7 +283,12 @@ class ZipfilePath(pathlib.Path):
     'mem'
     """
 
+    # _flavour = pathlib._posix_flavour
     __repr = "{self.__class__.__name__}({self._root.filename!r}, {self._at!r})"
+
+    def __new__(cls, *args: "Any", **kwargs: "Any") -> "ZipfilePath":
+        self = object.__new__(cls)
+        return self
 
     def __init__(
         self,
@@ -306,6 +313,7 @@ class ZipfilePath(pathlib.Path):
 
         self._root = FastLookup.make(root)
         self._at = at
+        # super().__init__(self._root.filename)
 
     def open(  # type: ignore[override]
         self,
@@ -427,6 +435,8 @@ class ZipfilePath(pathlib.Path):
         member: "Union[zipfile.ZipInfo, str]",
         targetpath: "Union[str, os.PathLike[str]]",
         pwd: "Optional[bytes]" = None,
+        preserve_attrs: "bool" = True,
+        aggresive_attrs: "bool" = False,
     ) -> "str":
         """
         Method partially borrowed from python 3.12
@@ -474,11 +484,43 @@ class ZipfilePath(pathlib.Path):
         ) as target:
             shutil.copyfileobj(source, target)
 
+        # Used bits from
+        # https://stackoverflow.com/a/39296577
+        # and
+        # https://stackoverflow.com/a/9813471
+        if preserve_attrs or aggresive_attrs:
+            if member.external_attr > 0xFFFF:
+                if aggresive_attrs:
+                    os.chmod(targetpath, member.external_attr >> 16)
+                elif (member.external_attr >> 16) & (
+                    stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
+                ):
+                    os.chmod(
+                        targetpath,
+                        os.stat(targetpath).st_mode
+                        | stat.S_IXUSR
+                        | stat.S_IXGRP
+                        | stat.S_IXOTH,
+                    )
+
+            date_time = time.mktime(member.date_time + (0, 0, -1))
+            os.utime(targetpath, (date_time, date_time))
+
         return targetpath
 
-    def copy_to(self, dest: "pathlib.Path") -> "None":
+    def copy_to(
+        self,
+        dest: "pathlib.Path",
+        preserve_attrs: "bool" = True,
+        aggresive_attrs: "bool" = False,
+    ) -> "None":
         if self.is_file():
-            self._extract_member(self._at, dest)
+            self._extract_member(
+                self._at,
+                dest,
+                preserve_attrs=preserve_attrs,
+                aggresive_attrs=aggresive_attrs,
+            )
         else:
             the_members: "Sequence[str]"
             if self._at != "":
@@ -491,7 +533,12 @@ class ZipfilePath(pathlib.Path):
                 the_members = self._root.namelist()
             for the_member in the_members:
                 the_partial_member = the_member[len(self._at) :]
-                self._extract_member(the_member, dest / the_partial_member)
+                self._extract_member(
+                    the_member,
+                    dest / the_partial_member,
+                    preserve_attrs=preserve_attrs,
+                    aggresive_attrs=aggresive_attrs,
+                )
 
     def with_name(self, name: "Union[str, os.PathLike[str]]") -> "ZipfilePath":
         return self.parent.joinpath(name)

@@ -190,20 +190,24 @@ def unmarshall_namedtuple(
         else:
             c_objn_keys = c_objn.keys()
 
-        fields = dict(zip(c_objn_keys, recurse_u(c_objn.values(), myglobals)))
-        # print("{} {} {}".format(clazz, theTypeName, fields))
+        fields_list = list(zip(c_objn_keys, recurse_u(c_objn.values(), myglobals)))
+        if issubclass(clazz, dict):
+            objres = clazz(fields_list)
+        else:
+            fields = dict(fields_list)
+            # print("{} {} {}".format(clazz, theTypeName, fields))
 
-        # Deactivated for now, as the code is not ready for this magic
-        # if hasattr(clazz, '_unmarshall'):
-        #    return clazz._unmarshall(**fields)
-        # else:
-        #    return clazz(**fields)
+            # Deactivated for now, as the code is not ready for this magic
+            # if hasattr(clazz, '_unmarshall'):
+            #    return clazz._unmarshall(**fields)
+            # else:
+            #    return clazz(**fields)
 
-        try:
-            objres = clazz(**fields)
-        except:
-            logger.exception(f"Unmarshalling Error instantiating {clazz.__name__}")
-            raise
+            try:
+                objres = clazz(**fields)
+            except:
+                logger.exception(f"Unmarshalling Error instantiating {clazz.__name__}")
+                raise
     elif obj_is(collections.abc.Iterable) and not obj_is(str):
         # print(type(obj))
         return type(obj)(recurse_u(obj, myglobals))

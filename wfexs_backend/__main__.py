@@ -79,6 +79,7 @@ except ImportError:
     from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .security_context import SecurityContextVault
+from .side_caches import populate_side_caches
 from .utils.rocrate import (
     ReproducibilityLevel,
 )
@@ -92,6 +93,10 @@ from .utils.misc import DatetimeEncoder
 
 
 class WfExS_Commands(StrDocEnum):
+    PopulateSideCaches = (
+        "populate-side-caches",
+        "Populate read-only side caches which live in XDG_CACHE_HOME (shared by all the WfExS instances of the very same user)",
+    )
     Init = ("init", "Init local setup")
     Cache = ("cache", "Cache handling subcommands")
     ConfigValidate = (
@@ -696,6 +701,7 @@ def processStagedWorkdirCommand(
         private_key_passphrase = ""
 
     # Getting the list of licences (in case they are needed)
+    op_licences: "Sequence[str]"
     if hasattr(args, "licences") and args.licences is not None:
         op_licences = args.licences
     else:
@@ -928,10 +934,11 @@ def processStagedWorkdirCommand(
                                     wfSetup.nickname,
                                 )
                             )
+                            expanded_licences = wB.curate_licence_list(op_licences)
                             wfInstance.createStageResearchObject(
                                 filename=args.staged_workdir_command_args[1],
                                 payloads=doMaterializedROCrate,
-                                licences=op_licences,
+                                licences=expanded_licences,
                                 resolved_orcids=resolved_orcids,
                                 crate_pid=op_crate_pid,
                             )
@@ -944,10 +951,11 @@ def processStagedWorkdirCommand(
                                         wfSetup.nickname,
                                     )
                                 )
+                                expanded_licences = wB.curate_licence_list(op_licences)
                                 wfInstance.createResultsResearchObject(
                                     filename=args.staged_workdir_command_args[1],
                                     payloads=doMaterializedROCrate,
-                                    licences=op_licences,
+                                    licences=expanded_licences,
                                     resolved_orcids=resolved_orcids,
                                     crate_pid=op_crate_pid,
                                 )
@@ -1088,6 +1096,8 @@ def _get_wfexs_argparse_internal(
     )
 
     ap_i = genParserSub(sp, WfExS_Commands.Init)
+
+    ap_psd = genParserSub(sp, WfExS_Commands.PopulateSideCaches)
 
     ap_c = genParserSub(sp, WfExS_Commands.Cache)
     ap_c.add_argument(
@@ -1269,6 +1279,11 @@ def main() -> None:
             logLevel if logLevel > logging.WARNING else logging.WARNING
         )
 
+    # Very early command
+    if command == WfExS_Commands.PopulateSideCaches:
+        populate_side_caches()
+        sys.exit(0)
+
     # First, try loading the configuration file
     localConfigFilename = args.localConfigFilename
     if localConfigFilename and os.path.exists(localConfigFilename):
@@ -1321,7 +1336,7 @@ def main() -> None:
         WfExS_Commands.Import,
         WfExS_Commands.Execute,
     ):
-        updated_config, local_config, config_directory = WfExSBackend.bootstrap(
+        updated_config, local_config, config_directory = WfExSBackend.bootstrap_config(
             local_config, config_directory, key_prefix=config_relname
         )
         # This is needed because config directory could have been empty

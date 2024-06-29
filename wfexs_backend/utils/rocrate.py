@@ -99,7 +99,6 @@ if TYPE_CHECKING:
 import pyld  # type: ignore[import, import-untyped]
 import rdflib
 import rdflib.plugins.sparql
-import xdg.BaseDirectory
 
 # This code needs exception groups
 if sys.version_info[:2] < (3, 11):
@@ -127,7 +126,7 @@ from .digests import (
 )
 
 from .pyld_caching import (
-    hook_pyld_cache,
+    pyld_cache_initialize,
 )
 
 from ..fetchers import (
@@ -189,11 +188,15 @@ ApplicationCategory2ContainerType: "Final[Mapping[str, ContainerType]]" = {
     for container_type, container_type_metadata in ContainerTypeMetadataDetails.items()
 }
 
-WORKFLOW_RUN_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
-WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_CONTEXT + "#"
+WORKFLOW_RUN_BASE: "Final[str]" = "https://w3id.org/ro/terms/workflow-run"
+WORKFLOW_RUN_CONTEXT: "Final[str]" = WORKFLOW_RUN_BASE + "/context"
+WORKFLOW_RUN_NAMESPACE: "Final[str]" = WORKFLOW_RUN_BASE + "#"
 
-WFEXS_TERMS_CONTEXT: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
-WFEXS_TERMS_NAMESPACE: "Final[str]" = WFEXS_TERMS_CONTEXT + "#"
+WFEXS_TERMS_BASE: "Final[str]" = "https://w3id.org/ro/terms/wfexs"
+# Not yet ....
+# WFEXS_TERMS_CONTEXT: "Final[str]" = WFEXS_TERMS_BASE + "/context"
+WFEXS_TERMS_CONTEXT: "Final[str]" = WFEXS_TERMS_BASE
+WFEXS_TERMS_NAMESPACE: "Final[str]" = WFEXS_TERMS_BASE + "#"
 
 CONTAINER_DOCKERIMAGE_SHORT: "Final[str]" = "DockerImage"
 CONTAINER_SIFIMAGE_SHORT: "Final[str]" = "SIFImage"
@@ -338,6 +341,7 @@ class ROCrateToolbox(abc.ABC):
         SCHEMA_ORG_PREFIX + "Text": "Text",
         SCHEMA_ORG_PREFIX + "Boolean": "Boolean",
         SCHEMA_ORG_PREFIX + "Float": "Float",
+        SCHEMA_ORG_PREFIX + "PropertyValue": "PropertyValue",
         SCHEMA_ORG_PREFIX + "MediaObject": "File",
         SCHEMA_ORG_PREFIX + "Dataset": "Directory",
     }
@@ -365,8 +369,7 @@ class ROCrateToolbox(abc.ABC):
         self.wfexs = wfexs
 
         # Caching path for the contexts
-        cache_path = xdg.BaseDirectory.save_cache_path("es.elixir.WfExSJSONLD")
-        hook_pyld_cache(os.path.join(cache_path, "contexts.db"))
+        pyld_cache_initialize()
 
         # This is needed for proper behaviour
         # https://stackoverflow.com/a/6264214
@@ -751,7 +754,7 @@ WHERE   {
             a s:PropertyValue .
     } UNION {
         # A combination of files or directories or property values
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?input
             a s:Collection ;
             s:hasPart+ ?component .
@@ -820,7 +823,7 @@ WHERE   {
         BIND (?env AS ?fileid)
     } UNION {
         # A combination of files or directories or property values
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?env
             a s:Collection ;
             s:name ?name_env ;
@@ -929,8 +932,8 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
-        BIND ( "Collection" AS ?additional_type )
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?input
             a s:Collection ;
             s:exampleOfWork ?inputfp ;
@@ -1017,8 +1020,8 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
-        BIND ( "Collection" AS ?additional_type )
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?env
             a s:Collection ;
             s:name ?name_env ;
@@ -1117,8 +1120,8 @@ WHERE   {
             s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
-        BIND ( "Collection" AS ?additional_type )
-        VALUES ( ?leaf_type ) { ( s:Integer ) ( s:Text ) ( s:Boolean ) ( s:Float ) ( s:MediaObject ) ( s:Dataset ) }
+        VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
+        VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?output
             a s:Collection ;
             s:exampleOfWork ?outputfp ;
@@ -1551,7 +1554,9 @@ WHERE   {
             additional_type = str(outputrow.additional_type)
             # Is it a nested one?
             cardinality = "1"
-            if additional_type == "Collection":
+            if (
+                hasattr(outputrow, "leaf_type") and outputrow.leaf_type is not None
+            ) or additional_type == "Collection":
                 if not hasattr(outputrow, "leaf_type"):
                     raise ROCrateToolboxException(
                         f"Unable to handle Collections of unknown type in output {str(outputrow.name)}"
@@ -1761,14 +1766,15 @@ WHERE   {
             valobj: "Optional[MutableMapping[str, Any]]" = None
             kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
-            if additional_type == "Collection":
+            if inputrow.leaf_type is not None:
                 leaf_type = str(inputrow.leaf_type)
                 leaf_additional_type = self.LEAF_TYPE_2_ADDITIONAL_TYPE.get(leaf_type)
                 if leaf_additional_type is None:
                     raise ROCrateToolboxException(
                         f"Unable to handle contents of type {leaf_type} in input Collection {str(inputrow.name)}"
                     )
-                additional_type = leaf_additional_type
+                if additional_type == "Collection":
+                    additional_type = leaf_additional_type
                 if leaf_additional_type not in ("File", "Dataset"):
                     valarr = base.setdefault(param_last, [])
 
@@ -1953,14 +1959,15 @@ WHERE   {
             valobj: "Optional[MutableMapping[str, Any]]" = None
             kindobj: "Optional[ContentKind]" = None
             # Is it a nested one?
-            if additional_type == "Collection":
+            if envrow.leaf_type is not None:
                 leaf_type = str(envrow.leaf_type)
                 leaf_additional_type = self.LEAF_TYPE_2_ADDITIONAL_TYPE.get(leaf_type)
                 if leaf_additional_type is None:
                     raise ROCrateToolboxException(
                         f"Unable to handle contents of type {leaf_type} in Collection reflecting contents pointed by environment variable {env_name}"
                     )
-                additional_type = leaf_additional_type
+                if additional_type == "Collection":
+                    additional_type = leaf_additional_type
                 if leaf_additional_type not in ("File", "Dataset"):
                     valarr = environment.setdefault(env_name, [])
 
@@ -2122,7 +2129,7 @@ WHERE   {
         entity_path: "Optional[str]" = None
         located_entity: "Optional[pathlib.Path]" = None
         if include_entity:
-            entity_path = entity_parsed_uri.path
+            entity_path = urllib.parse.unquote(entity_parsed_uri.path)
             if entity_path.startswith("/"):
                 entity_path = entity_path[1:]
 
@@ -2437,7 +2444,6 @@ WHERE   {
                     else None,
                     relPathFiles=rel_path_files,
                 )
-                self.logger.error(f"POZI {cached_workflow}")
 
         return repo, workflow_type, cached_workflow
 
@@ -2449,7 +2455,7 @@ WHERE   {
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
         payload_dir: "Optional[pathlib.Path]" = None,
-    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
+    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, Optional[Sequence[str]], EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -2640,11 +2646,19 @@ WHERE   {
                     }
             params = new_params
 
+        # Beware!! This is a tweak!!
+        profiles: "Optional[Sequence[str]]" = params.get("-profile")
+        if profiles is not None:
+            new_params = cast("MutableParamsBlock", copy.copy(params))
+            del new_params["-profile"]
+            params = new_params
+
         return (
             repo,
             workflow_type,
             container_type,
             params,
+            profiles,
             environment,
             outputs,
             cached_workflow,

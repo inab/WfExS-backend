@@ -19,10 +19,14 @@ from __future__ import absolute_import
 
 import atexit
 import copy
+import errno
+import http.client
 import inspect
+import io
 import logging
 import os
 import pathlib
+import shutil
 import subprocess
 import tempfile
 from typing import (
@@ -59,14 +63,13 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
-        MaterializedInput,
-        MaterializedOutput,
         ProgsMapping,
         RelPath,
         RepoTag,
         RepoURL,
         StagedExecution,
         StagedSetup,
+        SymbolicParamName,
         SymbolicOutputName,
         URIType,
         WFLangVersion,
@@ -96,7 +99,10 @@ if TYPE_CHECKING:
 import urllib.parse
 import uuid
 
-from .utils.misc import lazy_import
+from .utils.misc import (
+    is_uri,
+    lazy_import,
+)
 from .utils.rocrate import (
     ContainerType2AdditionalType,
     ContainerTypeMetadata,
@@ -105,6 +111,10 @@ from .utils.rocrate import (
     WFEXS_TERMS_NAMESPACE,
     WORKFLOW_RUN_CONTEXT,
     WORKFLOW_RUN_NAMESPACE,
+)
+
+from .workflow_engines import (
+    WorkflowEngine,
 )
 
 magic = lazy_import("magic")
@@ -125,7 +135,7 @@ import rocrate.rocrate
 
 from rocrate.utils import (
     get_norm_value,
-    is_url,
+    iso_now,
 )
 
 from .fetchers import (
@@ -134,6 +144,11 @@ from .fetchers import (
 
 from .utils.orcid import (
     validate_orcid,
+)
+
+from .utils.contents import (
+    MaterializedContent2AbstractGeneratedContent,
+    Path2AbstractGeneratedContent,
 )
 
 from .utils.digests import (
@@ -161,6 +176,8 @@ from .common import (
     GeneratedDirectoryContent,
     LicenceDescription,
     MaterializedContent,
+    MaterializedInput,
+    MaterializedOutput,
     META_JSON_POSTFIX,
     NoCratableItem,
     NoLicence,
@@ -334,18 +351,19 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
         self.fetch_remote = fetch_remote
         self.validate_url = validate_url
         self.source = source
+        self.dest_path = dest_path
         if dest_path is not None:
             dest_path = pathlib.Path(dest_path)
             if dest_path.is_absolute():
                 raise ValueError("if provided, dest_path must be relative")
             if identifier is None:
-                identifier = dest_path.as_posix()
+                identifier = urllib.parse.quote(dest_path.as_posix())
         elif identifier is None:
             if not isinstance(source, (str, pathlib.Path)):
                 raise ValueError(
                     "dest_path must be provided if source is not a path or URI"
                 )
-            elif is_url(str(source)):
+            elif is_uri(str(source)):
                 identifier = os.path.basename(source) if fetch_remote else str(source)
             else:
                 identifier = "./" if source == "./" else os.path.basename(source)
@@ -355,7 +373,47 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
 
 
 class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
-    pass
+    def write(self, base_path: "Union[str, os.PathLike[str]]") -> "None":
+        base_path_p: "pathlib.Path"
+        if isinstance(base_path, pathlib.Path):
+            base_path_p = base_path
+        else:
+            base_path_p = pathlib.Path(base_path)
+        if self.dest_path is not None:
+            out_file_path = base_path_p / self.dest_path
+        else:
+            out_file_path = base_path_p / self.id
+        if isinstance(self.source, (io.BytesIO, io.StringIO)):
+            out_file_path.parent.mkdir(parents=True, exist_ok=True)
+            mode = "w" + ("b" if isinstance(self.source, io.BytesIO) else "t")
+            with out_file_path.open(mode=mode) as out_file:
+                out_file.write(self.source.getvalue())
+        elif self.source is None:
+            # Allows to record a File entity whose @id does not exist, see #73
+            warnings.warn(f"No source for {self.id}")
+        elif is_uri(str(self.source)):
+            if self.fetch_remote or self.validate_url:
+                with urllib.request.urlopen(str(self.source)) as response:
+                    if self.validate_url:
+                        if isinstance(response, http.client.HTTPResponse):
+                            self._jsonld.update(  # type: ignore[attr-defined]
+                                {
+                                    "contentSize": response.getheader("Content-Length"),
+                                    "encodingFormat": response.getheader(
+                                        "Content-Type"
+                                    ),
+                                }
+                            )
+                        if not self.fetch_remote:
+                            self._jsonld["sdDatePublished"] = iso_now()  # type: ignore[attr-defined]
+                    if self.fetch_remote:
+                        out_file_path.parent.mkdir(parents=True, exist_ok=True)
+                        urllib.request.urlretrieve(response.url, out_file_path)
+                        self._jsonld["contentUrl"] = str(self.source)  # type: ignore[attr-defined]
+        else:
+            out_file_path.parent.mkdir(parents=True, exist_ok=True)
+            if not out_file_path.exists() or not out_file_path.samefile(self.source):
+                shutil.copy(self.source, out_file_path)
 
 
 class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
@@ -474,7 +532,32 @@ class SourceCodeFile(FixedFile):  # type: ignore[misc]
 
 
 class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[misc]
-    pass
+    def write(self, base_path: "Union[str, os.PathLike[str]]") -> "None":
+        if isinstance(base_path, pathlib.Path):
+            base_path_p = base_path
+        else:
+            base_path_p = pathlib.Path(base_path)
+        if self.dest_path is not None:
+            out_path = base_path_p / self.dest_path
+        else:
+            out_path = base_path_p / self.id
+        if self.source is None:
+            pass
+            # out_path.mkdir(parents=True, exist_ok=True)
+        elif is_uri(str(self.source)):
+            if self.validate_url and not self.fetch_remote:
+                with urllib.request.urlopen(str(self.source)) as _:
+                    self._jsonld["sdDatePublished"] = iso_now()  # type: ignore[attr-defined]
+            if self.fetch_remote:
+                self.__get_parts(out_path)  # type: ignore[attr-defined]
+        else:
+            if not pathlib.Path(self.source).exists():
+                raise FileNotFoundError(
+                    errno.ENOENT, os.strerror(errno.ENOENT), str(self.source)
+                )
+            out_path.mkdir(parents=True, exist_ok=True)
+            if not self.crate.source:
+                self.crate._copy_unlisted(self.source, out_path)  # type: ignore[attr-defined]
 
 
 class FixedWorkflow(FixedMixin, rocrate.model.computationalworkflow.ComputationalWorkflow):  # type: ignore[misc]
@@ -764,8 +847,8 @@ class WorkflowRunROCrate:
 
         self.crate: "FixedROCrate"
         self.compLang: "rocrate.model.computerlanguage.ComputerLanguage"
+        self.workflow_type = materializedEngine.instance.workflowType
         self._init_empty_crate_and_ComputerLanguage(
-            materializedEngine.instance.workflowType,
             localWorkflow.langVersion,
             licences,
             crate_pid=crate_pid,
@@ -914,11 +997,11 @@ class WorkflowRunROCrate:
 
     def _init_empty_crate_and_ComputerLanguage(
         self,
-        wf_type: "WorkflowType",
         langVersion: "Optional[Union[EngineVersion, WFLangVersion]]",
         licences: "Sequence[LicenceDescription]",
         crate_pid: "Optional[str]",
     ) -> "None":
+        wf_type = self.workflow_type
         """
         Due the internal synergies between an instance of ComputerLanguage
         and the RO-Crate it is attached to, both of them should be created
@@ -932,25 +1015,25 @@ class WorkflowRunROCrate:
         RO_licences = self._process_licences(licences)
 
         # Add extra terms
-        self.crate.metadata.extra_terms.update(
-            {
-                # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
-                # # Next ones are experimental
-                # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
-                # + ContainerImageAdditionalType.Docker.value,
-                # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
-                # + ContainerImageAdditionalType.Singularity.value,
-                # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
-                # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
-                # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
-                # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
-                "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
-                "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
-                "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
-            }
-        )
+        # self.crate.metadata.extra_terms.update(
+        #    {
+        #        # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
+        #        # # Next ones are experimental
+        #        # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
+        #        # + ContainerImageAdditionalType.Docker.value,
+        #        # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
+        #        # + ContainerImageAdditionalType.Singularity.value,
+        #        # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
+        #        # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
+        #        # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
+        #        # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
+        #        "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
+        #        "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
+        #        "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
+        #    }
+        # )
         self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
-        # self.crate.metadata.extra_contexts.append(WFEXS_TERMS_CONTEXT)
+        self.crate.metadata.extra_contexts.append(WFEXS_TERMS_CONTEXT)
 
         self.compLang = rocrate.model.computerlanguage.ComputerLanguage(
             self.crate,
@@ -1021,20 +1104,20 @@ class WorkflowRunROCrate:
         wrroc_profiles = [
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/process/0.3",
-                properties={"name": "ProcessRun Crate", "version": "0.3"},
+                identifier="https://w3id.org/ro/wfrun/process/0.5",
+                properties={"name": "ProcessRun Crate", "version": "0.5"},
             ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
-                identifier="https://w3id.org/ro/wfrun/workflow/0.3",
-                properties={"name": "Workflow Run Crate", "version": "0.3"},
+                identifier="https://w3id.org/ro/wfrun/workflow/0.5",
+                properties={"name": "Workflow Run Crate", "version": "0.5"},
             ),
             # TODO: This one can be enabled only when proper provenance
             # describing the execution steps is implemented
             # rocrate.model.creativework.CreativeWork(
             #     self.crate,
-            #     identifier="https://w3id.org/ro/wfrun/provenance/0.3",
-            #     properties={"name": "Provenance Run Crate", "version": "0.3"},
+            #     identifier="https://w3id.org/ro/wfrun/provenance/0.5",
+            #     properties={"name": "Provenance Run Crate", "version": "0.5"},
             # ),
             rocrate.model.creativework.CreativeWork(
                 self.crate,
@@ -1359,12 +1442,13 @@ you can find here an almost complete list of the possible ones:
 
             itemInValue0 = in_item.values[0]
             additional_type: "Optional[str]" = None
-            if isinstance(itemInValue0, int):
+            # A bool is an instance of int in Python
+            if isinstance(itemInValue0, bool):
+                additional_type = "Boolean"
+            elif isinstance(itemInValue0, int):
                 additional_type = "Integer"
             elif isinstance(itemInValue0, str):
                 additional_type = "Text"
-            elif isinstance(itemInValue0, bool):
-                additional_type = "Boolean"
             elif isinstance(itemInValue0, float):
                 additional_type = "Float"
             elif isinstance(itemInValue0, MaterializedContent):
@@ -1776,7 +1860,7 @@ you can find here an almost complete list of the possible ones:
         the_file_crate = self.crate.add_file_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
-            dest_path=the_name if do_attach else None,
+            dest_path=the_name,
             clazz=SourceCodeFile if is_soft_source else FixedFile,
         )
         if the_uri is not None:
@@ -1836,8 +1920,14 @@ you can find here an almost complete list of the possible ones:
         # Describe datasets referred from DOIs
         # as in https://github.com/ResearchObject/ro-crate/pull/255/files
 
-        if not os.path.isdir(the_path):
+        if not the_path.is_dir():
             return None, None
+
+        if the_name is not None and not the_name.endswith("/"):
+            the_name = cast("RelPath", the_name + "/")
+
+        if the_alternate_name is not None and not the_alternate_name.endswith("/"):
+            the_alternate_name = cast("RelPath", the_alternate_name + "/")
 
         assert not do_attach or (
             the_name is not None
@@ -1851,7 +1941,7 @@ you can find here an almost complete list of the possible ones:
         crate_dataset = self.crate.add_dataset_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
-            dest_path=the_name if do_attach else None,
+            dest_path=the_name,
             fetch_remote=False,
             validate_url=False,
             # properties=file_properties,
@@ -1880,6 +1970,12 @@ you can find here an almost complete list of the possible ones:
                     the_file_crate = self._add_file_to_crate(
                         the_path=pathlib.Path(the_file.path),
                         the_uri=the_item_uri,
+                        the_name=None
+                        if the_name is None
+                        else cast("RelPath", the_name + the_file.name),
+                        the_alternate_name=None
+                        if the_alternate_name is None
+                        else cast("RelPath", the_alternate_name + the_file.name),
                         the_size=the_file.stat().st_size,
                         do_attach=do_attach,
                     )
@@ -1895,6 +1991,12 @@ you can find here an almost complete list of the possible ones:
                     ) = self._add_directory_as_dataset(
                         the_path=pathlib.Path(the_file.path),
                         the_uri=the_item_uri,
+                        the_name=None
+                        if the_name is None
+                        else cast("RelPath", the_name + the_file.name),
+                        the_alternate_name=None
+                        if the_alternate_name is None
+                        else cast("RelPath", the_alternate_name + the_file.name),
                         do_attach=do_attach,
                     )
                     if the_dir_crate is not None:
@@ -2042,7 +2144,7 @@ you can find here an almost complete list of the possible ones:
         the_workflow_crate = self.crate.add_workflow_ext(
             identifier=the_id,
             source=the_path if do_attach else None,
-            dest_path=the_name if do_attach else None,
+            dest_path=the_name,
             main=main,
             lang=lang,
             gen_cwl=gen_cwl,
@@ -2144,7 +2246,7 @@ you can find here an almost complete list of the possible ones:
             the_workflow_crate["url"] = wf_url
 
         if the_workflow.relPathFiles:
-            rel_entities: "MutableSequence[Union[FixedFile, rocrate.model.creativework.CreativeWork]]" = (
+            rel_entities: "MutableSequence[Union[FixedFile, rocrate.model.creativework.CreativeWork, FixedDataset]]" = (
                 []
             )
             for rel_file in the_workflow.relPathFiles:
@@ -2154,7 +2256,7 @@ you can find here an almost complete list of the possible ones:
 
                 # First, are we dealing with relative files or with URIs?
                 p_rel_file = urllib.parse.urlparse(rel_file)
-                the_entity: "Union[FixedFile, rocrate.model.creativework.CreativeWork]"
+                the_entity: "Union[FixedFile, rocrate.model.creativework.CreativeWork, FixedDataset]"
                 if p_rel_file.scheme != "":
                     the_entity = rocrate.model.creativework.CreativeWork(
                         self.crate,
@@ -2170,14 +2272,37 @@ you can find here an almost complete list of the possible ones:
                         os.path.join(the_workflow.dir, rel_file),
                         self.staged_setup.workflow_dir,
                     )
-                    the_entity = self._add_file_to_crate(
-                        the_path=pathlib.Path(the_workflow.dir) / rel_file,
-                        the_name=the_s_name,
-                        the_alternate_name=cast("RelPath", the_alternate_name),
-                        the_uri=cast("URIType", rocrate_file_id),
-                        do_attach=do_attach,
-                        is_soft_source=True,
-                    )
+                    abs_file = pathlib.Path(the_workflow.dir) / rel_file
+                    if abs_file.is_file():
+                        the_entity = self._add_file_to_crate(
+                            the_path=abs_file,
+                            the_name=the_s_name,
+                            the_alternate_name=cast("RelPath", the_alternate_name),
+                            the_uri=cast("URIType", rocrate_file_id),
+                            do_attach=do_attach,
+                            is_soft_source=True,
+                        )
+                    elif abs_file.is_dir():
+                        (
+                            the_possible_entity,
+                            the_files_within_the_entity,
+                        ) = self._add_directory_as_dataset(
+                            the_path=abs_file,
+                            the_name=the_s_name,
+                            the_alternate_name=cast("RelPath", the_alternate_name),
+                            the_uri=cast("URIType", rocrate_file_id),
+                            do_attach=do_attach,
+                        )
+                        if the_possible_entity is None:
+                            raise ROCrateGenerationException(
+                                f"Unable to include {abs_file} directory into the RO-Crate being generated"
+                            )
+
+                        the_entity = the_possible_entity
+                    else:
+                        raise ROCrateGenerationException(
+                            f"Unable to include {abs_file} into the RO-Crate being generated (unmanaged file object)"
+                        )
 
                 rel_entities.append(the_entity)
 
@@ -2258,11 +2383,23 @@ you can find here an almost complete list of the possible ones:
         inputs: "Sequence[MaterializedInput]",
         environment: "Sequence[MaterializedInput]",
         outputs: "Optional[Sequence[ExpectedOutput]]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> None:
         """
         This method is used for WRROCs with only prospective provenance
         """
-        self.addWorkflowInputs(inputs, are_envvars=False)
+        augmented_inputs: "Sequence[MaterializedInput]"
+        if profiles:
+            augmented_inputs = [
+                MaterializedInput(
+                    name=cast("SymbolicParamName", "-profile"),
+                    values=profiles,
+                ),
+                *inputs,
+            ]
+        else:
+            augmented_inputs = inputs
+        self.addWorkflowInputs(augmented_inputs, are_envvars=False)
 
         if len(environment) > 0:
             self.addWorkflowInputs(environment, are_envvars=True)
@@ -2273,6 +2410,7 @@ you can find here an almost complete list of the possible ones:
     def addWorkflowExecution(
         self,
         stagedExec: "StagedExecution",
+        expected_outputs: "Optional[Sequence[ExpectedOutput]]" = None,
     ) -> None:
         # TODO: Add a new CreateAction for each stagedExec
         # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
@@ -2312,13 +2450,26 @@ you can find here an almost complete list of the possible ones:
 
         crate_action.append_to("actionStatus", {"@id": action_status}, compact=True)
 
+        augmented_inputs: "Sequence[MaterializedInput]"
+        if stagedExec.profiles:
+            # Profiles are represented as this custom parameter
+            # assuming no parameter name can start with a minus
+            augmented_inputs = [
+                MaterializedInput(
+                    name=cast("SymbolicParamName", "-profile"),
+                    values=stagedExec.profiles,
+                ),
+                *stagedExec.augmentedInputs,
+            ]
+        else:
+            augmented_inputs = stagedExec.augmentedInputs
         crate_inputs = self.addWorkflowInputs(
-            stagedExec.augmentedInputs,
+            augmented_inputs,
             are_envvars=False,
         )
         crate_action["object"] = crate_inputs
 
-        # Add environment, according to WRROC 0.4
+        # Add environment, according to WRROC 0.5
         if len(stagedExec.environment) > 0:
             crate_envvars = self.addWorkflowInputs(
                 stagedExec.environment,
@@ -2330,8 +2481,93 @@ you can find here an almost complete list of the possible ones:
         # see https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate#adding-engine-specific-traces
         # TODO: Add "augmented environment variables"
 
+        augmented_outputs: "Sequence[MaterializedOutput]"
+        if not self.workflow_type.has_explicit_outputs:
+            if expected_outputs is None:
+                expected_outputs = []
+            expected_outputs_h: "Mapping[str, ExpectedOutput]" = {
+                expected_output.name: expected_output
+                for expected_output in expected_outputs
+            }
+            # This code is needed to heal old nextflow-like executions.
+            # First, identify what it should be transferred,
+            # in case it does not appear yet
+            not_synthetic_inputs: "MutableMapping[str, MaterializedInput]" = {}
+            for augmented_input in stagedExec.augmentedInputs:
+                if augmented_input.autoFilled:
+                    not_synthetic_inputs[augmented_input.name] = augmented_input
+
+            the_augmented_outputs: "MutableSequence[MaterializedOutput]" = []
+            for mat_output in stagedExec.matCheckOutputs:
+                if (
+                    mat_output.name not in not_synthetic_inputs
+                    and mat_output.syntheticOutput is None
+                ):
+                    augmented_output = mat_output._replace(syntheticOutput=True)
+                else:
+                    del not_synthetic_inputs[mat_output.name]
+                    augmented_output = mat_output
+
+                the_augmented_outputs.append(augmented_output)
+
+            # What it is still in not_synthetic_inputs is what
+            # it has to be injected as an output
+            for augmented_input in not_synthetic_inputs.values():
+                preferred_filename: "Optional[RelPath]" = None
+                expected_output = expected_outputs_h.get(augmented_input.name)
+                if expected_output is not None:
+                    preferred_filename = expected_output.preferredFilename
+
+                assert len(augmented_input.values) > 0
+                if isinstance(augmented_input.values[0], MaterializedContent):
+                    kind = augmented_input.values[0].kind
+                elif isinstance(augmented_input.values[0], str):
+                    # It is a bare path (sigh, technical debt)
+                    the_path = augmented_input.values[0]
+                    assert os.path.exists(the_path)
+                    kind = (
+                        ContentKind.Directory
+                        if os.path.isdir(the_path)
+                        else ContentKind.File
+                    )
+                else:
+                    raise ROCrateGenerationException(
+                        "Unexpected type of augmented input for expected output healing"
+                    )
+
+                non_synthetic_values: "MutableSequence[AbstractGeneratedContent]" = []
+                for mat_content in cast(
+                    "Sequence[Union[str, MaterializedContent]]", augmented_input.values
+                ):
+                    non_synthetic_values.append(
+                        MaterializedContent2AbstractGeneratedContent(
+                            mat_content, preferred_filename
+                        )
+                        if isinstance(mat_content, MaterializedContent)
+                        else Path2AbstractGeneratedContent(
+                            pathlib.Path(mat_content), preferred_filename
+                        )
+                    )
+
+                the_augmented_outputs.append(
+                    MaterializedOutput(
+                        name=cast("SymbolicOutputName", augmented_input.name),
+                        kind=kind,
+                        expectedCardinality=WorkflowEngine.GuessedCardinalityMapping[
+                            len(non_synthetic_values) > 1
+                        ],
+                        values=non_synthetic_values,
+                        syntheticOutput=False,
+                        filledFrom=augmented_input.name,
+                    )
+                )
+            augmented_outputs = the_augmented_outputs
+        else:
+            # No healing should be needed
+            augmented_outputs = stagedExec.matCheckOutputs
+
         crate_outputs = self._add_workflow_execution_outputs(
-            stagedExec.matCheckOutputs,
+            augmented_outputs,
             rel_work_dir=stagedExec.outputsDir,
         )
 
@@ -2524,12 +2760,12 @@ you can find here an almost complete list of the possible ones:
                 )
             elif len(out_item.values) > 0:
                 itemOutValue0 = out_item.values[0]
-                if isinstance(itemOutValue0, int):
+                if isinstance(itemOutValue0, bool):
+                    additional_type = "Boolean"
+                elif isinstance(itemOutValue0, int):
                     additional_type = "Integer"
                 elif isinstance(itemOutValue0, str):
                     additional_type = "Text"
-                elif isinstance(itemOutValue0, bool):
-                    additional_type = "Boolean"
                 elif isinstance(itemOutValue0, float):
                     additional_type = "Float"
 
@@ -2756,7 +2992,7 @@ you can find here an almost complete list of the possible ones:
             crate_dataset = self.crate.add_dataset_ext(
                 identifier=the_id,
                 source=the_content.local if do_attach else None,
-                dest_path=dest_path if do_attach else None,
+                dest_path=dest_path,
                 fetch_remote=False,
                 validate_url=False,
                 # properties=file_properties,

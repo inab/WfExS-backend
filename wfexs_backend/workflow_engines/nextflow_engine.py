@@ -298,8 +298,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.nxf_profile: "Sequence[str]"
         if isinstance(nxf_profile, list):
             self.nxf_profile = nxf_profile
+        elif isinstance(nxf_profile, str):
+            split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+            self.nxf_profile = split_by_comma.split(nxf_profile)
         else:
-            self.nxf_profile = [cast("str", nxf_profile)]
+            # It should not happen
+            self.nxf_profile = [str(nxf_profile)]
 
         # Setting the assets directory
         self.nxf_assets = os.path.join(self.engineTweaksDir, "assets")
@@ -534,7 +538,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                     putativeEngineVerVal[1]
                                 )
                                 if matched:
-                                    if engineVer is None or engineVer < matched.group(
+                                    if engineVer is None or engineVer <= matched.group(
                                         1
                                     ):
                                         engineVer = cast(
@@ -686,6 +690,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
             newNxfScripts = nextNxfScripts
 
         candidateNf = cast("RelPath", os.path.relpath(entrypoint, nfDir))
+
+        # Last, as there is no safe way to learn about other needed
+        # files and directories, just include all the ones which are not
+        # hidden. In previous iterations the code was looking for bin,
+        # templates, lib and nextflow_schema.json , in part based on
+        # https://training.nextflow.io/advanced/structure/
+        # But real life workflows were using local files and directories
+        # relative to the workflow directory, from custom locations.
+        for child in nfDir.iterdir():
+            if child.name.startswith("."):
+                continue
+            if child.name not in nxfScripts:
+                nxfScripts.append(cast("RelPath", child.name))
 
         # The engine version should be used to create the id of the workflow language
         return engineVer, LocalWorkflow(
@@ -1336,6 +1353,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         matWorkflowEngine: "MaterializedWorkflowEngine",
         consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. In the case
@@ -1348,8 +1366,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
         # nextflow config -flat
         localWf = matWorkflowEngine.workflow
         nxf_params = ["config", "-flat"]
-        if self.nxf_profile:
-            nxf_params.extend(["-profile", ",".join(self.nxf_profile)])
+        if profiles is None:
+            profiles = self.nxf_profile
+        if profiles:
+            nxf_params.extend(["-profile", ",".join(profiles)])
         else:
             nxf_params.extend(["-show-profiles"])
         nxf_params.append(localWf.dir.as_posix())
@@ -1427,9 +1447,13 @@ STDERR
             if not relNxfScript.endswith(".nf"):
                 continue
 
-            nxfScript = os.path.normpath(os.path.join(nfDir, relNxfScript))
+            nxfScript = (nfDir / relNxfScript).resolve(strict=False)
+            # If it is an special directory, skip it!
+            if nxfScript.is_dir():
+                continue
+
             self.logger.debug(f"Searching container declarations at {relNxfScript}")
-            with open(nxfScript, encoding="utf-8") as wfH:
+            with nxfScript.open(mode="rt", encoding="utf-8") as wfH:
                 # This is needed for multi-line pattern matching
                 content = wfH.read()
 
@@ -1603,6 +1627,7 @@ STDERR
         matInputs: "Sequence[MaterializedInput]",
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "StagedExecution":
         # TODO: implement usage of materialized environment variables
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
@@ -1874,10 +1899,12 @@ wfexs_allParams()
         ]
 
         profile_input: "Optional[MaterializedInput]" = None
-        if self.nxf_profile:
+        if profiles is None:
+            profiles = self.nxf_profile
+        if profiles:
             profile_input = MaterializedInput(
                 name=cast("SymbolicParamName", "-profile"),
-                values=[",".join(self.nxf_profile)],
+                values=[",".join(profiles)],
             )
             nxf_params.extend(
                 [profile_input.name, cast("str", profile_input.values[0])]
@@ -1947,4 +1974,5 @@ wfexs_allParams()
                 cast("RelPath", os.path.relpath(stdoutFilename, self.workDir)),
                 cast("RelPath", os.path.relpath(stderrFilename, self.workDir)),
             ],
+            profiles=profiles,
         )

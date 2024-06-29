@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import dataclasses
 import json
 import os
 import os.path
@@ -44,6 +45,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Mapping,
+        MutableMapping,
         MutableSequence,
         Optional,
         Sequence,
@@ -405,56 +407,28 @@ STDERR
             # Assuming it is docker
             isDocker = True
 
-        # Should we enrich the tag with the registry?
-        if (
-            isDocker
-            and isinstance(tag.registries, dict)
-            and (common.ContainerType.Docker in tag.registries)
-        ):
-            registry = tag.registries[common.ContainerType.Docker]
-            # Bare case
-            if len(parsedTag.path) <= 1:
-                singTag = f"docker://{registry}/library/{parsedTag.netloc}"
-                parsedTag = parse.urlparse(singTag)
-            elif "/" not in parsedTag.path[1:]:
-                singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
-                parsedTag = parse.urlparse(singTag)
-            # Last case, it already has a registry declared
-        # It is not an absolute URL, we are prepending the docker://
-        tag_name = tag.origTaggedName
-        parsedTag = parse.urlparse(tag_name)
-        if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
-            singTag = tag_name
-            isDocker = parsedTag.scheme == DOCKER_SCHEME
-        else:
-            if parsedTag.scheme == "":
-                singTag = "docker://" + tag_name
-                parsedTag = parse.urlparse(singTag)
-            else:
-                parsedTag = parsedTag._replace(
-                    scheme=DOCKER_SCHEME,
-                    netloc=parsedTag.scheme + ":" + parsedTag.path,
-                    path="",
-                )
-                singTag = parse.urlunparse(parsedTag)
-            # Assuming it is docker
-            isDocker = True
-
-        # Should we enrich the tag with the registry?
-        if (
-            isDocker
-            and isinstance(tag.registries, dict)
-            and (common.ContainerType.Docker in tag.registries)
-        ):
-            registry = tag.registries[common.ContainerType.Docker]
-            # Bare case
-            if len(parsedTag.path) <= 1:
-                singTag = f"docker://{registry}/library/{parsedTag.netloc}"
-                parsedTag = parse.urlparse(singTag)
-            elif "/" not in parsedTag.path[1:]:
-                singTag = f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
-                parsedTag = parse.urlparse(singTag)
-            # Last case, it already has a registry declared
+        registries = tag.registries
+        if isDocker:
+            if registries is None:
+                registries = {
+                    common.ContainerType.Docker: DEFAULT_DOCKER_REGISTRY,
+                }
+            # Should we enrich the tag with the registry?
+            registry = registries.get(common.ContainerType.Docker)
+            if registry is not None:
+                # Bare case
+                if len(parsedTag.path) <= 1:
+                    singTag = f"docker://{registry}/library/{parsedTag.netloc}"
+                    parsedTag = parse.urlparse(singTag)
+                elif "/" not in parsedTag.path[1:]:
+                    if "." in parsedTag.netloc:
+                        singTag = f"docker://{parsedTag.netloc}/library{parsedTag.path}"
+                    else:
+                        singTag = (
+                            f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
+                        )
+                    parsedTag = parse.urlparse(singTag)
+                # Last case, it already has a registry declared
 
         # Now, the singPullTag
         if isDocker and isinstance(tag, Container) and tag.fingerprint is not None:
@@ -526,6 +500,7 @@ STDERR
 
         tag_name = tag.origTaggedName
         singTag, parsedTag, singPullTag, isDocker = self._genSingTag(tag)
+        singPullTagOrig = singPullTag
 
         fetch_metadata = True
         trusted_copy = False
@@ -614,6 +589,15 @@ STDERR
                 singPullTag, tmpContainerPath, matEnv
             )
 
+            if s_retval != 0 and singPullTag != singTag:
+                self.logger.warning(
+                    f"Unable to pull {singPullTag}. Degrading to {singTag}"
+                )
+                singPullTag = singTag
+                s_retval, s_out_v, s_err_v = self._pull(
+                    singTag, tmpContainerPath, matEnv
+                )
+
             # Reading the output and error for the report
             if s_retval == 0:
                 if not tmpContainerPath.exists():
@@ -627,7 +611,7 @@ STDERR
                 imageSignature = self.cc_handler._computeFingerprint(tmpContainerPath)
             else:
                 errstr = f"""\
-Could not materialize singularity image {singTag} ({singPullTag}). Retval {s_retval}
+Could not materialize singularity image {singTag} ({singPullTagOrig}). Retval {s_retval}
 ======
 STDOUT
 ======
@@ -647,7 +631,7 @@ STDERR
 
                 return FailedContainerTag(
                     tag=tag_name,
-                    sing_tag=singPullTag,
+                    sing_tag=singTag,
                 )
 
         # At this point we should always have a image signature
@@ -679,12 +663,10 @@ STDERR
             if isDocker:
                 tag_details = dhelp.query_tag(singTag)
                 if tag_details is None:
-                    self.logger.error(f"FALLA {singTag}")
                     return FailedContainerTag(tag=tag_name, sing_tag=singTag)
                 if singTag != singPullTag:
                     tag_pull_details = dhelp.query_tag(singPullTag)
                     if tag_pull_details is None:
-                        self.logger.error(f"CANALLA {singPullTag}")
                         return FailedContainerTag(tag=tag_name, sing_tag=singPullTag)
                 else:
                     tag_pull_details = tag_details
@@ -777,7 +759,7 @@ STDERR
         """
         It is assured the containers are materialized
         """
-        containersList: "MutableSequence[Container]" = []
+        containersHash: "MutableMapping[str, Container]" = {}
         notFoundContainersList: "MutableSequence[FailedContainerTag]" = []
 
         if containers_dir is None:
@@ -793,13 +775,16 @@ STDERR
                 continue
 
             tag_to_use: "ContainerTaggedName" = tag
+            singTag = self.generateCanonicalTag(tag)
+            if singTag in containersHash:
+                continue
             for injectable_container in injectable_containers:
-                if (
-                    injectable_container.origTaggedName == tag.origTaggedName
-                    and injectable_container.source_type == tag.type
-                    and injectable_container.registries == tag.registries
-                ):
+                if injectable_container.source_type != tag.type:
+                    continue
+                inj_tag = self.generateCanonicalTag(injectable_container)
+                if singTag == inj_tag:
                     tag_to_use = injectable_container
+                    self.logger.info(f"Matched injected container {singTag}")
                     break
 
             matched_container: "Union[Container, FailedContainerTag]"
@@ -818,8 +803,9 @@ STDERR
                 )
 
             if isinstance(matched_container, Container):
-                if matched_container not in containersList:
-                    containersList.append(matched_container)
+                matched_tag = self.generateCanonicalTag(matched_container)
+                if matched_tag not in containersHash:
+                    containersHash[matched_tag] = matched_container
             else:
                 notFoundContainersList.append(matched_container)
 
@@ -834,7 +820,7 @@ STDERR
                 )
             )
 
-        return containersList
+        return list(containersHash.values())
 
     def deploySingleContainer(
         self,
@@ -886,11 +872,33 @@ STDERR
         try:
             with containerPathMeta.open(mode="r", encoding="utf-8") as mH:
                 signaturesAndManifest = cast("SingularityManifest", json.load(mH))
-                imageSignature_in_metadata = signaturesAndManifest["image_signature"]
+                imageSignature_in_metadata = signaturesAndManifest.get(
+                    "image_signature"
+                )
+                # Degraded paths
+                if imageSignature_in_metadata is None and isinstance(
+                    container, Container
+                ):
+                    imageSignature_in_metadata = container.image_signature
+                # Last resort
+                if imageSignature_in_metadata is None:
+                    imageSignature_in_metadata = self.cc_handler._computeFingerprint(
+                        containerPath
+                    )
 
                 if isinstance(container, Container):
-                    # Reuse the input container instance
-                    rebuilt_container = container
+                    if was_redeployed:
+                        rebuilt_container = dataclasses.replace(
+                            container,
+                            signature=imageSignature_in_metadata,
+                            architecture=self._getContainerArchitecture(containerPath),
+                            localPath=containerPath,
+                            metadataLocalPath=containerPathMeta,
+                            image_signature=imageSignature_in_metadata,
+                        )
+                    else:
+                        # Reuse the input container instance
+                        rebuilt_container = container
                 else:
                     singTag, parsedTag, singPullTag, isDocker = self._genSingTag(
                         container
@@ -947,3 +955,10 @@ STDERR
             raise ContainerFactoryException(errmsg)
 
         return rebuilt_container, was_redeployed
+
+    def generateCanonicalTag(self, container: "ContainerTaggedName") -> "str":
+        """
+        It provides a way to help comparing two container tags
+        """
+        retval, _, _, _ = self._genSingTag(container)
+        return retval

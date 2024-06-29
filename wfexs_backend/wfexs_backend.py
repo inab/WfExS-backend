@@ -289,7 +289,7 @@ class WfExSBackend:
         )
 
     @classmethod
-    def bootstrap(
+    def bootstrap_config(
         cls,
         local_config_ro: "WfExSConfigBlock",
         config_directory: "Optional[AnyPath]" = None,
@@ -311,7 +311,7 @@ class WfExSBackend:
         valErrors = config_validate(local_config_ro, cls.CONFIG_SCHEMA)
         if len(valErrors) > 0:
             logging.error(
-                f"ERROR on incoming local configuration block for bootstrap: {valErrors}"
+                f"ERROR on incoming local configuration block for bootstrap config: {valErrors}"
             )
             sys.exit(1)
 
@@ -459,9 +459,21 @@ class WfExSBackend:
             stacklevel=2,
         )
 
-        _, updated_local_config, config_directory = cls.bootstrap(
+        _, updated_local_config, config_directory = cls.bootstrap_config(
             local_config, config_directory=config_directory
         )
+
+        profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get("profile")
+        enabled_profiles: "Optional[Sequence[str]]" = None
+        if profiles is not None:
+            if isinstance(profiles, list):
+                enabled_profiles = profiles
+            elif isinstance(profiles, str):
+                split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                enabled_profiles = split_by_comma.split(profiles)
+            else:
+                # It should not happen
+                enabled_profiles = [str(profiles)]
 
         return cls(updated_local_config, config_directory=config_directory).newSetup(
             workflow_meta["workflow_id"],
@@ -469,6 +481,7 @@ class WfExSBackend:
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=workflow_meta.get("trs_endpoint", WF.DEFAULT_TRS_ENDPOINT),
             params=workflow_meta.get("params", {}),
+            enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", {}),
             outputs=workflow_meta.get("outputs", {}),
             default_actions=workflow_meta.get("default_actions", []),
@@ -499,7 +512,9 @@ class WfExSBackend:
 
         if not isinstance(local_config, dict):
             # Minimal bootstrapping for embedded cases
-            _, local_config, config_directory = self.bootstrap({}, config_directory)
+            _, local_config, config_directory = self.bootstrap_config(
+                {}, config_directory
+            )
 
         # validate the local configuration object
         valErrors = config_validate(local_config, self.CONFIG_SCHEMA)
@@ -1123,6 +1138,7 @@ class WfExSBackend:
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "str" = WF.DEFAULT_TRS_ENDPOINT,
         params: "Optional[ParamsBlock]" = None,
+        enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
         outputs: "Optional[OutputsBlock]" = None,
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
@@ -1142,6 +1158,7 @@ class WfExSBackend:
             descriptor_type=descriptor_type,
             trs_endpoint=trs_endpoint,
             params=params,
+            enabled_profiles=enabled_profiles,
             environment=environment,
             outputs=outputs,
             default_actions=default_actions,

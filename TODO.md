@@ -65,7 +65,7 @@ references to the inputs, that we are going to use to instantiate the workflows.
   
   - [x] **Step 9.d**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate (only metadata).
 
-  - [ ] **Step 9.e**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate (reusing payloads).
+  - [x] **Step 9.e**: Add full circle capabilities. Re-execute workflow with the very same parameters from previously generated RO-Crate (reusing payloads).
 
 
 ## Other features

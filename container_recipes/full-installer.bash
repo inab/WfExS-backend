@@ -17,33 +17,35 @@
 
 # These are the software versions being installed
 # in the virtual environment
-JDK_MAJOR_VER=11
-JDK_VER=${JDK_MAJOR_VER}.0.11
-JDK_REV=9
-OPENJ9_VER=0.26.0
+: ${JDK_MAJOR_VER:=11}
+: ${JDK_VER:=${JDK_MAJOR_VER}.0.11}
+: ${JDK_REV:=9}
+: ${OPENJ9_VER:=0.26.0}
 
-GO_VER=1.17.13
-GOCRYPTFS_VER=v2.3.1
-STATIC_BASH_VER=5.1.004-1.2.2
-BUSYBOX_VER=1.35.0
+: ${GO_VER:=1.17.13}
+: ${GOCRYPTFS_VER:=v2.4.0}
+: ${STATIC_BASH_VER:=5.1.004-1.2.2}
+: ${BUSYBOX_VER:=1.35.0}
 
 # Getting the installation directory
-wfexsDir="$(dirname "$0")"
-case "${wfexsDir}" in
+scriptDir="$(dirname "$0")"
+case "${scriptDir}" in
 	/*)
 		# Path is absolute
 		true
 		;;
 	*)
 		# Path is relative
-		wfexsDir="$(readlink -f "${wfexsDir}")"
+		scriptDir="$(readlink -f "${scriptDir}")"
 		;;
 esac
 
 failed=
 for cmd in mktemp ; do
+	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
+	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
 		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
@@ -66,7 +68,13 @@ cleanup() {
 	rm -rf "${downloadDir}"
 }
 
-trap cleanup EXIT ERR
+cleanuperr() {
+	cleanup
+	exit 1
+}
+
+trap cleanup EXIT
+trap cleanuperr ERR
 
 set -eu
 
@@ -76,11 +84,9 @@ declare -a input_params=( "$@" )
 if [ $# -gt 0 ]; then
 	shift $#
 fi
-source "${wfexsDir}/basic-installer.bash"
-
-GO_VER=1.17.13
-
-
+trap - ERR
+source "${scriptDir}/basic-installer.bash"
+trap cleanuperr ERR
 
 declare -A archesJDK=(
 	[x86_64]=x64
@@ -147,10 +153,8 @@ else
 	gocryptfs_url="https://github.com/rfjakob/gocryptfs/releases/download/${GOCRYPTFS_VER}/gocryptfs_${GOCRYPTFS_VER}_${platformOS}-static_${platformArchGO}.tar.gz"
 	echo "Installing static gocryptfs ${GOCRYPTFS_VER} from ${gocryptfs_url}"
 	set +e
-	trap - ERR
 	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${gocryptfs_url}" && tar -x -C "${envDir}/bin" -f "${downloadDir}"/gocryptfs*.tar.gz )
 	retval=$?
-	trap cleanup ERR
 	set -e
 	if [ "$retval" -ne 0 ] ; then
 		# Get compiler
@@ -168,10 +172,10 @@ if [ -x "${envDir}/bin/${staticBash}" ] ; then
 else
 	static_bash_url="https://github.com/robxu9/bash-static/releases/download/${STATIC_BASH_VER}/${staticBash}"
 	echo "Installing static bash ${STATIC_BASH_VER} from ${static_bash_url}"
-	trap - ERR
-	( cd "${downloadDir}" && curl -f -L -O "${static_bash_url}" )
+	set +e
+	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${static_bash_url}" )
 	retval=$?
-	trap cleanup ERR
+	set -e
 	if [ "$retval" -eq 0 ] ; then
 		mv "${downloadDir}/${staticBash}" "${envDir}/bin/${staticBash}"
 		chmod +x "${envDir}/bin/${staticBash}"
@@ -188,10 +192,10 @@ for binName in ps ; do
 	else
 		static_bin_url="https://busybox.net/downloads/binaries/${BUSYBOX_VER}-${platformSuffixRev}-musl/busybox_${binName^^}"
 		echo "Installing busybox ${binName} ${BUSYBOX_VER} from ${static_bin_url}"
-		trap - ERR
-		( cd "${downloadDir}" && curl -f -L -o "${staticBin}" "${static_bin_url}" )
+		set +e
+		( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -o "${staticBin}" "${static_bin_url}" )
 		retval=$?
-		trap cleanup ERR
+		set -e
 		if [ "$retval" -eq 0 ] ; then
 			mv "${downloadDir}/${staticBin}" "${envDir}/bin/${staticBin}"
 			chmod +x "${envDir}/bin/${staticBin}"

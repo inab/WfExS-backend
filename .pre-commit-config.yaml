@@ -85,9 +85,15 @@ repos:
         args: [ wfexs_backend/schemas ]
 
   - repo: https://github.com/jmfernandez/pre-commit_mirrors-actionlint.git
-    rev: v1.6.25
+    rev: v1.7.1
     hooks:
       - id: actionlint
+
+  - repo: https://github.com/jmfernandez/pre-commit_mirrors-hadolint.git
+    rev: v2.12.0
+    hooks:
+      - id: hadolint
+        args: [ -t, warning]
 
   - repo: https://github.com/ambv/black.git
     rev: 23.3.0

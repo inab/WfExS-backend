@@ -108,3 +108,9 @@ class NoContainerFactory(ContainerFactory):
         assert isinstance(container, Container)
 
         return container, False
+
+    def generateCanonicalTag(self, container: "ContainerTaggedName") -> "str":
+        """
+        This is a no-op
+        """
+        return container.origTaggedName

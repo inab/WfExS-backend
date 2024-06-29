@@ -399,6 +399,12 @@ class CWLWorkflowEngine(WorkflowEngine):
             cwltoolPackage = self.DEVEL_CWLTOOL_PACKAGE
             cwltoolMatchOp = "@"
             inst_engineVersion = engineVersion[len(self.DEVEL_CWLTOOL_PACKAGE) + 1 :]
+        elif engineVersion.startswith("git+https") and "@" in engineVersion:
+            # This is for foreign development versions of cwltool
+            at_place = engineVersion.find("@")
+            cwltoolPackage = engineVersion[0:at_place]
+            cwltoolMatchOp = "@"
+            inst_engineVersion = engineVersion[at_place + 1 :]
         else:
             cwltoolPackage = self.CWLTOOL_PYTHON_PACKAGE
             cwltoolMatchOp = "=="
@@ -693,6 +699,7 @@ STDERR
         matWorkflowEngine: "MaterializedWorkflowEngine",
         consolidatedWorkflowDir: "AbsPath",
         offline: "bool" = False,
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. In the case
@@ -920,6 +927,7 @@ STDERR
         matInputs: "Sequence[MaterializedInput]",
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
+        profiles: "Optional[Sequence[str]]" = None,
     ) -> "StagedExecution":
         """
         Method to execute the workflow
