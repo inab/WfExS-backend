@@ -49,6 +49,7 @@ from typing import (
 
 from .common import (
     ContainerType,
+    ContentWithURIsDesc,
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
     NoCratableItem,
@@ -419,6 +420,11 @@ class ExportActionException(AbstractWfExSException):
 
 class WFWarning(UserWarning):
     pass
+
+
+ContentWithURIsMIMEs = {
+    "tabular": "text/csv",
+}
 
 
 class WF:
@@ -2858,10 +2864,15 @@ class WF:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
     ) -> "Tuple[Sequence[MaterializedInput], int, Sequence[str]]":
-        tabconf = inputs.get("tabular")
-        if not isinstance(tabconf, dict):
+        # Current code for ContentWithURIs is only implemented for
+        # tabular contents
+        config_key = "tabular"
+
+        tabconf = inputs.get(config_key)
+        encoding_format = ContentWithURIsMIMEs.get(config_key)
+        if not isinstance(tabconf, dict) or not isinstance(encoding_format, str):
             raise WFException(
-                f"Content with uris {linearKey} must have 'tabular' declaration"
+                f"Content with uris {linearKey} must have a declaration of these types: {', '.join(ContentWithURIsMIMEs.keys())}"
             )
 
         t_newline: "str" = (
@@ -3035,9 +3046,13 @@ class WF:
                             t_secondary_remote_pair.licensed_uri.uri
                             in these_secondary_uris
                         ):
-                            secondary_uri_mapping[
-                                t_secondary_remote_pair.licensed_uri.uri
-                            ] = t_secondary_remote_pair.local
+                            mapping_key = t_secondary_remote_pair.licensed_uri.uri
+                        else:
+                            mapping_key = cast("URIType", secondary_remote_file)
+
+                        secondary_uri_mapping[
+                            mapping_key
+                        ] = t_secondary_remote_pair.local
 
                 # Now, reopen each file to replace URLs by paths
                 for i_remote_pair, remote_pair in enumerate(remote_pairs):
@@ -3092,11 +3107,24 @@ class WF:
             else:
                 secondary_remote_pairs = None
 
+            # If more than one URI is provided, due some limitations more
+            # than one MaterializedInput instance is emitted associated to
+            # the very same linearKey. Each one of them will be represented
+            # as a collection in the generated Workflow Run RO-Crate
             theNewInputs.append(
                 MaterializedInput(
                     name=linearKey,
                     values=remote_pairs,
                     secondaryInputs=secondary_remote_pairs,
+                    contentWithURIs=ContentWithURIsDesc(
+                        encodingFormat=encoding_format,
+                        setup={
+                            "headerRows": t_skiplines,
+                            "rowSep": t_newline,
+                            "columnSep": t_split,
+                            "uriColumns": t_uri_cols,
+                        },
+                    ),
                 )
             )
 
