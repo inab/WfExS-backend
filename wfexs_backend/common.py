@@ -401,6 +401,32 @@ if TYPE_CHECKING:
     ]
 
 
+if TYPE_CHECKING:
+
+    class ContentWithURIsSetup(TypedDict):
+        """
+        headerRows: Number of header rows
+        rowSep: Line separator
+        columnSep: Expression used to break a line into its column values
+        uriColumns: The 0-based numbers of the columns containing URIs to be fetched
+        """
+
+        headerRows: "int"
+        rowSep: "str"
+        columnSep: "str"
+        uriColumns: "Sequence[int]"
+
+
+class ContentWithURIsDesc(NamedTuple):
+    """
+    encodingFormat: the kind of content with URIs (currently implemented is text/csv => tabular)
+    setup: The dictionary describing the setup
+    """
+
+    encodingFormat: "str"
+    setup: "ContentWithURIsSetup"
+
+
 class MaterializedInput(NamedTuple):
     """
     name: Name of the input
@@ -413,6 +439,7 @@ class MaterializedInput(NamedTuple):
     secondaryInputs: "Optional[Sequence[MaterializedContent]]" = None
     autoFilled: "bool" = False
     implicit: "bool" = False
+    contentWithURIs: "Optional[ContentWithURIsDesc]" = None
 
 
 if TYPE_CHECKING:
