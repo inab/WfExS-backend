@@ -202,6 +202,14 @@ CONTAINER_DOCKERIMAGE_SHORT: "Final[str]" = "DockerImage"
 CONTAINER_SIFIMAGE_SHORT: "Final[str]" = "SIFImage"
 
 
+ContentWithURIsMIMEs = {
+    "tabular": "text/csv",
+}
+
+
+RevContentWithURIsMIMEs = dict((v, k) for k, v in ContentWithURIsMIMEs.items())
+
+
 class ContainerImageAdditionalType(enum.Enum):
     Docker = WORKFLOW_RUN_NAMESPACE + CONTAINER_DOCKERIMAGE_SHORT
     Singularity = WORKFLOW_RUN_NAMESPACE + CONTAINER_SIFIMAGE_SHORT
@@ -631,7 +639,7 @@ WHERE   {
     {
         ?execution wrterm:containerImage ?source_container .
     } UNION {
-        ?entity s:softwareAddOn ?source_container.
+        ?entity s:softwareAddOn|s:softwareRequirements ?source_container.
     }
     ?source_container
         a wrterm:ContainerImage ;
@@ -719,14 +727,20 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_size ?file_sha256
+SELECT DISTINCT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_size ?file_sha256 ?encoding_format ?content_with_uris ?header_rows ?row_sep ?column_sep ?uri_columns
 WHERE   {
     ?main_entity bsworkflow:input ?inputfp .
     ?inputfp
         a bs:FormalParameter ;
         s:name ?name ;
-        s:additionalType ?additional_type ;
-        s:workExample ?input .
+        s:additionalType ?additional_type .
+
+    {
+        ?input s:exampleOfWork ?inputfp .
+    } UNION {
+        ?inputfp s:workExample ?input .
+    }
+
     {
         # A file, which is a schema.org MediaObject
         ?input
@@ -760,7 +774,33 @@ WHERE   {
             s:hasPart+ ?component .
         ?component
             a ?leaf_type .
+        FILTER NOT EXISTS { ?inputfp wfexsterm:contentWithURIs ?content_with_uris }
         BIND (?component AS ?fileid)
+    } UNION {
+        # A combination of files or directories or property values
+        ?input
+            a s:Collection ;
+            s:mainEntity ?extrapolated_input .
+        ?inputfp
+            s:encodingFormat ?encoding_format ;
+            wfexsterm:contentWithURIs ?content_with_uris ;
+            wfexsterm:headerRows ?header_rows ;
+            wfexsterm:rowSep ?row_sep ;
+            wfexsterm:columnSep ?column_sep .
+        # It is an all or nothing situation
+        {{
+            SELECT ?inputfp (GROUP_CONCAT(?uri_column ; SEPARATOR=";") AS ?uri_columns)
+            WHERE {
+                ?inputfp wfexsterm:uriColumns ?uri_column .
+            } GROUP BY ?inputfp
+        }}
+        ?extrapolate_action
+            a s:CreateAction ;
+            s:object ?real_input ;
+            s:result ?extrapolated_input .
+        ?real_input a s:MediaObject .
+
+        BIND (?real_input AS ?fileid)
     }
     OPTIONAL {
         ?fileid s:contentUrl ?fileuri .
@@ -785,14 +825,20 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_WORKFLOW_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
+SELECT DISTINCT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size ?encoding_format ?content_with_uris ?header_rows ?row_sep ?column_sep ?uri_columns
 WHERE   {
     ?main_entity wrterm:environment ?envfp .
     ?envfp
         a bs:FormalParameter ;
         s:name ?name ;
-        s:additionalType ?additional_type ;
-        s:workExample ?env .
+        s:additionalType ?additional_type .
+
+    {
+        ?env s:exampleOfWork ?envfp .
+    } UNION {
+        ?envfp s:workExample ?env .
+    }
+
     {
         # A file, which is a schema.org MediaObject
         ?env
@@ -830,7 +876,33 @@ WHERE   {
             s:hasPart+ ?component .
         ?component
             a ?leaf_type .
+        FILTER NOT EXISTS { ?envfp wfexsterm:contentWithURIs ?content_with_uris }
         BIND (?component AS ?fileid)
+    } UNION {
+        # A combination of files or directories or property values
+        ?env
+            a s:Collection ;
+            s:mainEntity ?extrapolated_input .
+        ?envfp
+            s:encodingFormat ?encoding_format ;
+            wfexsterm:contentWithURIs ?content_with_uris ;
+            wfexsterm:headerRows ?header_rows ;
+            wfexsterm:rowSep ?row_sep ;
+            wfexsterm:columnSep ?column_sep .
+        # It is an all or nothing situation
+        {{
+            SELECT ?envfp (GROUP_CONCAT(?uri_column ; SEPARATOR=";") AS ?uri_columns)
+            WHERE {
+                ?envfp wfexsterm:uriColumns ?uri_column .
+            } GROUP BY ?envfp
+        }}
+        ?extrapolate_action
+            a s:CreateAction ;
+            s:object ?real_input ;
+            s:result ?extrapolated_input .
+        ?real_input a s:MediaObject .
+
+        BIND (?real_input AS ?fileid)
     }
     OPTIONAL {
         ?fileid s:contentUrl ?fileuri .
@@ -884,32 +956,33 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_INPUTS_SPARQL: "Final[str]" = """\
-SELECT  ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
+SELECT DISTINCT ?input ?name ?inputfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size ?encoding_format ?content_with_uris ?header_rows ?row_sep ?column_sep ?uri_columns
 WHERE   {
     ?execution s:object ?input .
+    ?inputfp
+        a bs:FormalParameter ;
+        s:name ?name ;
+        s:additionalType ?additional_type .
+
+    {
+        ?input s:exampleOfWork ?inputfp .
+    } UNION {
+        ?inputfp s:workExample ?input .
+    }
+
     {
         # A file, which is a schema.org MediaObject
         BIND ( "File" AS ?additional_type )
         ?input
-            a s:MediaObject ;
-            s:exampleOfWork ?inputfp .
+            a s:MediaObject .
         BIND (?input AS ?fileid)
-        ?inputfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
     } UNION {
         # A directory, which is a schema.org Dataset
         BIND ( "Dataset" AS ?additional_type )
         ?input
-            a s:Dataset ;
-            s:exampleOfWork ?inputfp .
+            a s:Dataset .
         BIND (?input AS ?fileid)
-        ?inputfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
-        FILTER EXISTS { 
+        FILTER EXISTS {
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
             WHERE { 
@@ -923,28 +996,45 @@ WHERE   {
         # A single property value, which can be either Integer, Text, Boolean or Float
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
         ?input
-            a s:PropertyValue ;
-            s:exampleOfWork ?inputfp .
+            a s:PropertyValue .
         BIND (?input AS ?fileid)
-        ?inputfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
         VALUES ( ?leaf_type ) { ( s:PropertyValue ) ( s:MediaObject ) ( s:Dataset ) }
         ?input
             a s:Collection ;
-            s:exampleOfWork ?inputfp ;
             s:hasPart+ ?component .
-        ?inputfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
         ?component
             a ?leaf_type .
+        FILTER NOT EXISTS { ?inputfp wfexsterm:contentWithURIs ?content_with_uris }
         BIND (?component AS ?fileid)
+    } UNION {
+        # A file which points to other remote files or directories
+        BIND ( "File" AS ?additional_type )
+        ?input
+            a s:Collection ;
+            s:mainEntity ?extrapolated_input .
+        ?inputfp
+            s:encodingFormat ?encoding_format ;
+            wfexsterm:contentWithURIs ?content_with_uris ;
+            wfexsterm:headerRows ?header_rows ;
+            wfexsterm:rowSep ?row_sep ;
+            wfexsterm:columnSep ?column_sep .
+        # It is an all or nothing situation
+        {{
+            SELECT ?inputfp (GROUP_CONCAT(?uri_column ; SEPARATOR=";") AS ?uri_columns)
+            WHERE {
+                ?inputfp wfexsterm:uriColumns ?uri_column .
+            } GROUP BY ?inputfp
+        }}
+        ?extrapolate_action
+            a s:CreateAction ;
+            s:object ?real_input ;
+            s:result ?extrapolated_input .
+        ?real_input a s:MediaObject .
+        
+        BIND (?real_input AS ?fileid)
     }
     OPTIONAL {
         ?fileid s:contentUrl ?fileuri .
@@ -969,33 +1059,34 @@ WHERE   {
     # This compound query is much faster when each of the UNION components
     # is evaluated separately
     OBTAIN_EXECUTION_ENV_SPARQL: "Final[str]" = """\
-SELECT  ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size
+SELECT DISTINCT ?env ?name ?name_env ?envfp ?additional_type ?fileuri ?filepid ?value ?component ?leaf_type ?fileid ?file_sha256 ?file_size ?encoding_format ?content_with_uris ?header_rows ?row_sep ?column_sep ?uri_columns
 WHERE   {
     ?execution wrterm:environment ?env .
+    ?envfp
+        a bs:FormalParameter ;
+        s:name ?name ;
+        s:additionalType ?additional_type .
+
+    {
+        ?env s:exampleOfWork ?envfp .
+    } UNION {
+        ?envfp s:workExample ?env .
+    }
+
     {
         # A file, which is a schema.org MediaObject
         BIND ( "File" AS ?additional_type )
         ?env
             a s:MediaObject ;
-            s:name ?name_env ;
-            s:exampleOfWork ?envfp .
+            s:name ?name_env .
         BIND (?env AS ?fileid)
-        ?envfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
     } UNION {
         # A directory, which is a schema.org Dataset
         BIND ( "Dataset" AS ?additional_type )
         ?env
             a s:Dataset ;
-            s:name ?name_env ;
-            s:exampleOfWork ?envfp .
+            s:name ?name_env .
         BIND (?env AS ?fileid)
-        ?envfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
         FILTER EXISTS { 
             # subquery to determine it is not an empty Dataset
             SELECT ?dircomp
@@ -1011,13 +1102,8 @@ WHERE   {
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) }
         ?env
             a s:PropertyValue ;
-            s:name ?name_env ;
-            s:exampleOfWork ?envfp .
+            s:name ?name_env .
         BIND (?env AS ?fileid)
-        ?envfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
     } UNION {
         # A combination of files or directories or property values
         VALUES (?additional_type) { ( "Integer" ) ( "Text" ) ( "Boolean" ) ( "Float" ) ( "Collection" ) }
@@ -1025,15 +1111,37 @@ WHERE   {
         ?env
             a s:Collection ;
             s:name ?name_env ;
-            s:exampleOfWork ?envfp ;
             s:hasPart+ ?component .
-        ?envfp
-            a bs:FormalParameter ;
-            s:name ?name ;
-            s:additionalType ?additional_type .
         ?component
             a ?leaf_type .
+        FILTER NOT EXISTS { ?envfp wfexsterm:contentWithURIs ?content_with_uris }
         BIND (?component AS ?fileid)
+    } UNION {
+        # A file which points to other remote files or directories
+        BIND ( "File" AS ?additional_type )
+        ?env
+            a s:Collection ;
+            s:mainEntity ?extrapolated_input .
+        ?envfp
+            s:encodingFormat ?encoding_format ;
+            wfexsterm:contentWithURIs ?content_with_uris ;
+            wfexsterm:headerRows ?header_rows ;
+            wfexsterm:rowSep ?row_sep ;
+            wfexsterm:columnSep ?column_sep .
+        # It is an all or nothing situation
+        {{
+            SELECT ?envfp (GROUP_CONCAT(?uri_column ; SEPARATOR=";") AS ?uri_columns)
+            WHERE {
+                ?envfp wfexsterm:uriColumns ?uri_column .
+            } GROUP BY ?envfp
+        }}
+        ?extrapolate_action
+            a s:CreateAction ;
+            s:object ?real_input ;
+            s:result ?extrapolated_input .
+        ?real_input a s:MediaObject .
+        
+        BIND (?real_input AS ?fileid)
     }
     OPTIONAL {
         ?fileid s:contentUrl ?fileuri .
@@ -1743,7 +1851,6 @@ WHERE   {
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
-        # TODO: implement this
         params: "MutableParamsBlock" = {}
         cached_inputs_hash: "MutableMapping[str, MaterializedInput]" = {}
         for inputrow in qinputsres:
@@ -1779,18 +1886,49 @@ WHERE   {
                     valarr = base.setdefault(param_last, [])
 
             # Is it a file or a directory?
+            # Or even better, a ContentWithURIs
             if additional_type in ("File", "Dataset"):
-                kindobj = (
-                    ContentKind.Directory
-                    if additional_type == "Dataset"
-                    else ContentKind.File
-                )
+                self.logger.error(f"BINGO!! {inputrow}")
+                if (
+                    isinstance(inputrow.content_with_uris, rdflib.term.Literal)
+                    and bool(inputrow.content_with_uris.value)
+                    and str(inputrow.encoding_format) in RevContentWithURIsMIMEs
+                ):
+                    kindobj = ContentKind.ContentWithURIs
+                elif additional_type == "Dataset":
+                    kindobj = ContentKind.Directory
+                else:
+                    kindobj = ContentKind.File
+
                 valobj = base.setdefault(
                     param_last,
                     {
                         "c-l-a-s-s": kindobj.name,
                     },
                 )
+
+                # Time to transfer the additional properties
+                if kindobj == ContentKind.ContentWithURIs:
+                    assert isinstance(inputrow.header_rows, rdflib.term.Literal)
+                    assert isinstance(inputrow.row_sep, rdflib.term.Literal)
+                    assert isinstance(inputrow.column_sep, rdflib.term.Literal)
+                    assert isinstance(inputrow.uri_columns, rdflib.term.Literal)
+
+                    encoding_format_key = RevContentWithURIsMIMEs[
+                        str(inputrow.encoding_format)
+                    ]
+                    base[param_last].update(
+                        {
+                            encoding_format_key: {
+                                "header-rows": inputrow.header_rows.value,
+                                "row-sep": inputrow.row_sep.value,
+                                "column-sep": inputrow.column_sep.value,
+                                "uri-columns": list(
+                                    map(int, inputrow.uri_columns.value.split(";"))
+                                ),
+                            }
+                        }
+                    )
 
             if isinstance(valobj, dict):
                 the_uri: "str"
@@ -2504,6 +2642,7 @@ WHERE   {
         params: "ParamsBlock" = {}
         environment: "EnvironmentBlock" = {}
         outputs: "OutputsBlock" = {}
+        num_execs: "int" = 0
         if retrospective_first:
             # For the retrospective provenance at least an execution must
             # be described in the RO-Crate. Once one is chosen,
@@ -2524,6 +2663,7 @@ WHERE   {
                         "mainentity": matched_crate.mainentity,
                     },
                 )
+                num_execs = len(qexecsres)
                 for execrow in qexecsres:
                     assert isinstance(
                         execrow, rdflib.query.ResultRow
@@ -2575,8 +2715,10 @@ WHERE   {
                         public_name=public_name,
                     )
 
-                    # Now, let's get the list of input parameters
-                    break
+                    # TODO: deal with more than one execution
+                    # Now, let's check the list of captured input parameters
+                    if len(params) == 0:
+                        break
             except Exception as e:
                 raise ROCrateToolboxException(
                     f"Unable to perform JSON-LD workflow execution details query over {public_name} (see cascading exceptions)"
@@ -2584,6 +2726,10 @@ WHERE   {
 
         # Following the prospective path
         if len(params) == 0:
+            if retrospective_first and num_execs > 0:
+                self.logger.warning(
+                    f"No params found associated to {num_execs} executions"
+                )
             contresult = self._parseContainersFromWorkflow(
                 g,
                 main_entity=matched_crate.mainentity,
