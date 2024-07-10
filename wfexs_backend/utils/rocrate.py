@@ -1888,7 +1888,6 @@ WHERE   {
             # Is it a file or a directory?
             # Or even better, a ContentWithURIs
             if additional_type in ("File", "Dataset"):
-                self.logger.error(f"BINGO!! {inputrow}")
                 if (
                     isinstance(inputrow.content_with_uris, rdflib.term.Literal)
                     and bool(inputrow.content_with_uris.value)
