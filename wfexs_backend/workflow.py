@@ -249,6 +249,7 @@ from .ro_crate import (
     WorkflowRunROCrate,
 )
 from .utils.rocrate import (
+    ContentWithURIsMIMEs,
     ReadROCrateMetadata,
     ReproducibilityLevel,
 )
@@ -420,11 +421,6 @@ class ExportActionException(AbstractWfExSException):
 
 class WFWarning(UserWarning):
     pass
-
-
-ContentWithURIsMIMEs = {
-    "tabular": "text/csv",
-}
 
 
 class WF:
@@ -1614,6 +1610,7 @@ class WF:
         paranoidMode: "bool" = False,
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
+        retrospective_first: "bool" = True,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1641,6 +1638,7 @@ class WF:
             public_name,
             reproducibility_level=reproducibility_level,
             strict_reproducibility_level=strict_reproducibility_level,
+            retrospective_first=retrospective_first,
             payload_dir=payload_dir,
         )
 
