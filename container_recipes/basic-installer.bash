@@ -145,10 +145,45 @@ python3 --help | grep -q '^-P '
 retval=$?
 if [ "$retval" -eq 0 ] ; then
 	python_p_flag="-P"
+	read -r -d "" CHECKWFEXS <<EOF
+import sys
+
+try:
+	import wfexs_backend
+except:
+	sys.exit(1)
+
+sys.exit(0)
+EOF
+	python3 -P -c "$CHECKWFEXS"
+	retval=$?
 else
 	python_p_flag=""
+	read -r -d "" CHECKWFEXS <<EOF
+import sys
+
+try:
+	# Let's remove current directory
+	sys.path.remove("")
+except:
+	pass
+
+try:
+	import os
+	# Let's remove current directory
+	sys.path.remove(os.getcwd())
+except:
+	pass
+
+try:
+	import wfexs_backend
+except:
+	sys.exit(1)
+
+sys.exit(0)
+EOF
 fi
-python3 $python_p_flag -c "import sys"$'\n'"try:"$'\n'"  import wfexs_backend"$'\n'"except:"$'\n'"  sys.exit(1)"$'\n'"sys.exit(0)"
+python3 $python_p_flag -c "$CHECKWFEXS"
 retval=$?
 set -eu
 if [ "$retval" -eq 0 ] ; then
