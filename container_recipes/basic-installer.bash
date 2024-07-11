@@ -181,8 +181,13 @@ if [ -z "$envDir" ]; then
 
 	# Checking whether the modules were already installed
 	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))')
+	constraintsFile="$(readlink -f "${scriptDir}"/../constraints-${PYVER}.txt)"
 	echo "Installing WfExS-backend python dependencies (${PYVER})"
-	pip install --require-virtualenv -r "${requirementsFile}"
+	PIP_INSTALL_PARAMS=( -r "${requirementsFile}" )
+	if [ -f "$constraintsFile" ] ; then
+		PIP_INSTALL_PARAMS+=( -c "${constraintsFile}" )
+	fi
+	pip install --require-virtualenv "${PIP_INSTALL_PARAMS[@]}"
 
 	# Now, should we run something wrapped?
 	if [ $# != 0 ] ; then
