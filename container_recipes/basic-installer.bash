@@ -101,6 +101,21 @@ for cmd in python3 pip ; do
 	fi
 done
 
+for cmd in dot ; do
+	set +e
+	type -a "$cmd" 2> /dev/null
+	retval=$?
+	set -e
+	if [ "$retval" -ne 0 ] ; then
+		failed=1
+		echo "ERROR: Command $cmd not found in PATH and needed by WfExS runtime"
+	fi
+done
+
+if [ -n "$failed" ] ; then
+	exit 1
+fi
+
 failed=
 for lib in libmagic.so ; do
 	set +e
@@ -109,7 +124,7 @@ for lib in libmagic.so ; do
 	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
-		echo "ERROR: Library $lib found in ldconfig cache and needed for the installation"
+		echo "ERROR: Library $lib found in ldconfig cache and needed by WfExS runtime"
 	fi
 done
 
@@ -165,7 +180,8 @@ if [ -z "$envDir" ]; then
 	fi
 
 	# Checking whether the modules were already installed
-	echo "Installing WfExS-backend python dependencies"
+	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))')
+	echo "Installing WfExS-backend python dependencies (${PYVER})"
 	pip install --require-virtualenv -r "${requirementsFile}"
 
 	# Now, should we run something wrapped?

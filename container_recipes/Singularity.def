@@ -43,9 +43,9 @@ $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
 tee /etc/apt/sources.list.d/docker.list > /dev/null && \
 apt-get update && \
 apt-get install -y --no-install-recommends docker-ce-cli
-# Install both podman and encfs
+# Install both podman, encfs and graphviz
 # hadolint ignore=DL3008
-apt-get install -y podman encfs
+apt-get install -y podman encfs graphviz
 # Install WfExS, trusting the installers in the commit rather than the
 # one in the docker recipe
 mkdir -p /

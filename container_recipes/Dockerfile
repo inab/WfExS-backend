@@ -35,9 +35,9 @@ RUN	wget -nv -O /etc/apt/keyrings/docker.asc https://download.docker.com/linux/d
 	tee /etc/apt/sources.list.d/docker.list > /dev/null && \
 	apt-get update && \
 	apt-get install -y --no-install-recommends docker-ce-cli
-# Install both podman and encfs
+# Install both podman, encfs and graphviz
 # hadolint ignore=DL3008
-RUN	apt-get install -y podman encfs
+RUN	apt-get install -y podman encfs graphviz
 # Install WfExS, trusting the installers in the commit rather than the
 # one in the docker recipe
 WORKDIR	/

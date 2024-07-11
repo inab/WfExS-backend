@@ -200,6 +200,10 @@ There are additional software dependencies beyond core ones. Depending on the lo
 
   * [git](https://git-scm.com/) is used to fetch workflows from git repositories.
   
+  * [libmagic.so] dynamic library is needed by [python-magic](https://pypi.org/project/python-magic/) package.
+  
+  * [dot] command (from [GraphViz](https://graphviz.org)) is needed to generate a graphical representation of workflows on Workflow Run RO-Crate generation.
+  
   * [gocryptfs](https://nuetzlich.net/gocryptfs/) can be used for the feature of secure intermediate results. It has been tested since version v2.0-beta2 ([releases](https://github.com/rfjakob/gocryptfs/releases) provide static binaries).
 
   * [java](https://openjdk.java.net/): Needed to run Nextflow. Supported Java versions go from version 8 to any version below 15 (Nextflow does not support this last one). Both OpenJDK and Sun implementations should work.
