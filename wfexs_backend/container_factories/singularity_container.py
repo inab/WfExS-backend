@@ -504,19 +504,22 @@ STDERR
 
         fetch_metadata = True
         trusted_copy = False
-        localContainerPath: "Optional[pathlib.Path]" = None
-        localContainerPathMeta: "Optional[pathlib.Path]" = None
+        local_container_paths: "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]" = (
+            None
+        )
         imageSignature: "Optional[Fingerprint]" = None
         fingerprint: "Optional[Fingerprint]" = None
         if not force:
             (
                 trusted_copy,
-                localContainerPath,
-                localContainerPathMeta,
+                local_container_paths,
                 imageSignature,
             ) = self.cc_handler.query(tag)
 
             if trusted_copy:
+                assert len(local_container_paths) > 0
+                # We only need to inspect first provided path
+                localContainerPath, localContainerPathMeta = local_container_paths[0]
                 try:
                     with localContainerPathMeta.open(mode="r", encoding="utf8") as tcpm:
                         raw_metadata = json.load(tcpm)
@@ -643,12 +646,13 @@ STDERR
         if fetch_metadata:
             if offline:
                 raise ContainerFactoryException(
-                    f"Cannot download containers metadata in offline mode from {tag_name} to {localContainerPath}"
+                    f"Cannot download containers metadata in offline mode from {tag_name} to {local_container_paths}"
                 )
 
             if tmpContainerPath is None:
-                assert localContainerPath is not None
+                assert local_container_paths is not None
                 tmpContainerPath = self.cc_handler._genTmpContainerPath()
+                localContainerPath = local_container_paths[0][0]
                 link_or_copy_pathlib(localContainerPath, tmpContainerPath)
             tmpContainerPathMeta = tmpContainerPath.with_name(
                 tmpContainerPath.name + META_JSON_POSTFIX
@@ -728,11 +732,11 @@ STDERR
             containers_dir = pathlib.Path(self.stagedContainersDir)
 
         # Do not allow overwriting in offline mode
-        transferred_image = self.cc_handler.transfer(
+        transferred_images = self.cc_handler.transfer(
             tag, stagedContainersDir=containers_dir, force=force and not offline
         )
-        assert transferred_image is not None, f"Unexpected cache miss for {tag}"
-        containerPath, containerPathMeta = transferred_image
+        assert transferred_images is not None, f"Unexpected cache miss for {tag}"
+        containerPath, containerPathMeta = transferred_images[0]
 
         return Container(
             origTaggedName=tag_name,
@@ -783,7 +787,10 @@ STDERR
                     continue
                 inj_tag = self.generateCanonicalTag(injectable_container)
                 if singTag == inj_tag:
-                    tag_to_use = injectable_container
+                    # This is needed to respect the locally tagged image
+                    tag_to_use = dataclasses.replace(
+                        injectable_container, origTaggedName=tag.origTaggedName
+                    )
                     self.logger.info(f"Matched injected container {singTag}")
                     break
 
@@ -834,41 +841,46 @@ STDERR
         """
         if containers_dir is None:
             containers_dir = self.stagedContainersDir
-        containerPath, containerPathMeta = self.cc_handler.genStagedContainersDirPaths(
+        container_paths = self.cc_handler.genStagedContainersDirPaths(
             container, containers_dir
         )
+        assert len(container_paths) > 0
 
         was_redeployed = False
-        if (
-            not containerPath.is_file()
-            and isinstance(container, Container)
-            and container.localPath is not None
-        ):
-            # Time to inject the image!
-            link_or_copy_pathlib(container.localPath, containerPath, force_copy=True)
-            was_redeployed = True
+        for containerPath, containerPathMeta in container_paths:
+            if (
+                not containerPath.is_file()
+                and isinstance(container, Container)
+                and container.localPath is not None
+            ):
+                # Time to inject the image!
+                link_or_copy_pathlib(
+                    container.localPath, containerPath, force_copy=True
+                )
+                was_redeployed = True
 
-        if not containerPath.is_file():
-            errmsg = f"SIF saved image {containerPath.name} is not in the staged working dir for {container.origTaggedName}"
-            self.logger.warning(errmsg)
-            raise ContainerFactoryException(errmsg)
+            if not containerPath.is_file():
+                errmsg = f"SIF saved image {containerPath.name} is not in the staged working dir for {container.origTaggedName}"
+                self.logger.warning(errmsg)
+                raise ContainerFactoryException(errmsg)
 
-        if (
-            not containerPathMeta.is_file()
-            and isinstance(container, Container)
-            and container.metadataLocalPath is not None
-        ):
-            # Time to inject the metadata!
-            link_or_copy_pathlib(
-                container.metadataLocalPath, containerPathMeta, force_copy=True
-            )
-            was_redeployed = True
+            if (
+                not containerPathMeta.is_file()
+                and isinstance(container, Container)
+                and container.metadataLocalPath is not None
+            ):
+                # Time to inject the metadata!
+                link_or_copy_pathlib(
+                    container.metadataLocalPath, containerPathMeta, force_copy=True
+                )
+                was_redeployed = True
 
-        if not containerPathMeta.is_file():
-            errmsg = f"SIF saved image metadata {containerPathMeta.name} is not in the staged working dir for {container.origTaggedName}"
-            self.logger.warning(errmsg)
-            raise ContainerFactoryException(errmsg)
+            if not containerPathMeta.is_file():
+                errmsg = f"SIF saved image metadata {containerPathMeta.name} is not in the staged working dir for {container.origTaggedName}"
+                self.logger.warning(errmsg)
+                raise ContainerFactoryException(errmsg)
 
+        containerPath, containerPathMeta = container_paths[0]
         try:
             with containerPathMeta.open(mode="r", encoding="utf-8") as mH:
                 signaturesAndManifest = cast("SingularityManifest", json.load(mH))

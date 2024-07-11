@@ -245,8 +245,9 @@ STDERR
 
         fetch_metadata = True
         trusted_copy = False
-        localContainerPath: "Optional[pathlib.Path]" = None
-        localContainerPathMeta: "Optional[pathlib.Path]" = None
+        local_container_paths: "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]" = (
+            None
+        )
         imageSignature: "Optional[Fingerprint]" = None
         image_id: "Optional[Fingerprint]" = None
         manifestsImageSignature: "Optional[Fingerprint]" = None
@@ -255,12 +256,14 @@ STDERR
         if not force:
             (
                 trusted_copy,
-                localContainerPath,
-                localContainerPathMeta,
+                local_container_paths,
                 imageSignature,
             ) = self.cc_handler.query(tag)
 
             if trusted_copy:
+                assert len(local_container_paths) > 0
+                # We only need to inspect first provided path
+                localContainerPath, localContainerPathMeta = local_container_paths[0]
                 try:
                     with open(localContainerPathMeta, mode="r", encoding="utf-8") as mH:
                         signaturesAndManifest = cast(
@@ -297,12 +300,10 @@ STDERR
                     f"Banned remove docker containers in offline mode from {tag_name}"
                 )
 
-            if (
-                localContainerPathMeta is not None
-                and localContainerPath is not None
-                and (
-                    os.path.exists(localContainerPathMeta)
-                    or os.path.exists(localContainerPath)
+            if local_container_paths is not None and any(
+                map(
+                    lambda lcp: os.path.exists(lcp[0]) or os.path.exists(lcp[1]),
+                    local_container_paths,
                 )
             ):
                 self.logger.warning(
@@ -417,11 +418,11 @@ STDERR
             containers_dir = self.stagedContainersDir
 
         # Do not allow overwriting in offline mode
-        transferred_image = self.cc_handler.transfer(
+        transferred_images = self.cc_handler.transfer(
             tag, stagedContainersDir=containers_dir, force=force and not offline
         )
-        assert transferred_image is not None, f"Unexpected cache miss for {tag}"
-        containerPath, containerPathMeta = transferred_image
+        assert transferred_images is not None, f"Unexpected cache miss for {tag}"
+        containerPath, containerPathMeta = transferred_images[0]
 
         assert manifestsImageSignature is not None
         assert manifests is not None
@@ -470,7 +471,7 @@ STDERR
         # These are the paths to the copy of the saved container
         if containers_dir is None:
             containers_dir = self.stagedContainersDir
-        containerPath, containerPathMeta = self.cc_handler.genStagedContainersDirPaths(
+        container_paths = self.cc_handler.genStagedContainersDirPaths(
             container, containers_dir
         )
 
@@ -479,36 +480,40 @@ STDERR
         manifests = None
         manifest = None
         was_redeployed = False
-        if (
-            not containerPath.is_file()
-            and isinstance(container, Container)
-            and container.localPath is not None
-        ):
-            # Time to inject the image!
-            link_or_copy_pathlib(container.localPath, containerPath, force_copy=True)
-            was_redeployed = True
+        for containerPath, containerPathMeta in container_paths:
+            if (
+                not containerPath.is_file()
+                and isinstance(container, Container)
+                and container.localPath is not None
+            ):
+                # Time to inject the image!
+                link_or_copy_pathlib(
+                    container.localPath, containerPath, force_copy=True
+                )
+                was_redeployed = True
 
-        if not containerPath.is_file():
-            errmsg = f"Docker saved image {containerPath.name} is not in the staged working dir for {tag_name}"
-            self.logger.warning(errmsg)
-            raise ContainerFactoryException(errmsg)
+            if not containerPath.is_file():
+                errmsg = f"Docker saved image {containerPath.name} is not in the staged working dir for {tag_name}"
+                self.logger.warning(errmsg)
+                raise ContainerFactoryException(errmsg)
 
-        if (
-            not containerPathMeta.is_file()
-            and isinstance(container, Container)
-            and container.metadataLocalPath is not None
-        ):
-            # Time to inject the metadata!
-            link_or_copy_pathlib(
-                container.metadataLocalPath, containerPathMeta, force_copy=True
-            )
-            was_redeployed = True
+            if (
+                not containerPathMeta.is_file()
+                and isinstance(container, Container)
+                and container.metadataLocalPath is not None
+            ):
+                # Time to inject the metadata!
+                link_or_copy_pathlib(
+                    container.metadataLocalPath, containerPathMeta, force_copy=True
+                )
+                was_redeployed = True
 
-        if not containerPathMeta.is_file():
-            errmsg = f"Docker saved image metadata {containerPathMeta.name} is not in the staged working dir for {tag_name}"
-            self.logger.warning(errmsg)
-            raise ContainerFactoryException(errmsg)
+            if not containerPathMeta.is_file():
+                errmsg = f"Docker saved image metadata {containerPathMeta.name} is not in the staged working dir for {tag_name}"
+                self.logger.warning(errmsg)
+                raise ContainerFactoryException(errmsg)
 
+        containerPath, containerPathMeta = container_paths[0]
         try:
             with containerPathMeta.open(mode="r", encoding="utf-8") as mH:
                 signaturesAndManifest = cast("DockerManifestMetadata", json.load(mH))

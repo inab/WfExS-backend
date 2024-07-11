@@ -857,7 +857,7 @@ STDERR
         """
         return self.OPERATIONAL_CONTAINER_TAGS
 
-    def simpleContainerFileName(self, imageUrl: "URIType") -> "RelPath":
+    def simpleContainerFileName(self, imageUrl: "URIType") -> "Sequence[RelPath]":
         """
         This method was borrowed from
         https://github.com/common-workflow-language/cwltool/blob/5bdb3d3dd47d8d1b3a1685220b4b6ce0f94c055e/cwltool/singularity.py#L107
@@ -865,12 +865,14 @@ STDERR
         # match = re.search(
         #    pattern=r"([a-z]*://)", string=imageUrl
         # )
-        img_name = _normalize_image_id(imageUrl)
-        # candidates.append(img_name)
-        # sif_name = _normalize_sif_id(dockerRequirement["dockerPull"])
-        # candidates.append(sif_name)
+        candidates: "MutableSequence[RelPath]" = [_normalize_image_id(imageUrl)]
+        # Next block could be needed in a darker future where either one
+        # or another file naming style is used depending on some
+        # obscure reason
+        # if self.container_factory.containerType == ContainerType.Singularity:
+        #     candidates.append(_normalize_sif_id(imageUrl))
 
-        return img_name
+        return candidates
 
     @staticmethod
     def generateDotWorkflow(
