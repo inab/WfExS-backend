@@ -90,7 +90,7 @@ checkInstallGO() {
 	fi
 }
 
-for cmd in python3 pip ; do
+for cmd in python3 ; do
 	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
@@ -176,8 +176,35 @@ if [ -z "$envDir" ]; then
 		# Activating the python environment
 		envActivate="${envDir}/bin/activate"
 		source "${envActivate}"
+
+		# Pip should be available
+		for cmd in pip ; do
+			set +e
+			type -a "$cmd" 2> /dev/null
+			retval=$?
+			set -e
+			if [ "$retval" -ne 0 ] ; then
+				failed=1
+				echo "ERROR: Command $cmd not found in PATH and needed for the installation"
+				exit 1
+			fi
+		done
+
 		pip install --require-virtualenv --upgrade pip wheel
 	fi
+
+	# Pip should be available
+	for cmd in pip ; do
+		set +e
+		type -a "$cmd" 2> /dev/null
+		retval=$?
+		set -e
+		if [ "$retval" -ne 0 ] ; then
+			failed=1
+			echo "ERROR: Command $cmd not found in PATH and needed for the installation"
+			exit 1
+		fi
+	done
 
 	# Checking whether the modules were already installed
 	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))')
