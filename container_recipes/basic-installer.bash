@@ -17,16 +17,7 @@
 
 # Getting the installation directory
 scriptDir="$(dirname "$0")"
-case "${scriptDir}" in
-	/*)
-		# Path is absolute
-		true
-		;;
-	*)
-		# Path is relative
-		scriptDir="$(readlink -f "${scriptDir}")"
-		;;
-esac
+scriptDir="$(readlink -f "${scriptDir}")"
 
 set -eu
 
