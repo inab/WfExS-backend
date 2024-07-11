@@ -28,8 +28,17 @@
 : ${BUSYBOX_VER:=1.35.0}
 
 # Getting the installation directory
-scriptDir="$(dirname "$0")"
-scriptDir="$(readlink -f "${scriptDir}")"
+scriptDir="$(dirname "$(readlink -f "$0")")"
+case "${scriptDir}" in
+	/*)
+		# Path is absolute
+		true
+		;;
+	*)
+		# Path is relative
+		scriptDir="$(readlink -f "${scriptDir}")"
+		;;
+esac
 
 failed=
 for cmd in mktemp ; do

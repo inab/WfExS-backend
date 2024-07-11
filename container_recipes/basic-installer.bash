@@ -16,8 +16,17 @@
 # limitations under the License.
 
 # Getting the installation directory
-scriptDir="$(dirname "$0")"
-scriptDir="$(readlink -f "${scriptDir}")"
+scriptDir="$(dirname "$(readlink -f "$0")")"
+case "${scriptDir}" in
+	/*)
+		# Path is absolute
+		true
+		;;
+	*)
+		# Path is relative
+		scriptDir="$(readlink -f "${scriptDir}")"
+		;;
+esac
 
 set -eu
 
