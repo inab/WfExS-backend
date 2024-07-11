@@ -22,13 +22,17 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from typing import (
+        Sequence,
+    )
+
     from wfexs_backend.common import (
         RelPath,
         URIType,
     )
 
 
-def simpleTestContainerFileName(imageUrl: "URIType") -> "RelPath":
+def simpleTestContainerFileName(imageUrl: "URIType") -> "Sequence[RelPath]":
     """
     This method was borrowed from
     https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L80
@@ -46,4 +50,4 @@ def simpleTestContainerFileName(imageUrl: "URIType") -> "RelPath":
 
     name = name.replace(":", "-").replace("/", "-")
 
-    return cast("RelPath", name + extension)
+    return [cast("RelPath", name + extension)]

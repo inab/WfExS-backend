@@ -28,4 +28,4 @@ message: "If you use this software, please cite it using these metadata."
 repository-code: "https://github.com/inab/WfExS-backend"
 type: software
 title: "WfExS-backend"
-version: 1.0.0a0
+version: 1.0.0a1

@@ -256,6 +256,20 @@ def genParserSub(
                 help="Workflow Run RO-Crate describing a previous workflow execution. It can be either a local path or an URI resolvable from WfExS with no authentication",
             )
 
+            ap_.add_argument(
+                "--ignore-retrospective-provenance",
+                dest="retrospective_first",
+                action="store_false",
+                default=True,
+                help="Retrospective provenance is ignored",
+            )
+            ap_.add_argument(
+                "--prefer-retrospective-provenance",
+                dest="retrospective_first",
+                action="store_true",
+                help="Retrospective provenance is first inspected",
+            )
+
         not_restage = command not in (WfExS_Commands.Import, WfExS_Commands.ReStage)
         ap_.add_argument(
             "-W",
@@ -1483,6 +1497,7 @@ def main() -> None:
             secure=args.secure,
             reproducibility_level=ReproducibilityLevel(args.reproducibility_level),
             strict_reproducibility_level=args.strict_reproducibility_level,
+            retrospective_first=args.retrospective_first,
         )
     else:
         print(

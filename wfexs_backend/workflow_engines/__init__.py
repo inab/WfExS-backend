@@ -760,7 +760,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         return list()
 
     @abc.abstractmethod
-    def simpleContainerFileName(self, imageUrl: "URIType") -> "RelPath":
+    def simpleContainerFileName(self, imageUrl: "URIType") -> "Sequence[RelPath]":
         """
         This method must be implemented to tell which names expect the workflow engine
         on its container cache directories when an image is locally materialized

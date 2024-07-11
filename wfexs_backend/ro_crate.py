@@ -1015,23 +1015,28 @@ class WorkflowRunROCrate:
         RO_licences = self._process_licences(licences)
 
         # Add extra terms
-        # self.crate.metadata.extra_terms.update(
-        #    {
-        #        # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
-        #        # # Next ones are experimental
-        #        # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
-        #        # + ContainerImageAdditionalType.Docker.value,
-        #        # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
-        #        # + ContainerImageAdditionalType.Singularity.value,
-        #        # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
-        #        # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
-        #        # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
-        #        # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
-        #        "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
-        #        "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
-        #        "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
-        #    }
-        # )
+        self.crate.metadata.extra_terms.update(
+            {
+                # "sha256": WORKFLOW_RUN_NAMESPACE + "sha256",
+                # # Next ones are experimental
+                # ContainerImageAdditionalType.Docker.value: WORKFLOW_RUN_NAMESPACE
+                # + ContainerImageAdditionalType.Docker.value,
+                # ContainerImageAdditionalType.Singularity.value: WORKFLOW_RUN_NAMESPACE
+                # + ContainerImageAdditionalType.Singularity.value,
+                # "containerImage": WORKFLOW_RUN_NAMESPACE + "containerImage",
+                # "ContainerImage": WORKFLOW_RUN_NAMESPACE + "ContainerImage",
+                # "registry": WORKFLOW_RUN_NAMESPACE + "registry",
+                # "tag": WORKFLOW_RUN_NAMESPACE + "tag",
+                # "syntheticOutput": WFEXS_TERMS_NAMESPACE + "syntheticOutput",
+                # "globPattern": WFEXS_TERMS_NAMESPACE + "globPattern",
+                # "filledFrom": WFEXS_TERMS_NAMESPACE + "filledFrom",
+                "contentWithURIs": WFEXS_TERMS_NAMESPACE + "contentWithURIs",
+                "headerRows": WFEXS_TERMS_NAMESPACE + "headerRows",
+                "rowSep": WFEXS_TERMS_NAMESPACE + "rowSep",
+                "columnSep": WFEXS_TERMS_NAMESPACE + "columnSep",
+                "uriColumns": WFEXS_TERMS_NAMESPACE + "uriColumns",
+            }
+        )
         self.crate.metadata.extra_contexts.append(WORKFLOW_RUN_CONTEXT)
         self.crate.metadata.extra_contexts.append(WFEXS_TERMS_CONTEXT)
 
@@ -1442,6 +1447,7 @@ you can find here an almost complete list of the possible ones:
 
             itemInValue0 = in_item.values[0]
             additional_type: "Optional[str]" = None
+            is_content_with_uris = False
             # A bool is an instance of int in Python
             if isinstance(itemInValue0, bool):
                 additional_type = "Boolean"
@@ -1459,6 +1465,9 @@ you can find here an almost complete list of the possible ones:
                     ContentKind.ContentWithURIs,
                 ):
                     additional_type = "File"
+                    is_content_with_uris = (
+                        itemInValue0.kind == ContentKind.ContentWithURIs
+                    )
                 elif itemInValue0.kind == ContentKind.Directory:
                     additional_type = "Dataset"
 
@@ -1481,6 +1490,24 @@ you can find here an almost complete list of the possible ones:
                 value_required = not in_item.implicit
                 # This one must be a real boolean, as of schema.org
                 formal_parameter["valueRequired"] = value_required
+
+                if is_content_with_uris:
+                    assert in_item.contentWithURIs is not None
+
+                    formal_parameter["contentWithURIs"] = True
+                    formal_parameter[
+                        "encodingFormat"
+                    ] = in_item.contentWithURIs.encodingFormat
+                    formal_parameter["headerRows"] = in_item.contentWithURIs.setup[
+                        "headerRows"
+                    ]
+                    formal_parameter["rowSep"] = in_item.contentWithURIs.setup["rowSep"]
+                    formal_parameter["columnSep"] = in_item.contentWithURIs.setup[
+                        "columnSep"
+                    ]
+                    formal_parameter["uriColumns"] = in_item.contentWithURIs.setup[
+                        "uriColumns"
+                    ]
 
             item_signature = cast(
                 "bytes",
@@ -1734,9 +1761,27 @@ you can find here an almost complete list of the possible ones:
 
                             secInputLocalSource = secInput.local  # local source
                             secInputURISource = secInput.licensed_uri.uri  # uri source
-                            secInputURILicences = (
-                                secInput.licensed_uri.licences
-                            )  # licences
+                            # Properly curate secondary input licences
+                            secInputURILicences: "Optional[MutableSequence[LicenceDescription]]" = (
+                                None  # licences
+                            )
+
+                            if secInput.licensed_uri.licences is not None:
+                                secInputURILicences = []
+                                for licence in secInput.licensed_uri.licences:
+                                    sec_matched_licence: "Optional[LicenceDescription]"
+                                    if isinstance(licence, LicenceDescription):
+                                        sec_matched_licence = licence
+                                    else:
+                                        sec_matched_licence = (
+                                            self.licence_matcher.matchLicence(licence)
+                                        )
+                                        if sec_matched_licence is None:
+                                            failed_licences.append(licence)
+
+                                    if sec_matched_licence is not None:
+                                        secInputURILicences.append(sec_matched_licence)
+
                             if os.path.isfile(secInputLocalSource):
                                 # This is needed to avoid including the input
                                 the_sec_signature: "Optional[Fingerprint]" = None

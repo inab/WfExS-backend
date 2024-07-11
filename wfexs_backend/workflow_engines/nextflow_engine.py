@@ -1509,7 +1509,7 @@ STDERR
             containerTags.extend(containerTagsConda)
         return matWorkflowEngine, containerTags
 
-    def simpleContainerFileName(self, imageUrl: "URIType") -> "RelPath":
+    def simpleContainerFileName(self, imageUrl: "URIType") -> "Sequence[RelPath]":
         """
         This method was borrowed from
         https://github.com/nextflow-io/nextflow/blob/539a22b68c114c94eaf4a88ea8d26b7bfe2d0c39/modules/nextflow/src/main/groovy/nextflow/container/SingularityCache.groovy#L80
@@ -1527,7 +1527,7 @@ STDERR
 
         name = name.replace(":", "-").replace("/", "-")
 
-        return cast("RelPath", name + extension)
+        return [cast("RelPath", name + extension)]
 
     def structureAsNXFParams(
         self, matInputs: "Sequence[MaterializedInput]", outputsDir: "pathlib.Path"

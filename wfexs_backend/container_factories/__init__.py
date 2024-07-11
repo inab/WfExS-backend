@@ -18,7 +18,7 @@
 from __future__ import absolute_import
 
 import copy
-from dataclasses import dataclass
+import dataclasses
 import json
 import os
 import pathlib
@@ -80,7 +80,7 @@ if TYPE_CHECKING:
 
     # As each workflow engine can have its own naming convention, leave them to
     # provide it
-    ContainerFileNamingMethod: TypeAlias = Callable[[URIType], RelPath]
+    ContainerFileNamingMethod: TypeAlias = Callable[[URIType], Sequence[RelPath]]
 
     ContainerLocalConfig: TypeAlias = Mapping[str, Any]
 
@@ -114,7 +114,7 @@ DOCKER_URI_PREFIX: "Final[str]" = DOCKER_SCHEME + ":"
 DEFAULT_DOCKER_REGISTRY: "Final[str]" = "docker.io"
 
 
-@dataclass
+@dataclasses.dataclass
 class Container(ContainerTaggedName):
     """
     origTaggedName: Symbolic name or identifier of the container
@@ -322,15 +322,10 @@ class ContainerCacheHandler:
 
     def _genContainerPaths(
         self, container: "ContainerTaggedName"
-    ) -> "Tuple[pathlib.Path, pathlib.Path]":
-        containerFilename = self.simpleFileNameMethod(
-            cast("URIType", container.origTaggedName)
+    ) -> "Sequence[Tuple[pathlib.Path, pathlib.Path]]":
+        return self.genStagedContainersDirPaths(
+            container, self.engineContainersSymlinkDir
         )
-        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
-        localContainerPath = self.engineContainersSymlinkDir / containerFilename
-        localContainerPathMeta = self.engineContainersSymlinkDir / containerFilenameMeta
-
-        return localContainerPath, localContainerPathMeta
 
     def _computeFingerprint(self, image_path: "pathlib.Path") -> "Fingerprint":
         return cast("Fingerprint", ComputeDigestFromFile(image_path.as_posix()))
@@ -349,89 +344,115 @@ class ContainerCacheHandler:
 
     def query(
         self, container: "ContainerTaggedName"
-    ) -> "Tuple[bool, pathlib.Path, pathlib.Path, Optional[Fingerprint]]":
+    ) -> "Tuple[bool, Sequence[Tuple[pathlib.Path, pathlib.Path]], Optional[Fingerprint]]":
         """
         This method checks whether the container snapshot and its
         metadata are in the caching directory
         """
-        localContainerPath, localContainerPathMeta = self._genContainerPaths(container)
+        possible_container_paths = self._genContainerPaths(container)
+        assert len(possible_container_paths) > 0
 
-        trusted_copy = False
-        imageSignature: "Optional[Fingerprint]" = None
-        if localContainerPath.is_file():
-            if localContainerPath.is_symlink():
-                # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
-                # Path.readlink was added in Python 3.9
-                unlinkedContainerPath = pathlib.Path(os.readlink(localContainerPath))
-                fsImageSignature = unlinkedContainerPath.name
-                imageSignature = cast(
-                    "Fingerprint",
-                    fsImageSignature.replace("~", "=")
-                    .replace("-", "/")
-                    .replace("_", "+"),
-                )
-
-                # Do not trust paths outside the caching directory
-                canonicalContainerPath = self.containersCacheDir / fsImageSignature
-
-                trusted_copy = localContainerPath.resolve().samefile(
-                    canonicalContainerPath.resolve()
-                )
-            else:
-                (
-                    canonicalContainerPath,
-                    imageSignature,
-                ) = self._computeCanonicalImagePath(localContainerPath)
-
-                if localContainerPath.samefile(canonicalContainerPath):
-                    trusted_copy = True
-                elif canonicalContainerPath.is_file():
-                    canonicalImageSignature = self._computeFingerprint(
-                        canonicalContainerPath
+        all_imageSignature: "Optional[Fingerprint]" = None
+        all_trusted_copies = True
+        for localContainerPath, localContainerPathMeta in possible_container_paths:
+            trusted_copy = False
+            imageSignature: "Optional[Fingerprint]" = None
+            if localContainerPath.is_file():
+                if localContainerPath.is_symlink():
+                    # Some filesystems complain when filenames contain 'equal', 'slash' or 'plus' symbols
+                    # Path.readlink was added in Python 3.9
+                    unlinkedContainerPath = pathlib.Path(
+                        os.readlink(localContainerPath)
+                    )
+                    fsImageSignature = unlinkedContainerPath.name
+                    imageSignature = cast(
+                        "Fingerprint",
+                        fsImageSignature.replace("~", "=")
+                        .replace("-", "/")
+                        .replace("_", "+"),
                     )
 
-                    trusted_copy = canonicalImageSignature == imageSignature
+                    # Do not trust paths outside the caching directory
+                    canonicalContainerPath = self.containersCacheDir / fsImageSignature
 
-        if trusted_copy:
-            if localContainerPathMeta.is_file():
-                try:
-                    with localContainerPathMeta.open(mode="r", encoding="utf-8") as mH:
-                        signaturesAndManifest = cast(
-                            "AbstractImageManifestMetadata", json.load(mH)
+                    trusted_copy = localContainerPath.resolve().samefile(
+                        canonicalContainerPath.resolve()
+                    )
+                else:
+                    (
+                        canonicalContainerPath,
+                        imageSignature,
+                    ) = self._computeCanonicalImagePath(localContainerPath)
+
+                    if localContainerPath.samefile(canonicalContainerPath):
+                        trusted_copy = True
+                    elif canonicalContainerPath.is_file():
+                        canonicalImageSignature = self._computeFingerprint(
+                            canonicalContainerPath
                         )
-                        imageSignature_in_metadata = signaturesAndManifest.get(
-                            "image_signature"
-                        )
-                        trusted_copy = imageSignature_in_metadata == imageSignature
-                except:
+
+                        trusted_copy = canonicalImageSignature == imageSignature
+
+            if trusted_copy:
+                if localContainerPathMeta.is_file():
+                    try:
+                        with localContainerPathMeta.open(
+                            mode="r", encoding="utf-8"
+                        ) as mH:
+                            signaturesAndManifest = cast(
+                                "AbstractImageManifestMetadata", json.load(mH)
+                            )
+                            imageSignature_in_metadata = signaturesAndManifest.get(
+                                "image_signature"
+                            )
+                            trusted_copy = imageSignature_in_metadata == imageSignature
+                    except:
+                        trusted_copy = False
+                else:
                     trusted_copy = False
-            else:
-                trusted_copy = False
 
-        return trusted_copy, localContainerPath, localContainerPathMeta, imageSignature
+            # One failed, all fails
+            if not trusted_copy or (
+                all_imageSignature is not None and all_imageSignature != imageSignature
+            ):
+                all_trusted_copies = False
+                all_imageSignature = None
+                break
+
+            # To improve checks in the next loop
+            all_imageSignature = imageSignature
+
+        return all_trusted_copies, possible_container_paths, all_imageSignature
 
     def genStagedContainersDirPaths(
         self,
         container: "ContainerTaggedName",
         stagedContainersDir: "pathlib.Path",
-    ) -> "Tuple[pathlib.Path, pathlib.Path]":
-        containerFilename = self.simpleFileNameMethod(
+    ) -> "Sequence[Tuple[pathlib.Path, pathlib.Path]]":
+        container_filenames = self.simpleFileNameMethod(
             cast("URIType", container.origTaggedName)
         )
-        containerFilenameMeta = containerFilename + META_JSON_POSTFIX
 
-        containerPath = stagedContainersDir / containerFilename
+        staged_container_filenames: "MutableSequence[Tuple[pathlib.Path, pathlib.Path]]" = (
+            []
+        )
+        for container_filename in container_filenames:
+            container_filename_meta = container_filename + META_JSON_POSTFIX
 
-        containerPathMeta = stagedContainersDir / containerFilenameMeta
+            containerPath = stagedContainersDir / container_filename
 
-        return containerPath, containerPathMeta
+            containerPathMeta = stagedContainersDir / container_filename_meta
+
+            staged_container_filenames.append((containerPath, containerPathMeta))
+
+        return staged_container_filenames
 
     def transfer(
         self,
         container: "ContainerTaggedName",
         stagedContainersDir: "pathlib.Path",
         force: "bool" = False,
-    ) -> "Optional[Tuple[pathlib.Path, pathlib.Path]]":
+    ) -> "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]":
         """
         This method is used to transfer both the container snapshot and
         its metadata from the caching directory to stagedContainersDir
@@ -439,8 +460,7 @@ class ContainerCacheHandler:
         # First, get the local paths
         (
             trusted_copy,
-            localContainerPath,
-            localContainerPathMeta,
+            local_container_paths,
             imageSignature,
         ) = self.query(container)
         if not trusted_copy:
@@ -449,16 +469,18 @@ class ContainerCacheHandler:
         # Last, but not the least important
         # Hardlink or copy the container and its metadata
         stagedContainersDir.mkdir(parents=True, exist_ok=True)
-        containerPath, containerPathMeta = self.genStagedContainersDirPaths(
+        container_paths = self.genStagedContainersDirPaths(
             container, stagedContainersDir
         )
 
-        if force or not containerPath.exists():
-            link_or_copy_pathlib(localContainerPath, containerPath)
-        if force or not containerPathMeta.exists():
-            link_or_copy_pathlib(localContainerPathMeta, containerPathMeta)
+        assert len(container_paths) == len(local_container_paths)
 
-        return (containerPath, containerPathMeta)
+        for local_paths, dest_paths in zip(local_container_paths, container_paths):
+            for local_path, dest_path in zip(local_paths, dest_paths):
+                if force or not dest_path.exists():
+                    link_or_copy_pathlib(local_path, dest_path)
+
+        return container_paths
 
     def update(
         self,
@@ -469,9 +491,6 @@ class ContainerCacheHandler:
     ) -> "None":
         # First, let's remove what it is still there
         self.invalidate(container)
-
-        # Then, get the local paths
-        localContainerPath, localContainerPathMeta = self._genContainerPaths(container)
 
         # Now, compute the hash
         canonicalContainerPath, imageSignature = self._computeCanonicalImagePath(
@@ -495,21 +514,28 @@ class ContainerCacheHandler:
             )
 
         # Last, the symbolic links
-        localContainerPath.symlink_to(
-            os.path.relpath(canonicalContainerPath, self.engineContainersSymlinkDir)
-        )
+        # to all the possible local paths
+        possible_container_paths = self._genContainerPaths(container)
+        assert len(possible_container_paths) > 0
 
-        localContainerPathMeta.symlink_to(
-            os.path.relpath(canonicalContainerPathMeta, self.engineContainersSymlinkDir)
-        )
+        for localContainerPath, localContainerPathMeta in possible_container_paths:
+            localContainerPath.symlink_to(
+                os.path.relpath(canonicalContainerPath, self.engineContainersSymlinkDir)
+            )
+
+            localContainerPathMeta.symlink_to(
+                os.path.relpath(
+                    canonicalContainerPathMeta, self.engineContainersSymlinkDir
+                )
+            )
 
     def invalidate(self, container: "ContainerTaggedName") -> "None":
         # First, get the local paths
-        localContainerPath, localContainerPathMeta = self._genContainerPaths(container)
-
-        # Let's remove what it is still there
-        real_unlink_if_exists(localContainerPath)
-        real_unlink_if_exists(localContainerPathMeta)
+        possible_container_paths = self._genContainerPaths(container)
+        for localContainerPath, localContainerPathMeta in possible_container_paths:
+            # Let's remove what it is still there
+            real_unlink_if_exists(localContainerPath)
+            real_unlink_if_exists(localContainerPathMeta)
 
 
 class ContainerFactory(abc.ABC):
@@ -717,7 +743,9 @@ STDERR
                         continue
                     inj_tag = self.generateCanonicalTag(injectable_container)
                     if contTag == inj_tag:
-                        tag_to_use = injectable_container
+                        tag_to_use = dataclasses.replace(
+                            injectable_container, origTaggedName=tag.origTaggedName
+                        )
                         self.logger.info(f"Matched injected container {contTag}")
                         break
 
