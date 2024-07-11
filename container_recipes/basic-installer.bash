@@ -141,7 +141,14 @@ fi
 
 # Is WfExS already installed??? (case of Docker)
 set +eu
-python3 -P -c "import sys"$'\n'"try:"$'\n'"  import wfexs_backend"$'\n'"except:"$'\n'"  sys.exit(1)"$'\n'"sys.exit(0)"
+python3 --help | grep -q '^-P '
+retval=$?
+if [ "$retval" -eq 0 ] ; then
+	python_p_flag="-P"
+else
+	python_p_flag=""
+fi
+python3 $python_p_flag -c "import sys"$'\n'"try:"$'\n'"  import wfexs_backend"$'\n'"except:"$'\n'"  sys.exit(1)"$'\n'"sys.exit(0)"
 retval=$?
 set -eu
 if [ "$retval" -eq 0 ] ; then
