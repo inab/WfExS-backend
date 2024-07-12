@@ -575,7 +575,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             nextNewNxfConfigs.append(absIncludePath)
                         else:
                             self.logger.warning(
-                                f"Nextflow config file {relIncludePath} included from {relNewNxfConfig} not found"
+                                f"Nextflow config file {relIncludePath} included from {relNewNxfConfig} not found (tried path {absIncludePath})"
                             )
             # Next round
             newNxfConfigs = nextNewNxfConfigs
@@ -660,16 +660,24 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     nxfScriptDir = nxfScript.parent
                     for include in includes:
                         relIncludePath = include.path
-                        if not relIncludePath.endswith(".nf"):
-                            relIncludePath += ".nf"
                         absIncludePath = (nxfScriptDir / relIncludePath).resolve(
                             strict=False
                         )
+
+                        if absIncludePath.is_dir():
+                            absIncludePath = (absIncludePath / "main.nf").resolve(
+                                strict=False
+                            )
+                        elif not relIncludePath.endswith(".nf"):
+                            absIncludePath = (
+                                nxfScriptDir / (relIncludePath + ".nf")
+                            ).resolve(strict=False)
+
                         if absIncludePath.is_file():
                             nextNxfScripts.append(absIncludePath)
                         else:
                             self.logger.warning(
-                                f"Nextflow file {relIncludePath} included from {relNxfScript} not found"
+                                f"Nextflow path {relIncludePath} included from {relNxfScript} not found (tried path {absIncludePath})"
                             )
 
                     # And register the templates from each
