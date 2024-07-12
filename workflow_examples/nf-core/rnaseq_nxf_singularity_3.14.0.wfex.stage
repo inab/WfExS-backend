@@ -1,0 +1,60 @@
+workflow_id: git+https://github.com/nf-core/rnaseq.git@3.14.0
+workflow_config:
+  secure: false
+  containerType: singularity
+  nextflow:
+    profile:
+      - singularity
+    maxProcesses: 16
+placeholders:
+  test_datasets: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/reference"
+  igenomes_base: "s3://ngi-igenomes/igenomes"
+  genome: GRCh38
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  input:
+    c-l-a-s-s: ContentWithURIs
+    preferred-name: samplesheet_test.csv
+    url: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/samplesheet/v3.10/samplesheet_test.csv"
+    tabular:
+      uri-columns:
+        - 1
+        - 2
+      column-sep: ","
+      header-rows: 1
+  genome: "{genome}"
+  igenomes_base: "{igenomes_base}"
+
+  fasta:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/NCBI/{genome}/Sequence/WholeGenomeFasta/genome.fa"
+
+  bwa:
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/NCBI/{genome}/Sequence/BWAIndex/version0.6.0/"
+
+  bowtie2:
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/NCBI/{genome}/Sequence/Bowtie2Index/"
+
+  star:
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/NCBI/{genome}/Sequence/STARIndex/"
+
+  bismark:
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/NCBI/{genome}/Sequence/BismarkIndex/"
+
+  gtf:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/NCBI/{genome}/Annotation/Genes/genes.gtf"
+
+  bed12:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/NCBI/{genome}/Annotation/Genes/genes.bed"
+
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false

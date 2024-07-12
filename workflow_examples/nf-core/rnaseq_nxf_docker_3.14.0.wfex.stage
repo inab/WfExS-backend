@@ -1,9 +1,10 @@
 workflow_id: git+https://github.com/nf-core/rnaseq.git@3.14.0
 workflow_config:
   secure: false
+  containerType: docker
   nextflow:
     profile:
-      - singularity
+      - docker
     maxProcesses: 16
 placeholders:
   test_datasets: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/reference"
