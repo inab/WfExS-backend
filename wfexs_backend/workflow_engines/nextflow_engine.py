@@ -557,9 +557,20 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     # And register all the included config files which are reachable
                     for includeconfig in includeconfigs:
                         relIncludePath = includeconfig.path
-                        absIncludePath = (nfConfigDir / relIncludePath).resolve(
-                            strict=False
-                        )
+
+                        if os.path.isabs(relIncludePath) and not os.path.exists(
+                            relIncludePath
+                        ):
+                            self.logger.warning(
+                                f"Nextflow config file {relIncludePath} included from {relNewNxfConfig} is an absolute path not found. This usually happens from incomplete groovy evaluations. Trying to match it relatively to workflow directory"
+                            )
+                            absIncludePath = (nfDir / ("." + relIncludePath)).resolve(
+                                strict=False
+                            )
+                        else:
+                            absIncludePath = (nfConfigDir / relIncludePath).resolve(
+                                strict=False
+                            )
                         if absIncludePath.is_file():
                             nextNewNxfConfigs.append(absIncludePath)
                         else:
