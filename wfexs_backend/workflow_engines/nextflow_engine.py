@@ -1567,9 +1567,8 @@ STDERR
                         _,
                     ) = analyze_nf_content(content, cache_dir=self.groovy_cache_dir)
                 except Exception as e:
-                    errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
-                    self.logger.exception(errstr)
-                    raise WorkflowEngineException(errstr) from e
+                    errstr = f"Failed to parse file {relNxfScript} with groovy parser while looking for plugins"
+                    self.logger.warning(errstr)
 
             plugins.extend(l_plugins)
 
