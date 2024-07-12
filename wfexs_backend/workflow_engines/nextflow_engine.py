@@ -90,6 +90,7 @@ if TYPE_CHECKING:
         ContextAssignments,
         NfInclude,
         NfIncludeConfig,
+        NfPlugin,
         NfProcess,
         NfWorkflow,
     )
@@ -421,6 +422,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     includes,
                     workflows,
                     includeconfigs,
+                    plugins,
                     interesting_assignments,
                 ) = analyze_nf_content(
                     firstPathContent,
@@ -487,6 +489,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             _,
                             _,
                             includeconfigs,
+                            plugins,
                             interesting_assignments,
                         ) = analyze_nf_content(
                             newNxfConfigContent,
@@ -648,6 +651,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             processes,
                             includes,
                             workflows,
+                            _,
                             _,
                             interesting_assignments,
                         ) = analyze_nf_content(
@@ -1490,6 +1494,7 @@ STDERR
                         includes,
                         workflows,
                         _,
+                        _,
                         interesting_assignments,
                     ) = analyze_nf_content(content, cache_dir=self.groovy_cache_dir)
                 except Exception as e:
@@ -1533,6 +1538,70 @@ STDERR
         # Join both lists
         if len(containerTagsConda) > 0:
             containerTags.extend(containerTagsConda)
+
+        # Now, search for the plugins
+        plugins: "MutableSequence[NfPlugin]" = []
+        for relNxfScript in matWorkflowEngine.workflow.relPathFiles:
+            # Skipping nextflow files
+            if relNxfScript.endswith(".nf"):
+                continue
+
+            nxfScript = (nfDir / relNxfScript).resolve(strict=False)
+            # If it is an special directory, skip it!
+            if nxfScript.is_dir():
+                continue
+
+            self.logger.debug(f"Searching plugin declarations at {relNxfScript}")
+            with nxfScript.open(mode="rt", encoding="utf-8") as wfH:
+                # This is needed for multi-line pattern matching
+                content = wfH.read()
+
+                try:
+                    (
+                        _,
+                        _,
+                        _,
+                        _,
+                        _,
+                        l_plugins,
+                        _,
+                    ) = analyze_nf_content(content, cache_dir=self.groovy_cache_dir)
+                except Exception as e:
+                    errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
+                    self.logger.exception(errstr)
+                    raise WorkflowEngineException(errstr) from e
+
+            plugins.extend(l_plugins)
+
+        # And materialize/install them
+        pluginsline = ",".join(map(lambda plugin: plugin.label, plugins))
+        if len(pluginsline) > 0:
+            (
+                retval,
+                nxf_plugin_inst_stdout_v,
+                nxf_plugin_inst_stderr_v,
+            ) = self.runNextflowCommand(
+                matWorkflowEngine.version,
+                ["plugin", "install", pluginsline],
+                workdir=pathlib.Path(matWorkflowEngine.engine_path),
+                nextflow_path=matWorkflowEngine.engine_path,
+            )
+            self.logger.info(f"Installing nextflow plugins {pluginsline}")
+            if retval != 0:
+                errstr = f"""\
+Could not install Nextflow plugins {pluginsline} . Retval {retval}
+======
+STDOUT
+======
+{nxf_plugin_inst_stdout_v}
+======
+STDERR
+======
+{nxf_plugin_inst_stderr_v}
+"""
+                self.logger.error(errstr)
+                raise WorkflowEngineException(errstr)
+
         return matWorkflowEngine, containerTags
 
     def simpleContainerFileName(self, imageUrl: "URIType") -> "Sequence[RelPath]":
