@@ -309,6 +309,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.nxf_assets = os.path.join(self.engineTweaksDir, "assets")
         os.makedirs(self.nxf_assets, exist_ok=True)
 
+        # Setting the home directory
+        self.nxf_home = os.path.join(self.engineTweaksDir, ".nextflow")
+        os.makedirs(self.nxf_assets, exist_ok=True)
+
         # Setting up packed directory
         self.groovy_cache_dir = os.path.join(
             self.cacheWorkflowDir, "groovy-parsing-cache"
@@ -857,7 +861,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             os.chmod(cachedScript, 0o555)
 
         # Now, time to run it
-        NXF_HOME = os.path.join(nextflow_install_dir, ".nextflow")
+        NXF_HOME = self.nxf_home
         instEnv = dict(os.environ if runEnv is None else runEnv)
         instEnv["NXF_HOME"] = NXF_HOME
         # Needed for newer nextflow versions, so older workflows do not misbehave
@@ -1069,7 +1073,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             homedir = os.path.expanduser("~")
 
             nextflow_install_dir = os.path.join(self.weCacheDir, nextflow_version)
-            nxf_home = os.path.join(nextflow_install_dir, ".nextflow")
+            nxf_home = self.nxf_home
             nxf_assets_dir = self.nxf_assets
             try:
                 # Directories required by Nextflow in a Docker
@@ -1097,6 +1101,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 "HOME=" + homedir,
                 "-e",
                 "NXF_ASSETS=" + nxf_assets_dir,
+                "-e",
+                "NXF_HOME=" + nxf_home,
                 "-e",
                 "NXF_USRMAP=" + uid,
                 # "-e", "NXF_DOCKER_OPTS=-u "+uid+":"+gid+" -e HOME="+homedir+" -e TZ="+tzstring+" -v "+workdir+":"+workdir+":rw,rprivate,z -v "+project_path+":"+project_path+":rw,rprivate,z",
@@ -1130,7 +1136,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # to generate the volume parameters
             volumes = [
                 (homedir + "/", "ro,rprivate,z"),
-                #    (nxf_assets_dir,"rprivate,z"),
+                (nxf_assets_dir + "/", "rprivate,z"),
+                (nxf_home + "/", "rprivate,z"),
                 (workdir.as_posix() + "/", "rw,rprivate,z"),
                 #    (project_path+'/',"rw,rprivate,z"),
                 #    (repo_dir+'/',"ro,rprivate,z")
