@@ -34,6 +34,7 @@ extensions = [
     'sphinxcontrib.datatemplates',
     'myst_parser',
     'sphinxcontrib.asciinema',
+    'sphinx_design',
 ]
 
 autodoc2_packages = [
@@ -63,6 +64,21 @@ myst_enable_extensions = ['colon_fence']
 # -- Options for HTML output
 
 html_theme = 'sphinx_book_theme'
+html_logo = "images/WfExS-logo-final_paths.svg"
+html_favicon = "images/WfExS-logo-final_paths.svg"
+
+html_theme_options = {
+    "logo": {
+        "text": f"{project} {version}",
+    },
+    "repository_url": "https://github.com/inab/WfExS-backend",
+    "repository_branch": "master",
+    "path_to_docs": "docs",
+    "use_repository_button": True,
+    "use_issues_button": True,
+}
+
+
 
 # -- Options for EPUB output
 epub_show_urls = 'footnote'

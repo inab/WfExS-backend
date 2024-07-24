@@ -1,7 +1,7 @@
 .. _configuration:
 
-Configuration 
-=============
+📄 Configuration 
+================
 
 WfExS software needs at least two and sometimes three different input confguration files 
 to run your workflow:
