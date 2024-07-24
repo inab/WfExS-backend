@@ -46,6 +46,16 @@ autodoc2_packages = [
 
 autodoc2_output_dir = "apidocs"
 
+autodoc2_hidden_regexes = [
+    r".*\.logger$",
+    r".*\.magic$",
+    r".*\.YAMLDumper$",
+    r".*\.YAMLLoader$",
+    r".*\.KT$",
+    r".*\.VT$",
+    r".*\.SCHEME_HANDLERS$",
+]
+
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
