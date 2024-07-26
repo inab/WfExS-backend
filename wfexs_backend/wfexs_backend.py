@@ -547,17 +547,20 @@ class WfExSBackend:
                     self.progs[progKey] = cast("AbsPath", abs_cmd)
 
         encfsSect = toolSect.get("encrypted_fs", {})
-        encfs_type = encfsSect.get("type", DEFAULT_ENCRYPTED_FS_TYPE)
+        encfs_type_str: "Optional[str]" = encfsSect.get(
+            "type", DEFAULT_ENCRYPTED_FS_TYPE
+        )
+        assert encfs_type_str is not None
         try:
-            encfs_type = EncryptedFSType(encfs_type)
+            encfs_type = EncryptedFSType(encfs_type_str)
         except:
-            raise WfExSBackendException(
-                "Invalid default encryption filesystem {}".format(encfs_type)
-            )
+            errmsg = f"Invalid default encryption filesystem {encfs_type_str}"
+            self.logger.error(errmsg)
+            raise WfExSBackendException(errmsg)
         if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-            raise WfExSBackendException(
-                "FIXME: Default encryption filesystem {} mount procedure is not implemented"
-            )
+            errmsg = f"FIXME: Default encryption filesystem {encfs_type} mount procedure is not implemented"
+            self.logger.fatal(errmsg)
+            raise WfExSBackendException(errmsg)
         self.encfs_type = encfs_type
 
         self.encfs_cmd = encfsSect.get(
@@ -1592,19 +1595,24 @@ class WfExSBackend:
             clearF.getvalue().decode("utf-8").partition("=")
         )
         del clearF
-        self.logger.debug(encfs_type_str + " " + secureWorkdirPassphrase)
+
+        if secureWorkdirPassphrase == "":
+            errmsg = "Encryption filesystem key does not follow the right format"
+            self.logger.error(errmsg)
+            raise WfExSBackendException(errmsg)
+
         try:
             encfs_type = EncryptedFSType(encfs_type_str)
         except:
-            raise WfExSBackendException(
-                "Invalid encryption filesystem {} in working directory".format(
-                    encfs_type_str
-                )
+            errmsg = (
+                f"Invalid encryption filesystem {encfs_type_str} in working directory"
             )
+            raise WfExSBackendException(errmsg)
+
         if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-            raise WfExSBackendException(
-                "FIXME: Encryption filesystem {} mount procedure is not implemented"
-            )
+            errmsg = f"FIXME: Encryption filesystem {encfs_type_str} mount procedure is not implemented"
+            self.logger.fatal(errmsg)
+            raise WfExSBackendException(errmsg)
 
         # If the working directory encrypted filesystem does not
         # match the configured one, use its default executable
@@ -1613,12 +1621,13 @@ class WfExSBackend:
         else:
             encfs_cmd = self.encfs_cmd
 
-        if secureWorkdirPassphrase == "":
-            raise WfExSBackendException(
-                "Encryption filesystem key does not follow the right format"
-            )
+        abs_encfs_cmd = shutil.which(encfs_cmd)
+        if abs_encfs_cmd is None:
+            errmsg = f"FUSE filesystem command {encfs_cmd}, needed by {encfs_type}, was not found. Please install it in order to access the encrypted working directory"
+            self.logger.fatal(errmsg)
+            raise WfExSBackendException(errmsg)
 
-        return encfs_type, encfs_cmd, secureWorkdirPassphrase
+        return encfs_type, cast("AbsPath", abs_encfs_cmd), secureWorkdirPassphrase
 
     def generateSecuredWorkdirPassphrase(
         self,
