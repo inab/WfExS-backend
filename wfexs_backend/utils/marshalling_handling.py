@@ -61,10 +61,14 @@ def marshall_namedtuple(obj: "Any", workdir: "Optional[pathlib.Path]" = None) ->
         }
     elif obj_is(pathlib.Path):
         # Store the relative path, not the instance
+        # Path.is_relative_to was introduced in Python 3.9
+        is_relative_path = False
+        if workdir is not None:
+            # Path.is_relative_to was introduced in Python 3.9
+            # is_relative_path = obj.is_relative_to(workdir)
+            is_relative_path = obj.samefile(workdir) or workdir in obj.parents
         return (
-            obj.relative_to(workdir).as_posix()
-            if workdir is not None and obj.is_relative_to(workdir)
-            else obj.as_posix()
+            obj.relative_to(workdir).as_posix() if is_relative_path else obj.as_posix()
         )
     elif obj_is(tuple) and hasattr(obj, "_fields"):  # namedtuple
         fields = zip(obj._fields, _recurse_m(obj, workdir))
