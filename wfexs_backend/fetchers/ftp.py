@@ -47,6 +47,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoURL,
@@ -78,7 +79,7 @@ from .internal.ftp_downloader import FTPDownloader
 
 def fetchFTPURL(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """
@@ -120,7 +121,7 @@ def fetchFTPURL(
 
     ftp_client = FTPDownloader(**connParams)
     retval = ftp_client.download(
-        download_path=parsedInputURL.path, upload_path=cachedFilename
+        download_path=parsedInputURL.path, upload_path=str(cachedFilename)
     )
     if isinstance(retval, list):
         kind = ContentKind.Directory

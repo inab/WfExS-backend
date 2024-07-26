@@ -29,6 +29,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from typing import (
         Any,
         Callable,
@@ -58,6 +59,7 @@ if TYPE_CHECKING:
         AbsPath,
         AnyURI,
         ContentKind,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoURL,
@@ -84,11 +86,12 @@ class ProtocolFetcherReturn(NamedTuple):
 
 if TYPE_CHECKING:
     from mypy_extensions import DefaultNamedArg
+    import os
 
     ProtocolFetcher: TypeAlias = Callable[
         [
             URIType,
-            AbsPath,
+            PathLikePath,
             DefaultNamedArg(Optional[SecurityContextConfig], "secContext"),
         ],
         ProtocolFetcherReturn,
@@ -171,7 +174,7 @@ class AbstractStatefulFetcher(abc.ABC):
     def fetch(
         self,
         remote_file: "URIType",
-        cachedFilename: "AbsPath",
+        cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
     ) -> "ProtocolFetcherReturn":
         """
@@ -300,10 +303,10 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
         self,
         repoURL: "RepoURL",
         repoTag: "Optional[RepoTag]" = None,
-        repo_tag_destdir: "Optional[AbsPath]" = None,
-        base_repo_destdir: "Optional[AbsPath]" = None,
+        repo_tag_destdir: "Optional[PathLikePath]" = None,
+        base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
         pass
 
     @abc.abstractmethod
@@ -335,7 +338,7 @@ class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
     def fetch(
         self,
         remote_file: "URIType",
-        cachedFilename: "AbsPath",
+        cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
     ) -> "ProtocolFetcherReturn":
         with open(cachedFilename, mode="wb") as dS:

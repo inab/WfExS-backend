@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoURL,
@@ -72,7 +73,7 @@ DATA_SCHEME = "data"
 
 def deserializeDataURI(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """

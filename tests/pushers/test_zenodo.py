@@ -21,7 +21,7 @@ import pytest
 import datetime
 import logging
 
-from pathlib import Path
+import pathlib
 
 import os
 import sys
@@ -82,7 +82,7 @@ def test_zenodo_basic_fail_nosandbox() -> "None":
     Check Zenodo plugin complains about missing sandbox parameter
     """
     with pytest.raises(ExportPluginException):
-        ZenodoExportPlugin(cast("AbsPath", "/"), setup_block={"token": ""})
+        ZenodoExportPlugin(pathlib.Path("/"), setup_block={"token": ""})
 
 
 # @pytest.mark.xfail(raises=ExportPluginException, reason="Check Zenodo plugin complains about missing sandbox parameter")
@@ -92,7 +92,7 @@ def test_zenodo_basic_fail_notoken() -> "None":
     Check Zenodo plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
-        zep = ZenodoExportPlugin(cast("AbsPath", "/"), setup_block={"sandbox": True})
+        zep = ZenodoExportPlugin(pathlib.Path("/"), setup_block={"sandbox": True})
 
 
 basic_deps = [
@@ -121,7 +121,7 @@ def test_zenodo_basic(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -143,7 +143,7 @@ def test_zenodo_get_pid_metadata(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
     existing_pid = file_params.extra["owned_existing_pid"]
 
     pid_metadata = zep.get_pid_metadata(existing_pid)
@@ -165,7 +165,7 @@ def test_zenodo_book_new_pid(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -201,7 +201,7 @@ def test_zenodo_book_draft_pid(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     booked_entry_take2 = None
@@ -252,7 +252,7 @@ def test_zenodo_book_new_version_pid(file_params: "ParamTestData") -> "None":
         "sandbox": file_params.extra["sandbox"],
     }
     zep = ZenodoExportPlugin(
-        cast("AbsPath", "/tofill"),
+        pathlib.Path("/tofill"),
         setup_block=setup_block,
         default_preferred_id=file_params.extra["owned_existing_pid"],
     )
@@ -295,7 +295,7 @@ def test_zenodo_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         "sandbox": file_params.extra["sandbox"],
     }
     zep = ZenodoExportPlugin(
-        cast("AbsPath", os.path.join(os.path.dirname(__file__), "data")),
+        pathlib.Path(__file__).parent / "data",
         setup_block=setup_block,
     )
 
@@ -350,7 +350,7 @@ def test_zenodo_upload_stream_to_draft(file_params: "ParamTestData") -> "None":
         "sandbox": file_params.extra["sandbox"],
         "path_sep": path_sep,
     }
-    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -396,7 +396,7 @@ def test_zenodo_update_record_metadata_raw(file_params: "ParamTestData") -> "Non
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -450,7 +450,7 @@ def test_zenodo_update_record_metadata_facets(file_params: "ParamTestData") -> "
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    zep = ZenodoExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -513,7 +513,7 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
         "sandbox": file_params.extra["sandbox"],
     }
     zep = ZenodoExportPlugin(
-        cast("AbsPath", os.path.join(os.path.dirname(__file__), "data")),
+        pathlib.Path(__file__).parent / "data",
         setup_block=setup_block,
     )
 

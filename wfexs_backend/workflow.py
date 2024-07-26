@@ -396,15 +396,15 @@ class DefaultMissing(Dict[KT, VT]):
 
 
 def _wakeupEncDir(
-    cond: "threading.Condition", workDir: "AbsPath", logger: "logging.Logger"
+    cond: "threading.Condition", workDir: "pathlib.Path", logger: "logging.Logger"
 ) -> None:
     """
     This method periodically checks whether the directory is still available
     """
     cond.acquire()
     try:
-        while not cond.wait(60):
-            os.path.isdir(workDir)
+        while not cond.wait(60) and workDir.is_dir():
+            pass
     except:
         logger.exception("Wakeup thread failed!")
     finally:
@@ -460,10 +460,10 @@ class WF:
         nickname: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
         creation: "Optional[datetime.datetime]" = None,
-        rawWorkDir: "Optional[AnyPath]" = None,
+        rawWorkDir: "Optional[pathlib.Path]" = None,
         paranoid_mode: "Optional[bool]" = None,
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
         cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
@@ -538,8 +538,8 @@ class WF:
         self.reproducibility_level = reproducibility_level
         self.strict_reproducibility_level = strict_reproducibility_level
 
-        self.encWorkDir: "Optional[AbsPath]" = None
-        self.workDir: "Optional[AbsPath]" = None
+        self.encWorkDir: "Optional[pathlib.Path]" = None
+        self.workDir: "Optional[pathlib.Path]" = None
 
         if isinstance(paranoid_mode, bool):
             self.paranoidMode = paranoid_mode
@@ -697,7 +697,7 @@ class WF:
                     instanceId, nickname=nickname, create_ok=False
                 )
         else:
-            self.rawWorkDir = cast("AbsPath", os.path.abspath(rawWorkDir))
+            self.rawWorkDir = rawWorkDir.absolute()
             if instanceId is None:
                 (
                     self.instanceId,
@@ -717,10 +717,8 @@ class WF:
         self.allowOther = False
 
         if checkSecure:
-            workdir_passphrase_file = os.path.join(
-                self.rawWorkDir, WORKDIR_PASSPHRASE_FILE
-            )
-            self.secure = os.path.exists(workdir_passphrase_file)
+            workdir_passphrase_file = self.rawWorkDir / WORKDIR_PASSPHRASE_FILE
+            self.secure = workdir_passphrase_file.exists()
         else:
             self.secure = (len(public_key_filenames) > 0) or workflow_config.get(
                 "secure", True
@@ -728,7 +726,7 @@ class WF:
 
         doSecureWorkDir = self.secure or self.paranoidMode
 
-        self.tempDir: "AbsPath"
+        self.tempDir: "pathlib.Path"
         was_setup, self.tempDir = self.setupWorkdir(
             doSecureWorkDir,
             fail_ok=fail_ok,
@@ -738,15 +736,15 @@ class WF:
         )
 
         self.configMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
-        self.inputsDir: "Optional[AbsPath]"
-        self.extrapolatedInputsDir: "Optional[AbsPath]"
-        self.intermediateDir: "Optional[AbsPath]"
-        self.outputsDir: "Optional[AbsPath]"
-        self.engineTweaksDir: "Optional[AbsPath]"
-        self.metaDir: "Optional[AbsPath]"
-        self.workflowDir: "Optional[AbsPath]"
-        self.consolidatedWorkflowDir: "Optional[AbsPath]"
-        self.containersDir: "Optional[AbsPath]"
+        self.inputsDir: "Optional[pathlib.Path]"
+        self.extrapolatedInputsDir: "Optional[pathlib.Path]"
+        self.intermediateDir: "Optional[pathlib.Path]"
+        self.outputsDir: "Optional[pathlib.Path]"
+        self.engineTweaksDir: "Optional[pathlib.Path]"
+        self.metaDir: "Optional[pathlib.Path]"
+        self.workflowDir: "Optional[pathlib.Path]"
+        self.consolidatedWorkflowDir: "Optional[pathlib.Path]"
+        self.containersDir: "Optional[pathlib.Path]"
         if was_setup:
             assert (
                 self.workDir is not None
@@ -755,56 +753,40 @@ class WF:
             # inputs, or the inputs properly pre-processed (decompressed,
             # decrypted, etc....) before a possible extrapolation.
             # These are the inputs used for RO-Crate building
-            self.inputsDir = cast(
-                "AbsPath", os.path.join(self.workDir, WORKDIR_INPUTS_RELDIR)
-            )
-            os.makedirs(self.inputsDir, exist_ok=True)
+            self.inputsDir = self.workDir / WORKDIR_INPUTS_RELDIR
+            self.inputsDir.mkdir(parents=True, exist_ok=True)
             # This directory will hold either hard links to the inputs directory,
             # or the inputs after a possible extrapolation
-            self.extrapolatedInputsDir = cast(
-                "AbsPath",
-                os.path.join(self.workDir, WORKDIR_EXTRAPOLATED_INPUTS_RELDIR),
+            self.extrapolatedInputsDir = (
+                self.workDir / WORKDIR_EXTRAPOLATED_INPUTS_RELDIR
             )
-            os.makedirs(self.extrapolatedInputsDir, exist_ok=True)
+            self.extrapolatedInputsDir.mkdir(parents=True, exist_ok=True)
             # This directory should hold intermediate workflow steps results
-            self.intermediateDir = cast(
-                "AbsPath", os.path.join(self.workDir, WORKDIR_INTERMEDIATE_RELDIR)
-            )
-            os.makedirs(self.intermediateDir, exist_ok=True)
+            self.intermediateDir = self.workDir / WORKDIR_INTERMEDIATE_RELDIR
+            self.intermediateDir.mkdir(parents=True, exist_ok=True)
             # This directory will hold the final workflow results, which could
             # be either symbolic links to the intermediate results directory
             # or newly generated content
-            self.outputsDir = cast(
-                "AbsPath", os.path.join(self.workDir, WORKDIR_OUTPUTS_RELDIR)
-            )
-            os.makedirs(self.outputsDir, exist_ok=True)
+            self.outputsDir = self.workDir / WORKDIR_OUTPUTS_RELDIR
+            self.outputsDir.mkdir(parents=True, exist_ok=True)
             # This directory is here for those files which are created in order
             # to tweak or patch workflow executions
-            self.engineTweaksDir = cast(
-                "AbsPath", os.path.join(self.workDir, WORKDIR_ENGINE_TWEAKS_RELDIR)
-            )
-            os.makedirs(self.engineTweaksDir, exist_ok=True)
+            self.engineTweaksDir = self.workDir / WORKDIR_ENGINE_TWEAKS_RELDIR
+            self.engineTweaksDir.mkdir(exist_ok=True)
             # This directory will hold metadata related to the execution
-            self.metaDir = cast(
-                "AbsPath", os.path.join(self.workDir, WORKDIR_META_RELDIR)
-            )
+            self.metaDir = self.workDir / WORKDIR_META_RELDIR
             # This directory will hold a copy of the workflow
-            self.workflowDir = cast(
-                "AbsPath", os.path.join(self.workDir, WORKDIR_WORKFLOW_RELDIR)
-            )
+            self.workflowDir = self.workDir / WORKDIR_WORKFLOW_RELDIR
             # This directory will hold a copy of the consolidated workflow
-            self.consolidatedWorkflowDir = cast(
-                "AbsPath",
-                os.path.join(self.workDir, WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR),
+            self.consolidatedWorkflowDir = (
+                self.workDir / WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR
             )
             # This directory will hold either a hardlink or a copy of the containers
-            self.containersDir = cast(
-                "AbsPath", os.path.join(self.workDir, WORKDIR_CONTAINERS_RELDIR)
-            )
+            self.containersDir = self.workDir / WORKDIR_CONTAINERS_RELDIR
 
             # This is true when the working directory already exists
             if checkSecure:
-                if not os.path.isdir(self.metaDir):
+                if not self.metaDir.is_dir():
                     self.configMarshalled = False
                     errstr = "Staged working directory {} is incomplete".format(
                         self.workDir
@@ -835,7 +817,7 @@ class WF:
                 # the container type
                 self.explicit_container_type = True
 
-                os.makedirs(self.metaDir, exist_ok=True)
+                self.metaDir.mkdir(parents=True, exist_ok=True)
                 self.marshallConfig(overwrite=True)
                 is_damaged = False
         else:
@@ -905,7 +887,7 @@ class WF:
         self.arch: "Optional[ProcessorArchitecture]" = None
 
         self.stagedExecutions: "Optional[MutableSequence[StagedExecution]]" = None
-        self.cacheROCrateFilename: "Optional[AbsPath]" = None
+        self.cacheROCrateFilename: "Optional[pathlib.Path]" = None
 
         self.runExportActions: "Optional[MutableSequence[MaterializedExportAction]]" = (
             None
@@ -961,15 +943,15 @@ class WF:
         self,
         doSecureWorkDir: "bool",
         fail_ok: "bool" = False,
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
-    ) -> "Tuple[bool, AbsPath]":
+    ) -> "Tuple[bool, pathlib.Path]":
         uniqueRawWorkDir = self.rawWorkDir
 
         allowOther = False
-        uniqueEncWorkDir: "Optional[AbsPath]"
-        uniqueWorkDir: "AbsPath"
+        uniqueEncWorkDir: "Optional[pathlib.Path]"
+        uniqueWorkDir: "pathlib.Path"
         if doSecureWorkDir:
             # We need to detect whether fuse has enabled user_allow_other
             # the only way I know is parsing /etc/fuse.conf
@@ -981,20 +963,18 @@ class WF:
                             break
                     self.logger.debug(f"FUSE has user_allow_other: {allowOther}")
 
-            uniqueEncWorkDir = cast("AbsPath", os.path.join(uniqueRawWorkDir, ".crypt"))
-            uniqueWorkDir = cast("AbsPath", os.path.join(uniqueRawWorkDir, "work"))
+            uniqueEncWorkDir = uniqueRawWorkDir / ".crypt"
+            uniqueWorkDir = uniqueRawWorkDir / "work"
 
             # The directories should exist before calling encryption FS mount
-            os.makedirs(uniqueEncWorkDir, exist_ok=True)
-            os.makedirs(uniqueWorkDir, exist_ok=True)
+            uniqueEncWorkDir.mkdir(parents=True, exist_ok=True)
+            uniqueWorkDir.mkdir(parents=True, exist_ok=True)
 
             # This is the passphrase needed to decrypt the filesystem
-            workdir_passphrase_file = cast(
-                "AbsPath", os.path.join(uniqueRawWorkDir, WORKDIR_PASSPHRASE_FILE)
-            )
+            workdir_passphrase_file = uniqueRawWorkDir / WORKDIR_PASSPHRASE_FILE
 
-            used_public_key_filenames: "Sequence[AnyPath]"
-            if os.path.exists(workdir_passphrase_file):
+            used_public_key_filenames: "Sequence[pathlib.Path]"
+            if workdir_passphrase_file.exists():
                 (
                     encfs_type,
                     encfs_cmd,
@@ -1042,10 +1022,12 @@ class WF:
                                 f"Destination mount point {uniqueWorkDir} is tainted. Moving..."
                             )
                             shutil.move(
-                                uniqueWorkDir,
-                                uniqueWorkDir + "_tainted_" + str(time.time()),
+                                uniqueWorkDir.as_posix(),
+                                uniqueWorkDir.with_name(
+                                    uniqueWorkDir.name + "_tainted_" + str(time.time())
+                                ).as_posix(),
                             )
-                            os.makedirs(uniqueWorkDir, exist_ok=True)
+                            uniqueWorkDir.mkdir(parents=True, exist_ok=True)
                             break
 
                 # We are going to unmount what we have mounted
@@ -1054,7 +1036,7 @@ class WF:
                 # Now, time to mount the encrypted FS
                 try:
                     ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](
-                        encfs_cmd,
+                        pathlib.Path(encfs_cmd),
                         self.encfs_idleMinutes,
                         uniqueEncWorkDir,
                         uniqueWorkDir,
@@ -1082,10 +1064,8 @@ class WF:
                     # Time to transfer the public keys
                     # to be used later in the lifecycle
                     if len(used_public_key_filenames) > 0:
-                        base_keys_dir = os.path.join(
-                            uniqueWorkDir, "meta", "public_keys"
-                        )
-                        os.makedirs(base_keys_dir, exist_ok=True)
+                        base_keys_dir = uniqueWorkDir / "meta" / "public_keys"
+                        base_keys_dir.mkdir(parents=True, exist_ok=True)
                         key_fns: "MutableSequence[str]" = []
                         manifest = {
                             "creation": datetime.datetime.now(
@@ -1095,13 +1075,12 @@ class WF:
                         }
                         for i_key, key_fn in enumerate(used_public_key_filenames):
                             dest_fn_basename = f"key_{i_key}.c4gh.public"
-                            dest_fn = os.path.join(base_keys_dir, dest_fn_basename)
+                            dest_fn = base_keys_dir / dest_fn_basename
                             shutil.copyfile(key_fn, dest_fn)
                             key_fns.append(dest_fn_basename)
 
                         # Last, manifest
-                        with open(
-                            os.path.join(base_keys_dir, "manifest.json"),
+                        with (base_keys_dir / "manifest.json").open(
                             mode="wt",
                             encoding="utf-8",
                         ) as mF:
@@ -1116,9 +1095,9 @@ class WF:
 
         # The temporary directory is in the raw working directory as
         # some container engine could fail
-        uniqueTempDir = cast("AbsPath", os.path.join(uniqueRawWorkDir, ".TEMP"))
-        os.makedirs(uniqueTempDir, exist_ok=True)
-        os.chmod(uniqueTempDir, 0o1777)
+        uniqueTempDir = uniqueRawWorkDir / ".TEMP"
+        uniqueTempDir.mkdir(parents=True, exist_ok=True)
+        uniqueTempDir.chmod(0o1777)
 
         # Setting up working directories, one per instance
         self.encWorkDir = uniqueEncWorkDir
@@ -1142,7 +1121,7 @@ class WF:
                         self.fusermount_cmd,
                         "-u",  # Umount the directory
                         "-z",  # Even if it is not possible to umount it now, hide the mount point
-                        self.workDir,
+                        self.workDir.as_posix(),
                     ]
 
                     retval = subprocess.Popen(
@@ -1223,9 +1202,14 @@ class WF:
         self.paranoidMode = True
 
     @staticmethod
-    def __read_yaml_config(filename: "AnyPath") -> "WritableWorkflowMetaConfigBlock":
-        with open(filename, mode="r", encoding="utf-8") as wcf:
-            workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+    def __read_yaml_config(
+        filename: "pathlib.Path",
+    ) -> "WritableWorkflowMetaConfigBlock":
+        with filename.open(mode="r", encoding="utf-8") as wcf:
+            config_dirname = filename.resolve().parent
+            workflow_meta = unmarshall_namedtuple(
+                yaml.safe_load(wcf), workdir=config_dirname
+            )
 
         return cast("WritableWorkflowMetaConfigBlock", workflow_meta)
 
@@ -1234,7 +1218,7 @@ class WF:
         cls,
         wfexs: "WfExSBackend",
         base_workflow_meta: "WorkflowMetaConfigBlock",
-        replaced_parameters_filename: "AnyPath",
+        replaced_parameters_filename: "pathlib.Path",
     ) -> "Tuple[WritableWorkflowMetaConfigBlock, Mapping[str, Set[str]]]":
         transferrable_keys = ("params", "environment")
         new_params_meta = cls.__read_yaml_config(replaced_parameters_filename)
@@ -1284,8 +1268,8 @@ class WF:
     def FromWorkDir(
         cls,
         wfexs: "WfExSBackend",
-        workflowWorkingDirectory: "AnyPath",
-        private_key_filename: "Optional[AnyPath]" = None,
+        workflowWorkingDirectory: "pathlib.Path",
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
     ) -> "WF":
@@ -1320,12 +1304,12 @@ class WF:
     def FromFiles(
         cls,
         wfexs: "WfExSBackend",
-        workflowMetaFilename: "AnyPath",
-        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        workflowMetaFilename: "pathlib.Path",
+        securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":
@@ -1353,11 +1337,11 @@ class WF:
         cls,
         wfexs: "WfExSBackend",
         workflow_meta: "WritableWorkflowMetaConfigBlock",
-        securityContextsConfigFilename: "Optional[AnyPath]" = None,
+        securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
         cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
@@ -1381,7 +1365,7 @@ class WF:
 
         # Last, try loading the security contexts credentials file
         if securityContextsConfigFilename:
-            if os.path.exists(securityContextsConfigFilename):
+            if securityContextsConfigFilename.exists():
                 vault = SecurityContextVault.FromFile(securityContextsConfigFilename)
             else:
                 raise WFException(
@@ -1414,12 +1398,12 @@ class WF:
         cls,
         wfexs: "WfExSBackend",
         wfInstance: "WF",
-        securityContextsConfigFilename: "Optional[AnyPath]" = None,
-        replaced_parameters_filename: "Optional[AnyPath]" = None,
+        securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
+        replaced_parameters_filename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
@@ -1599,12 +1583,12 @@ class WF:
         wfexs: "WfExSBackend",
         workflowROCrateFilename: "pathlib.Path",
         public_name: "str",  # Mainly used for provenance and exceptions
-        securityContextsConfigFilename: "Optional[AnyPath]" = None,
-        replaced_parameters_filename: "Optional[AnyPath]" = None,
+        securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
+        replaced_parameters_filename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
         paranoidMode: "bool" = False,
@@ -1751,8 +1735,8 @@ class WF:
         workflow_meta: "WorkflowMetaConfigBlock",
         vault: "SecurityContextVault",
         orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
         cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
@@ -1830,8 +1814,8 @@ class WF:
         wfexs: "WfExSBackend",
         workflow_meta: "WorkflowMetaConfigBlock",
         orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[AnyPath]" = [],
-        private_key_filename: "Optional[AnyPath]" = None,
+        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":  # VRE
@@ -2044,7 +2028,7 @@ class WF:
         )
 
         if self.repoRelPath is not None:
-            if not os.path.exists(os.path.join(self.workflowDir, self.repoRelPath)):
+            if not (self.workflowDir / self.repoRelPath).exists():
                 raise WFException(
                     "Relative path {} cannot be found in materialized workflow repository {}".format(
                         self.repoRelPath, self.workflowDir
@@ -2230,7 +2214,7 @@ class WF:
                 self.consolidatedWorkflowDir is not None
             ), "The consolidated workflow directory should be available here"
             if not offline:
-                os.makedirs(self.containersDir, exist_ok=True)
+                self.containersDir.mkdir(parents=True, exist_ok=True)
             (
                 self.materializedEngine,
                 self.containerEngineVersion,
@@ -2245,77 +2229,6 @@ class WF:
                 injectable_operational_containers=injectable_operational_containers,
                 profiles=self.enabled_profiles,
             )
-
-    # DEPRECATED?
-    def injectInputs(
-        self,
-        paths: "Sequence[AnyPath]",
-        workflowInputs_destdir: "Optional[AbsPath]" = None,
-        workflowInputs_cacheDir: "Optional[Union[AbsPath, CacheType]]" = None,
-        lastInput: "int" = 0,
-    ) -> int:
-        warnings.warn(
-            "injectInputs is being deprecated", PendingDeprecationWarning, stacklevel=2
-        )
-        if workflowInputs_destdir is None:
-            assert self.inputsDir is not None
-            workflowInputs_destdir = self.inputsDir
-        if workflowInputs_cacheDir is None:
-            workflowInputs_cacheDir = CacheType.Input
-
-        cacheable = not self.paranoidMode
-        # The storage dir depends on whether it can be cached or not
-        storeDir = workflowInputs_cacheDir if cacheable else workflowInputs_destdir
-        if storeDir is None:
-            raise WFException(
-                "Cannot inject inputs as the store directory is undefined"
-            )
-
-        for path in paths:
-            # We are sending the context name thinking in the future,
-            # as it could contain potential hints for authenticated access
-            fileuri = urllib.parse.urlunparse(
-                ("file", "", os.path.abspath(path), "", "", "")
-            )
-            matContent = self.wfexs.downloadContent(
-                LicensedURI(
-                    uri=cast("URIType", fileuri),
-                ),
-                vault=self.vault,
-                dest=storeDir,
-                ignoreCache=not cacheable,
-                registerInCache=cacheable,
-            )
-
-            # Now, time to create the symbolic link
-            lastInput += 1
-
-            prettyLocal = os.path.join(
-                workflowInputs_destdir, matContent.prettyFilename
-            )
-
-            # As Nextflow has some issues when two inputs of a process
-            # have the same basename, harden by default
-            hardenPrettyLocal = True
-            # hardenPrettyLocal = False
-            # if os.path.islink(prettyLocal):
-            #     oldLocal = os.readlink(prettyLocal)
-            #
-            #     hardenPrettyLocal = oldLocal != matContent.local
-            # elif os.path.exists(prettyLocal):
-            #     hardenPrettyLocal = True
-
-            if hardenPrettyLocal:
-                # Trying to avoid collisions on input naming
-                prettyLocal = os.path.join(
-                    workflowInputs_destdir,
-                    str(lastInput) + "_" + matContent.prettyFilename,
-                )
-
-            if not os.path.exists(prettyLocal):
-                os.symlink(matContent.local, prettyLocal)
-
-        return lastInput
 
     def materializeInputs(
         self,
@@ -2428,7 +2341,7 @@ class WF:
         remote_file: "Sch_InputURI_Fetchable",
         contextName: "Optional[str]",
         offline: "bool",
-        storeDir: "Union[AbsPath, CacheType]",
+        storeDir: "Union[pathlib.Path, CacheType]",
         cacheable: "bool",
         inputDestDir: "pathlib.Path",
         globExplode: "Optional[str]",
@@ -2856,8 +2769,8 @@ class WF:
         self,
         inputs: "ParamsBlock",
         linearKey: "SymbolicParamName",
-        workflowInputs_destdir: "AbsPath",
-        workflowExtrapolatedInputs_destdir: "AbsPath",
+        workflowInputs_destdir: "pathlib.Path",
+        workflowExtrapolatedInputs_destdir: "pathlib.Path",
         lastInput: "int" = 0,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
@@ -2936,7 +2849,7 @@ class WF:
                 ).resolve()
 
         # The storage dir depends on whether it can be cached or not
-        storeDir: "Union[CacheType, AbsPath]" = (
+        storeDir: "Union[CacheType, pathlib.Path]" = (
             CacheType.Input if cacheable else workflowInputs_destdir
         )
 
@@ -2991,8 +2904,10 @@ class WF:
             for t_remote_pair in t_remote_pairs:
                 remote_pairs.append(t_remote_pair)
 
-                with open(
-                    t_remote_pair.local, mode="rt", encoding="utf-8", newline=t_newline
+                with t_remote_pair.local.open(
+                    mode="rt",
+                    encoding="utf-8",
+                    newline=t_newline,
                 ) as tH:
                     skiplines = t_skiplines
                     for line in tH:
@@ -3172,8 +3087,8 @@ class WF:
     def fetchInputs(
         self,
         params: "Union[ParamsBlock, Sequence[ParamsBlock]]",
-        workflowInputs_destdir: "AbsPath",
-        workflowExtrapolatedInputs_destdir: "AbsPath",
+        workflowInputs_destdir: "pathlib.Path",
+        workflowExtrapolatedInputs_destdir: "pathlib.Path",
         prefix: "str" = "",
         injectable_inputs_dict: "Mapping[str, MaterializedInput]" = {},
         lastInput: "int" = 0,
@@ -3280,18 +3195,19 @@ class WF:
 
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
-                            autoFilledFile = os.path.join(
+                            autoFilledFile = pathlib.Path(
                                 self.outputsDir, rel_auto_filled, *the_tokens
                             )
-                            autoFilledDir = os.path.dirname(autoFilledFile)
+                            autoFilledDir = autoFilledFile.parent
                             # This is needed to assure the path exists
-                            if autoFilledDir != self.outputsDir:
-                                os.makedirs(autoFilledDir, exist_ok=True)
+                            if not autoFilledDir.samefile(self.outputsDir):
+                                autoFilledDir.mkdir(parents=True, exist_ok=True)
 
                             theInputs.append(
                                 MaterializedInput(
                                     name=linearKey,
-                                    values=[autoFilledFile],
+                                    # TODO: do it in a more elegant way
+                                    values=[autoFilledFile.as_posix()],
                                     autoFilled=True,
                                 )
                             )
@@ -3371,7 +3287,7 @@ class WF:
                             if len(remote_pairs) == 0:
                                 # No injected content
                                 # The storage dir depends on whether it can be cached or not
-                                storeDir: "Union[CacheType, AbsPath]" = (
+                                storeDir: "Union[CacheType, pathlib.Path]" = (
                                     CacheType.Input
                                     if cacheable
                                     else workflowInputs_destdir
@@ -3630,7 +3546,7 @@ class WF:
         BEWARE: This is a destructive step! So, once run, there is no back!
         """
         assert self.workDir is not None
-        return bagit.make_bag(self.workDir)
+        return bagit.make_bag(self.workDir.as_posix())
 
     DefaultCardinality = "1"
     CardinalityMapping = {
@@ -3825,14 +3741,16 @@ class WF:
 
     def exportResultsFromFiles(
         self,
-        exportActionsFile: "Optional[AnyPath]" = None,
-        securityContextFile: "Optional[AnyPath]" = None,
+        exportActionsFile: "Optional[pathlib.Path]" = None,
+        securityContextFile: "Optional[pathlib.Path]" = None,
         action_ids: "Sequence[SymbolicName]" = [],
         fail_ok: "bool" = False,
     ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
         if exportActionsFile is not None:
-            with open(exportActionsFile, mode="r", encoding="utf-8") as eaf:
-                raw_actions = unmarshall_namedtuple(yaml.safe_load(eaf))
+            with exportActionsFile.open(mode="r", encoding="utf-8") as eaf:
+                raw_actions = unmarshall_namedtuple(
+                    yaml.safe_load(eaf), workdir=self.workDir
+                )
 
             actions = self.parseExportActions(raw_actions["exports"])
         else:
@@ -4151,7 +4069,8 @@ This is an enumeration of the types of collected contents:
             workflow_meta["default_actions"] = self.default_actions
 
         return cast(
-            "WritableWorkflowMetaConfigBlock", marshall_namedtuple(workflow_meta)
+            "WritableWorkflowMetaConfigBlock",
+            marshall_namedtuple(workflow_meta, workdir=self.workDir),
         )
 
     def marshallConfig(
@@ -4164,16 +4083,14 @@ This is an enumeration of the types of collected contents:
 
         # Now, the config itself
         if overwrite or (self.configMarshalled is None):
-            workflow_meta_filename = os.path.join(
-                self.metaDir, WORKDIR_WORKFLOW_META_FILE
-            )
+            workflow_meta_filename = self.metaDir / WORKDIR_WORKFLOW_META_FILE
             if (
                 overwrite
-                or not os.path.exists(workflow_meta_filename)
+                or not workflow_meta_filename.exists()
                 or os.path.getsize(workflow_meta_filename) == 0
             ):
                 staging_recipe = self.staging_recipe
-                with open(workflow_meta_filename, mode="w", encoding="utf-8") as wmF:
+                with workflow_meta_filename.open(mode="w", encoding="utf-8") as wmF:
                     yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
 
             self.configMarshalled = datetime.datetime.fromtimestamp(
@@ -4207,12 +4124,10 @@ This is an enumeration of the types of collected contents:
 
         if self.configMarshalled is None:
             config_unmarshalled = True
-            workflow_meta_filename = os.path.join(
-                self.metaDir, WORKDIR_WORKFLOW_META_FILE
-            )
+            workflow_meta_filename = self.metaDir / WORKDIR_WORKFLOW_META_FILE
             # If the file does not exist, fail fast
             if (
-                not os.path.isfile(workflow_meta_filename)
+                not workflow_meta_filename.is_file()
                 or os.stat(workflow_meta_filename).st_size == 0
             ):
                 self.logger.debug(
@@ -4222,8 +4137,10 @@ This is an enumeration of the types of collected contents:
 
             workflow_meta = None
             try:
-                with open(workflow_meta_filename, mode="r", encoding="utf-8") as wcf:
-                    workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
+                with workflow_meta_filename.open(mode="r", encoding="utf-8") as wcf:
+                    workflow_meta = unmarshall_namedtuple(
+                        yaml.safe_load(wcf), workdir=self.workDir
+                    )
 
                     # If the file decodes to None, fail fast
                     if workflow_meta is None:
@@ -4349,11 +4266,9 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_stage_file = os.path.join(
-                self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE
-            )
+            marshalled_stage_file = self.metaDir / WORKDIR_MARSHALLED_STAGE_FILE
             stageAlreadyMarshalled = False
-            if os.path.exists(marshalled_stage_file):
+            if marshalled_stage_file.exists():
                 errmsg = "Marshalled stage file {} already exists".format(
                     marshalled_stage_file
                 )
@@ -4388,8 +4303,8 @@ This is an enumeration of the types of collected contents:
                 self.logger.debug(
                     "Creating marshalled stage file {}".format(marshalled_stage_file)
                 )
-                with open(marshalled_stage_file, mode="w", encoding="utf-8") as msF:
-                    marshalled_stage = marshall_namedtuple(stage)
+                with marshalled_stage_file.open(mode="w", encoding="utf-8") as msF:
+                    marshalled_stage = marshall_namedtuple(stage, workdir=self.workDir)
                     yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
@@ -4416,10 +4331,8 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_stage_file = os.path.join(
-                self.metaDir, WORKDIR_MARSHALLED_STAGE_FILE
-            )
-            if not os.path.exists(marshalled_stage_file):
+            marshalled_stage_file = self.metaDir / WORKDIR_MARSHALLED_STAGE_FILE
+            if not marshalled_stage_file.exists():
                 errmsg = f"Marshalled stage file {marshalled_stage_file} does not exists. Stage state was not stored"
                 self.logger.debug(errmsg)
                 self.stageMarshalled = False
@@ -4432,11 +4345,15 @@ This is an enumeration of the types of collected contents:
             )
             try:
                 # These symbols are needed to properly deserialize the yaml
-                with open(marshalled_stage_file, mode="r", encoding="utf-8") as msF:
+                with marshalled_stage_file.open(mode="r", encoding="utf-8") as msF:
                     marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
 
                     combined_globals = self.__get_combined_globals()
-                    stage = unmarshall_namedtuple(marshalled_stage, combined_globals)
+                    stage = unmarshall_namedtuple(
+                        marshalled_stage,
+                        myglobals=combined_globals,
+                        workdir=self.workDir,
+                    )
                     self.remote_repo = stage.get("remote_repo")
                     # This one takes precedence
                     if self.remote_repo is not None:
@@ -4598,11 +4515,9 @@ This is an enumeration of the types of collected contents:
 
             assert self.stagedExecutions is not None
 
-            marshalled_execution_file = os.path.join(
-                self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE
-            )
+            marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
             executionAlreadyMarshalled = False
-            if os.path.exists(marshalled_execution_file):
+            if marshalled_execution_file.exists():
                 errmsg = "Marshalled execution file {} already exists".format(
                     marshalled_execution_file
                 )
@@ -4630,8 +4545,12 @@ This is an enumeration of the types of collected contents:
                         marshalled_execution_file
                     )
                 )
-                with open(marshalled_execution_file, mode="w", encoding="utf-8") as msF:
-                    yaml.dump(marshall_namedtuple(executions), msF, Dumper=YAMLDumper)
+                with marshalled_execution_file.open(mode="w", encoding="utf-8") as msF:
+                    yaml.dump(
+                        marshall_namedtuple(executions, workdir=self.workDir),
+                        msF,
+                        Dumper=YAMLDumper,
+                    )
 
             self.executionMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
@@ -4654,10 +4573,8 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_execution_file = os.path.join(
-                self.metaDir, WORKDIR_MARSHALLED_EXECUTE_FILE
-            )
-            if not os.path.exists(marshalled_execution_file):
+            marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
+            if not marshalled_execution_file.exists():
                 errmsg = f"Marshalled execution file {marshalled_execution_file} does not exists. Execution state was not stored"
                 self.logger.debug(errmsg)
                 self.executionMarshalled = False
@@ -4675,11 +4592,13 @@ This is an enumeration of the types of collected contents:
                 os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
             )
             try:
-                with open(marshalled_execution_file, mode="r", encoding="utf-8") as meF:
+                with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
                     marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
                     combined_globals = self.__get_combined_globals()
                     execution_read = unmarshall_namedtuple(
-                        marshalled_execution, combined_globals
+                        marshalled_execution,
+                        myglobals=combined_globals,
+                        workdir=self.workDir,
                     )
 
                     if isinstance(execution_read, dict):
@@ -4692,13 +4611,9 @@ This is an enumeration of the types of collected contents:
                         # We might need to learn where the metadata of this
                         # specific execution is living
                         outputsDir = execution.get("outputsDir", WORKDIR_OUTPUTS_RELDIR)
-                        absOutputMetaDir = os.path.join(
-                            self.metaDir, WORKDIR_OUTPUTS_RELDIR
-                        )
-                        if absOutputMetaDir != WORKDIR_OUTPUTS_RELDIR:
-                            jobOutputMetaDir = os.path.join(
-                                absOutputMetaDir, os.path.basename(outputsDir)
-                            )
+                        absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
+                        if outputsDir != WORKDIR_OUTPUTS_RELDIR:
+                            jobOutputMetaDir = absOutputMetaDir / outputsDir
                         else:
                             jobOutputMetaDir = absOutputMetaDir
 
@@ -4714,10 +4629,14 @@ This is an enumeration of the types of collected contents:
                                 WORKDIR_STDERR_FILE,
                                 "log.txt",
                             ):
-                                putative_fname = os.path.join(
-                                    jobOutputMetaDir, logfname
-                                )
-                                if os.path.exists(putative_fname):
+                                putative_fname = jobOutputMetaDir / logfname
+                                if (
+                                    not putative_fname.exists()
+                                    and not jobOutputMetaDir.samefile(absOutputMetaDir)
+                                ):
+                                    putative_fname = absOutputMetaDir / logfname
+
+                                if putative_fname.exists():
                                     logfile.append(
                                         cast(
                                             "RelPath",
@@ -4726,46 +4645,30 @@ This is an enumeration of the types of collected contents:
                                             ),
                                         )
                                     )
-                                    continue
-
-                                if jobOutputMetaDir != absOutputMetaDir:
-                                    putative_fname = os.path.join(
-                                        absOutputMetaDir, logfname
-                                    )
-                                    if os.path.exists(putative_fname):
-                                        logfile.append(
-                                            cast(
-                                                "RelPath",
-                                                os.path.relpath(
-                                                    putative_fname, self.workDir
-                                                ),
-                                            )
-                                        )
 
                         diagram: "Optional[RelPath]" = execution.get("diagram")
                         if diagram is None:
-                            putative_diagram = os.path.join(
-                                jobOutputMetaDir,
-                                WORKDIR_STATS_RELDIR,
-                                STATS_DAG_DOT_FILE,
+                            putative_diagram = (
+                                jobOutputMetaDir
+                                / WORKDIR_STATS_RELDIR
+                                / STATS_DAG_DOT_FILE
                             )
 
-                            if os.path.exists(putative_diagram):
+                            if (
+                                not putative_diagram.exists()
+                                and not jobOutputMetaDir.samefile(absOutputMetaDir)
+                            ):
+                                putative_diagram = (
+                                    absOutputMetaDir
+                                    / WORKDIR_STATS_RELDIR
+                                    / STATS_DAG_DOT_FILE
+                                )
+
+                            if putative_diagram.exists():
                                 diagram = cast(
                                     "RelPath",
                                     os.path.relpath(putative_diagram, self.workDir),
                                 )
-                            elif jobOutputMetaDir != absOutputMetaDir:
-                                putative_diagram = os.path.join(
-                                    absOutputMetaDir,
-                                    WORKDIR_STATS_RELDIR,
-                                    STATS_DAG_DOT_FILE,
-                                )
-                                if os.path.exists(putative_diagram):
-                                    diagram = cast(
-                                        "RelPath",
-                                        os.path.relpath(putative_diagram, self.workDir),
-                                    )
 
                         profiles: "Optional[Sequence[str]]" = execution.get("profiles")
                         # Backward <=> forward compatibility
@@ -4813,11 +4716,9 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_export_file = os.path.join(
-                self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE
-            )
+            marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
             exportAlreadyMarshalled = False
-            if os.path.exists(marshalled_export_file):
+            if marshalled_export_file.exists():
                 errmsg = "Marshalled export results file {} already exists".format(
                     marshalled_export_file
                 )
@@ -4835,9 +4736,11 @@ This is an enumeration of the types of collected contents:
                         marshalled_export_file
                     )
                 )
-                with open(marshalled_export_file, mode="w", encoding="utf-8") as msF:
+                with marshalled_export_file.open(mode="w", encoding="utf-8") as msF:
                     yaml.dump(
-                        marshall_namedtuple(self.runExportActions),
+                        marshall_namedtuple(
+                            self.runExportActions, workdir=self.workDir
+                        ),
                         msF,
                         Dumper=YAMLDumper,
                     )
@@ -4863,10 +4766,8 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_export_file = os.path.join(
-                self.metaDir, WORKDIR_MARSHALLED_EXPORT_FILE
-            )
-            if not os.path.exists(marshalled_export_file):
+            marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
+            if not marshalled_export_file.exists():
                 errmsg = f"Marshalled export results file {marshalled_export_file} does not exists. Export results state was not stored"
                 self.logger.debug(errmsg)
                 self.exportMarshalled = False
@@ -4880,11 +4781,13 @@ This is an enumeration of the types of collected contents:
                 )
             )
             try:
-                with open(marshalled_export_file, mode="r", encoding="utf-8") as meF:
+                with marshalled_export_file.open(mode="r", encoding="utf-8") as meF:
                     marshalled_export = yaml.load(meF, Loader=YAMLLoader)
                     combined_globals = self.__get_combined_globals()
                     self.runExportActions = unmarshall_namedtuple(
-                        marshalled_export, combined_globals
+                        marshalled_export,
+                        myglobals=combined_globals,
+                        workdir=self.workDir,
                     )
 
             except Exception as e:
@@ -4965,12 +4868,10 @@ This is an enumeration of the types of collected contents:
                     # The whole input directory, which can contain files
                     # and / or directories references from environment
                     # variables
-                    prettyFilename = cast(
-                        "RelPath", os.path.basename(self.staged_setup.inputs_dir)
-                    )
+                    prettyFilename = cast("RelPath", self.staged_setup.inputs_dir.name)
                     retval.append(
                         MaterializedContent(
-                            local=pathlib.Path(self.staged_setup.inputs_dir),
+                            local=self.staged_setup.inputs_dir,
                             licensed_uri=LicensedURI(
                                 uri=cast(
                                     "URIType",
@@ -5142,9 +5043,10 @@ This is an enumeration of the types of collected contents:
                 )
                 os.close(temp_handle)
                 atexit.register(os.unlink, temp_rocrate_file)
+                temp_rocrate_path = pathlib.Path(temp_rocrate_file)
 
                 create_rocrate(
-                    filename=cast("AbsPath", temp_rocrate_file),
+                    filename=temp_rocrate_path,
                     payloads=payloads_param,
                     licences=licences,
                     resolved_orcids=resolved_orcids,
@@ -5152,7 +5054,7 @@ This is an enumeration of the types of collected contents:
                 )
                 retval.append(
                     MaterializedContent(
-                        local=pathlib.Path(temp_rocrate_file),
+                        local=temp_rocrate_path,
                         licensed_uri=LicensedURI(
                             uri=cast(
                                 "URIType",
@@ -5175,12 +5077,12 @@ This is an enumeration of the types of collected contents:
 
     def createStageResearchObject(
         self,
-        filename: "Optional[AnyPath]" = None,
+        filename: "Optional[pathlib.Path]" = None,
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
-    ) -> "AnyPath":
+    ) -> "pathlib.Path":
         """
         Create RO-crate from stage provenance.
         """
@@ -5241,9 +5143,7 @@ This is an enumeration of the types of collected contents:
         # Save RO-crate as execution.crate.zip
         if filename is None:
             assert self.outputsDir is not None
-            filename = cast(
-                "AnyPath", os.path.join(self.outputsDir, self.STAGED_CRATE_FILE)
-            )
+            filename = self.outputsDir / self.STAGED_CRATE_FILE
         wrroc.writeWRROC(filename)
 
         self.logger.info("Staged RO-Crate created: {}".format(filename))
@@ -5252,12 +5152,12 @@ This is an enumeration of the types of collected contents:
 
     def createResultsResearchObject(
         self,
-        filename: "Optional[AnyPath]" = None,
+        filename: "Optional[pathlib.Path]" = None,
         payloads: "CratableItem" = NoCratableItem,
         licences: "Sequence[LicenceDescription]" = [],
         resolved_orcids: "Sequence[ResolvedORCID]" = [],
         crate_pid: "Optional[str]" = None,
-    ) -> "AnyPath":
+    ) -> "pathlib.Path":
         """
         Create RO-crate from stage provenance.
         """
@@ -5315,9 +5215,7 @@ This is an enumeration of the types of collected contents:
         # Save RO-crate as execution.crate.zip
         if filename is None:
             assert self.outputsDir is not None
-            filename = cast(
-                "AnyPath", os.path.join(self.outputsDir, self.EXECUTION_CRATE_FILE)
-            )
+            filename = self.outputsDir / self.EXECUTION_CRATE_FILE
 
         wrroc.writeWRROC(filename)
 

@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         ProgsMapping,
         SecurityContextConfig,
         SymbolicName,
@@ -89,7 +90,7 @@ class WiktionaryFetcher(AbstractStatefulFetcher):
     def fetch(
         self,
         remote_file: "URIType",
-        cachedFilename: "AbsPath",
+        cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
     ) -> "ProtocolFetcherReturn":
         parsedInputURL = urllib.parse.urlparse(remote_file)

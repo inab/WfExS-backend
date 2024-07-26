@@ -23,6 +23,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from os import (
         PathLike,
     )
@@ -37,6 +38,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         LicenceDescription,
+        PathLikePath,
         ResolvedORCID,
         SecurityContextConfig,
         URIType,
@@ -55,7 +57,7 @@ class AbstractContextedExportPlugin(AbstractExportPlugin):
 
     def __init__(
         self,
-        refdir: "AbsPath",
+        refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],
@@ -69,12 +71,12 @@ class AbstractContextedExportPlugin(AbstractExportPlugin):
             default_preferred_id=default_preferred_id,
         )
         self.wfexs: "Optional[WfExSBackend]" = None
-        self.tempdir: "Optional[Union[str, PathLike[Any]]]" = None
+        self.tempdir: "Optional[PathLikePath]" = None
 
     def set_wfexs_context(
         self,
         wfexs: "WfExSBackend",
-        tempdir: "Optional[Union[str, PathLike[Any]]]" = None,
+        tempdir: "Optional[PathLikePath]" = None,
     ) -> "None":
         self.wfexs = wfexs
         self.tempdir = tempdir

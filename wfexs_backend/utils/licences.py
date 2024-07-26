@@ -49,6 +49,7 @@ import inspect
 import json
 import logging
 import os.path
+import pathlib
 import urllib.parse
 
 import xdg.BaseDirectory
@@ -518,7 +519,7 @@ class LicenceMatcher:
     def __init__(
         self,
         cacheHandler: "SchemeHandlerCacheHandler",
-        cacheDir: "Optional[AbsPath]" = None,
+        cacheDir: "Optional[pathlib.Path]" = None,
         spdx_version: "str" = DEFAULT_SPDX_VERSION,
     ):
         # Getting a logger focused on specific classes
@@ -622,9 +623,8 @@ class LicenceMatcherSingleton(LicenceMatcher):
 
     def __new__(cls) -> "LicenceMatcher":  # type: ignore
         if cls.__instance is None:
-            cachePath = cast(
-                "AbsPath",
-                xdg.BaseDirectory.save_cache_path("es.elixir.WfExSLicenceMatcher"),
+            cachePath = pathlib.Path(
+                xdg.BaseDirectory.save_cache_path("es.elixir.WfExSLicenceMatcher")
             )
 
             # Private cache handler instance

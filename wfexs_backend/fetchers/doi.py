@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         SecurityContextConfig,
         URIType,
     )
@@ -66,7 +67,7 @@ WORKFLOWHUB_RECORD_PREFIX = "/workflows/"
 
 def fetchDOI(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """

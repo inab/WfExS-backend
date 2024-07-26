@@ -17,10 +17,16 @@
 # limitations under the License.
 
 import pytest
+import pathlib
 
 from tests.pushers.marks import (
     MARKERS,
 )
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from py.path.local import LocalPath  # type: ignore[import]
 
 
 def pytest_addoption(parser: "pytest.Parser") -> "None":
@@ -31,3 +37,8 @@ def pytest_addoption(parser: "pytest.Parser") -> "None":
             action="store",
             help=mark_details.param_description,
         )
+
+
+@pytest.fixture
+def tmppath(tmpdir: "LocalPath") -> "pathlib.Path":
+    return pathlib.Path(tmpdir)

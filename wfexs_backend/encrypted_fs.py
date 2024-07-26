@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import enum
+import pathlib
 import subprocess
 import tempfile
 
@@ -27,6 +28,10 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from typing import (
+        MutableSequence,
+    )
+
     from .common import (
         AbsPath,
         AnyPath,
@@ -59,23 +64,23 @@ DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT = 5
 
 
 def _mountEncFS(
-    encfs_cmd: "AnyPath",
+    encfs_cmd: "pathlib.Path",
     encfs_idleMinutes: "int",
-    uniqueEncWorkDir: "AbsPath",
-    uniqueWorkDir: "AbsPath",
-    uniqueRawWorkDir: "AbsPath",
+    uniqueEncWorkDir: "pathlib.Path",
+    uniqueWorkDir: "pathlib.Path",
+    uniqueRawWorkDir: "pathlib.Path",
     clearPass: "str",
     allowOther: "bool" = False,
 ) -> None:
     with tempfile.NamedTemporaryFile() as encfs_init_stdout, tempfile.NamedTemporaryFile() as encfs_init_stderr:
-        encfsCommand = [
-            encfs_cmd,
+        encfsCommand: "MutableSequence[str]" = [
+            encfs_cmd.as_posix(),
             "-i",
             str(encfs_idleMinutes),
             "--stdinpass",
             "--standard",
-            uniqueEncWorkDir,
-            uniqueWorkDir,
+            uniqueEncWorkDir.as_posix(),
+            uniqueWorkDir.as_posix(),
         ]
 
         # This parameter can be a security hole
@@ -106,17 +111,21 @@ def _mountEncFS(
 
 
 def _mountGoCryptFS(
-    gocryptfs_cmd: "AnyPath",
+    gocryptfs_cmd: "pathlib.Path",
     gocryptfs_idleMinutes: "int",
-    uniqueEncWorkDir: "AbsPath",
-    uniqueWorkDir: "AbsPath",
-    uniqueRawWorkDir: "AbsPath",
+    uniqueEncWorkDir: "pathlib.Path",
+    uniqueWorkDir: "pathlib.Path",
+    uniqueRawWorkDir: "pathlib.Path",
     clearPass: "str",
     allowOther: "bool" = False,
 ) -> None:
     with tempfile.NamedTemporaryFile() as gocryptfs_init_stdout, tempfile.NamedTemporaryFile() as gocryptfs_init_stderr:
         # First, detect whether there is an already created filesystem
-        gocryptfsInfo = [gocryptfs_cmd, "-info", uniqueEncWorkDir]
+        gocryptfsInfo: "MutableSequence[str]" = [
+            gocryptfs_cmd.as_posix(),
+            "-info",
+            uniqueEncWorkDir.as_posix(),
+        ]
 
         retval = subprocess.call(
             gocryptfsInfo,
@@ -128,7 +137,11 @@ def _mountGoCryptFS(
 
         if retval != 0:
             # Let's try creating it!
-            gocryptfsInit = [gocryptfs_cmd, "-init", uniqueEncWorkDir]
+            gocryptfsInit: "MutableSequence[str]" = [
+                gocryptfs_cmd.as_posix(),
+                "-init",
+                uniqueEncWorkDir.as_posix(),
+            ]
 
             gocryptfsCommand = gocryptfsInit
 
@@ -144,8 +157,8 @@ def _mountGoCryptFS(
 
         if retval == 0:
             # And now, let's mount it
-            gocryptfsMount = [
-                gocryptfs_cmd,
+            gocryptfsMount: "MutableSequence[str]" = [
+                gocryptfs_cmd.as_posix(),
                 "-i",
                 str(gocryptfs_idleMinutes) + "m",
             ]
@@ -153,7 +166,9 @@ def _mountGoCryptFS(
             if allowOther:
                 gocryptfsMount.append("-allow_other")
 
-            gocryptfsMount.extend([uniqueEncWorkDir, uniqueWorkDir])
+            gocryptfsMount.extend(
+                [uniqueEncWorkDir.as_posix(), uniqueWorkDir.as_posix()]
+            )
 
             gocryptfsCommand = gocryptfsMount
 

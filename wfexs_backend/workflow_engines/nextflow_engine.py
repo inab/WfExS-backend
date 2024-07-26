@@ -183,21 +183,21 @@ class NextflowWorkflowEngine(WorkflowEngine):
     def __init__(
         self,
         container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
-        cacheDir: "Optional[AnyPath]" = None,
+        cacheDir: "Optional[pathlib.Path]" = None,
         workflow_config: "Optional[Mapping[str, Any]]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
-        engineTweaksDir: "Optional[AnyPath]" = None,
-        cacheWorkflowDir: "Optional[AnyPath]" = None,
-        cacheWorkflowInputsDir: "Optional[AnyPath]" = None,
-        workDir: "Optional[AnyPath]" = None,
-        outputsDir: "Optional[AnyPath]" = None,
-        outputMetaDir: "Optional[AnyPath]" = None,
-        intermediateDir: "Optional[AnyPath]" = None,
-        tempDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
+        engineTweaksDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowInputsDir: "Optional[pathlib.Path]" = None,
+        workDir: "Optional[pathlib.Path]" = None,
+        outputsDir: "Optional[pathlib.Path]" = None,
+        outputMetaDir: "Optional[pathlib.Path]" = None,
+        intermediateDir: "Optional[pathlib.Path]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
-        config_directory: "Optional[AnyPath]" = None,
+        config_directory: "Optional[pathlib.Path]" = None,
     ):
         super().__init__(
             container_factory_clazz=container_factory_clazz,
@@ -307,18 +307,16 @@ class NextflowWorkflowEngine(WorkflowEngine):
             self.nxf_profile = [str(nxf_profile)]
 
         # Setting the assets directory
-        self.nxf_assets = os.path.join(self.engineTweaksDir, "assets")
-        os.makedirs(self.nxf_assets, exist_ok=True)
+        self.nxf_assets = self.engineTweaksDir / "assets"
+        self.nxf_assets.mkdir(parents=True, exist_ok=True)
 
         # Setting the home directory
-        self.nxf_home = os.path.join(self.engineTweaksDir, ".nextflow")
-        os.makedirs(self.nxf_assets, exist_ok=True)
+        self.nxf_home = self.engineTweaksDir / ".nextflow"
+        self.nxf_assets.mkdir(parents=True, exist_ok=True)
 
         # Setting up packed directory
-        self.groovy_cache_dir = os.path.join(
-            self.cacheWorkflowDir, "groovy-parsing-cache"
-        )
-        os.makedirs(self.groovy_cache_dir, exist_ok=True)
+        self.groovy_cache_dir = self.cacheWorkflowDir / "groovy-parsing-cache"
+        self.groovy_cache_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def MyWorkflowType(cls) -> "WorkflowType":
@@ -427,7 +425,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 ) = analyze_nf_content(
                     firstPathContent,
                     only_names=only_names,
-                    cache_dir=self.groovy_cache_dir,
+                    cache_dir=self.groovy_cache_dir.as_posix(),
                 )
             except Exception as e:
                 errstr = f"Failed to parse initial file {os.path.relpath(firstPath, nfDir)} with groovy parser"
@@ -494,7 +492,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         ) = analyze_nf_content(
                             newNxfConfigContent,
                             only_names=only_names,
-                            cache_dir=self.groovy_cache_dir,
+                            cache_dir=self.groovy_cache_dir.as_posix(),
                         )
                     except Exception as e:
                         errstr = f"Failed to parse configuration file {relNewNxfConfig} with groovy parser"
@@ -657,7 +655,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         ) = analyze_nf_content(
                             content,
                             only_names=only_names,
-                            cache_dir=self.groovy_cache_dir,
+                            cache_dir=self.groovy_cache_dir.as_posix(),
                         )
                     except Exception as e:
                         errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
@@ -742,16 +740,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     def materializeEngineVersion(
         self, engineVersion: "EngineVersion"
-    ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
+    ) -> "Tuple[EngineVersion, pathlib.Path, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
 
-        nextflow_install_dir = cast(
-            "EnginePath", os.path.join(self.weCacheDir, engineVersion)
-        )
+        nextflow_install_dir = self.weCacheDir / engineVersion
         retval, nxf_install_stdout_v, nxf_install_stderr_v = self.runNextflowCommand(
             engineVersion, ["info"], nextflow_path=nextflow_install_dir
         )
@@ -778,20 +774,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
-        containers_path: "Optional[AnyPath]" = None,
+        containers_path: "Optional[pathlib.Path]" = None,
         workdir: "Optional[pathlib.Path]" = None,
         intermediateDir: "Optional[pathlib.Path]" = None,
-        nextflow_path: "Optional[EnginePath]" = None,
-        stdoutFilename: "Optional[AbsPath]" = None,
-        stderrFilename: "Optional[AbsPath]" = None,
+        nextflow_path: "Optional[pathlib.Path]" = None,
+        stdoutFilename: "Optional[pathlib.Path]" = None,
+        stderrFilename: "Optional[pathlib.Path]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
     ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         self.logger.debug("Command => nextflow " + " ".join(commandLine))
 
         if containers_path is None:
-            containers_path = cast(
-                "AnyPath", self.container_factory.cacheDir.as_posix()
-            )
+            containers_path = self.container_factory.cacheDir
         if self.engine_mode == EngineMode.Docker:
             (
                 retval,
@@ -832,21 +826,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
-        containers_path: "AnyPath",
+        containers_path: "pathlib.Path",
         workdir: "Optional[pathlib.Path]" = None,
         intermediateDir: "Optional[pathlib.Path]" = None,
-        nextflow_install_dir: "Optional[EnginePath]" = None,
-        stdoutFilename: "Optional[AbsPath]" = None,
-        stderrFilename: "Optional[AbsPath]" = None,
+        nextflow_install_dir: "Optional[pathlib.Path]" = None,
+        stdoutFilename: "Optional[pathlib.Path]" = None,
+        stderrFilename: "Optional[pathlib.Path]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
     ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         if nextflow_install_dir is None:
-            nextflow_install_dir = cast(
-                "EnginePath", os.path.join(self.weCacheDir, nextflow_version)
-            )
-        cachedScript = cast("AbsPath", os.path.join(nextflow_install_dir, "nextflow"))
-        if not os.path.exists(cachedScript):
-            os.makedirs(nextflow_install_dir, exist_ok=True)
+            nextflow_install_dir = self.weCacheDir / nextflow_version
+        cachedScript = nextflow_install_dir / "nextflow"
+        if not cachedScript.exists():
+            nextflow_install_dir.mkdir(parents=True, exist_ok=True)
             nextflow_script_url = cast(
                 "URIType",
                 "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow-{0}-all".format(
@@ -862,12 +854,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         # Checking the installer has execution permissions
         if not os.access(cachedScript, os.R_OK | os.X_OK):
-            os.chmod(cachedScript, 0o555)
+            cachedScript.chmod(0o555)
 
         # Now, time to run it
         NXF_HOME = self.nxf_home
         instEnv = dict(os.environ if runEnv is None else runEnv)
-        instEnv["NXF_HOME"] = NXF_HOME
+        instEnv["NXF_HOME"] = NXF_HOME.as_posix()
         # Needed for newer nextflow versions, so older workflows do not misbehave
         instEnv["NXF_DEFAULT_DSL"] = "1"
         instEnv["JAVA_CMD"] = self.java_cmd
@@ -881,7 +873,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         instEnv["NXF_WORK"] = (
             workdir if workdir is not None else jobIntermediateDir
         ).as_posix()
-        instEnv["NXF_ASSETS"] = self.nxf_assets
+        instEnv["NXF_ASSETS"] = self.nxf_assets.as_posix()
         if self.logger.getEffectiveLevel() <= logging.DEBUG:
             instEnv["NXF_DEBUG"] = "1"
         #    instEnv['NXF_DEBUG'] = '2'
@@ -889,8 +881,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         #    instEnv['NXF_DEBUG'] = '1'
 
         # FIXME: Should we set NXF_TEMP???
-        instEnv["NXF_TEMP"] = self.tempDir
-        instEnv["TMPDIR"] = self.tempDir
+        instEnv["NXF_TEMP"] = self.tempDir.as_posix()
+        instEnv["TMPDIR"] = self.tempDir.as_posix()
 
         # This is needed to have Nextflow using the cached contents
         if self.container_factory.containerType == ContainerType.Singularity:
@@ -900,7 +892,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             else:
                 env_sing_key = "NXF_SINGULARITY_CACHEDIR"
 
-            instEnv[env_sing_key] = containers_path
+            instEnv[env_sing_key] = containers_path.as_posix()
 
         # This is done only once
         retval = 0
@@ -914,7 +906,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             [cachedScript, "-version"],
                             stdout=nxf_install_stdout,
                             stderr=nxf_install_stderr,
-                            cwd=nextflow_install_dir,
+                            cwd=nextflow_install_dir.as_posix(),
                             env=instEnv,
                         ).wait()
 
@@ -944,15 +936,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
             try:
                 if stdoutFilename is None:
                     nxf_run_stdout = tempfile.NamedTemporaryFile()
-                    stdoutFilename = cast("AbsPath", nxf_run_stdout.name)
+                    stdoutFilename = pathlib.Path(nxf_run_stdout.name)
                 else:
-                    nxf_run_stdout = open(stdoutFilename, mode="ab+")
+                    nxf_run_stdout = stdoutFilename.open(mode="ab+")
 
                 if stderrFilename is None:
                     nxf_run_stderr = tempfile.NamedTemporaryFile()
-                    stderrFilename = cast("AbsPath", nxf_run_stderr.name)
+                    stderrFilename = pathlib.Path(nxf_run_stderr.name)
                 else:
-                    nxf_run_stderr = open(stderrFilename, mode="ab+")
+                    nxf_run_stderr = stderrFilename.open(mode="ab+")
 
                 retval = subprocess.Popen(
                     [cachedScript, *commandLine],
@@ -980,11 +972,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
-        containers_path: "AnyPath",
+        containers_path: "pathlib.Path",
         workdir: "Optional[pathlib.Path]" = None,
         intermediateDir: "Optional[pathlib.Path]" = None,
-        stdoutFilename: "Optional[AbsPath]" = None,
-        stderrFilename: "Optional[AbsPath]" = None,
+        stdoutFilename: "Optional[pathlib.Path]" = None,
+        stderrFilename: "Optional[pathlib.Path]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
     ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         # Now, we have to assure the nextflow image is already here
@@ -1076,12 +1068,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # FIXME: should it be something more restrictive?
             homedir = os.path.expanduser("~")
 
-            nextflow_install_dir = os.path.join(self.weCacheDir, nextflow_version)
+            nextflow_install_dir = self.weCacheDir / nextflow_version
             nxf_home = self.nxf_home
             nxf_assets_dir = self.nxf_assets
             try:
                 # Directories required by Nextflow in a Docker
-                os.makedirs(nxf_assets_dir, exist_ok=True)
+                nxf_assets_dir.mkdir(parents=True, exist_ok=True)
             except Exception as error:
                 raise WorkflowEngineException(
                     "ERROR: Unable to create nextflow assets directory. Error: "
@@ -1104,9 +1096,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 "-e",
                 "HOME=" + homedir,
                 "-e",
-                "NXF_ASSETS=" + nxf_assets_dir,
+                "NXF_ASSETS=" + nxf_assets_dir.as_posix(),
                 "-e",
-                "NXF_HOME=" + nxf_home,
+                "NXF_HOME=" + nxf_home.as_posix(),
                 "-e",
                 "NXF_USRMAP=" + uid,
                 # "-e", "NXF_DOCKER_OPTS=-u "+uid+":"+gid+" -e HOME="+homedir+" -e TZ="+tzstring+" -v "+workdir+":"+workdir+":rw,rprivate,z -v "+project_path+":"+project_path+":rw,rprivate,z",
@@ -1128,7 +1120,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 "/var/run/docker.sock:/var/run/docker.sock:rw,rprivate,z",
             ]
 
-            validation_cmd_post_vol = ["-w", workdir, docker_tag, "nextflow"]
+            validation_cmd_post_vol: "MutableSequence[str]" = [
+                "-w",
+                workdir.as_posix(),
+                docker_tag,
+                "nextflow",
+            ]
             validation_cmd_post_vol.extend(commandLine)
 
             validation_cmd_post_vol_resume = [*validation_cmd_post_vol, "-resume"]
@@ -1140,8 +1137,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # to generate the volume parameters
             volumes = [
                 (homedir + "/", "ro,rprivate,z"),
-                (nxf_assets_dir + "/", "rprivate,z"),
-                (nxf_home + "/", "rprivate,z"),
+                (nxf_assets_dir.as_posix() + "/", "rprivate,z"),
+                (nxf_home.as_posix() + "/", "rprivate,z"),
                 (workdir.as_posix() + "/", "rw,rprivate,z"),
                 #    (project_path+'/',"rw,rprivate,z"),
                 #    (repo_dir+'/',"ro,rprivate,z")
@@ -1247,15 +1244,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
             try:
                 if stdoutFilename is None:
                     run_stdout = tempfile.NamedTemporaryFile()
-                    stdoutFilename = cast("AbsPath", run_stdout.name)
+                    stdoutFilename = pathlib.Path(run_stdout.name)
                 else:
-                    run_stdout = open(stdoutFilename, mode="ab+")
+                    run_stdout = stdoutFilename.open(mode="ab+")
 
                 if stderrFilename is None:
                     run_stderr = tempfile.NamedTemporaryFile()
-                    stderrFilename = cast("AbsPath", run_stderr.name)
+                    stderrFilename = pathlib.Path(run_stderr.name)
                 else:
-                    run_stderr = open(stderrFilename, mode="ab+")
+                    run_stderr = stderrFilename.open(mode="ab+")
 
                 while retries > 0 and retval != 0:
                     self.logger.debug('"' + '" "'.join(validation_params_cmd) + '"')
@@ -1381,7 +1378,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     def materializeWorkflow(
         self,
         matWorkflowEngine: "MaterializedWorkflowEngine",
-        consolidatedWorkflowDir: "AbsPath",
+        consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
@@ -1496,7 +1493,9 @@ STDERR
                         _,
                         _,
                         interesting_assignments,
-                    ) = analyze_nf_content(content, cache_dir=self.groovy_cache_dir)
+                    ) = analyze_nf_content(
+                        content, cache_dir=self.groovy_cache_dir.as_posix()
+                    )
                 except Exception as e:
                     errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
                     self.logger.exception(errstr)
@@ -1565,7 +1564,9 @@ STDERR
                         _,
                         l_plugins,
                         _,
-                    ) = analyze_nf_content(content, cache_dir=self.groovy_cache_dir)
+                    ) = analyze_nf_content(
+                        content, cache_dir=self.groovy_cache_dir.as_posix()
+                    )
                 except Exception as e:
                     errstr = f"Failed to parse file {relNxfScript} with groovy parser while looking for plugins"
                     self.logger.warning(errstr)
@@ -1846,7 +1847,7 @@ STDERR
             originalConfFile = None
 
         # File where all the gathered parameters are going to be stored
-        allParamsFile = os.path.join(outputMetaDir, "all-params.json")
+        allParamsFile = outputMetaDir / "all-params.json"
 
         with forceParamsConfFile.open(mode="w", encoding="utf-8") as fPC:
             # First of all, we have to replicate the contents of the
@@ -1954,7 +1955,7 @@ def wfexs_allParams()
 
 wfexs_allParams()
 """.format(
-                    allParamsFile
+                    allParamsFile.as_posix()
                 ),
                 file=fPC,
             )
@@ -1977,7 +1978,7 @@ wfexs_allParams()
 
         runName = "WfExS-run_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
-        nxf_params = [
+        nxf_params: "MutableSequence[str]" = [
             "-log",
             (outputStatsDir / "log.txt").as_posix(),
             "-C",
@@ -2007,12 +2008,8 @@ wfexs_allParams()
         # Using the copy of the original workflow
         nxf_params.append(wDir.as_posix())
 
-        stdoutFilename = cast(
-            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STDOUT_FILE)
-        )
-        stderrFilename = cast(
-            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STDERR_FILE)
-        )
+        stdoutFilename = outputMetaDir / WORKDIR_STDOUT_FILE
+        stderrFilename = outputMetaDir / WORKDIR_STDERR_FILE
 
         started = datetime.datetime.now(datetime.timezone.utc)
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(

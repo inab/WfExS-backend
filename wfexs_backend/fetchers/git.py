@@ -19,6 +19,7 @@
 import atexit
 import hashlib
 import os
+import pathlib
 import shutil
 import subprocess
 import tempfile
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoTag,
@@ -653,10 +655,10 @@ class GitFetcher(AbstractRepoFetcher):
         self,
         repoURL: "RepoURL",
         repoTag: "Optional[RepoTag]" = None,
-        repo_tag_destdir: "Optional[AbsPath]" = None,
-        base_repo_destdir: "Optional[AbsPath]" = None,
+        repo_tag_destdir: "Optional[PathLikePath]" = None,
+        base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
         """
 
         :param repoURL: The URL to the repository.
@@ -669,18 +671,18 @@ class GitFetcher(AbstractRepoFetcher):
         # Assure directory exists before next step
         if repo_tag_destdir is None:
             if base_repo_destdir is None:
-                repo_tag_destdir = cast(
-                    "AbsPath", tempfile.mkdtemp(prefix="wfexs", suffix=".git")
+                repo_tag_destpath = pathlib.Path(
+                    tempfile.mkdtemp(prefix="wfexs", suffix=".git")
                 )
-                atexit.register(shutil.rmtree, repo_tag_destdir, True)
+                atexit.register(shutil.rmtree, repo_tag_destpath, True)
             else:
                 repo_hashed_id = hashlib.sha1(repoURL.encode("utf-8")).hexdigest()
-                repo_destdir = os.path.join(base_repo_destdir, repo_hashed_id)
-                # repo_destdir = os.path.join(self.cacheWorkflowDir, repo_hashed_id)
+                repo_destpath = pathlib.Path(base_repo_destdir, repo_hashed_id)
+                # repo_destdir = pathlib.Path(self.cacheWorkflowDir, repo_hashed_id)
 
-                if not os.path.exists(repo_destdir):
+                if not repo_destpath.exists():
                     try:
-                        os.makedirs(repo_destdir)
+                        repo_destpath.mkdir(parents=True)
                     except IOError:
                         errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(
                             repoURL
@@ -690,15 +692,21 @@ class GitFetcher(AbstractRepoFetcher):
                 repo_hashed_tag_id = hashlib.sha1(
                     b"" if repoTag is None else repoTag.encode("utf-8")
                 ).hexdigest()
-                repo_tag_destdir = cast(
-                    "AbsPath", os.path.join(repo_destdir, repo_hashed_tag_id)
-                )
+                repo_tag_destpath = repo_destpath / repo_hashed_tag_id
+        else:
+            repo_tag_destpath = (
+                repo_tag_destdir
+                if isinstance(repo_tag_destdir, pathlib.Path)
+                else pathlib.Path(repo_tag_destdir)
+            )
 
-        self.logger.debug(f"Repo dir {repo_tag_destdir}")
+        self.logger.debug(f"Repo dir {repo_tag_destpath}")
 
         # We are assuming that, if the directory does exist, it contains the repo
         doRepoUpdate = True
-        if not os.path.exists(os.path.join(repo_tag_destdir, ".git")):
+        gitclone_params: "Optional[Sequence[str]]"
+        gitcheckout_params: "Optional[Sequence[str]]"
+        if not (repo_tag_destpath / ".git").exists():
             # Try cloning the repository without initial checkout
             if repoTag is not None:
                 gitclone_params = [
@@ -707,7 +715,7 @@ class GitFetcher(AbstractRepoFetcher):
                     "-n",
                     "--recurse-submodules",
                     repoURL,
-                    repo_tag_destdir,
+                    repo_tag_destpath.as_posix(),
                 ]
 
                 # Now, checkout the specific commit
@@ -719,7 +727,7 @@ class GitFetcher(AbstractRepoFetcher):
                     "clone",
                     "--recurse-submodules",
                     repoURL,
-                    repo_tag_destdir,
+                    repo_tag_destpath.as_posix(),
                 ]
 
                 gitcheckout_params = None
@@ -750,7 +758,7 @@ class GitFetcher(AbstractRepoFetcher):
                         gitcheckout_params,
                         stdout=git_stdout,
                         stderr=git_stderr,
-                        cwd=repo_tag_destdir,
+                        cwd=repo_tag_destpath,
                     ).wait()
                 # Last, submodule preparation
                 if retval == 0:
@@ -768,7 +776,7 @@ class GitFetcher(AbstractRepoFetcher):
                         gitsubmodule_params,
                         stdout=git_stdout,
                         stderr=git_stderr,
-                        cwd=repo_tag_destdir,
+                        cwd=repo_tag_destpath,
                     ).wait()
 
                 # Proper error handling
@@ -793,7 +801,7 @@ class GitFetcher(AbstractRepoFetcher):
             gitrevparse_params,
             stdout=subprocess.PIPE,
             encoding="iso-8859-1",
-            cwd=repo_tag_destdir,
+            cwd=repo_tag_destpath,
         ) as revproc:
             if revproc.stdout is not None:
                 repo_effective_checkout = cast(
@@ -808,7 +816,7 @@ class GitFetcher(AbstractRepoFetcher):
         )
 
         return (
-            repo_tag_destdir,
+            repo_tag_destpath,
             remote_repo,
             [],
         )
@@ -816,7 +824,7 @@ class GitFetcher(AbstractRepoFetcher):
     def fetch(
         self,
         remote_file: "URIType",
-        cachedFilename: "AbsPath",
+        cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
     ) -> "ProtocolFetcherReturn":
         parsedInputURL = parse.urlparse(remote_file)
@@ -892,8 +900,8 @@ class GitFetcher(AbstractRepoFetcher):
 
         preferredName: "Optional[RelPath]"
         if repoRelPath is not None:
-            cachedContentPath = os.path.join(repo_tag_destdir, repoRelPath)
-            preferredName = cast("RelPath", repoRelPath.split("/")[-1])
+            cachedContentPath = repo_tag_destdir / repoRelPath
+            preferredName = cast("RelPath", cachedContentPath.name)
         else:
             cachedContentPath = repo_tag_destdir
             preferredName = None

@@ -48,8 +48,8 @@
 			"type": "object",
 			"properties": {
 				"containerType": {
-					"title": "Container technology type in this installation",
-					"description": "Type of container technology to be used when any workflow is launched using this installation. Supported types are:\n- Singularity (default).\n- Docker.\n- Podman\n- No containerisation technology (discouraged)\nEncrypted working directories are unsupported when Docker or Podman are used due technological limitations",
+					"title": "Default container technology type in this installation",
+					"description": "Type of container technology to be used by default when any workflow is launched using this installation. Supported types are:\n- Singularity (default).\n- Docker.\n- Podman\n- No containerisation technology (discouraged)\nEncrypted working directories are unsupported when Docker or Podman are used due technological limitations",
 					"type": "string",
 					"enum": [
 						"singularity",

@@ -18,7 +18,7 @@
 
 from __future__ import absolute_import
 import http.client
-
+import os
 import shutil
 
 from typing import (
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoURL,
@@ -79,7 +80,7 @@ from ..utils.misc import (
 
 def fetchClassicURL(
     remote_file: "URIType",
-    cachedFilename: "Union[AbsPath, IO[bytes]]",
+    cachedFilename: "Union[PathLikePath, IO[bytes]]",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """
@@ -146,7 +147,7 @@ def fetchClassicURL(
 
     # Preparing where it is going to be written
     download_file: "IO[bytes]"
-    if isinstance(cachedFilename, str):
+    if isinstance(cachedFilename, (str, os.PathLike)):
         download_file = open(cachedFilename, "wb")
     else:
         download_file = cachedFilename
