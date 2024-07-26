@@ -17,7 +17,9 @@
 # limitations under the License.
 
 import pytest
+import atexit
 import logging
+import os
 import pathlib
 
 from typing import (
@@ -27,6 +29,7 @@ from typing import (
 
 if TYPE_CHECKING:
     from typing import (
+        Optional,
         Tuple,
     )
     from wfexs_backend.wfexs_backend import (
@@ -34,6 +37,12 @@ if TYPE_CHECKING:
     )
 
 from wfexs_backend.wfexs_backend import WfExSBackend
+from wfexs_backend.workflow import WF
+
+from tests.util import get_path
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 @pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
@@ -93,3 +102,39 @@ def test_wfexsbackend_list_workflow_engines(tmppath: "pathlib.Path") -> "None":
     wfBackend = test_wfexsbackend_init(tmppath)
 
     assert len(wfBackend.WORKFLOW_ENGINES) > 0
+
+
+WORKFLOW_TESTBED = pytest.mark.parametrize(
+    ["stage_file", "context_file"],
+    [
+        ("test-hello-cwl.wfex.stage", None),
+    ],
+)
+
+
+@pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
+@WORKFLOW_TESTBED
+def test_wfexsbackend_stage(
+    tmppath: "pathlib.Path", stage_file: "str", context_file: "Optional[str]"
+) -> "WF":
+    wfBackend = test_wfexsbackend_init(tmppath)
+
+    stage_def_path = pathlib.Path(get_path(os.path.join("data", stage_file)))
+    assert stage_def_path.is_file(), f"Test file {stage_def_path} is not available"
+
+    context_def_path: "Optional[pathlib.Path]"
+    if context_file is not None:
+        context_def_path = pathlib.Path(get_path(os.path.join("data", context_file)))
+        assert (
+            context_def_path.is_file()
+        ), f"Context file {context_def_path}, paired with {stage_def_path}, is not available"
+    else:
+        context_def_path = None
+
+    wfInstance = wfBackend.fromFiles(
+        stage_def_path,
+        context_def_path,
+    )
+
+    atexit.register(wfInstance.cleanup)
+    return wfInstance
