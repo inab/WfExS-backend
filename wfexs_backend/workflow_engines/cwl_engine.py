@@ -118,6 +118,7 @@ from . import (
     WORKDIR_STDERR_FILE,
     WorkflowEngine,
     WorkflowEngineException,
+    WorkflowEngineInstallException,
     WorkflowType,
 )
 
@@ -535,7 +536,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                             cwltool_install_stdout_v,
                             cwltool_install_stderr_v,
                         )
-                        raise WorkflowEngineException(errstr)
+                        raise WorkflowEngineInstallException(errstr)
 
             # TODO
 

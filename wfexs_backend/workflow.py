@@ -301,6 +301,7 @@ from .workflow_engines import (
     STATS_DAG_DOT_FILE,
     WorkflowEngine,
     WorkflowEngineException,
+    WorkflowEngineInstallException,
     WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR,
     WORKDIR_CONTAINERS_RELDIR,
     WORKDIR_ENGINE_TWEAKS_RELDIR,
@@ -2053,6 +2054,11 @@ class WF:
                     if engineVer is not None:
                         self.engineDesc = engineDesc
                         break
+                except WorkflowEngineInstallException:
+                    self.logger.exception(
+                        f"Engine {engineDesc.trs_descriptor} could not be installed. Reason:"
+                    )
+                    raise
                 except WorkflowEngineException:
                     # TODO: store the exceptions, to be shown if no workflow is recognized
                     self.logger.exception(

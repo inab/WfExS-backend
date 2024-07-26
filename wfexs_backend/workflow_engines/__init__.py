@@ -341,6 +341,14 @@ class WorkflowEngineException(AbstractWfExSException):
     pass
 
 
+class WorkflowEngineInstallException(WorkflowEngineException):
+    """
+    Exceptions fired by instances of WorkflowEngine when the engine could not be installed
+    """
+
+    pass
+
+
 class WorkflowEngine(AbstractWorkflowEngineType):
     def __init__(
         self,

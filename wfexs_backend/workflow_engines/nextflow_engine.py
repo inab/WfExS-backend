@@ -101,8 +101,10 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
-from . import WorkflowEngine, WorkflowEngineException
 from . import (
+    WorkflowEngine,
+    WorkflowEngineException,
+    WorkflowEngineInstallException,
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
@@ -755,7 +757,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             errstr = "Could not install Nextflow {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                 engineVersion, retval, nxf_install_stdout_v, nxf_install_stderr_v
             )
-            raise WorkflowEngineException(errstr)
+            raise WorkflowEngineInstallException(errstr)
 
         # Getting the version label
         verPat = re.compile(r"Version: +(.*)$")
@@ -1600,7 +1602,7 @@ STDERR
 {nxf_plugin_inst_stderr_v}
 """
                 self.logger.error(errstr)
-                raise WorkflowEngineException(errstr)
+                raise WorkflowEngineInstallException(errstr)
 
         return matWorkflowEngine, containerTags
 
