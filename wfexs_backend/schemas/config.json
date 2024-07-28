@@ -81,7 +81,7 @@
 								"encfs",
 								"gocryptfs"
 							],
-							"default": "encfs"
+							"default": "gocryptfs"
 						},
 						"command": {
 							"title": "Path to encryption mount program",

@@ -53,7 +53,7 @@ class EncryptedFSType(enum.Enum):
     GoCryptFS = "gocryptfs"
 
 
-DEFAULT_ENCRYPTED_FS_TYPE = EncryptedFSType.EncFS
+DEFAULT_ENCRYPTED_FS_TYPE = EncryptedFSType.GoCryptFS
 DEFAULT_ENCRYPTED_FS_CMD = {
     EncryptedFSType.EncFS: cast("RelPath", "encfs"),
     EncryptedFSType.GoCryptFS: cast("RelPath", "gocryptfs"),
