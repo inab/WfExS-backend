@@ -87,13 +87,18 @@ def _mountEncFS(
         if allowOther:
             encfsCommand.extend(["--", "-o", "allow_other"])
 
-        efs = subprocess.Popen(
-            encfsCommand,
-            stdin=subprocess.PIPE,
-            stdout=encfs_init_stdout,
-            stderr=encfs_init_stderr,
-            cwd=uniqueRawWorkDir,
-        )
+        try:
+            efs = subprocess.Popen(
+                encfsCommand,
+                stdin=subprocess.PIPE,
+                stdout=encfs_init_stdout,
+                stderr=encfs_init_stderr,
+                cwd=uniqueRawWorkDir,
+            )
+        except IOError as ioe:
+            errstr = f"Could not init/mount directory encryption FUSE using {encfsCommand} (maybe was not found)"
+            raise EncryptedFSException(errstr) from ioe
+
         efs.communicate(input=clearPass.encode("utf-8"))
         retval = efs.wait()
 
