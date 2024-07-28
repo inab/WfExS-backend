@@ -419,6 +419,8 @@ class CWLWorkflowEngine(WorkflowEngine):
 
         python_executable = self.python_cmd
         # A version directory is needed, also based on the python version
+        python_version_major = 0
+        python_version_minor = 0
         if python_executable is None or python_executable == sys.executable:
             python_version_major = sys.version_info.major
             python_version_minor = sys.version_info.minor
