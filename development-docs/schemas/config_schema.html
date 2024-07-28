@@ -15,9 +15,9 @@
     
     <title>WfExS-backend config</title>
 </head>
-<body onload="anchorOnLoad();" id="root"><h1>WfExS-backend config</h1>
+<body onload="anchorOnLoad();" id="root">
 
-    <div class="breadcrumbs"></div><span class="badge badge-dark value-type">Type: object</span><br/>
+    <div class="breadcrumbs"></div> <h1>WfExS-backend config</h1><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>WfExS-backend configuration file (EOSC-Life Demonstrator 7 JSON Schemas)</p>
 </span> <span class="badge badge-info no-additional">No Additional Properties</span>
         
@@ -47,7 +47,7 @@
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#cacheDir" onclick="anchorLink('cacheDir')">cacheDir</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#cacheDir" onclick="anchorLink('cacheDir')">cacheDir</a></div><h4>Caching directory</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>Directory where all the cache-able content will be hold.<br />
 This directory can be removed, as its contents should be available outside.<br />
 When it is not set, a temporary directory is created for the session, being destroyed when the program finishes.</p>
@@ -83,8 +83,8 @@ When it is not set, a temporary directory is created for the session, being dest
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#crypt4gh" onclick="anchorLink('crypt4gh')">crypt4gh</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
-<span class="description"><p>WfExS-backend needs an encryption key for several tasks, like encrypting and decrypting random keys of encrypted working directories. When this block does not exist, WfExS-backend.py creates the installation's keys, and updates the configuration file</p>
+    <a href="#crypt4gh" onclick="anchorLink('crypt4gh')">crypt4gh</a></div><h4>Installation Crypt4GH key setup</h4><span class="badge badge-dark value-type">Type: object</span><br/>
+<span class="description"><p>WfExS-backend needs an encryption key for several tasks, like encrypting and decrypting random keys of encrypted working directories. When this block does not exist, WfExS-backend.py creates the installation&#39;s keys, and updates the configuration file</p>
 </span> <span class="badge badge-info no-additional">No Additional Properties</span>
         
 
@@ -120,7 +120,7 @@ When it is not set, a temporary directory is created for the session, being dest
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#crypt4gh_key" onclick="anchorLink('crypt4gh_key')">key</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#crypt4gh_key" onclick="anchorLink('crypt4gh_key')">key</a></div><h4>Secret key installation file</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>The path to the Crypt4GH secret key file used by this installation. If the path is relative, the directory where the configuration file resides is used for the resolution</p>
 </span>
         
@@ -161,7 +161,7 @@ When it is not set, a temporary directory is created for the session, being dest
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#crypt4gh_passphrase" onclick="anchorLink('crypt4gh_passphrase')">passphrase</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#crypt4gh_passphrase" onclick="anchorLink('crypt4gh_passphrase')">passphrase</a></div><h4>Passphrase used to work with the secret key</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>Passphrase which has to be used to work with the secret key</p>
 </span>
         
@@ -202,7 +202,7 @@ When it is not set, a temporary directory is created for the session, being dest
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#crypt4gh_pub" onclick="anchorLink('crypt4gh_pub')">pub</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#crypt4gh_pub" onclick="anchorLink('crypt4gh_pub')">pub</a></div><h4>Public key installation file</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>The path to the Crypt4GH public key file used by this installation. If the path is relative, the directory where the configuration file resides is used for the resolution</p>
 </span>
         
@@ -240,7 +240,7 @@ When it is not set, a temporary directory is created for the session, being dest
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools" onclick="anchorLink('tools')">tools</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
+    <a href="#tools" onclick="anchorLink('tools')">tools</a></div><h4>External tools configuration block</h4><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>External tools configuration block</p>
 </span> <span class="badge badge-info no-additional">No Additional Properties</span>
         
@@ -277,8 +277,8 @@ When it is not set, a temporary directory is created for the session, being dest
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_containerType" onclick="anchorLink('tools_containerType')">containerType</a></div><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "singularity"</span><br/>
-<span class="description"><p>Type of container technology to be used when any workflow is launched using this installation. Supported types are:<br />
+    <a href="#tools_containerType" onclick="anchorLink('tools_containerType')">containerType</a></div><h4>Default container technology type in this installation</h4><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "singularity"</span><br/>
+<span class="description"><p>Type of container technology to be used by default when any workflow is launched using this installation. Supported types are:<br />
 - Singularity (default).<br />
 - Docker.<br />
 - Podman<br />
@@ -326,7 +326,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_engineMode" onclick="anchorLink('tools_engineMode')">engineMode</a></div><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "local"</span><br/>
+    <a href="#tools_engineMode" onclick="anchorLink('tools_engineMode')">engineMode</a></div><h4>Workflow engine invocation mode</h4><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "local"</span><br/>
 <span class="description"><p>Most of workflow engines are usually available both as installable executables and as containers, but when they are used inside a container usually do not support running containerised jobs, unless a very careful setup is done. Currently, WfExS-backend only partially supports Nextflow in its docker-in-docker mode.</p>
 </span><div class="enum-value" id="tools_engineMode_enum">
             <h4>Must be one of:</h4>
@@ -370,7 +370,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_encrypted_fs" onclick="anchorLink('tools_encrypted_fs')">encrypted_fs</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
+    <a href="#tools_encrypted_fs" onclick="anchorLink('tools_encrypted_fs')">encrypted_fs</a></div><h4>Working directory FUSE encrypted FS configuration block</h4><span class="badge badge-dark value-type">Type: object</span><br/>
  <span class="badge badge-info no-additional">No Additional Properties</span>
         
 
@@ -413,7 +413,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_encrypted_fs_type" onclick="anchorLink('tools_encrypted_fs_type')">type</a></div><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "encfs"</span><br/>
+    <a href="#tools_encrypted_fs_type" onclick="anchorLink('tools_encrypted_fs_type')">type</a></div><h4>Type of encrypted FS</h4><span class="badge badge-dark value-type">Type: enum (of string)</span> <span class="badge badge-success default-value">Default: "gocryptfs"</span><br/>
 <span class="description"><p>When an encrypted working directory is needed, the type of encrypted FS to be used is set up through this key. Currently, both encfs (default) and gocryptfs (recommended) are supported</p>
 </span><div class="enum-value" id="tools_encrypted_fs_type_enum">
             <h4>Must be one of:</h4>
@@ -464,7 +464,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_encrypted_fs_command" onclick="anchorLink('tools_encrypted_fs_command')">command</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#tools_encrypted_fs_command" onclick="anchorLink('tools_encrypted_fs_command')">command</a></div><h4>Path to encryption mount program</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>When this key is set, it overrides the default command to be used when an encrypted directory has to be created or mounted</p>
 </span>
         
@@ -512,8 +512,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_encrypted_fs_fusermount_command" onclick="anchorLink('tools_encrypted_fs_fusermount_command')">fusermount_command</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "fusermount"</span><br/>
-<span class="description"><p>Path to unmounting command to be used, being 'fusermount' by default</p>
+    <a href="#tools_encrypted_fs_fusermount_command" onclick="anchorLink('tools_encrypted_fs_fusermount_command')">fusermount_command</a></div><h4>Path to unmount command</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "fusermount"</span><br/>
+<span class="description"><p>Path to unmounting command to be used, being &#39;fusermount&#39; by default</p>
 </span>
         
 
@@ -560,7 +560,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_encrypted_fs_idle" onclick="anchorLink('tools_encrypted_fs_idle')">idle</a></div><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 5</span><br/>
+    <a href="#tools_encrypted_fs_idle" onclick="anchorLink('tools_encrypted_fs_idle')">idle</a></div><h4>Idle minutes before autoumount</h4><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 5</span><br/>
 <span class="description"><p>Number of minutes before an idle, mounted encrypted directory will automatically unmount</p>
 </span>
         
@@ -573,6 +573,192 @@ Encrypted working directories are unsupported when Docker or Podman are used due
         </div>
     </div>
 </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="accordion" id="accordiontools_commands">
+    <div class="card">
+        <div class="card-header" id="headingtools_commands">
+            <h2 class="mb-0">
+                <button class="btn btn-link property-name-button" type="button" data-toggle="collapse" data-target="#tools_commands"
+                        aria-expanded="" aria-controls="tools_commands" onclick="setAnchor('#tools_commands')"><span class="property-name">commands</span></button>
+            </h2>
+        </div>
+
+        <div id="tools_commands"
+             class="collapse property-definition-div" aria-labelledby="headingtools_commands"
+             data-parent="#accordiontools_commands">
+            <div class="card-body pl-5">
+
+    <div class="breadcrumbs">root
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools" onclick="anchorLink('tools')">tools</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands" onclick="anchorLink('tools_commands')">commands</a></div><h4>Custom command paths</h4><span class="badge badge-dark value-type">Type: array of object</span><br/>
+<span class="description"><p>Different modules depend on locatable programs, like git, docker, java or similar. These declarations are used to provide WfExS either custom paths or custom names. These declarations take precedence over <code>gitCommand</code>, <code>javaCommand</code> and similar ones</p>
+</span>
+        
+
+        
+        
+
+        <p><span class="badge badge-light restriction min-items-restriction" id="tools_commands_minItems">Must contain a minimum of <code>1</code> items</span></p><p><span class="badge badge-light restriction unique-items-restriction" id="tools_commands_uniqueItems">All items must be unique</span></p> <span class="badge badge-info no-additional">No Additional Items</span><h4>Each item of this array must be:</h4>
+    <div class="card">
+        <div class="card-body items-definition" id="tools_commands_items">
+            
+
+    <div class="breadcrumbs">root
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools" onclick="anchorLink('tools')">tools</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands" onclick="anchorLink('tools_commands')">commands</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands_items" onclick="anchorLink('tools_commands_items')">commands items</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
+
+        
+
+        
+        
+
+        
+<div class="accordion" id="accordiontools_commands_items_key">
+    <div class="card">
+        <div class="card-header" id="headingtools_commands_items_key">
+            <h2 class="mb-0">
+                <button class="btn btn-link property-name-button" type="button" data-toggle="collapse" data-target="#tools_commands_items_key"
+                        aria-expanded="" aria-controls="tools_commands_items_key" onclick="setAnchor('#tools_commands_items_key')"><span class="property-name">key</span> <span class="badge badge-warning required-property">Required</span></button>
+            </h2>
+        </div>
+
+        <div id="tools_commands_items_key"
+             class="collapse property-definition-div" aria-labelledby="headingtools_commands_items_key"
+             data-parent="#accordiontools_commands_items_key">
+            <div class="card-body pl-5">
+
+    <div class="breadcrumbs">root
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools" onclick="anchorLink('tools')">tools</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands" onclick="anchorLink('tools_commands')">commands</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands_items" onclick="anchorLink('tools_commands_items')">commands items</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands_items_key" onclick="anchorLink('tools_commands_items_key')">key</a></div><h4>The command key</h4><span class="badge badge-dark value-type">Type: string</span><br/>
+<span class="description"><p>Internal symbolic name used to represent this command</p>
+</span>
+        
+
+        
+        
+
+        
+            </div>
+        </div>
+    </div>
+</div>
+<div class="accordion" id="accordiontools_commands_items_path">
+    <div class="card">
+        <div class="card-header" id="headingtools_commands_items_path">
+            <h2 class="mb-0">
+                <button class="btn btn-link property-name-button" type="button" data-toggle="collapse" data-target="#tools_commands_items_path"
+                        aria-expanded="" aria-controls="tools_commands_items_path" onclick="setAnchor('#tools_commands_items_path')"><span class="property-name">path</span> <span class="badge badge-warning required-property">Required</span></button>
+            </h2>
+        </div>
+
+        <div id="tools_commands_items_path"
+             class="collapse property-definition-div" aria-labelledby="headingtools_commands_items_path"
+             data-parent="#accordiontools_commands_items_path">
+            <div class="card-body pl-5">
+
+    <div class="breadcrumbs">root
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools" onclick="anchorLink('tools')">tools</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands" onclick="anchorLink('tools_commands')">commands</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands_items" onclick="anchorLink('tools_commands_items')">commands items</a>
+        <svg width="1em" height="1em" viewBox="0 0 16 16" class="bi bi-arrow-right-short" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            <path
+                fill-rule="evenodd"
+                d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
+            />
+        </svg>
+    <a href="#tools_commands_items_path" onclick="anchorLink('tools_commands_items_path')">path</a></div><h4>The command path</h4><span class="badge badge-dark value-type">Type: string</span><br/>
+<span class="description"><p>Either the absolute path or PATH findable program name</p>
+</span>
+        
+
+        
+        <p><span class="badge badge-light restriction min-length-restriction" id="tools_commands_items_path_minLength">Must be at least <code>1</code> characters long</span></p>
+
+        
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
+    </div>
             </div>
         </div>
     </div>
@@ -605,7 +791,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_gitCommand" onclick="anchorLink('tools_gitCommand')">gitCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "git"</span><br/>
+    <a href="#tools_gitCommand" onclick="anchorLink('tools_gitCommand')">gitCommand</a></div><h4>Git client path</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "git"</span><br/>
 <span class="description"><p>Git is used to materialize workflows being hosted at git repositories, like GitHub. This key sets up custom paths to git command</p>
 </span>
         
@@ -646,7 +832,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_javaCommand" onclick="anchorLink('tools_javaCommand')">javaCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "java"</span><br/>
+    <a href="#tools_javaCommand" onclick="anchorLink('tools_javaCommand')">javaCommand</a></div><h4>Java path</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "java"</span><br/>
 <span class="description"><p>Java is needed to run Nextflow and future workflow engines. This key sets up custom paths to java installations</p>
 </span>
         
@@ -687,8 +873,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_singularityCommand" onclick="anchorLink('tools_singularityCommand')">singularityCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "singularity"</span><br/>
-<span class="description"><p>Singularity is used when containerType is 'singularity'. This key sets up custom paths to singularity command</p>
+    <a href="#tools_singularityCommand" onclick="anchorLink('tools_singularityCommand')">singularityCommand</a></div><h4>Singularity client path</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "singularity"</span><br/>
+<span class="description"><p>Singularity is used when containerType is &#39;singularity&#39;. This key sets up custom paths to singularity command</p>
 </span>
         
 
@@ -728,8 +914,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_dockerCommand" onclick="anchorLink('tools_dockerCommand')">dockerCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "docker"</span><br/>
-<span class="description"><p>Docker is used when containerType is 'docker'. This key sets up custom paths to docker command</p>
+    <a href="#tools_dockerCommand" onclick="anchorLink('tools_dockerCommand')">dockerCommand</a></div><h4>Docker client path</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "docker"</span><br/>
+<span class="description"><p>Docker is used when containerType is &#39;docker&#39;. This key sets up custom paths to docker command</p>
 </span>
         
 
@@ -769,8 +955,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_podmanCommand" onclick="anchorLink('tools_podmanCommand')">podmanCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "podman"</span><br/>
-<span class="description"><p>Podman is used when containerType is 'podman'. This key sets up custom paths to podman command</p>
+    <a href="#tools_podmanCommand" onclick="anchorLink('tools_podmanCommand')">podmanCommand</a></div><h4>Podman client path</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "podman"</span><br/>
+<span class="description"><p>Podman is used when containerType is &#39;podman&#39;. This key sets up custom paths to podman command</p>
 </span>
         
 
@@ -810,8 +996,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_dotCommand" onclick="anchorLink('tools_dotCommand')">dotCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "dot"</span><br/>
-<span class="description"><p>'dot' is used when the workflow engine generated diagram is in DOT format, to translate it to either PNG or SVG when the diagram is going to be embedded in an RO-Crate</p>
+    <a href="#tools_dotCommand" onclick="anchorLink('tools_dotCommand')">dotCommand</a></div><h4>'dot' client path</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "dot"</span><br/>
+<span class="description"><p>&#39;dot&#39; is used when the workflow engine generated diagram is in DOT format, to translate it to either PNG or SVG when the diagram is going to be embedded in an RO-Crate</p>
 </span>
         
 
@@ -851,8 +1037,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_staticBashCommand" onclick="anchorLink('tools_staticBashCommand')">staticBashCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "bash.static"</span><br/>
-<span class="description"><p>There is a bug in some bash versions which make them unsuitable to run the trace machinery from Nextflow, as the trace machinery enters in a live lock. As the images containing these faulty bash versions cannot be changed, a 'monkey patch' solution where an external, static bash version is injected on workflow execution is used. The injected static bash is found through this key, which is searched on PATH variable when it is not a full path.</p>
+    <a href="#tools_staticBashCommand" onclick="anchorLink('tools_staticBashCommand')">staticBashCommand</a></div><h4>Static bash command (used in singularity based Nextflow engine executions)</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "bash.static"</span><br/>
+<span class="description"><p>There is a bug in some bash versions which make them unsuitable to run the trace machinery from Nextflow, as the trace machinery enters in a live lock. As the images containing these faulty bash versions cannot be changed, a &#39;monkey patch&#39; solution where an external, static bash version is injected on workflow execution is used. The injected static bash is found through this key, which is searched on PATH variable when it is not a full path.</p>
 </span>
         
 
@@ -892,8 +1078,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_staticPsCommand" onclick="anchorLink('tools_staticPsCommand')">staticPsCommand</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "ps.static"</span><br/>
-<span class="description"><p>Nextflow uses a bash wrapper to gather process execution statistics. One of the binaries used by the wrapper is <code>ps</code>. Some containers (for instance, r-base:latest) do not contain such binary. As the images which do not contain <code>ps</code> cannot be changed, a 'monkey patch' solution where an external, static ps version is injected on workflow execution is used. The injected static ps is found through this key, which is searched on PATH variable when it is not a full path.</p>
+    <a href="#tools_staticPsCommand" onclick="anchorLink('tools_staticPsCommand')">staticPsCommand</a></div><h4>Static ps command (used in Nextflow engine executions to assure metrics gathering works even in containers without /bin/ps command)</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "ps.static"</span><br/>
+<span class="description"><p>Nextflow uses a bash wrapper to gather process execution statistics. One of the binaries used by the wrapper is <code>ps</code>. Some containers (for instance, r-base:latest) do not contain such binary. As the images which do not contain <code>ps</code> cannot be changed, a &#39;monkey patch&#39; solution where an external, static ps version is injected on workflow execution is used. The injected static ps is found through this key, which is searched on PATH variable when it is not a full path.</p>
 </span>
         
 
@@ -976,8 +1162,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_nextflow_dockerImage" onclick="anchorLink('tools_nextflow_dockerImage')">dockerImage</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "nextflow/nextflow"</span><br/>
-<span class="description"><p>(unfinished) When <code>engineMode</code> is <code>docker</code>, the name of the image to be fetched and used. The used tag will depend on the workflow's metadata, being by default the <code>version</code></p>
+    <a href="#tools_nextflow_dockerImage" onclick="anchorLink('tools_nextflow_dockerImage')">dockerImage</a></div><h4>Image for docker-in-docker mode</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "nextflow/nextflow"</span><br/>
+<span class="description"><p>(unfinished) When <code>engineMode</code> is <code>docker</code>, the name of the image to be fetched and used. The used tag will depend on the workflow&#39;s metadata, being by default the <code>version</code></p>
 </span>
         
 
@@ -1024,8 +1210,8 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_nextflow_version" onclick="anchorLink('tools_nextflow_version')">version</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "19.04.1"</span><br/>
-<span class="description"><p>Version of Nextflow engine to be used when workflow's metadata does not provide hints about minimal version needed.</p>
+    <a href="#tools_nextflow_version" onclick="anchorLink('tools_nextflow_version')">version</a></div><h4>Nextflow's version</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "19.04.1"</span><br/>
+<span class="description"><p>Version of Nextflow engine to be used when workflow&#39;s metadata does not provide hints about minimal version needed.</p>
 </span>
         
 
@@ -1072,7 +1258,7 @@ Encrypted working directories are unsupported when Docker or Podman are used due
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_nextflow_maxRetries" onclick="anchorLink('tools_nextflow_maxRetries')">maxRetries</a></div><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 5</span><br/>
+    <a href="#tools_nextflow_maxRetries" onclick="anchorLink('tools_nextflow_maxRetries')">maxRetries</a></div><h4>Retries in docker mode</h4><span class="badge badge-dark value-type">Type: integer</span> <span class="badge badge-success default-value">Default: 5</span><br/>
 <span class="description"><p>Retries when <code>engineMode</code> is <code>docker</code>.<br />
 Retries system was introduced when using docker-in-docker pattern because an insidious<br />
 bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-symlinks-on-bind-mounts/32138</p>
@@ -1122,7 +1308,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_nextflow_maxProcesses" onclick="anchorLink('tools_nextflow_maxProcesses')">maxProcesses</a></div><br/>
+    <a href="#tools_nextflow_maxProcesses" onclick="anchorLink('tools_nextflow_maxProcesses')">maxProcesses</a></div><h4>Max number of CPUs</h4><br/>
 <span class="description"><p>Number of CPUs to be used by Nextflow. When this key has an explicit value of <code>null</code>, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes</p>
 </span><div class="one-of-value" id="tools_nextflow_maxProcesses_oneOf"><h2 class="handle">
   <label>One of</label>
@@ -1317,7 +1503,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_cwl_version" onclick="anchorLink('tools_cwl_version')">version</a></div><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "3.1.20210628163208"</span><br/>
+    <a href="#tools_cwl_version" onclick="anchorLink('tools_cwl_version')">version</a></div><h4>cwltool's version</h4><span class="badge badge-dark value-type">Type: string</span> <span class="badge badge-success default-value">Default: "3.1.20210628163208"</span><br/>
 <span class="description"><p>Version of cwltool engine to be used. WfExS is not currently guessing the minimal needed version, so it is either the value set up in this key or the default one</p>
 </span>
         
@@ -1367,7 +1553,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#tools_pattern1" onclick="anchorLink('tools_pattern1')">Path to a command</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#tools_pattern1" onclick="anchorLink('tools_pattern1')">Path to a command</a></div><h4>Path to a command</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>This is a wildcard declaration to allow setting up custom paths to commands needed by several parts of the code</p>
 </span>
         
@@ -1405,7 +1591,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#workDir" onclick="anchorLink('workDir')">workDir</a></div><span class="badge badge-dark value-type">Type: string</span><br/>
+    <a href="#workDir" onclick="anchorLink('workDir')">workDir</a></div><h4>Working directory</h4><span class="badge badge-dark value-type">Type: string</span><br/>
 <span class="description"><p>Directory where all the working directories are going to be created.<br />
 When it is not set, a temporary directory is created, which will be removed when the program finishes (which avoids inspecting the working directory after the program has finished).</p>
 </span>
@@ -1440,7 +1626,7 @@ When it is not set, a temporary directory is created, which will be removed when
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#fetchers-setup" onclick="anchorLink('fetchers-setup')">fetchers-setup</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
+    <a href="#fetchers-setup" onclick="anchorLink('fetchers-setup')">fetchers-setup</a></div><h4>Fetchers parameters setup</h4><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>Some fetchers could need customizations at the configuration level, like limiting throughput or setting up some proxy</p>
 </span>
         
@@ -1482,7 +1668,7 @@ When it is not set, a temporary directory is created, which will be removed when
                 d="M4 8a.5.5 0 0 1 .5-.5h5.793L8.146 5.354a.5.5 0 1 1 .708-.708l3 3a.5.5 0 0 1 0 .708l-3 3a.5.5 0 0 1-.708-.708L10.293 8.5H4.5A.5.5 0 0 1 4 8z"
             />
         </svg>
-    <a href="#fetchers-setup_pattern1" onclick="anchorLink('fetchers-setup_pattern1')">Scheme fetcher setup</a></div><span class="badge badge-dark value-type">Type: object</span><br/>
+    <a href="#fetchers-setup_pattern1" onclick="anchorLink('fetchers-setup_pattern1')">Scheme fetcher setup</a></div><h4>Scheme fetcher setup</h4><span class="badge badge-dark value-type">Type: object</span><br/>
 <span class="description"><p>Some scheme fetchers could need customizations which depend on local WfExS installation environment. This is the place where to pass that</p>
 </span>
         
@@ -1501,6 +1687,6 @@ When it is not set, a temporary directory is created, which will be removed when
 </div>
 
     <footer>
-        <p class="generated-by-footer">Generated using <a href="https://github.com/coveooss/json-schema-for-humans">json-schema-for-humans</a> on 2023-09-19 at 01:51:39 +0000</p>
+        <p class="generated-by-footer">Generated using <a href="https://github.com/coveooss/json-schema-for-humans">json-schema-for-humans</a> on 2024-07-28 at 02:42:57 +0000</p>
     </footer></body>
 </html>
