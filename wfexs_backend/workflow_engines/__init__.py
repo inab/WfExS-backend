@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import copy
 import os
 import pathlib
 import sys
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
         Callable,
         Mapping,
         MutableSequence,
+        MutableMapping,
         NewType,
         Optional,
         Pattern,
@@ -80,9 +82,11 @@ if TYPE_CHECKING:
         LocalWorkflow,
         MaterializedInput,
         MaterializedContent,
+        ProgsMapping,
         RelPath,
         StagedExecution,
         StagedSetup,
+        SymbolicName,
         SymbolicOutputName,
         SymbolicParamName,
         TRS_Workflow_Descriptor,
@@ -199,6 +203,22 @@ class MaterializedWorkflowEngine(NamedTuple):
     containers_path: "Optional[pathlib.Path]" = None
     containers: "Optional[Sequence[Container]]" = None
     operational_containers: "Optional[Sequence[Container]]" = None
+
+    @classmethod
+    def _mapping_fixes(
+        cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
+    ) -> "Mapping[str, Any]":
+        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest["engine_path"] = pathlib.Path(orig["engine_path"])
+        if workdir is not None and not dest["engine_path"].is_absolute():
+            dest["engine_path"] = (workdir / dest["engine_path"]).resolve()
+
+        if dest.get("containers_path") is not None:
+            dest["containers_path"] = pathlib.Path(orig["containers_path"])
+            if workdir is not None and not dest["containers_path"].is_absolute():
+                dest["containers_path"] = (workdir / dest["containers_path"]).resolve()
+
+        return dest
 
 
 # This skeleton is here only for type mapping reasons
@@ -324,6 +344,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
             NoContainerFactory
         ],
+        progs_mapping: "Optional[ProgsMapping]" = None,
         cache_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_inputs_dir: "Optional[pathlib.Path]" = None,
@@ -350,12 +371,14 @@ class WorkflowEngineInstallException(WorkflowEngineException):
 
 
 class WorkflowEngine(AbstractWorkflowEngineType):
+    ENGINE_NAME = "abstract"
+
     def __init__(
         self,
         container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
         cacheDir: "Optional[pathlib.Path]" = None,
-        workflow_config: "Optional[Mapping[str, Any]]" = None,
-        local_config: "Optional[EngineLocalConfig]" = None,
+        engine_config: "Optional[EngineLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
         engineTweaksDir: "Optional[pathlib.Path]" = None,
         cacheWorkflowDir: "Optional[pathlib.Path]" = None,
         cacheWorkflowInputsDir: "Optional[pathlib.Path]" = None,
@@ -368,15 +391,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
         config_directory: "Optional[pathlib.Path]" = None,
+        engine_mode: "EngineMode" = DEFAULT_ENGINE_MODE,
+        writable_containers: "bool" = False,
     ):
         """
         Abstract init method
 
         :param cacheDir:
-        :param workflow_config:
-            This one may be needed to identify container overrides
-            or specific engine versions
-        :param local_config:
+        :param engine_config:
         :param engineTweaksDir:
         :param cacheWorkflowDir:
         :param cacheWorkflowInputsDir:
@@ -386,12 +408,15 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         :param tempDir:
         :param secure_exec:
         :param config_directory:
+        :param writable_containers: Whether the containers of each step are writable
         """
-        if local_config is None:
-            local_config = dict()
-        if workflow_config is None:
-            workflow_config = dict()
-        self.local_config = local_config
+        if engine_config is None:
+            engine_config = dict()
+        self.engine_config = engine_config
+
+        if progs_mapping is None:
+            progs_mapping = dict()
+        self.progs_mapping = progs_mapping
 
         if config_directory is None:
             config_directory = pathlib.Path.cwd()
@@ -400,14 +425,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        # This one may be needed to identify container overrides
-        # or specific engine versions
-        self.workflow_config = workflow_config
-
         # cacheDir
-        if cacheDir is None:
-            cacheDir = local_config.get("cacheDir")
-
         if cacheDir is None:
             cacheDir = pathlib.Path(tempfile.mkdtemp(prefix="WfExS", suffix="backend"))
             # Assuring this temporal directory is removed at the end
@@ -509,13 +527,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.stagedContainersDir = stagedContainersDir
 
         # Setting up common properties
-        tools_config = local_config.get("tools", {})
-        self.docker_cmd = tools_config.get("dockerCommand", DEFAULT_DOCKER_CMD)
-        engine_mode = tools_config.get("engineMode")
-        if engine_mode is None:
-            engine_mode = DEFAULT_ENGINE_MODE
-        else:
-            engine_mode = EngineMode(engine_mode)
+        self.docker_cmd = self.progs_mapping.get(
+            cast("SymbolicName", "docker"), DEFAULT_DOCKER_CMD
+        )
         self.engine_mode = engine_mode
 
         container_type = container_factory_clazz.ContainerType()
@@ -532,14 +546,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.logger.debug(f"Instantiating container type {container_type}")
         # For materialized containers, we should use common directories
         # This for the containers themselves
-        containersCacheDir = (
-            pathlib.Path(cacheDir) / "containers" / container_factory_clazz.__name__
-        )
+        containersCacheDir = cacheDir / "containers" / container_factory_clazz.__name__
         self.container_factory = container_factory_clazz(
             simpleFileNameMethod=self.simpleContainerFileName,
             containersCacheDir=containersCacheDir,
             stagedContainersDir=self.stagedContainersDir,
-            tools_config=tools_config,
+            progs_mapping=progs_mapping,
             engine_name=self.__class__.__name__,
             tempDir=self.tempDir,
         )
@@ -566,7 +578,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.payloadsDir = pathlib.Path(os.path.dirname(__file__), "payloads")
 
         # Whether the containers of each step are writable
-        self.writable_containers = workflow_config.get("writable_containers", False)
+        self.writable_containers = writable_containers
 
         if (
             secure_exec
@@ -586,6 +598,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
             NoContainerFactory
         ],
+        progs_mapping: "Optional[ProgsMapping]" = None,
         cache_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_inputs_dir: "Optional[pathlib.Path]" = None,
@@ -613,9 +626,45 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             raise WorkflowEngineException(
                 f"FATAL: No container factory implementation for {staged_setup.container_type}"
             )
+
+        if local_config is None:
+            local_config = dict()
+        tools_config = local_config.get("tools", {})
+
+        engineConf = copy.deepcopy(tools_config.get(cls.ENGINE_NAME, {}))
+        workflowEngineConf = (
+            staged_setup.workflow_config.get(cls.ENGINE_NAME, {})
+            if staged_setup.workflow_config
+            else {}
+        )
+        engineConf.update(workflowEngineConf)
+
+        if cache_dir is None:
+            cache_dir_str = local_config.get("cacheDir")
+            if cache_dir_str is not None:
+                cache_dir = pathlib.Path(cache_dir_str)
+
+        engine_mode = tools_config.get("engineMode")
+        if engine_mode is None:
+            engine_mode = DEFAULT_ENGINE_MODE
+        else:
+            try:
+                engine_mode = EngineMode(engine_mode)
+            except:
+                raise WorkflowEngineException(
+                    f"Unrecognized engine mode {engine_mode} for {cls.ENGINE_NAME}"
+                )
+
+        # Whether the containers of each step are writable
+        writable_containers = False
+        if staged_setup.workflow_config is not None:
+            writable_containers = staged_setup.workflow_config.get(
+                "writable_containers", False
+            )
+
         return cls(
             container_factory_clazz=the_container_factory_clazz,
-            workflow_config=staged_setup.workflow_config,
+            progs_mapping=progs_mapping,
             engineTweaksDir=staged_setup.engine_tweaks_dir,
             workDir=staged_setup.work_dir,
             outputsDir=staged_setup.outputs_dir,
@@ -627,8 +676,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             cacheWorkflowDir=cache_workflow_dir,
             cacheWorkflowInputsDir=cache_workflow_inputs_dir,
             stagedContainersDir=staged_setup.containers_dir,
-            local_config=local_config,
+            engine_config=engineConf,
             config_directory=config_directory,
+            writable_containers=writable_containers,
         )
 
     def getConfiguredContainerType(self) -> "ContainerType":

@@ -1978,6 +1978,7 @@ class WfExSBackend:
         return engineDesc.clazz.FromStagedSetup(
             staged_setup=stagedSetup,
             container_factory_classes=self.listContainerFactoryClasses(),
+            progs_mapping=self.progs,
             cache_dir=self.cacheDir,
             cache_workflow_dir=self.cacheWorkflowDir,
             cache_workflow_inputs_dir=self.cacheWorkflowInputsDir,

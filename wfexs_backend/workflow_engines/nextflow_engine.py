@@ -77,7 +77,9 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         MaterializedOutput,
+        ProgsMapping,
         RelPath,
+        SymbolicName,
         SymbolicParamName,
         URIType,
     )
@@ -186,8 +188,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
         cacheDir: "Optional[pathlib.Path]" = None,
-        workflow_config: "Optional[Mapping[str, Any]]" = None,
-        local_config: "Optional[EngineLocalConfig]" = None,
+        engine_config: "Optional[EngineLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
         engineTweaksDir: "Optional[pathlib.Path]" = None,
         cacheWorkflowDir: "Optional[pathlib.Path]" = None,
         cacheWorkflowInputsDir: "Optional[pathlib.Path]" = None,
@@ -200,12 +202,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
         config_directory: "Optional[pathlib.Path]" = None,
+        writable_containers: "bool" = False,
     ):
         super().__init__(
             container_factory_clazz=container_factory_clazz,
             cacheDir=cacheDir,
-            workflow_config=workflow_config,
-            local_config=local_config,
+            engine_config=engine_config,
+            progs_mapping=progs_mapping,
             engineTweaksDir=engineTweaksDir,
             cacheWorkflowDir=cacheWorkflowDir,
             cacheWorkflowInputsDir=cacheWorkflowInputsDir,
@@ -218,22 +221,24 @@ class NextflowWorkflowEngine(WorkflowEngine):
             secure_exec=secure_exec,
             allowOther=allowOther,
             config_directory=config_directory,
+            writable_containers=writable_containers,
         )
 
-        toolsSect = local_config.get("tools", {}) if local_config else {}
         # Obtaining the full path to Java
-        self.java_cmd = toolsSect.get("javaCommand", DEFAULT_JAVA_CMD)
+        self.java_cmd = self.progs_mapping.get(
+            cast("SymbolicName", "java"), DEFAULT_JAVA_CMD
+        )
         abs_java_cmd = shutil.which(self.java_cmd)
         if abs_java_cmd is None:
-            self.logger.critical(
-                f"Java command {self.java_cmd}, needed by Nextflow, was not found"
-            )
+            errmsg = f"Java command {self.java_cmd}, needed by Nextflow, was not found"
+            self.logger.critical(errmsg)
+            raise WorkflowEngineInstallException(errmsg)
         else:
-            self.java_cmd = abs_java_cmd
+            self.java_cmd = cast("AbsPath", abs_java_cmd)
 
         # Obtaining the full path to static bash
-        staticBashPaths = []
-        stBash = toolsSect.get("staticBashCommand")
+        staticBashPaths: "MutableSequence[str]" = []
+        stBash = self.progs_mapping.get(cast("SymbolicName", "staticBash"))
         if stBash is not None:
             staticBashPaths.append(stBash)
         staticBashPaths.extend(DEFAULT_STATIC_BASH_CMDS)
@@ -249,8 +254,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             )
 
         # Obtaining the full path to static ps
-        staticPsPaths = []
-        stPs = toolsSect.get("staticPsCommand")
+        staticPsPaths: "MutableSequence[str]" = []
+        stPs = self.progs_mapping.get(cast("SymbolicName", "staticPs"))
         if stPs is not None:
             staticPsPaths.append(stPs)
         staticPsPaths.extend(DEFAULT_STATIC_PS_CMDS)
@@ -271,33 +276,29 @@ class NextflowWorkflowEngine(WorkflowEngine):
             os.path.commonpath([self.java_cmd, wfexs_dirname]) == wfexs_dirname
         )
 
-        engineConf = copy.deepcopy(toolsSect.get(self.ENGINE_NAME, {}))
-        workflowEngineConf = (
-            workflow_config.get(self.ENGINE_NAME, {}) if workflow_config else {}
-        )
-        engineConf.update(workflowEngineConf)
-
-        self.nxf_image = engineConf.get(
+        self.nxf_image = self.engine_config.get(
             "dockerImage", self.DEFAULT_NEXTFLOW_DOCKER_IMAGE
         )
-        nxf_version = engineConf.get("version")
+        nxf_version = self.engine_config.get("version")
         if nxf_version is None:
             if self.container_factory.containerType == ContainerType.Podman:
                 default_nextflow_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
             else:
                 default_nextflow_version = self.DEFAULT_NEXTFLOW_VERSION
-            nxf_version = engineConf.get("version", default_nextflow_version)
+            nxf_version = default_nextflow_version
         elif (
             self.container_factory.containerType == ContainerType.Podman
             and nxf_version < self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
         ):
             nxf_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
         self.nxf_version = nxf_version
-        self.max_retries = engineConf.get("maxRetries", self.DEFAULT_MAX_RETRIES)
-        self.max_cpus = engineConf.get("maxProcesses", self.DEFAULT_MAX_CPUS)
+        self.max_retries = self.engine_config.get(
+            "maxRetries", self.DEFAULT_MAX_RETRIES
+        )
+        self.max_cpus = self.engine_config.get("maxProcesses", self.DEFAULT_MAX_CPUS)
 
         # The profile to force, in case it cannot be guessed
-        nxf_profile: "Union[str, Sequence[str]]" = engineConf.get("profile", [])
+        nxf_profile: "Union[str, Sequence[str]]" = self.engine_config.get("profile", [])
         self.nxf_profile: "Sequence[str]"
         if isinstance(nxf_profile, list):
             self.nxf_profile = nxf_profile
