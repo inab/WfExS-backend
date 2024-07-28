@@ -2156,10 +2156,10 @@ class WF:
             assert self.localWorkflow is not None
             localWorkflow = self.localWorkflow
             do_identify = True
-            if self.engineVer is not None:
-                engine_version = self.engineVer
-            else:
+            if initial_engine_version is not None:
                 engine_version = initial_engine_version
+            else:
+                engine_version = self.engineVer
         else:
             localWorkflow = self.materializedEngine.workflow
             engine_version = self.materializedEngine.version
@@ -2174,6 +2174,8 @@ class WF:
 
         # At this point, there can be uninitialized elements
         if matWfEngV2 is not None:
+            # We have to assure the reused version is the right one
+            self.engineVer = matWfEngV2.version
             engine_version_str = WorkflowEngine.GetEngineVersion(matWfEngV2)
             self.workflowEngineVersion = engine_version_str
             if self.materializedEngine is not None:
@@ -2202,6 +2204,7 @@ class WF:
             # Only inject on first try
             self.setupEngine(
                 offline=offline,
+                initial_engine_version=self.engineVer,
                 ignoreCache=ignoreCache,
                 injectable_repo=injectable_repo,
                 injectable_workflow=injectable_workflow,
@@ -4265,7 +4268,7 @@ This is an enumeration of the types of collected contents:
     ) -> "Optional[Union[bool, datetime.datetime]]":
         if overwrite or (self.stageMarshalled is None):
             # Do not even try
-            if self.marshallConfig(overwrite=overwrite) is None:
+            if self.marshallConfig() is None:
                 return None
 
             assert (
@@ -4512,7 +4515,7 @@ This is an enumeration of the types of collected contents:
         self, exist_ok: "bool" = True, overwrite: "bool" = False
     ) -> "Optional[Union[bool, datetime.datetime]]":
         if overwrite or (self.executionMarshalled is None):
-            if self.marshallStage(exist_ok=exist_ok, overwrite=overwrite) is None:
+            if self.marshallStage() is None:
                 return None
 
             assert (
@@ -4619,7 +4622,7 @@ This is an enumeration of the types of collected contents:
                         outputsDir = execution.get("outputsDir", WORKDIR_OUTPUTS_RELDIR)
                         absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
                         if outputsDir != WORKDIR_OUTPUTS_RELDIR:
-                            jobOutputMetaDir = absOutputMetaDir / outputsDir
+                            jobOutputMetaDir = self.metaDir / outputsDir
                         else:
                             jobOutputMetaDir = absOutputMetaDir
 
@@ -4699,7 +4702,7 @@ This is an enumeration of the types of collected contents:
                 )
                 self.executionMarshalled = False
                 if fail_ok:
-                    self.logger.debug(errmsg)
+                    self.logger.error(errmsg)
                     return self.executionMarshalled
                 self.logger.exception(errmsg)
                 raise WFException(errmsg) from e
@@ -4715,7 +4718,7 @@ This is an enumeration of the types of collected contents:
     ) -> "Optional[Union[bool, datetime.datetime]]":
         if overwrite or (self.exportMarshalled is None):
             # Do not even try saving the state
-            if self.marshallStage(exist_ok=exist_ok, overwrite=overwrite) is None:
+            if self.marshallStage() is None:
                 return None
 
             assert (
