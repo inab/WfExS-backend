@@ -103,6 +103,33 @@
 					},
 					"additionalProperties": false
 				},
+				"commands": {
+					"title": "Custom command paths",
+					"description": "Different modules depend on locatable programs, like git, docker, java or similar. These declarations are used to provide WfExS either custom paths or custom names. These declarations take precedence over `gitCommand`, `javaCommand` and similar ones",
+					"type": "array",
+					"minItems": 1,
+					"items": {
+						"type": "object",
+						"properties": {
+							"key": {
+								"title": "The command key",
+								"description": "Internal symbolic name used to represent this command",
+								"type": "string"
+							},
+							"path": {
+								"title": "The command path",
+								"description": "Either the absolute path or PATH findable program name",
+								"type": "string",
+								"minLength": 1
+							}
+						},
+						"required": [
+							"key",
+							"path"
+						]
+					},
+					"uniqueItems": true
+				},
 				"gitCommand": {
 					"title": "Git client path",
 					"description": "Git is used to materialize workflows being hosted at git repositories, like GitHub. This key sets up custom paths to git command",

@@ -533,18 +533,30 @@ class WfExSBackend:
         # Populating paths
         for keyC, pathC in toolSect.items():
             # Skipping what this section is not going to manage and store
-            if keyC.endswith("Command") and not keyC.startswith("static"):
-                progKey = keyC[0 : -len("Command")]
-                abs_cmd = shutil.which(pathC)
+            key_path: "MutableSequence[Tuple[str, str]]" = []
+            if keyC.endswith("Command"):
+                prog_key = keyC[0 : -len("Command")]
+                key_path.append((prog_key, pathC))
+            elif keyC == "commands":
+                assert isinstance(pathC, list)
+
+                for command_block in pathC:
+                    assert isinstance(command_block, dict)
+
+                    if "key" in command_block and "path" in command_block:
+                        key_path.append((command_block["key"], command_block["path"]))
+
+            for prog_key, path_val in key_path:
+                abs_cmd = shutil.which(path_val)
                 if abs_cmd is None:
                     self.logger.critical(
-                        f'{progKey} command {pathC}, could not be reached relatively or through PATH {os.environ["PATH"]} (core: {progKey in self.progs})'
+                        f'{prog_key} command {path_val}, could not be reached relatively or through PATH {os.environ["PATH"]} (core: {prog_key in self.progs})'
                     )
                 else:
                     self.logger.info(
-                        f"Setting up {progKey} to {abs_cmd} (derived from {pathC}) (core: {progKey in self.progs})"
+                        f"Setting up {prog_key} to {abs_cmd} (derived from {path_val}) (core: {prog_key in self.progs})"
                     )
-                    self.progs[progKey] = cast("AbsPath", abs_cmd)
+                    self.progs[prog_key] = cast("AbsPath", abs_cmd)
 
         encfsSect = toolSect.get("encrypted_fs", {})
         encfs_type_str: "Optional[str]" = encfsSect.get(
