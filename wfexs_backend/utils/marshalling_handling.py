@@ -218,6 +218,8 @@ def unmarshall_namedtuple(
             #    return clazz(**fields)
 
             try:
+                # In the future, get_type_hints(clazz, globalns=myglobals) could be used
+                # to learn about which fields are not strings, but pathlib.Path, for instance
                 objres = clazz(**fields)
             except:
                 logger.exception(f"Unmarshalling Error instantiating {clazz.__name__}")
