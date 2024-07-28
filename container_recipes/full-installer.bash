@@ -28,7 +28,7 @@
 : ${BUSYBOX_VER:=1.35.0}
 
 # Getting the installation directory
-scriptDir="$(dirname "$0")"
+scriptDir="$(dirname "$(readlink -f "$0")")"
 case "${scriptDir}" in
 	/*)
 		# Path is absolute

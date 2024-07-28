@@ -48,8 +48,8 @@
 			"type": "object",
 			"properties": {
 				"containerType": {
-					"title": "Container technology type in this installation",
-					"description": "Type of container technology to be used when any workflow is launched using this installation. Supported types are:\n- Singularity (default).\n- Docker.\n- Podman\n- No containerisation technology (discouraged)\nEncrypted working directories are unsupported when Docker or Podman are used due technological limitations",
+					"title": "Default container technology type in this installation",
+					"description": "Type of container technology to be used by default when any workflow is launched using this installation. Supported types are:\n- Singularity (default).\n- Docker.\n- Podman\n- No containerisation technology (discouraged)\nEncrypted working directories are unsupported when Docker or Podman are used due technological limitations",
 					"type": "string",
 					"enum": [
 						"singularity",
@@ -81,7 +81,7 @@
 								"encfs",
 								"gocryptfs"
 							],
-							"default": "encfs"
+							"default": "gocryptfs"
 						},
 						"command": {
 							"title": "Path to encryption mount program",
@@ -102,6 +102,33 @@
 						}
 					},
 					"additionalProperties": false
+				},
+				"commands": {
+					"title": "Custom command paths",
+					"description": "Different modules depend on locatable programs, like git, docker, java or similar. These declarations are used to provide WfExS either custom paths or custom names. These declarations take precedence over `gitCommand`, `javaCommand` and similar ones",
+					"type": "array",
+					"minItems": 1,
+					"items": {
+						"type": "object",
+						"properties": {
+							"key": {
+								"title": "The command key",
+								"description": "Internal symbolic name used to represent this command",
+								"type": "string"
+							},
+							"path": {
+								"title": "The command path",
+								"description": "Either the absolute path or PATH findable program name",
+								"type": "string",
+								"minLength": 1
+							}
+						},
+						"required": [
+							"key",
+							"path"
+						]
+					},
+					"uniqueItems": true
 				},
 				"gitCommand": {
 					"title": "Git client path",

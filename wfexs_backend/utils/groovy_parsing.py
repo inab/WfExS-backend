@@ -115,6 +115,10 @@ MANIFEST_CHILD = {"leaf": "IDENTIFIER", "value": "manifest"}
 # This is from nextflow.config files
 INCLUDECONFIG_CHILD = {"leaf": "IDENTIFIER", "value": "includeConfig"}
 
+PLUGINS_CHILD = {"leaf": "IDENTIFIER", "value": "plugins"}
+
+ID_CHILD = {"leaf": "IDENTIFIER", "value": "id"}
+
 COMMON_RULE = [
     "argument_list",
     "first_argument_list_element",
@@ -338,6 +342,22 @@ def extract_nextflow_workflow(node: "RuleNode") -> "NfWorkflow":
     )
 
 
+class NfPlugin(NamedTuple):
+    label: "str"
+
+
+def extract_nextflow_config_plugins(
+    node: "RuleNode",
+) -> "Sequence[NfPlugin]":
+    # return [ node ]
+    return [
+        NfPlugin(
+            label=label,
+        )
+        for label in extract_strings(node)
+    ]
+
+
 if TYPE_CHECKING:
     KeyType = TypeVar("KeyType")
     DeepValType = TypeVar("DeepValType", contravariant=True)
@@ -526,7 +546,7 @@ def extract_nested_assignments(
 
 def extract_nextflow_features(
     t_tree: "RuleNode",
-) -> "Tuple[Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig]]":
+) -> "Tuple[Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], Sequence[NfPlugin]]":
     """
     This method takes as input a parsed groovy tree, and tries finding
     Nextflow and nextflow.config features
@@ -536,6 +556,7 @@ def extract_nextflow_features(
     includes: "MutableSequence[NfInclude]" = []
     workflows: "MutableSequence[NfWorkflow]" = []
     includeconfigs: "MutableSequence[NfIncludeConfig]" = []
+    plugins: "MutableSequence[NfPlugin]" = []
 
     # First, sanity check
     # root_rule = t_tree.get("rule")
@@ -591,6 +612,13 @@ def extract_nextflow_features(
                             )
                         )
                         unprocessed = False
+                    elif c_children_0_children[0] == PLUGINS_CHILD:
+                        plugins.extend(
+                            extract_nextflow_config_plugins(
+                                cast("RuleNode", c_children[-1])
+                            )
+                        )
+                        unprocessed = False
 
             elif child_rule[-len(VAR_RULE) :] == VAR_RULE:
                 # Save the process
@@ -619,13 +647,15 @@ def extract_nextflow_features(
                     c_includes,
                     c_workflows,
                     c_includeconfigs,
+                    c_plugins,
                 ) = extract_nextflow_features(child)
                 processes.extend(c_processes)
                 includes.extend(c_includes)
                 workflows.extend(c_workflows)
                 includeconfigs.extend(c_includeconfigs)
+                plugins.extend(c_plugins)
 
-    return processes, includes, workflows, includeconfigs
+    return processes, includes, workflows, includeconfigs, plugins
 
 
 @functools.lru_cache(maxsize=128)
@@ -643,12 +673,18 @@ def analyze_nf_content(
     content: "str",
     only_names: "Sequence[str]" = [],
     cache_dir: "Optional[str]" = None,
-) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], ContextAssignments]":
+) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], Sequence[NfPlugin], ContextAssignments]":
     t_tree = cached_parse_and_digest_groovy_content(content, cache_dir=cache_dir)
 
     if "rule" in t_tree:
         c_t_tree = cast("RuleNode", t_tree)
-        processes, includes, workflows, includeconfigs = extract_nextflow_features(
+        (
+            processes,
+            includes,
+            workflows,
+            includeconfigs,
+            plugins,
+        ) = extract_nextflow_features(
             c_t_tree,
         )
         interesting_assignments = extract_nested_assignments(
@@ -660,6 +696,7 @@ def analyze_nf_content(
         includes = []
         workflows = []
         includeconfigs = []
+        plugins = []
         interesting_assignments = dict()
 
     return (
@@ -668,6 +705,7 @@ def analyze_nf_content(
         includes,
         workflows,
         includeconfigs,
+        plugins,
         interesting_assignments,
     )
 
@@ -703,6 +741,7 @@ if __name__ == "__main__":
                     includes,
                     workflows,
                     includeconfigs,
+                    plugins,
                     interesting_assignments,
                 ) = analyze_nf_content(content, cache_dir=cache_directory)
             with open(jsonfile, mode="w", encoding="utf-8") as jH:
@@ -712,6 +751,7 @@ if __name__ == "__main__":
                 print(f"INCLUDE {includes}", file=rW)
                 print(f"WORKFLOW {workflows}", file=rW)
                 print(f"INCLUDECONFIG {includeconfigs}", file=rW)
+                print(f"PLUGINS {plugins}", file=rW)
                 print(f"ASSIGNMENTS:", file=rW)
                 json.dump(interesting_assignments, rW, indent=4)
         except Exception as e:

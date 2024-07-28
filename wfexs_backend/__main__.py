@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import os.path
+import pathlib
 import sys
 import shutil
 import tempfile
@@ -231,6 +232,9 @@ DEBUG_LOGGING_FORMAT = (
     "%(asctime)-15s - [%(name)s %(funcName)s %(lineno)d][%(levelname)s] %(message)s"
 )
 
+# This is going to be wildly reused
+PathArgType = lambda p: pathlib.Path(p).absolute()
+
 
 def genParserSub(
     sp: "argparse._SubParsersAction[argparse.ArgumentParser]",
@@ -276,6 +280,7 @@ def genParserSub(
             "--workflow-config",
             dest="workflowConfigFilename",
             required=not_restage,
+            type=PathArgType,
             help="Configuration file, describing workflow and inputs"
             if not_restage
             else "Optional configuration file, describing some inputs which will replace the base, original ones",
@@ -328,6 +333,7 @@ def genParserSub(
             "-Z",
             "--creds-config",
             dest="securityContextsConfigFilename",
+            type=PathArgType,
             help="Configuration file, describing security contexts, which hold credentials and similar",
         )
 
@@ -336,6 +342,7 @@ def genParserSub(
             "-E",
             "--exports-config",
             dest="exportsConfigFilename",
+            type=PathArgType,
             help="Configuration file, describing exports which can be done",
         )
 
@@ -377,6 +384,7 @@ def genParserSub(
             "--public-key-file",
             dest="public_key_files",
             action="append",
+            type=PathArgType,
             default=[],
             help="This parameter switches on secure processing. Path to the public key(s) to be used to encrypt the working directory",
         )
@@ -404,6 +412,7 @@ def genParserSub(
         priv_opts.add_argument(
             "--private-key-file",
             dest="private_key_file",
+            type=PathArgType,
             help="This parameter passes the name of the file containing the private key needed to unlock an encrypted working directory.",
         )
         priv_opts.add_argument(
@@ -603,7 +612,7 @@ def processCacheCommand(
         print(
             "\n".join(
                 map(
-                    lambda x: "\t".join([x[0].uri, x[1]]),
+                    lambda x: "\t".join([x[0].uri, x[1].as_posix()]),
                     cH.remove(
                         *args.cache_command_args,
                         destdir=cPath,
@@ -1090,7 +1099,11 @@ def _get_wfexs_argparse_internal(
         default=defaultLocalConfigFilename,
         help="Local installation configuration file (can also be set up through WFEXS_CONFIG_FILE environment variable)",
     )
-    ap.add_argument("--cache-dir", dest="cacheDir", help="Caching directory")
+    ap.add_argument(
+        "--cache-dir",
+        dest="cacheDir",
+        help="Caching directory",
+    )
 
     ap.add_argument(
         "-V", "--version", action="version", version="%(prog)s version " + verstr
@@ -1299,13 +1312,15 @@ def main() -> None:
         sys.exit(0)
 
     # First, try loading the configuration file
-    localConfigFilename = args.localConfigFilename
-    if localConfigFilename and os.path.exists(localConfigFilename):
-        with open(localConfigFilename, mode="r", encoding="utf-8") as cf:
+    localConfigFilename = (
+        pathlib.Path(args.localConfigFilename) if args.localConfigFilename else None
+    )
+    if localConfigFilename and localConfigFilename.exists():
+        with localConfigFilename.open(mode="r", encoding="utf-8") as cf:
             local_config = yaml.safe_load(cf)
     else:
         local_config = {}
-        if localConfigFilename and not os.path.exists(localConfigFilename):
+        if localConfigFilename and not localConfigFilename.exists():
             print(
                 "[WARNING] Configuration file {} does not exist".format(
                     localConfigFilename
@@ -1336,8 +1351,8 @@ def main() -> None:
         config_relname = os.path.basename(defaultLocalConfigFilename)
     else:
         # Hints for the the default path for the Crypt4GH keys
-        config_directory = os.path.dirname(localConfigFilename)
-        config_relname = os.path.basename(localConfigFilename)
+        config_directory = localConfigFilename.parent
+        config_relname = localConfigFilename.name
 
     # Initialize (and create config file)
     if command in (
@@ -1354,12 +1369,12 @@ def main() -> None:
             local_config, config_directory, key_prefix=config_relname
         )
         # This is needed because config directory could have been empty
-        localConfigFilename = os.path.join(config_directory, config_relname)
+        localConfigFilename = config_directory / config_relname
 
         # Last, should config be saved back?
-        if updated_config or not os.path.exists(localConfigFilename):
+        if updated_config or not localConfigFilename.exists():
             print("* Storing updated configuration at {}".format(localConfigFilename))
-            with open(localConfigFilename, mode="w", encoding="utf-8") as cf:
+            with localConfigFilename.open(mode="w", encoding="utf-8") as cf:
                 yaml.dump(local_config, cf, Dumper=YAMLDumper)
 
         # We are finishing here!
@@ -1433,7 +1448,7 @@ def main() -> None:
     ):
         if os.path.isdir(args.workflowWorkingDirectory):
             wfInstance = wfBackend.fromWorkDir(
-                args.workflowWorkingDirectory,
+                pathlib.Path(args.workflowWorkingDirectory),
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
                 fail_ok=command != WfExS_Commands.MountWorkDir,

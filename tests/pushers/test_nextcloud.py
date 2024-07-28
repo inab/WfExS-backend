@@ -70,7 +70,7 @@ def test_nextcloud_basic_fail_noapiprefix() -> "None":
     """
     with pytest.raises(ExportPluginException):
         NextcloudExportPlugin(
-            cast("AbsPath", "/"),
+            pathlib.Path("/"),
             setup_block={"base-directory": "/", "user": "", "token": ""},
         )
 
@@ -82,7 +82,7 @@ def test_nextcloud_basic_fail_nobasedir() -> "None":
     """
     with pytest.raises(ExportPluginException):
         NextcloudExportPlugin(
-            cast("AbsPath", "/"),
+            pathlib.Path("/"),
             setup_block={"api-prefix": "", "user": "", "token": ""},
         )
 
@@ -94,7 +94,7 @@ def test_nextcloud_basic_fail_nouser() -> "None":
     """
     with pytest.raises(ExportPluginException):
         nep = NextcloudExportPlugin(
-            cast("AbsPath", "/"),
+            pathlib.Path("/"),
             setup_block={"api-prefix": "", "base-directory": "/", "token": ""},
         )
 
@@ -106,7 +106,7 @@ def test_nextcloud_basic_fail_notoken() -> "None":
     """
     with pytest.raises(ExportPluginException):
         nep = NextcloudExportPlugin(
-            cast("AbsPath", "/"),
+            pathlib.Path("/"),
             setup_block={"api-prefix": "", "base-directory": "/", "user": ""},
         )
 
@@ -142,7 +142,7 @@ def test_nextcloud_basic(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -172,7 +172,7 @@ def test_nextcloud_get_pid_metadata(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
     existing_pid = file_params.extra["owned_existing_pid"]
 
     pid_metadata = nep.get_pid_metadata(existing_pid)
@@ -202,7 +202,7 @@ def test_nextcloud_book_new_pid(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -246,7 +246,7 @@ def test_nextcloud_book_draft_pid(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     booked_entry_take2 = None
@@ -306,7 +306,7 @@ def test_nextcloud_book_new_version_pid(file_params: "ParamTestData") -> "None":
     }
 
     nep = NextcloudExportPlugin(
-        cast("AbsPath", "/tofill"),
+        pathlib.Path("/tofill"),
         setup_block=setup_block,
         default_preferred_id=file_params.extra["owned_existing_pid"],
     )
@@ -365,7 +365,7 @@ def test_nextcloud_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         "base-directory": file_params.extra["base-directory"],
     }
     nep = NextcloudExportPlugin(
-        cast("AbsPath", os.path.dirname(naive_path)),
+        pathlib.Path(naive_path).parent,
         setup_block=setup_block,
     )
 
@@ -430,7 +430,7 @@ def test_nextcloud_upload_stream_to_draft(file_params: "ParamTestData") -> "None
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -489,7 +489,7 @@ def test_nextcloud_update_record_metadata_raw(file_params: "ParamTestData") -> "
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -554,7 +554,7 @@ def test_nextcloud_update_record_metadata_facets(
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -625,7 +625,7 @@ def test_nextcloud_publish_new_pid(file_params: "ParamTestData") -> "None":
         "base-directory": file_params.extra["base-directory"],
     }
     nep = NextcloudExportPlugin(
-        cast("AbsPath", os.path.join(os.path.dirname(__file__), "data")),
+        pathlib.Path(__file__).parent / "data",
         setup_block=setup_block,
     )
 
@@ -706,7 +706,7 @@ def test_nextcloud_push(file_params: "ParamTestData") -> "None":
         "base-directory": file_params.extra["base-directory"],
     }
     nep = NextcloudExportPlugin(
-        cast("AbsPath", os.path.join(os.path.dirname(__file__), "data")),
+        pathlib.Path(__file__).parent / "data",
         setup_block=setup_block,
     )
 

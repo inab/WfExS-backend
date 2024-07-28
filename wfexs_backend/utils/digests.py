@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         AbsPath,
         AbstractGeneratedContent,
         AnyPath,
+        PathLikePath,
         Fingerprint,
     )
 
@@ -166,7 +167,7 @@ def ComputeDigestFromFileLike(
 
 @functools.lru_cache(maxsize=32)
 def ComputeDigestFromFile(
-    filename: "Union[AnyPath, os.PathLike[str]]",
+    filename: "PathLikePath",
     digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
     bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
     repMethod: "Union[FingerprintMethod, RawFingerprintMethod]" = stringifyDigest,
@@ -294,7 +295,7 @@ def compute_sha1_git_from_any(path: "str") -> "Tuple[str, str]":
 
 
 # Next method has been borrowed from FlowMaps
-def scantree(path: "Union[AnyPath, os.PathLike[str]]") -> "Iterator[os.DirEntry[str]]":
+def scantree(path: "PathLikePath") -> "Iterator[os.DirEntry[str]]":
     """Recursively yield DirEntry objects for given directory."""
 
     hasDirs = False
@@ -316,7 +317,7 @@ def scantree(path: "Union[AnyPath, os.PathLike[str]]") -> "Iterator[os.DirEntry[
 
 
 def ComputeDigestFromDirectory(
-    dirname: "Union[AnyPath, os.PathLike[str]]",
+    dirname: "PathLikePath",
     digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
     bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,
     repMethod: "FingerprintMethod" = stringifyDigest,
@@ -352,7 +353,7 @@ def ComputeDigestFromDirectory(
 
 
 def ComputeDigestFromGeneratedContentList(
-    dirname: "Union[AnyPath, os.PathLike[str]]",
+    dirname: "PathLikePath",
     theValues: "Sequence[AbstractGeneratedContent]",
     digestAlgorithm: "str" = DEFAULT_DIGEST_ALGORITHM,
     bufferSize: "int" = DEFAULT_DIGEST_BUFFER_SIZE,

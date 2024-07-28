@@ -64,8 +64,6 @@ class NoContainerFactory(ContainerFactory):
     The 'no container approach', for development and local installed software
     """
 
-    # def __init__(self, containersCacheDir=None, tools_config=None, engine_name='unset'):
-    #    super().__init__(containersCacheDir=containersCacheDir, tools_config=tools_config, engine_name=engine_name)
     AcceptedContainerTypes = set([common.ContainerType.NoContainer])
 
     @classmethod

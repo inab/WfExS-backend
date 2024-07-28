@@ -17,6 +17,7 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import copy
 import os
 import pathlib
 import sys
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
         Callable,
         Mapping,
         MutableSequence,
+        MutableMapping,
         NewType,
         Optional,
         Pattern,
@@ -80,9 +82,11 @@ if TYPE_CHECKING:
         LocalWorkflow,
         MaterializedInput,
         MaterializedContent,
+        ProgsMapping,
         RelPath,
         StagedExecution,
         StagedSetup,
+        SymbolicName,
         SymbolicOutputName,
         SymbolicParamName,
         TRS_Workflow_Descriptor,
@@ -194,11 +198,27 @@ class MaterializedWorkflowEngine(NamedTuple):
     instance: "AbstractWorkflowEngineType"
     version: "EngineVersion"
     fingerprint: "Union[Fingerprint, str]"
-    engine_path: "EnginePath"
+    engine_path: "pathlib.Path"
     workflow: "LocalWorkflow"
-    containers_path: "Optional[AbsPath]" = None
+    containers_path: "Optional[pathlib.Path]" = None
     containers: "Optional[Sequence[Container]]" = None
     operational_containers: "Optional[Sequence[Container]]" = None
+
+    @classmethod
+    def _mapping_fixes(
+        cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
+    ) -> "Mapping[str, Any]":
+        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest["engine_path"] = pathlib.Path(orig["engine_path"])
+        if workdir is not None and not dest["engine_path"].is_absolute():
+            dest["engine_path"] = (workdir / dest["engine_path"]).resolve()
+
+        if dest.get("containers_path") is not None:
+            dest["containers_path"] = pathlib.Path(orig["containers_path"])
+            if workdir is not None and not dest["containers_path"].is_absolute():
+                dest["containers_path"] = (workdir / dest["containers_path"]).resolve()
+
+        return dest
 
 
 # This skeleton is here only for type mapping reasons
@@ -248,7 +268,7 @@ class AbstractWorkflowEngineType(abc.ABC):
     def materialize_containers(
         self,
         listOfContainerTags: "Sequence[ContainerTaggedName]",
-        containersDir: "AnyPath",
+        containersDir: "pathlib.Path",
         offline: "bool" = False,
         force: "bool" = False,
         injectable_containers: "Sequence[Container]" = [],
@@ -259,14 +279,14 @@ class AbstractWorkflowEngineType(abc.ABC):
     def deploy_containers(
         self,
         containers_list: "Sequence[Container]",
-        containersDir: "Optional[AnyPath]" = None,
+        containersDir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
     ) -> "Sequence[Container]":
         pass
 
     @property
     @abc.abstractmethod
-    def staged_containers_dir(self) -> "AnyPath":
+    def staged_containers_dir(self) -> "pathlib.Path":
         pass
 
     @abc.abstractmethod
@@ -292,7 +312,7 @@ class AbstractWorkflowEngineType(abc.ABC):
     def materializeWorkflow(
         self,
         matWorfklowEngine: "MaterializedWorkflowEngine",
-        consolidatedWorkflowDir: "AbsPath",
+        consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
@@ -324,11 +344,12 @@ class AbstractWorkflowEngineType(abc.ABC):
         container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
             NoContainerFactory
         ],
-        cache_dir: "Optional[AnyPath]" = None,
-        cache_workflow_dir: "Optional[AnyPath]" = None,
-        cache_workflow_inputs_dir: "Optional[AnyPath]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
+        cache_dir: "Optional[pathlib.Path]" = None,
+        cache_workflow_dir: "Optional[pathlib.Path]" = None,
+        cache_workflow_inputs_dir: "Optional[pathlib.Path]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
-        config_directory: "Optional[AnyPath]" = None,
+        config_directory: "Optional[pathlib.Path]" = None,
     ) -> "AbstractWorkflowEngineType":
         pass
 
@@ -341,34 +362,43 @@ class WorkflowEngineException(AbstractWfExSException):
     pass
 
 
+class WorkflowEngineInstallException(WorkflowEngineException):
+    """
+    Exceptions fired by instances of WorkflowEngine when the engine could not be installed
+    """
+
+    pass
+
+
 class WorkflowEngine(AbstractWorkflowEngineType):
+    ENGINE_NAME = "abstract"
+
     def __init__(
         self,
         container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
-        cacheDir: "Optional[AnyPath]" = None,
-        workflow_config: "Optional[Mapping[str, Any]]" = None,
-        local_config: "Optional[EngineLocalConfig]" = None,
-        engineTweaksDir: "Optional[AnyPath]" = None,
-        cacheWorkflowDir: "Optional[AnyPath]" = None,
-        cacheWorkflowInputsDir: "Optional[AnyPath]" = None,
-        workDir: "Optional[AnyPath]" = None,
-        outputsDir: "Optional[AnyPath]" = None,
-        outputMetaDir: "Optional[AnyPath]" = None,
-        intermediateDir: "Optional[AnyPath]" = None,
-        tempDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
+        cacheDir: "Optional[pathlib.Path]" = None,
+        engine_config: "Optional[EngineLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
+        engineTweaksDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowInputsDir: "Optional[pathlib.Path]" = None,
+        workDir: "Optional[pathlib.Path]" = None,
+        outputsDir: "Optional[pathlib.Path]" = None,
+        outputMetaDir: "Optional[pathlib.Path]" = None,
+        intermediateDir: "Optional[pathlib.Path]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
-        config_directory: "Optional[AnyPath]" = None,
+        config_directory: "Optional[pathlib.Path]" = None,
+        engine_mode: "EngineMode" = DEFAULT_ENGINE_MODE,
+        writable_containers: "bool" = False,
     ):
         """
         Abstract init method
 
         :param cacheDir:
-        :param workflow_config:
-            This one may be needed to identify container overrides
-            or specific engine versions
-        :param local_config:
+        :param engine_config:
         :param engineTweaksDir:
         :param cacheWorkflowDir:
         :param cacheWorkflowInputsDir:
@@ -378,76 +408,65 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         :param tempDir:
         :param secure_exec:
         :param config_directory:
+        :param writable_containers: Whether the containers of each step are writable
         """
-        if local_config is None:
-            local_config = dict()
-        if workflow_config is None:
-            workflow_config = dict()
-        self.local_config = local_config
+        if engine_config is None:
+            engine_config = dict()
+        self.engine_config = engine_config
+
+        if progs_mapping is None:
+            progs_mapping = dict()
+        self.progs_mapping = progs_mapping
 
         if config_directory is None:
-            config_directory = cast("AbsPath", os.getcwd())
+            config_directory = pathlib.Path.cwd()
         self.config_directory = config_directory
 
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(self.__class__.__name__)
 
-        # This one may be needed to identify container overrides
-        # or specific engine versions
-        self.workflow_config = workflow_config
-
         # cacheDir
         if cacheDir is None:
-            cacheDir = local_config.get("cacheDir")
-
-        if cacheDir is None:
-            cacheDir = cast(
-                "AbsPath", tempfile.mkdtemp(prefix="WfExS", suffix="backend")
-            )
+            cacheDir = pathlib.Path(tempfile.mkdtemp(prefix="WfExS", suffix="backend"))
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, cacheDir, True)
         else:
-            if not os.path.isabs(cacheDir):
-                cacheDir = cast(
-                    "AbsPath",
-                    os.path.normpath(os.path.join(config_directory, cacheDir)),
-                )
+            if not cacheDir.is_absolute():
+                cacheDir = (config_directory / cacheDir).resolve()
             # Be sure the directory exists
-            os.makedirs(cacheDir, exist_ok=True)
+            cacheDir.mkdir(parents=True, exist_ok=True)
 
         # We are using as our own caching directory one located at the
         # generic caching directory, with the name of the class
         # This directory will hold software installations, for instance
-        self.weCacheDir = os.path.join(cacheDir, self.__class__.__name__)
+        self.weCacheDir = cacheDir / self.__class__.__name__
 
         # Needed for those cases where alternate version of the workflow is generated
         if cacheWorkflowDir is None:
-            cacheWorkflowDir = cast("AbsPath", os.path.join(cacheDir, "wf-cache"))
-            os.makedirs(cacheWorkflowDir, exist_ok=True)
+            cacheWorkflowDir = cacheDir / "wf-cache"
+            cacheWorkflowDir.mkdir(parents=True, exist_ok=True)
         self.cacheWorkflowDir = cacheWorkflowDir
 
         # Needed for those cases where there is a shared cache
         if cacheWorkflowInputsDir is None:
-            cacheWorkflowInputsDir = cast(
-                "AbsPath", os.path.join(cacheDir, "wf-inputs")
-            )
-            os.makedirs(cacheWorkflowInputsDir, exist_ok=True)
+            cacheWorkflowInputsDir = cacheDir / "wf-inputs"
+            cacheWorkflowInputsDir.mkdir(parents=True, exist_ok=True)
         self.cacheWorkflowInputsDir = cacheWorkflowInputsDir
 
         # Setting up working directories, one per instance
         if workDir is None:
-            workDir = cast(
-                "AbsPath", tempfile.mkdtemp(prefix="WfExS-exec", suffix="workdir")
+            workDir = pathlib.Path(
+                tempfile.mkdtemp(prefix="WfExS-exec", suffix="workdir")
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, workDir, True)
-        self.workDir = pathlib.Path(workDir)
+        self.workDir = workDir
 
         # This directory should hold intermediate workflow steps results
         if intermediateDir is None:
             self.intermediateDir = self.workDir / WORKDIR_INTERMEDIATE_RELDIR
         else:
-            self.intermediateDir = pathlib.Path(intermediateDir)
+            self.intermediateDir = intermediateDir
         self.intermediateDir.mkdir(parents=True, exist_ok=True)
 
         # This directory will hold the final workflow results, which could
@@ -456,7 +475,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if outputsDir is None:
             self.outputsDir = self.workDir / WORKDIR_OUTPUTS_RELDIR
         else:
-            self.outputsDir = pathlib.Path(outputsDir)
+            self.outputsDir = outputsDir
 
         if not self.outputsDir.is_absolute():
             self.outputsDir = self.outputsDir.absolute()
@@ -470,7 +489,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 self.workDir / WORKDIR_META_RELDIR / WORKDIR_OUTPUTS_RELDIR
             )
         else:
-            self.outputMetaDir = pathlib.Path(outputMetaDir)
+            self.outputMetaDir = outputMetaDir
 
         self.outputMetaDir.mkdir(parents=True, exist_ok=True)
 
@@ -486,14 +505,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if engineTweaksDir is None:
             self.engineTweaksDir = self.workDir / WORKDIR_ENGINE_TWEAKS_RELDIR
         else:
-            self.engineTweaksDir = pathlib.Path(engineTweaksDir)
+            self.engineTweaksDir = engineTweaksDir
         self.engineTweaksDir.mkdir(parents=True, exist_ok=True)
 
         # This directory is here for temporary files of any program launched from
         # WfExS or the engine itself. It should be set to TMPDIR on subprocess calls
         if tempDir is None:
-            tempDir = cast(
-                "AbsPath", tempfile.mkdtemp(prefix="WfExS-exec", suffix="tempdir")
+            tempDir = pathlib.Path(
+                tempfile.mkdtemp(prefix="WfExS-exec", suffix="tempdir")
             )
             # Assuring this temporal directory is removed at the end
             atexit.register(shutil.rmtree, tempDir, True)
@@ -501,22 +520,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         # This directory will hold the staged containers to be used
         if stagedContainersDir is None:
-            stagedContainersDir = cast(
-                "AbsPath", os.path.join(workDir, WORKDIR_CONTAINERS_RELDIR)
-            )
-        elif not os.path.isabs(stagedContainersDir):
-            stagedContainersDir = cast("AbsPath", os.path.abspath(stagedContainersDir))
-        os.makedirs(stagedContainersDir, exist_ok=True)
-        self.stagedContainersDir = pathlib.Path(stagedContainersDir)
+            stagedContainersDir = workDir / WORKDIR_CONTAINERS_RELDIR
+        elif not stagedContainersDir.is_absolute():
+            stagedContainersDir = stagedContainersDir.absolute()
+        stagedContainersDir.mkdir(parents=True, exist_ok=True)
+        self.stagedContainersDir = stagedContainersDir
 
         # Setting up common properties
-        tools_config = local_config.get("tools", {})
-        self.docker_cmd = tools_config.get("dockerCommand", DEFAULT_DOCKER_CMD)
-        engine_mode = tools_config.get("engineMode")
-        if engine_mode is None:
-            engine_mode = DEFAULT_ENGINE_MODE
-        else:
-            engine_mode = EngineMode(engine_mode)
+        self.docker_cmd = self.progs_mapping.get(
+            cast("SymbolicName", "docker"), DEFAULT_DOCKER_CMD
+        )
         self.engine_mode = engine_mode
 
         container_type = container_factory_clazz.ContainerType()
@@ -533,16 +546,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.logger.debug(f"Instantiating container type {container_type}")
         # For materialized containers, we should use common directories
         # This for the containers themselves
-        containersCacheDir = (
-            pathlib.Path(cacheDir) / "containers" / container_factory_clazz.__name__
-        )
+        containersCacheDir = cacheDir / "containers" / container_factory_clazz.__name__
         self.container_factory = container_factory_clazz(
             simpleFileNameMethod=self.simpleContainerFileName,
             containersCacheDir=containersCacheDir,
             stagedContainersDir=self.stagedContainersDir,
-            tools_config=tools_config,
+            progs_mapping=progs_mapping,
             engine_name=self.__class__.__name__,
-            tempDir=pathlib.Path(self.tempDir),
+            tempDir=self.tempDir,
         )
 
         isUserNS = self.container_factory.supportsFeature("userns")
@@ -564,10 +575,10 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 )
 
         # Locating the payloads directory, where the nodejs wrapper should be placed
-        self.payloadsDir = os.path.join(os.path.dirname(__file__), "payloads")
+        self.payloadsDir = pathlib.Path(os.path.dirname(__file__), "payloads")
 
         # Whether the containers of each step are writable
-        self.writable_containers = workflow_config.get("writable_containers", False)
+        self.writable_containers = writable_containers
 
         if (
             secure_exec
@@ -587,11 +598,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
             NoContainerFactory
         ],
-        cache_dir: "Optional[AnyPath]" = None,
-        cache_workflow_dir: "Optional[AnyPath]" = None,
-        cache_workflow_inputs_dir: "Optional[AnyPath]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
+        cache_dir: "Optional[pathlib.Path]" = None,
+        cache_workflow_dir: "Optional[pathlib.Path]" = None,
+        cache_workflow_inputs_dir: "Optional[pathlib.Path]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
-        config_directory: "Optional[AnyPath]" = None,
+        config_directory: "Optional[pathlib.Path]" = None,
     ) -> "AbstractWorkflowEngineType":
         """
         Init method from staged setup instance
@@ -614,9 +626,45 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             raise WorkflowEngineException(
                 f"FATAL: No container factory implementation for {staged_setup.container_type}"
             )
+
+        if local_config is None:
+            local_config = dict()
+        tools_config = local_config.get("tools", {})
+
+        engineConf = copy.deepcopy(tools_config.get(cls.ENGINE_NAME, {}))
+        workflowEngineConf = (
+            staged_setup.workflow_config.get(cls.ENGINE_NAME, {})
+            if staged_setup.workflow_config
+            else {}
+        )
+        engineConf.update(workflowEngineConf)
+
+        if cache_dir is None:
+            cache_dir_str = local_config.get("cacheDir")
+            if cache_dir_str is not None:
+                cache_dir = pathlib.Path(cache_dir_str)
+
+        engine_mode = tools_config.get("engineMode")
+        if engine_mode is None:
+            engine_mode = DEFAULT_ENGINE_MODE
+        else:
+            try:
+                engine_mode = EngineMode(engine_mode)
+            except:
+                raise WorkflowEngineException(
+                    f"Unrecognized engine mode {engine_mode} for {cls.ENGINE_NAME}"
+                )
+
+        # Whether the containers of each step are writable
+        writable_containers = False
+        if staged_setup.workflow_config is not None:
+            writable_containers = staged_setup.workflow_config.get(
+                "writable_containers", False
+            )
+
         return cls(
             container_factory_clazz=the_container_factory_clazz,
-            workflow_config=staged_setup.workflow_config,
+            progs_mapping=progs_mapping,
             engineTweaksDir=staged_setup.engine_tweaks_dir,
             workDir=staged_setup.work_dir,
             outputsDir=staged_setup.outputs_dir,
@@ -628,8 +676,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             cacheWorkflowDir=cache_workflow_dir,
             cacheWorkflowInputsDir=cache_workflow_inputs_dir,
             stagedContainersDir=staged_setup.containers_dir,
-            local_config=local_config,
+            engine_config=engineConf,
             config_directory=config_directory,
+            writable_containers=writable_containers,
         )
 
     def getConfiguredContainerType(self) -> "ContainerType":
@@ -680,7 +729,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     @abc.abstractmethod
     def materializeEngineVersion(
         self, engineVersion: "EngineVersion"
-    ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
+    ) -> "Tuple[EngineVersion, pathlib.Path, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -740,7 +789,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def materializeWorkflow(
         self,
         matWorfklowEngine: "MaterializedWorkflowEngine",
-        consolidatedWorkflowDir: "AbsPath",
+        consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
@@ -771,7 +820,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def materialize_containers(
         self,
         listOfContainerTags: "Sequence[ContainerTaggedName]",
-        containersDir: "Optional[AnyPath]" = None,
+        containersDir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
         injectable_containers: "Sequence[Container]" = [],
@@ -779,7 +828,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if containersDir is None:
             containersDirPath = self.stagedContainersDir
         else:
-            containersDirPath = pathlib.Path(containersDir)
+            containersDirPath = containersDir
 
         return (
             self.container_factory.engine_version(),
@@ -796,13 +845,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def deploy_containers(
         self,
         containers_list: "Sequence[Container]",
-        containersDir: "Optional[AnyPath]" = None,
+        containersDir: "Optional[pathlib.Path]" = None,
         force: "bool" = False,
     ) -> "Sequence[Container]":
         if containersDir is None:
             containersDirPath = self.stagedContainersDir
         else:
-            containersDirPath = pathlib.Path(containersDir)
+            containersDirPath = containersDir
 
         return self.container_factory.deployContainers(
             containers_list=containers_list,
@@ -811,8 +860,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         )
 
     @property
-    def staged_containers_dir(self) -> "AnyPath":
-        return cast("AbsPath", self.stagedContainersDir.as_posix())
+    def staged_containers_dir(self) -> "pathlib.Path":
+        return self.stagedContainersDir
 
     def create_job_directories(
         self,
@@ -872,8 +921,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def MaterializeWorkflowAndContainers(
         cls,
         matWfEng: "MaterializedWorkflowEngine",
-        containersDir: "AbsPath",
-        consolidatedWorkflowDir: "AbsPath",
+        containersDir: "pathlib.Path",
+        consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         injectable_containers: "Sequence[Container]" = [],
         injectable_operational_containers: "Sequence[Container]" = [],

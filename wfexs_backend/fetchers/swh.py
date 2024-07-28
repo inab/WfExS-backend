@@ -21,6 +21,7 @@ import hashlib
 import io
 import json
 import os
+import pathlib
 import shutil
 import tarfile
 import tempfile
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
     from ..common import (
         AbsPath,
         AnyPath,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoTag,
@@ -79,7 +81,10 @@ from ..common import (
     URIWithMetadata,
 )
 
-from ..utils.contents import link_or_copy
+from ..utils.contents import (
+    link_or_copy,
+    link_or_copy_pathlib,
+)
 
 
 class SoftwareHeritageFetcher(AbstractRepoFetcher):
@@ -239,10 +244,10 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         self,
         repoURL: "RepoURL",
         repoTag: "Optional[RepoTag]" = None,
-        repo_tag_destdir: "Optional[AbsPath]" = None,
-        base_repo_destdir: "Optional[AbsPath]" = None,
+        repo_tag_destdir: "Optional[PathLikePath]" = None,
+        base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[AbsPath, RemoteRepo, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
         # If we are here is because the repo is valid
         # as it should have been checked by GuessRepoParams
 
@@ -256,6 +261,8 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         # Error handling
         if "exception" in res_doc:
             raise FetcherException(f"{repoURL} is not valid. Message: {res_doc}")
+
+        repo_tag_destpath: "pathlib.Path"
 
         # Now, handling the cases
         object_type = res_doc["object_type"]
@@ -445,23 +452,22 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                     # Assure directory exists before next step
                     if repo_tag_destdir is None:
                         if base_repo_destdir is None:
-                            repo_tag_destdir = cast(
-                                "AbsPath",
-                                tempfile.mkdtemp(prefix="wfexs", suffix=".swh"),
+                            repo_tag_destpath = pathlib.Path(
+                                tempfile.mkdtemp(prefix="wfexs", suffix=".swh")
                             )
-                            atexit.register(shutil.rmtree, repo_tag_destdir, True)
+                            atexit.register(shutil.rmtree, repo_tag_destpath, True)
                         else:
                             repo_hashed_id = hashlib.sha1(
                                 repoURL.encode("utf-8")
                             ).hexdigest()
-                            repo_destdir = os.path.join(
+                            repo_destpath = pathlib.Path(
                                 base_repo_destdir, repo_hashed_id
                             )
                             # repo_destdir = os.path.join(self.cacheWorkflowDir, repo_hashed_id)
 
-                            if not os.path.exists(repo_destdir):
+                            if not repo_destpath.exists():
                                 try:
-                                    os.makedirs(repo_destdir)
+                                    repo_destpath.mkdir(parents=True)
                                 except IOError:
                                     errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(
                                         repoURL
@@ -471,23 +477,28 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                             repo_hashed_tag_id = hashlib.sha1(
                                 b"" if repoTag is None else repoTag.encode("utf-8")
                             ).hexdigest()
-                            repo_tag_destdir = cast(
-                                "AbsPath",
-                                os.path.join(repo_destdir, repo_hashed_tag_id),
-                            )
+                            repo_tag_destpath = repo_destpath / repo_hashed_tag_id
+                    else:
+                        repo_tag_destpath = (
+                            repo_tag_destdir
+                            if isinstance(repo_tag_destdir, pathlib.Path)
+                            else pathlib.Path(repo_tag_destdir)
+                        )
 
                     # These steps are needed because the bundle has its contents in the parent
-                    extract_dir = tempfile.mkdtemp(prefix="wfexs", suffix=".swh")
+                    extract_dir = pathlib.Path(
+                        tempfile.mkdtemp(prefix="wfexs", suffix=".swh")
+                    )
                     atexit.register(shutil.rmtree, extract_dir, True)
                     with tarfile.open(
                         tmp_targz_filename.name, mode="r|*", bufsize=10 * 1024 * 1024
                     ) as tF:
                         tF.extractall(path=extract_dir)
                     # The directory has as name the swhid
-                    extract_dir_dir = os.path.join(extract_dir, repo_effective_checkout)
-                    if os.path.exists(extract_dir_dir):
+                    extract_dir_dir = extract_dir / repo_effective_checkout
+                    if extract_dir_dir.exists():
                         extract_dir = extract_dir_dir
-                    link_or_copy(cast("AbsPath", extract_dir), repo_tag_destdir)
+                    link_or_copy_pathlib(extract_dir, repo_tag_destpath)
             else:
                 raise FetcherException(
                     f"For {repoURL}, Software Heritage directory {directory_url} is not ready after {self.DIR_RETRIES}, waiting {self.WAIT_SECS} seconds on each"
@@ -539,7 +550,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
 
             # Assure base directory exists before next step
             # here repo_tag_destdir is a file
-            repo_tag_destfile: "Union[AbsPath, IO[bytes]]"
+            repo_tag_destfile: "Union[PathLikePath, IO[bytes]]"
             if repo_tag_destdir is None:
                 if base_repo_destdir is None:
                     temp_file_descriptor, repo_tag_destdir = cast(
@@ -572,6 +583,8 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             else:
                 repo_tag_destfile = repo_tag_destdir
 
+            repo_tag_destpath = pathlib.Path(repo_tag_destdir)
+
             try:
                 _, metafetchio, _ = fetchClassicURL(
                     content_fetch_url,
@@ -582,7 +595,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                     f"HTTP REST call {content_fetch_url} failed"
                 ) from e
             finally:
-                if not isinstance(repo_tag_destfile, str):
+                if not isinstance(repo_tag_destfile, (str, os.PathLike)):
                     repo_tag_destfile.close()
 
             gathered_meta = {
@@ -603,7 +616,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         )
 
         return (
-            repo_tag_destdir,
+            repo_tag_destpath,
             remote_repo,
             metadata_array,
         )
@@ -611,7 +624,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
     def fetch(
         self,
         remote_file: "URIType",
-        cachedFilename: "AbsPath",
+        cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
     ) -> "ProtocolFetcherReturn":
         parsedInputURL = parse.urlparse(remote_file)
@@ -641,8 +654,8 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         # repoRelPath is only acknowledged when the resolved repo
         # is translated to a directory
         if repoRelPath is not None and os.path.isdir(repo_tag_destdir):
-            cachedContentPath = os.path.join(repo_tag_destdir, repoRelPath)
-            preferredName = cast("RelPath", repoRelPath.split("/")[-1])
+            cachedContentPath = repo_tag_destdir / repoRelPath
+            preferredName = cast("RelPath", cachedContentPath.name)
         else:
             cachedContentPath = repo_tag_destdir
             preferredName = None

@@ -14,7 +14,7 @@ just using next bash pattern:
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
 docker build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
 https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -25,7 +25,7 @@ a local copy of the recipe, and next command line from the project root will hel
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
 mkdir WfExS_docker_build
 cd WfExS_docker_build
 curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -46,7 +46,7 @@ just using next bash pattern:
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
 podman build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
 https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -57,7 +57,7 @@ a local copy of the recipe, and next command line from the project root will hel
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
 mkdir WfExS_podman_build
 cd WfExS_podman_build
 curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -77,7 +77,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # WFEXS_VER can be either a branch, a tag or a commit hash
-  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
   mkdir WfExS_SIF_build
   cd WfExS_SIF_build
   curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Singularity.def
@@ -88,7 +88,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # WFEXS_VER can be either a branch, a tag or a commit hash
-  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
   singularity build \
   --build-arg wfexs_checkout="${WFEXS_VER}" \
   wfexs-backend-${WFEXS_VER}.sif container_recipes/Singularity.def
@@ -100,7 +100,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # Remember to use the correct tag!!!
-  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
   singularity build wfexs-${WFEXS_VER}.sif docker-daemon://inab/wfexs-backend:${WFEXS_VER}
   ```
 
@@ -117,7 +117,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
   cd WfExS_SIF_build
   
   # Remember to use the correct tag!!!
-  WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
 
   # Next command should be used if you used podman to build the local image
   podman save -o wfexs-backend-${WFEXS_VER}.tar inab/wfexs-backend:${WFEXS_VER}
@@ -199,6 +199,10 @@ There are additional software dependencies beyond core ones, which are needed de
 There are additional software dependencies beyond core ones. Depending on the local setup, some other external tools or container technologies are needed in several stages of the code. Please, install them, using either native packages (for instance, from your Linux distribution) or by hand and later set their path in the local configuration file you are using:
 
   * [git](https://git-scm.com/) is used to fetch workflows from git repositories.
+  
+  * [libmagic.so] dynamic library is needed by [python-magic](https://pypi.org/project/python-magic/) package.
+  
+  * [dot] command (from [GraphViz](https://graphviz.org)) is needed to generate a graphical representation of workflows on Workflow Run RO-Crate generation.
   
   * [gocryptfs](https://nuetzlich.net/gocryptfs/) can be used for the feature of secure intermediate results. It has been tested since version v2.0-beta2 ([releases](https://github.com/rfjakob/gocryptfs/releases) provide static binaries).
 

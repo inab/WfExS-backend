@@ -52,6 +52,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         SecurityContextConfig,
         URIType,
     )
@@ -65,7 +66,7 @@ TRS_DESCRIPTOR_INFIX = "/descriptor/"
 
 def fetchTRSFiles(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """

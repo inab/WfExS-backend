@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         SecurityContextConfig,
         URIType,
     )
@@ -54,7 +55,7 @@ logger = logging.getLogger()
 
 def downloadContentFrom_gs(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """

@@ -74,7 +74,9 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         MaterializedOutput,
+        ProgsMapping,
         RelPath,
+        SymbolicName,
         SymbolicParamName,
         URIType,
     )
@@ -118,6 +120,7 @@ from . import (
     WORKDIR_STDERR_FILE,
     WorkflowEngine,
     WorkflowEngineException,
+    WorkflowEngineInstallException,
     WorkflowType,
 )
 
@@ -200,27 +203,28 @@ class CWLWorkflowEngine(WorkflowEngine):
     def __init__(
         self,
         container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
-        cacheDir: "Optional[AnyPath]" = None,
-        workflow_config: "Optional[Mapping[str, Any]]" = None,
-        local_config: "Optional[EngineLocalConfig]" = None,
-        engineTweaksDir: "Optional[AnyPath]" = None,
-        cacheWorkflowDir: "Optional[AnyPath]" = None,
-        cacheWorkflowInputsDir: "Optional[AnyPath]" = None,
-        workDir: "Optional[AnyPath]" = None,
-        outputsDir: "Optional[AnyPath]" = None,
-        outputMetaDir: "Optional[AnyPath]" = None,
-        intermediateDir: "Optional[AnyPath]" = None,
-        tempDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
+        cacheDir: "Optional[pathlib.Path]" = None,
+        engine_config: "Optional[EngineLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
+        engineTweaksDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowInputsDir: "Optional[pathlib.Path]" = None,
+        workDir: "Optional[pathlib.Path]" = None,
+        outputsDir: "Optional[pathlib.Path]" = None,
+        outputMetaDir: "Optional[pathlib.Path]" = None,
+        intermediateDir: "Optional[pathlib.Path]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
-        config_directory: "Optional[AnyPath]" = None,
+        config_directory: "Optional[pathlib.Path]" = None,
+        writable_containers: "bool" = False,
     ):
         super().__init__(
             container_factory_clazz=container_factory_clazz,
             cacheDir=cacheDir,
-            workflow_config=workflow_config,
-            local_config=local_config,
+            engine_config=engine_config,
+            progs_mapping=progs_mapping,
             engineTweaksDir=engineTweaksDir,
             cacheWorkflowDir=cacheWorkflowDir,
             cacheWorkflowInputsDir=cacheWorkflowInputsDir,
@@ -233,15 +237,13 @@ class CWLWorkflowEngine(WorkflowEngine):
             secure_exec=secure_exec,
             allowOther=allowOther,
             config_directory=config_directory,
+            writable_containers=writable_containers,
         )
 
-        # Getting a fixed version of the engine
-        toolsSect = local_config.get("tools", {}) if local_config else {}
-        engineConf = copy.deepcopy(toolsSect.get(self.ENGINE_NAME, {}))
-        workflowEngineConf = (
-            workflow_config.get(self.ENGINE_NAME, {}) if workflow_config else {}
+        # Obtaining the full path to Java
+        self.python_cmd = self.progs_mapping.get(
+            cast("SymbolicName", "python"), sys.executable
         )
-        engineConf.update(workflowEngineConf)
 
         pymatched = False
         if self.DEVEL_CWLTOOL_VERSION is not None:
@@ -267,7 +269,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                     break
 
         # These are the requested versions
-        requested_cwltool_version = engineConf.get("version")
+        requested_cwltool_version = self.engine_config.get("version")
 
         if (requested_cwltool_version is None) or (
             pymatched and requested_cwltool_version > default_cwltool_version
@@ -283,8 +285,8 @@ class CWLWorkflowEngine(WorkflowEngine):
         self.cwltool_version = cwltool_version
 
         # Setting up packed directory
-        self.cacheWorkflowPackDir = os.path.join(self.cacheWorkflowDir, "wf-pack")
-        os.makedirs(self.cacheWorkflowPackDir, exist_ok=True)
+        self.cacheWorkflowPackDir = self.cacheWorkflowDir / "wf-pack"
+        self.cacheWorkflowPackDir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def MyWorkflowType(cls) -> "WorkflowType":
@@ -371,7 +373,7 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     def materializeEngineVersion(
         self, engineVersion: "EngineVersion"
-    ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
+    ) -> "Tuple[EngineVersion, pathlib.Path, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -387,8 +389,10 @@ class CWLWorkflowEngine(WorkflowEngine):
         )
 
     def _materializeEngineVersionLocal(
-        self, engineVersion: "EngineVersion"
-    ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
+        self,
+        engineVersion: "EngineVersion",
+        search_other: "bool" = True,
+    ) -> "Tuple[EngineVersion, pathlib.Path, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
@@ -410,16 +414,109 @@ class CWLWorkflowEngine(WorkflowEngine):
             cwltoolMatchOp = "=="
             inst_engineVersion = engineVersion
 
-        # A version directory is needed
-        cwltool_install_dir = cast(
-            "EnginePath", os.path.join(self.weCacheDir, inst_engineVersion)
+        # Now, time to run it
+        instEnv = dict(os.environ)
+
+        python_executable = self.python_cmd
+        # A version directory is needed, also based on the python version
+        python_version_major = 0
+        python_version_minor = 0
+        if python_executable is None or python_executable == sys.executable:
+            python_version_major = sys.version_info.major
+            python_version_minor = sys.version_info.minor
+        else:
+            with tempfile.NamedTemporaryFile() as cwltool_vers_stdout:
+                with tempfile.NamedTemporaryFile() as cwltool_vers_stderr:
+                    retval_vers = subprocess.Popen(
+                        [
+                            python_executable,
+                            "-c",
+                            "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')",
+                        ],
+                        stdout=cwltool_vers_stdout,
+                        stderr=cwltool_vers_stderr,
+                        env=instEnv,
+                    ).wait()
+                    with open(cwltool_vers_stdout.name, "r") as c_stF:
+                        cwltool_vers_stdout_v = c_stF.read()
+                    vers = cwltool_vers_stdout_v.split("\n")[0].split(".")
+                    if retval_vers == 0 and len(vers) >= 2:
+                        try:
+                            python_version_major = int(vers[0])
+                            python_version_minor = int(vers[1])
+                        except:
+                            errstr = f"Could not parse python version using {python_executable}"
+                            self.logger.error(errstr)
+                            raise WorkflowEngineInstallException(errstr)
+                    else:
+                        # Reading the output and error for the report
+                        with open(cwltool_vers_stderr.name, "r") as c_stF:
+                            cwltool_vers_stderr_v = c_stF.read()
+
+                        errstr = f"""\
+Could not get python version using {python_executable}. Retval {retval_vers}
+======
+STDOUT
+======
+{cwltool_vers_stdout_v}
+======
+STDERR
+======
+{cwltool_vers_stderr_v}
+"""
+                        # Cleanup
+                        self.logger.error(errstr)
+                        raise WorkflowEngineInstallException(errstr)
+
+        cwltool_install_dir = (
+            self.weCacheDir
+            / f"python-{python_version_major}.{python_version_minor}_{inst_engineVersion}"
         )
 
         # Creating the virtual environment needed to separate CWL code
         # from workflow execution backend
         do_install = True
-        if not os.path.isdir(cwltool_install_dir):
-            venv.create(cwltool_install_dir, with_pip=True)
+        if not cwltool_install_dir.is_dir():
+            if python_executable is None:
+                venv.create(cwltool_install_dir, with_pip=True)
+            else:
+                with tempfile.NamedTemporaryFile() as cwltool_venv_stdout:
+                    with tempfile.NamedTemporaryFile() as cwltool_venv_stderr:
+                        retval_venv = subprocess.Popen(
+                            [
+                                python_executable,
+                                "-mvenv",
+                                cwltool_install_dir.as_posix(),
+                            ],
+                            stdout=cwltool_venv_stdout,
+                            stderr=cwltool_venv_stderr,
+                            env=instEnv,
+                        ).wait()
+                        if retval_venv != 0:
+                            # Reading the output and error for the report
+                            with open(cwltool_venv_stdout.name, "r") as c_stF:
+                                cwltool_venv_stdout_v = c_stF.read()
+                            with open(cwltool_venv_stderr.name, "r") as c_stF:
+                                cwltool_venv_stderr_v = c_stF.read()
+
+                            errstr = f"""\
+Could not create environment at {cwltool_install_dir} using {python_executable}. Retval {retval_venv}
+======
+STDOUT
+======
+{cwltool_venv_stdout_v}
+======
+STDERR
+======
+{cwltool_venv_stderr_v}
+"""
+                            # Cleanup
+                            if cwltool_install_dir.is_dir():
+                                shutil.rmtree(cwltool_install_dir)
+                                errstr += f"\n(partial directory {cwltool_install_dir} was removed)"
+                            self.logger.error(errstr)
+                            raise WorkflowEngineInstallException(errstr)
+
         else:
             # Check the installation is up and running
             # creating a "fake" MaterializedWorkflowEngine
@@ -460,28 +557,19 @@ class CWLWorkflowEngine(WorkflowEngine):
             # triaged and fixed.
             installWrapper = True
             if inst_engineVersion < self.NO_WRAPPER_CWLTOOL_VERSION:
-                node_wrapper_source_path = os.path.join(
-                    self.payloadsDir, self.NODEJS_WRAPPER
-                )
-                node_wrapper_inst_path = os.path.join(
-                    cwltool_install_dir, "bin", "node"
-                )
-                if not os.path.isfile(node_wrapper_inst_path):
+                node_wrapper_source_path = self.payloadsDir / self.NODEJS_WRAPPER
+                node_wrapper_inst_path = cwltool_install_dir / "bin" / "node"
+                if not node_wrapper_inst_path.is_file():
                     shutil.copy2(node_wrapper_source_path, node_wrapper_inst_path)
 
                 # Assuring it has the permissions
                 if not os.access(node_wrapper_inst_path, os.X_OK):
-                    os.chmod(node_wrapper_inst_path, stat.S_IREAD | stat.S_IEXEC)
+                    node_wrapper_inst_path.chmod(stat.S_IREAD | stat.S_IEXEC)
 
                 # And the symlink from nodejs to node
-                nodejs_wrapper_inst_path = os.path.join(
-                    cwltool_install_dir, "bin", "nodejs"
-                )
-                if not os.path.islink(nodejs_wrapper_inst_path):
+                nodejs_wrapper_inst_path = cwltool_install_dir / "bin" / "nodejs"
+                if not nodejs_wrapper_inst_path.is_symlink():
                     os.symlink("node", nodejs_wrapper_inst_path)
-
-            # Now, time to run it
-            instEnv = dict(os.environ)
 
             with tempfile.NamedTemporaryFile() as cwltool_install_stdout:
                 with tempfile.NamedTemporaryFile() as cwltool_install_stderr:
@@ -512,6 +600,9 @@ class CWLWorkflowEngine(WorkflowEngine):
                             cwltool_install_stdout_v,
                             cwltool_install_stderr_v,
                         )
+                        # Cleanup
+                        shutil.rmtree(cwltool_install_dir)
+                        errstr += f"\n(directory {cwltool_install_dir} was removed)"
                         raise WorkflowEngineException(errstr)
 
                     retVal = subprocess.Popen(
@@ -519,6 +610,9 @@ class CWLWorkflowEngine(WorkflowEngine):
                             f"{cwltool_install_dir}/bin/pip",
                             "install",
                             cwltoolPackage + cwltoolMatchOp + inst_engineVersion,
+                            # Due https://github.com/common-workflow-language/cwltool/issues/2027
+                            # we are downgrading here the pydot version
+                            "pydot<3.0.0",
                         ],
                         # Commented out, as WfExS is not currently using cwl-utils
                         #    self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
@@ -537,13 +631,74 @@ class CWLWorkflowEngine(WorkflowEngine):
                         with open(cwltool_install_stderr.name, "r") as c_stF:
                             cwltool_install_stderr_v = c_stF.read()
 
+                        # Is the proposed version unavailable?
+                        if (
+                            search_other
+                            and cwltoolMatchOp == "=="
+                            and "ERROR: Ignored the following versions"
+                            in cwltool_install_stderr_v
+                        ):
+                            with tempfile.NamedTemporaryFile() as cwltool_index_stdout:
+                                with tempfile.NamedTemporaryFile() as cwltool_index_stderr:
+                                    retval_index = subprocess.Popen(
+                                        [
+                                            f"{cwltool_install_dir}/bin/pip",
+                                            "index",
+                                            "versions",
+                                            cwltoolPackage,
+                                        ],
+                                        # Commented out, as WfExS is not currently using cwl-utils
+                                        #    self.SCHEMA_SALAD_PYTHON_PACKAGE, self.DEFAULT_SCHEMA_SALAD_VERSION,
+                                        #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
+                                        stdout=cwltool_index_stdout,
+                                        stderr=cwltool_index_stderr,
+                                        cwd=cwltool_install_dir,
+                                        env=instEnv,
+                                    ).wait()
+
+                                    # Cleanup
+                                    shutil.rmtree(cwltool_install_dir)
+
+                                    if retval_index == 0:
+                                        with open(
+                                            cwltool_index_stdout.name, mode="r"
+                                        ) as c_stF:
+                                            for rep_line in c_stF:
+                                                aver = "Available versions: "
+                                                if rep_line.startswith(aver):
+                                                    for version in rep_line[
+                                                        len(aver) :
+                                                    ].split(", "):
+                                                        try:
+                                                            return self._materializeEngineVersionLocal(
+                                                                cast(
+                                                                    "EngineVersion",
+                                                                    version,
+                                                                ),
+                                                                search_other=False,
+                                                            )
+                                                        except:
+                                                            self.logger.warning(
+                                                                f"Unable to install cwltool {version}"
+                                                            )
+
+                        # Cleanup
+                        shutil.rmtree(cwltool_install_dir)
+
+                        # Reading the output and error for the report
+                        with open(cwltool_install_stdout.name, "r") as c_stF:
+                            cwltool_install_stdout_v = c_stF.read()
+                        with open(cwltool_install_stderr.name, "r") as c_stF:
+                            cwltool_install_stderr_v = c_stF.read()
+
                         errstr = "Could not install CWL {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                             engineVersion,
                             retVal,
                             cwltool_install_stdout_v,
                             cwltool_install_stderr_v,
                         )
-                        raise WorkflowEngineException(errstr)
+                        errstr += f"\n(directory {cwltool_install_dir} was removed)"
+                        raise WorkflowEngineInstallException(errstr)
 
             # TODO
 
@@ -697,7 +852,7 @@ STDERR
     def materializeWorkflow(
         self,
         matWorkflowEngine: "MaterializedWorkflowEngine",
-        consolidatedWorkflowDir: "AbsPath",
+        consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
@@ -876,7 +1031,7 @@ STDERR
 
     @staticmethod
     def generateDotWorkflow(
-        matWfEng: "MaterializedWorkflowEngine", dagFile: "AbsPath"
+        matWfEng: "MaterializedWorkflowEngine", dagFile: "pathlib.Path"
     ) -> None:
         localWf = matWfEng.workflow
 
@@ -888,21 +1043,20 @@ STDERR
         # no call to materializeEngineVersion is needed
 
         if os.path.isabs(localWf.relPath):
-            localWorkflowFile = cast("AbsPath", localWf.relPath)
+            localWorkflowFile = pathlib.Path(localWf.relPath)
         else:
-            localWorkflowFile = cast(
-                "AbsPath", os.path.join(localWf.dir, localWf.relPath)
-            )
+            localWorkflowFile = localWf.dir / localWf.relPath
         engineVersion = matWfEng.version
-        cwltool_install_dir = matWfEng.engine_path
+        cwltool_install_dir = str(matWfEng.engine_path)
         # Execute cwltool --print-dot
-        with open(dagFile, mode="wb") as packedH:
+        with dagFile.open(mode="wb") as packedH:
             with tempfile.NamedTemporaryFile() as cwltool_dot_stderr:
                 # Writing straight to the file
                 retVal = subprocess.Popen(
                     [
                         f"{cwltool_install_dir}/bin/cwltool",
                         "--print-dot",
+                        "--debug",
                         localWorkflowFile,
                     ],
                     stdout=packedH,
@@ -942,11 +1096,9 @@ STDERR
         ), "CWL workflows should have a relative file path"
 
         if os.path.isabs(localWf.relPath):
-            localWorkflowFile = cast("AbsPath", localWf.relPath)
+            localWorkflowFile = pathlib.Path(localWf.relPath)
         else:
-            localWorkflowFile = cast(
-                "AbsPath", os.path.join(localWf.dir, localWf.relPath)
-            )
+            localWorkflowFile = localWf.dir / localWf.relPath
         engineVersion = matWfEng.version
 
         (
@@ -955,12 +1107,12 @@ STDERR
             outputsDir,
             outputMetaDir,
         ) = self.create_job_directories()
-        outputStatsDir = os.path.join(outputMetaDir, WORKDIR_STATS_RELDIR)
-        os.makedirs(outputStatsDir, exist_ok=True)
+        outputStatsDir = outputMetaDir / WORKDIR_STATS_RELDIR
+        outputStatsDir.mkdir(parents=True, exist_ok=True)
 
-        dagFile = cast("AbsPath", os.path.join(outputStatsDir, STATS_DAG_DOT_FILE))
+        dagFile = outputStatsDir / STATS_DAG_DOT_FILE
 
-        if os.path.exists(localWorkflowFile):
+        if localWorkflowFile.exists():
             # CWLWorkflowEngine directory is needed
             cwltool_install_dir = matWfEng.engine_path
 
@@ -969,7 +1121,7 @@ STDERR
 
             # Then, all the preparations
             cwl_dict_inputs: "MutableMapping[SymbolicParamName, Any]" = dict()
-            with open(localWorkflowFile, "r") as cwl_file:
+            with localWorkflowFile.open(mode="r") as cwl_file:
                 cwl_yaml = yaml.safe_load(cwl_file)  # convert packed CWL to YAML
 
                 # As the workflow has been packed, the #main element appears
@@ -1031,9 +1183,7 @@ STDERR
                             cast("SymbolicParamName", inputId)
                         ] = cwl_yaml_input
 
-            inputsFileName = cast(
-                "AbsPath", os.path.join(outputMetaDir, self.INPUT_DECLARATIONS_FILENAME)
-            )
+            inputsFileName = outputMetaDir / self.INPUT_DECLARATIONS_FILENAME
 
             try:
                 # Create YAML file
@@ -1108,7 +1258,7 @@ STDERR
                                 )
                                 instEnv[
                                     "CWL_SINGULARITY_CACHE"
-                                ] = matWfEng.containers_path
+                                ] = matWfEng.containers_path.as_posix()
                                 instEnv["SINGULARITY_CONTAIN"] = "1"
                                 instEnv["APPTAINER_CONTAIN"] = "1"
                                 if self.writable_containers:
@@ -1192,8 +1342,8 @@ STDERR
                             # Last, the workflow to run and the yaml with the inputs
                             cmd_arr.extend(
                                 [
-                                    localWorkflowFile,
-                                    inputsFileName,
+                                    localWorkflowFile.as_posix(),
+                                    inputsFileName.as_posix(),
                                 ]
                             )
                             self.logger.debug("Command => {}".format(" ".join(cmd_arr)))
@@ -1287,7 +1437,7 @@ STDERR
         self,
         matInputs: "Sequence[MaterializedInput]",
         cwlInputs: "Mapping[SymbolicParamName, Any]",
-        filename: "AnyPath",
+        filename: "pathlib.Path",
     ) -> "Mapping[SymbolicParamName, ExecInputVal]":
         """
         Method to create a YAML file that describes the execution inputs of the workflow
@@ -1296,7 +1446,7 @@ STDERR
         try:
             execInputs = self.executionInputs(matInputs, cwlInputs)
             if len(execInputs) != 0:
-                with open(filename, mode="w+", encoding="utf-8") as yaml_file:
+                with filename.open(mode="w+", encoding="utf-8") as yaml_file:
                     yaml.safe_dump(
                         execInputs,
                         yaml_file,

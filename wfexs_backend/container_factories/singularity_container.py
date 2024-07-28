@@ -66,7 +66,9 @@ if TYPE_CHECKING:
         ContainerTaggedName,
         ExitVal,
         Fingerprint,
+        ProgsMapping,
         RelPath,
+        SymbolicName,
         URIType,
     )
 
@@ -132,7 +134,7 @@ class SingularityContainerFactory(ContainerFactory):
         simpleFileNameMethod: "ContainerFileNamingMethod",
         containersCacheDir: "Optional[pathlib.Path]" = None,
         stagedContainersDir: "Optional[pathlib.Path]" = None,
-        tools_config: "Optional[ContainerLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
         engine_name: "str" = "unset",
         tempDir: "Optional[pathlib.Path]" = None,
     ):
@@ -140,12 +142,12 @@ class SingularityContainerFactory(ContainerFactory):
             simpleFileNameMethod=simpleFileNameMethod,
             containersCacheDir=containersCacheDir,
             stagedContainersDir=stagedContainersDir,
-            tools_config=tools_config,
+            progs_mapping=progs_mapping,
             engine_name=engine_name,
             tempDir=tempDir,
         )
-        self.runtime_cmd = self.tools_config.get(
-            "singularityCommand", DEFAULT_SINGULARITY_CMD
+        self.runtime_cmd = self.progs_mapping.get(
+            cast("SymbolicName", "singularityCommand"), DEFAULT_SINGULARITY_CMD
         )
 
         # This is needed due a bug in singularity 3.6, where

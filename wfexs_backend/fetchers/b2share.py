@@ -50,6 +50,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         SecurityContextConfig,
         URIType,
     )
@@ -61,7 +62,7 @@ B2SHARE_RECORD_REST = "https://b2share.eudat.eu/api/records/"
 
 def fetchB2SHARE(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """

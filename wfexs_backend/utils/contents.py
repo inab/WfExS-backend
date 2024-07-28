@@ -60,6 +60,7 @@ if TYPE_CHECKING:
         Fingerprint,
         LicensedURI,
         MaterializedContent,
+        PathLikePath,
         RelPath,
         URIType,
     )
@@ -77,7 +78,7 @@ from .digests import (
 
 
 def GetGeneratedDirectoryContent(
-    thePath: "Union[AbsPath, os.PathLike[str]]",
+    thePath: "PathLikePath",
     uri: "Optional[LicensedURI]" = None,
     preferredFilename: "Optional[RelPath]" = None,
     signatureMethod: "Optional[FingerprintMethod]" = None,
@@ -130,7 +131,7 @@ def GetGeneratedDirectoryContent(
 
 
 def GetGeneratedDirectoryContentFromList(
-    thePath: "Union[AbsPath, os.PathLike[str]]",
+    thePath: "PathLikePath",
     theValues: "Sequence[AbstractGeneratedContent]",
     uri: "Optional[LicensedURI]" = None,
     preferredFilename: "Optional[RelPath]" = None,
@@ -295,21 +296,17 @@ def CWLDesc2Content(
     return matValues
 
 
-def copy2_nofollow(
-    src: "Union[str, os.PathLike[str]]", dest: "Union[str, os.PathLike[str]]"
-) -> "None":
+def copy2_nofollow(src: "PathLikePath", dest: "PathLikePath") -> "None":
     shutil.copy2(src, dest, follow_symlinks=False)
 
 
-def copy_nofollow(
-    src: "Union[str, os.PathLike[str]]", dest: "Union[str, os.PathLike[str]]"
-) -> "None":
+def copy_nofollow(src: "PathLikePath", dest: "PathLikePath") -> "None":
     shutil.copy(src, dest, follow_symlinks=False)
 
 
 def link_or_copy(
-    src: "Union[AnyPath, os.PathLike[str]]",
-    dest: "Union[AnyPath, os.PathLike[str]]",
+    src: "PathLikePath",
+    dest: "PathLikePath",
     force_copy: "bool" = False,
     preserve_attrs: "bool" = True,
 ) -> None:
@@ -434,9 +431,7 @@ def link_or_copy_pathlib(
                 )
 
 
-def real_unlink_if_exists(
-    the_path: "Union[AnyPath, os.PathLike[str]]", fail_ok: "bool" = False
-) -> "None":
+def real_unlink_if_exists(the_path: "PathLikePath", fail_ok: "bool" = False) -> "None":
     if os.path.lexists(the_path):
         try:
             canonical_to_be_erased = os.path.realpath(the_path)

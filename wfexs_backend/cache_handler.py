@@ -164,7 +164,7 @@ class SchemeHandlerCacheHandler:
 
     def __init__(
         self,
-        cacheDir: "AbsPath",
+        cacheDir: "pathlib.Path",
         schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]" = dict(),
     ):
         # Getting a logger focused on specific classes
@@ -281,40 +281,40 @@ class SchemeHandlerCacheHandler:
         ]
 
     def _genUriMetaCachedFilename(
-        self, hashDir: "AbsPath", the_remote_file: "URIType"
-    ) -> "Tuple[AbsPath, RelPath, AbsPath]":
+        self, hashDir: "pathlib.Path", the_remote_file: "URIType"
+    ) -> "Tuple[pathlib.Path, RelPath, pathlib.Path]":
         input_file = hashlib.sha1(the_remote_file.encode("utf-8")).hexdigest()
         metadata_input_file = input_file + META_JSON_POSTFIX
 
         return (
-            cast("AbsPath", os.path.join(hashDir, metadata_input_file)),
+            (hashDir / metadata_input_file),
             cast("RelPath", input_file),
-            cast("AbsPath", os.path.join(hashDir, input_file)),
+            (hashDir / input_file),
         )
 
     @staticmethod
-    def getHashDir(destdir: "AbsPath") -> "AbsPath":
-        hashDir = os.path.join(destdir, "uri_hashes")
-        if not os.path.exists(hashDir):
+    def getHashDir(destdir: "pathlib.Path") -> "pathlib.Path":
+        hashDir = destdir / "uri_hashes"
+        if not hashDir.exists():
             try:
-                os.makedirs(hashDir)
+                hashDir.mkdir(parents=True)
             except IOError:
                 errstr = "ERROR: Unable to create directory for workflow URI hashes {}.".format(
                     hashDir
                 )
                 raise CacheHandlerException(errstr)
 
-        return cast("AbsPath", hashDir)
+        return hashDir
 
     def _parseMetaStructure(
-        self, fMeta: "AbsPath", validate_meta: "bool" = False
+        self, fMeta: "pathlib.Path", validate_meta: "bool" = False
     ) -> "CacheMetadataDict":
         """
         Parse cache metadata structure, with optional validation
         """
 
         metaStructure: "CacheMetadataDict"
-        with open(fMeta, mode="r", encoding="utf-8") as eH:
+        with fMeta.open(mode="r", encoding="utf-8") as eH:
             metaStructure = jsonFilterDecodeFromStream(eH)
 
         if not isinstance(metaStructure, dict):
@@ -327,16 +327,16 @@ class SchemeHandlerCacheHandler:
             )
 
         metaStructure.setdefault("path", dict())["meta"] = {
-            "relative": cast("RelPath", os.path.basename(fMeta)),
-            "absolute": fMeta,
+            "relative": cast("RelPath", fMeta.name),
+            "absolute": cast("AbsPath", fMeta.as_posix()),
         }
 
         # Generating a path structure for old cases
         if (metaStructure.get("resolves_to") is None) and (
             metaStructure["path"].get("relative") is None
         ):
-            if fMeta.endswith(META_JSON_POSTFIX):
-                fname = fMeta[0 : -len(META_JSON_POSTFIX)]
+            if fMeta.name.endswith(META_JSON_POSTFIX):
+                fname = fMeta.as_posix()[0 : -len(META_JSON_POSTFIX)]
                 if os.path.exists(fname):
                     finalCachedFilename = cast("AbsPath", os.path.realpath(fname))
                     hashDir = os.path.dirname(fMeta)
@@ -369,7 +369,7 @@ class SchemeHandlerCacheHandler:
     def list(
         self,
         *args: "str",
-        destdir: "Optional[AbsPath]" = None,
+        destdir: "Optional[pathlib.Path]" = None,
         acceptGlob: "bool" = False,
         cascade: "bool" = False,
     ) -> "Iterator[Tuple[LicensedURI, CacheMetadataDict]]":
@@ -398,7 +398,7 @@ class SchemeHandlerCacheHandler:
                 ):
                     try:
                         metaStructure = self._parseMetaStructure(
-                            cast("AbsPath", entry.path)
+                            pathlib.Path(entry.path)
                         )
                         meta_uri = None
                         if not entries:
@@ -487,11 +487,11 @@ class SchemeHandlerCacheHandler:
     def remove(
         self,
         *args: "str",
-        destdir: "Optional[AbsPath]" = None,
+        destdir: "Optional[pathlib.Path]" = None,
         doRemoveFiles: "bool" = False,
         acceptGlob: "bool" = False,
         cascade: "bool" = False,
-    ) -> "Iterator[Tuple[LicensedURI, AbsPath, Optional[AbsPath]]]":
+    ) -> "Iterator[Tuple[LicensedURI, pathlib.Path, Optional[pathlib.Path]]]":
         """
         This method iterates elements from metadata entries,
         and optionally the cached value
@@ -504,35 +504,36 @@ class SchemeHandlerCacheHandler:
             for licensed_meta_uri, metaStructure in self.list(
                 *args, destdir=destdir, acceptGlob=acceptGlob, cascade=cascade
             ):
-                removeCachedCopyPath: "Optional[AbsPath]" = None
+                removeCachedCopyPath: "Optional[pathlib.Path]" = None
                 for meta in metaStructure["metadata_array"]:
                     if doRemoveFiles and not meta["metadata"].get("injected"):
                         # Decide the removal path
-                        finalCachedFilename: "Optional[AbsPath]" = None
+                        finalCachedFilename: "Optional[pathlib.Path]" = None
                         relFinalCachedFilename: "Optional[RelPath]" = metaStructure.get(
                             "path", {}
                         ).get("relative")
                         if relFinalCachedFilename is not None:
-                            finalCachedFilename = cast(
-                                "AbsPath",
-                                os.path.normpath(
-                                    os.path.join(hashDir, relFinalCachedFilename)
-                                ),
-                            )
+                            finalCachedFilename = (
+                                hashDir / relFinalCachedFilename
+                            ).resolve()
 
-                            if not os.path.exists(finalCachedFilename):
+                            if not finalCachedFilename.exists():
                                 self.logger.warning(
                                     f"Relative cache path {relFinalCachedFilename} was not found"
                                 )
 
                         if finalCachedFilename is None:
-                            finalCachedFilename = metaStructure.get("path", {}).get(
+                            finalCachedFilename_str = metaStructure.get("path", {}).get(
                                 "absolute"
                             )
+                            if finalCachedFilename_str is not None:
+                                finalCachedFilename = pathlib.Path(
+                                    finalCachedFilename_str
+                                )
 
-                        if (finalCachedFilename is not None) and os.path.exists(
-                            finalCachedFilename
-                        ):
+                        if (
+                            finalCachedFilename is not None
+                        ) and finalCachedFilename.exists():
                             removeCachedCopyPath = finalCachedFilename
                         else:
                             self.logger.warning(
@@ -545,26 +546,26 @@ class SchemeHandlerCacheHandler:
                     self.logger.info(
                         f"Removing cache {metaStructure['fingerprint']} physical path {removeCachedCopyPath}"
                     )
-                    if os.path.isdir(removeCachedCopyPath):
+                    if removeCachedCopyPath.is_dir():
                         shutil.rmtree(removeCachedCopyPath, ignore_errors=True)
                     else:
-                        os.unlink(removeCachedCopyPath)
+                        removeCachedCopyPath.unlink()
 
-                metaFile: "AbsPath" = metaStructure["path"]["meta"]["absolute"]
+                metaFile = pathlib.Path(metaStructure["path"]["meta"]["absolute"])
                 self.logger.info(
                     f"Removing cache {metaStructure.get('fingerprint')} metadata {metaFile}"
                 )
-                os.unlink(metaFile)
+                metaFile.unlink()
 
                 yield licensed_meta_uri, metaFile, removeCachedCopyPath
 
     def inject(
         self,
         the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
-        destdir: "Optional[AbsPath]" = None,
+        destdir: "Optional[pathlib.Path]" = None,
         fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
-        finalCachedFilename: "Optional[AbsPath]" = None,
-        tempCachedFilename: "Optional[AbsPath]" = None,
+        finalCachedFilename: "Optional[pathlib.Path]" = None,
+        tempCachedFilename: "Optional[pathlib.Path]" = None,
         inputKind: "Optional[ContentKind]" = None,
     ) -> "Tuple[Optional[pathlib.Path], Optional[Fingerprint]]":
         if destdir is None:
@@ -610,14 +611,14 @@ class SchemeHandlerCacheHandler:
 
     def _inject(
         self,
-        hashDir: "AbsPath",
+        hashDir: "pathlib.Path",
         the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
-        destdir: "AbsPath",
+        destdir: "pathlib.Path",
         fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
-        finalCachedFilename: "Optional[AbsPath]" = None,
-        tempCachedFilename: "Optional[AbsPath]" = None,
+        finalCachedFilename: "Optional[pathlib.Path]" = None,
+        tempCachedFilename: "Optional[pathlib.Path]" = None,
         inputKind: "Optional[Union[ContentKind, AnyURI, Sequence[AnyURI]]]" = None,
-    ) -> "Tuple[Optional[AbsPath], Optional[Fingerprint]]":
+    ) -> "Tuple[Optional[pathlib.Path], Optional[Fingerprint]]":
         """
         This method has been created to be able to inject a cached metadata entry
         """
@@ -650,9 +651,9 @@ class SchemeHandlerCacheHandler:
                     "No defined paths or input kinds, which would lead to an empty cache entry"
                 )
 
-            if os.path.isdir(tempCachedFilename):
+            if tempCachedFilename.is_dir():
                 inputKind = ContentKind.Directory
-            elif os.path.isfile(tempCachedFilename):
+            elif tempCachedFilename.is_file():
                 inputKind = ContentKind.File
             else:
                 raise CacheHandlerException(
@@ -662,22 +663,21 @@ class SchemeHandlerCacheHandler:
         fingerprint: "Optional[Fingerprint]" = None
         # Are we dealing with a redirection?
         if isinstance(inputKind, ContentKind):
-            if os.path.isfile(
-                cast("AbsPath", tempCachedFilename)
-            ):  # inputKind == ContentKind.File:
+            assert tempCachedFilename is not None
+            if tempCachedFilename.is_file():
+                # inputKind == ContentKind.File:
                 fingerprint = cast(
                     "Fingerprint",
                     ComputeDigestFromFile(
-                        cast("AbsPath", tempCachedFilename),
+                        tempCachedFilename,
                         repMethod=stringifyFilenameDigest,
                     ),
                 )
                 putativeInputKind = ContentKind.File
-            elif os.path.isdir(
-                cast("AbsPath", tempCachedFilename)
-            ):  # inputKind == ContentKind.Directory:
+            elif tempCachedFilename.is_dir():
+                # inputKind == ContentKind.Directory:
                 fingerprint = ComputeDigestFromDirectory(
-                    cast("AbsPath", tempCachedFilename),
+                    tempCachedFilename,
                     repMethod=stringifyFilenameDigest,
                 )
                 putativeInputKind = ContentKind.Directory
@@ -692,14 +692,12 @@ class SchemeHandlerCacheHandler:
                 )
 
             if finalCachedFilename is None:
-                finalCachedFilename = cast(
-                    "AbsPath", os.path.join(destdir, fingerprint)
-                )
+                finalCachedFilename = destdir / fingerprint
         else:
             finalCachedFilename = None
 
         # Saving the metadata
-        with open(uriMetaCachedFilename, mode="w", encoding="utf-8") as mOut:
+        with uriMetaCachedFilename.open(mode="w", encoding="utf-8") as mOut:
             # Serializing the metadata
             if fetched_metadata_array is None:
                 fetched_metadata_array = [
@@ -724,7 +722,7 @@ class SchemeHandlerCacheHandler:
                 metaStructure["fingerprint"] = fingerprint
                 metaStructure["path"] = {
                     "relative": os.path.relpath(finalCachedFilename, hashDir),
-                    "absolute": finalCachedFilename,
+                    "absolute": finalCachedFilename.as_posix(),
                 }
             else:
                 metaStructure["resolves_to"] = inputKind
@@ -750,7 +748,7 @@ class SchemeHandlerCacheHandler:
     def validate(
         self,
         *args: "str",
-        destdir: "Optional[AbsPath]" = None,
+        destdir: "Optional[pathlib.Path]" = None,
         acceptGlob: "bool" = False,
         cascade: "bool" = False,
     ) -> "Iterator[Tuple[LicensedURI, bool, Optional[CacheMetadataDict]]]":
@@ -837,7 +835,7 @@ class SchemeHandlerCacheHandler:
         self,
         remote_file: "Union[AnyURI, urllib.parse.ParseResult, Sequence[AnyURI], Sequence[urllib.parse.ParseResult]]",
         offline: "bool",
-        destdir: "Optional[AbsPath]" = None,
+        destdir: "Optional[pathlib.Path]" = None,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         vault: "Optional[SecurityContextVault]" = None,
@@ -847,9 +845,9 @@ class SchemeHandlerCacheHandler:
             destdir = self.cacheDir
 
         # The directory with the content, whose name is based on sha256
-        if not os.path.exists(destdir):
+        if not destdir.exists():
             try:
-                os.makedirs(destdir)
+                destdir.mkdir(parents=True)
             except IOError:
                 errstr = (
                     "ERROR: Unable to create directory for workflow inputs {}.".format(
@@ -863,9 +861,7 @@ class SchemeHandlerCacheHandler:
         hashDir = self.getHashDir(destdir)
 
         # This filename will only be used when content is being fetched
-        tempCachedFilename = cast(
-            "AbsPath", os.path.join(destdir, "caching-" + str(uuid.uuid4()))
-        )
+        tempCachedFilename = destdir / ("caching-" + str(uuid.uuid4()))
 
         # This is an iterative process, where the URI is resolved and peeled until a basic fetching protocol is reached
         # inputKind: "Union[ContentKind, LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]]" = remote_file
@@ -904,7 +900,7 @@ class SchemeHandlerCacheHandler:
             currentSecContext = dict()
 
         relFinalCachedFilename: "Optional[RelPath]"
-        finalCachedFilename: "Optional[AbsPath]"
+        finalCachedFilename: "Optional[pathlib.Path]"
         final_fingerprint: "Optional[Fingerprint]"
         while not isinstance(inputKind, ContentKind):
             # These elements are alternative URIs. Any of them should
@@ -952,19 +948,19 @@ class SchemeHandlerCacheHandler:
                 # Cleaning up
                 if registerInCache and ignoreCache:
                     # Removing the metadata
-                    if os.path.exists(uriMetaCachedFilename):
-                        os.unlink(uriMetaCachedFilename)
+                    if uriMetaCachedFilename.exists():
+                        uriMetaCachedFilename.unlink()
 
                     # Removing the symlink
-                    if os.path.exists(absUriCachedFilename):
-                        os.unlink(absUriCachedFilename)
+                    if absUriCachedFilename.exists():
+                        absUriCachedFilename.unlink()
                     # We cannot remove the content as
                     # it could be referenced by other symlinks
 
                 refetch = (
                     not registerInCache
                     or ignoreCache
-                    or not os.path.exists(uriMetaCachedFilename)
+                    or not uriMetaCachedFilename.exists()
                     or os.stat(uriMetaCachedFilename).st_size == 0
                 )
 
@@ -997,24 +993,25 @@ class SchemeHandlerCacheHandler:
                             relFinalCachedFilename = cast(
                                 "RelPath", os.readlink(absUriCachedFilename)
                             )
-                        finalCachedFilename = cast(
-                            "AbsPath",
-                            os.path.normpath(
-                                os.path.join(hashDir, relFinalCachedFilename)
-                            ),
-                        )
+                        finalCachedFilename = (
+                            hashDir / relFinalCachedFilename
+                        ).resolve()
 
-                        if not os.path.exists(finalCachedFilename):
+                        if not finalCachedFilename.exists():
                             self.logger.warning(
                                 f"Relative cache path {relFinalCachedFilename} was not found"
                             )
-                            finalCachedFilename = metaStructure.get("path", {}).get(
+                            finalCachedFilename_str = metaStructure.get("path", {}).get(
                                 "absolute"
                             )
+                            if finalCachedFilename_str is not None:
+                                finalCachedFilename = pathlib.Path(
+                                    finalCachedFilename_str
+                                )
 
-                            if (finalCachedFilename is None) or not os.path.exists(
-                                finalCachedFilename
-                            ):
+                            if (
+                                finalCachedFilename is None
+                            ) or not finalCachedFilename.exists():
                                 self.logger.warning(
                                     f"Absolute cache path {finalCachedFilename} was not found. Cache miss!!!"
                                 )
@@ -1142,11 +1139,11 @@ class SchemeHandlerCacheHandler:
                             # Now, creating the symlink
                             # (which should not be needed in the future)
                             if finalCachedFilename is not None:
-                                if os.path.isfile(finalCachedFilename):
-                                    os.unlink(finalCachedFilename)
-                                elif os.path.isdir(finalCachedFilename):
+                                if finalCachedFilename.is_file():
+                                    finalCachedFilename.unlink()
+                                elif finalCachedFilename.is_dir():
                                     shutil.rmtree(finalCachedFilename)
-                                os.rename(tempCachedFilename, finalCachedFilename)
+                                tempCachedFilename.rename(finalCachedFilename)
 
                                 next_input_file = os.path.relpath(
                                     finalCachedFilename, hashDir
@@ -1156,8 +1153,11 @@ class SchemeHandlerCacheHandler:
                                     the_remote_file.encode("utf-8")
                                 ).hexdigest()
 
-                            if os.path.lexists(absUriCachedFilename):
-                                os.unlink(absUriCachedFilename)
+                            if (
+                                absUriCachedFilename.is_symlink()
+                                or absUriCachedFilename.exists()
+                            ):
+                                absUriCachedFilename.unlink()
 
                             os.symlink(next_input_file, absUriCachedFilename)
 
@@ -1211,7 +1211,7 @@ class SchemeHandlerCacheHandler:
 
         return CachedContent(
             kind=inputKind,
-            path=pathlib.Path(finalCachedFilename),
+            path=finalCachedFilename,
             metadata_array=metadata_array,
             licences=tuple(licences),
             fingerprint=final_fingerprint,

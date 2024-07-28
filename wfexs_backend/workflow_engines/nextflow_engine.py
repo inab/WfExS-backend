@@ -77,7 +77,9 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         MaterializedOutput,
+        ProgsMapping,
         RelPath,
+        SymbolicName,
         SymbolicParamName,
         URIType,
     )
@@ -90,6 +92,7 @@ if TYPE_CHECKING:
         ContextAssignments,
         NfInclude,
         NfIncludeConfig,
+        NfPlugin,
         NfProcess,
         NfWorkflow,
     )
@@ -100,8 +103,10 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
-from . import WorkflowEngine, WorkflowEngineException
 from . import (
+    WorkflowEngine,
+    WorkflowEngineException,
+    WorkflowEngineInstallException,
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
@@ -182,27 +187,28 @@ class NextflowWorkflowEngine(WorkflowEngine):
     def __init__(
         self,
         container_factory_clazz: "Type[ContainerFactory]" = NoContainerFactory,
-        cacheDir: "Optional[AnyPath]" = None,
-        workflow_config: "Optional[Mapping[str, Any]]" = None,
-        local_config: "Optional[EngineLocalConfig]" = None,
-        engineTweaksDir: "Optional[AnyPath]" = None,
-        cacheWorkflowDir: "Optional[AnyPath]" = None,
-        cacheWorkflowInputsDir: "Optional[AnyPath]" = None,
-        workDir: "Optional[AnyPath]" = None,
-        outputsDir: "Optional[AnyPath]" = None,
-        outputMetaDir: "Optional[AnyPath]" = None,
-        intermediateDir: "Optional[AnyPath]" = None,
-        tempDir: "Optional[AnyPath]" = None,
-        stagedContainersDir: "Optional[AnyPath]" = None,
+        cacheDir: "Optional[pathlib.Path]" = None,
+        engine_config: "Optional[EngineLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
+        engineTweaksDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowDir: "Optional[pathlib.Path]" = None,
+        cacheWorkflowInputsDir: "Optional[pathlib.Path]" = None,
+        workDir: "Optional[pathlib.Path]" = None,
+        outputsDir: "Optional[pathlib.Path]" = None,
+        outputMetaDir: "Optional[pathlib.Path]" = None,
+        intermediateDir: "Optional[pathlib.Path]" = None,
+        tempDir: "Optional[pathlib.Path]" = None,
+        stagedContainersDir: "Optional[pathlib.Path]" = None,
         secure_exec: "bool" = False,
         allowOther: "bool" = False,
-        config_directory: "Optional[AnyPath]" = None,
+        config_directory: "Optional[pathlib.Path]" = None,
+        writable_containers: "bool" = False,
     ):
         super().__init__(
             container_factory_clazz=container_factory_clazz,
             cacheDir=cacheDir,
-            workflow_config=workflow_config,
-            local_config=local_config,
+            engine_config=engine_config,
+            progs_mapping=progs_mapping,
             engineTweaksDir=engineTweaksDir,
             cacheWorkflowDir=cacheWorkflowDir,
             cacheWorkflowInputsDir=cacheWorkflowInputsDir,
@@ -215,22 +221,24 @@ class NextflowWorkflowEngine(WorkflowEngine):
             secure_exec=secure_exec,
             allowOther=allowOther,
             config_directory=config_directory,
+            writable_containers=writable_containers,
         )
 
-        toolsSect = local_config.get("tools", {}) if local_config else {}
         # Obtaining the full path to Java
-        self.java_cmd = toolsSect.get("javaCommand", DEFAULT_JAVA_CMD)
+        self.java_cmd = self.progs_mapping.get(
+            cast("SymbolicName", "java"), DEFAULT_JAVA_CMD
+        )
         abs_java_cmd = shutil.which(self.java_cmd)
         if abs_java_cmd is None:
-            self.logger.critical(
-                f"Java command {self.java_cmd}, needed by Nextflow, was not found"
-            )
+            errmsg = f"Java command {self.java_cmd}, needed by Nextflow, was not found"
+            self.logger.critical(errmsg)
+            raise WorkflowEngineInstallException(errmsg)
         else:
-            self.java_cmd = abs_java_cmd
+            self.java_cmd = cast("AbsPath", abs_java_cmd)
 
         # Obtaining the full path to static bash
-        staticBashPaths = []
-        stBash = toolsSect.get("staticBashCommand")
+        staticBashPaths: "MutableSequence[str]" = []
+        stBash = self.progs_mapping.get(cast("SymbolicName", "staticBash"))
         if stBash is not None:
             staticBashPaths.append(stBash)
         staticBashPaths.extend(DEFAULT_STATIC_BASH_CMDS)
@@ -246,8 +254,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             )
 
         # Obtaining the full path to static ps
-        staticPsPaths = []
-        stPs = toolsSect.get("staticPsCommand")
+        staticPsPaths: "MutableSequence[str]" = []
+        stPs = self.progs_mapping.get(cast("SymbolicName", "staticPs"))
         if stPs is not None:
             staticPsPaths.append(stPs)
         staticPsPaths.extend(DEFAULT_STATIC_PS_CMDS)
@@ -268,33 +276,29 @@ class NextflowWorkflowEngine(WorkflowEngine):
             os.path.commonpath([self.java_cmd, wfexs_dirname]) == wfexs_dirname
         )
 
-        engineConf = copy.deepcopy(toolsSect.get(self.ENGINE_NAME, {}))
-        workflowEngineConf = (
-            workflow_config.get(self.ENGINE_NAME, {}) if workflow_config else {}
-        )
-        engineConf.update(workflowEngineConf)
-
-        self.nxf_image = engineConf.get(
+        self.nxf_image = self.engine_config.get(
             "dockerImage", self.DEFAULT_NEXTFLOW_DOCKER_IMAGE
         )
-        nxf_version = engineConf.get("version")
+        nxf_version = self.engine_config.get("version")
         if nxf_version is None:
             if self.container_factory.containerType == ContainerType.Podman:
                 default_nextflow_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
             else:
                 default_nextflow_version = self.DEFAULT_NEXTFLOW_VERSION
-            nxf_version = engineConf.get("version", default_nextflow_version)
+            nxf_version = default_nextflow_version
         elif (
             self.container_factory.containerType == ContainerType.Podman
             and nxf_version < self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
         ):
             nxf_version = self.DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN
         self.nxf_version = nxf_version
-        self.max_retries = engineConf.get("maxRetries", self.DEFAULT_MAX_RETRIES)
-        self.max_cpus = engineConf.get("maxProcesses", self.DEFAULT_MAX_CPUS)
+        self.max_retries = self.engine_config.get(
+            "maxRetries", self.DEFAULT_MAX_RETRIES
+        )
+        self.max_cpus = self.engine_config.get("maxProcesses", self.DEFAULT_MAX_CPUS)
 
         # The profile to force, in case it cannot be guessed
-        nxf_profile: "Union[str, Sequence[str]]" = engineConf.get("profile", [])
+        nxf_profile: "Union[str, Sequence[str]]" = self.engine_config.get("profile", [])
         self.nxf_profile: "Sequence[str]"
         if isinstance(nxf_profile, list):
             self.nxf_profile = nxf_profile
@@ -306,14 +310,16 @@ class NextflowWorkflowEngine(WorkflowEngine):
             self.nxf_profile = [str(nxf_profile)]
 
         # Setting the assets directory
-        self.nxf_assets = os.path.join(self.engineTweaksDir, "assets")
-        os.makedirs(self.nxf_assets, exist_ok=True)
+        self.nxf_assets = self.engineTweaksDir / "assets"
+        self.nxf_assets.mkdir(parents=True, exist_ok=True)
+
+        # Setting the home directory
+        self.nxf_home = self.engineTweaksDir / ".nextflow"
+        self.nxf_assets.mkdir(parents=True, exist_ok=True)
 
         # Setting up packed directory
-        self.groovy_cache_dir = os.path.join(
-            self.cacheWorkflowDir, "groovy-parsing-cache"
-        )
-        os.makedirs(self.groovy_cache_dir, exist_ok=True)
+        self.groovy_cache_dir = self.cacheWorkflowDir / "groovy-parsing-cache"
+        self.groovy_cache_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
     def MyWorkflowType(cls) -> "WorkflowType":
@@ -417,11 +423,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     includes,
                     workflows,
                     includeconfigs,
+                    plugins,
                     interesting_assignments,
                 ) = analyze_nf_content(
                     firstPathContent,
                     only_names=only_names,
-                    cache_dir=self.groovy_cache_dir,
+                    cache_dir=self.groovy_cache_dir.as_posix(),
                 )
             except Exception as e:
                 errstr = f"Failed to parse initial file {os.path.relpath(firstPath, nfDir)} with groovy parser"
@@ -483,11 +490,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             _,
                             _,
                             includeconfigs,
+                            plugins,
                             interesting_assignments,
                         ) = analyze_nf_content(
                             newNxfConfigContent,
                             only_names=only_names,
-                            cache_dir=self.groovy_cache_dir,
+                            cache_dir=self.groovy_cache_dir.as_posix(),
                         )
                     except Exception as e:
                         errstr = f"Failed to parse configuration file {relNewNxfConfig} with groovy parser"
@@ -557,14 +565,25 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     # And register all the included config files which are reachable
                     for includeconfig in includeconfigs:
                         relIncludePath = includeconfig.path
-                        absIncludePath = (nfConfigDir / relIncludePath).resolve(
-                            strict=False
-                        )
+
+                        if os.path.isabs(relIncludePath) and not os.path.exists(
+                            relIncludePath
+                        ):
+                            self.logger.warning(
+                                f"Nextflow config file {relIncludePath} included from {relNewNxfConfig} is an absolute path not found. This usually happens from incomplete groovy evaluations. Trying to match it relatively to workflow directory"
+                            )
+                            absIncludePath = (nfDir / ("." + relIncludePath)).resolve(
+                                strict=False
+                            )
+                        else:
+                            absIncludePath = (nfConfigDir / relIncludePath).resolve(
+                                strict=False
+                            )
                         if absIncludePath.is_file():
                             nextNewNxfConfigs.append(absIncludePath)
                         else:
                             self.logger.warning(
-                                f"Nextflow config file {relIncludePath} included from {relNewNxfConfig} not found"
+                                f"Nextflow config file {relIncludePath} included from {relNewNxfConfig} not found (tried path {absIncludePath})"
                             )
             # Next round
             newNxfConfigs = nextNewNxfConfigs
@@ -634,11 +653,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             includes,
                             workflows,
                             _,
+                            _,
                             interesting_assignments,
                         ) = analyze_nf_content(
                             content,
                             only_names=only_names,
-                            cache_dir=self.groovy_cache_dir,
+                            cache_dir=self.groovy_cache_dir.as_posix(),
                         )
                     except Exception as e:
                         errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
@@ -649,16 +669,24 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     nxfScriptDir = nxfScript.parent
                     for include in includes:
                         relIncludePath = include.path
-                        if not relIncludePath.endswith(".nf"):
-                            relIncludePath += ".nf"
                         absIncludePath = (nxfScriptDir / relIncludePath).resolve(
                             strict=False
                         )
+
+                        if absIncludePath.is_dir():
+                            absIncludePath = (absIncludePath / "main.nf").resolve(
+                                strict=False
+                            )
+                        elif not relIncludePath.endswith(".nf"):
+                            absIncludePath = (
+                                nxfScriptDir / (relIncludePath + ".nf")
+                            ).resolve(strict=False)
+
                         if absIncludePath.is_file():
                             nextNxfScripts.append(absIncludePath)
                         else:
                             self.logger.warning(
-                                f"Nextflow file {relIncludePath} included from {relNxfScript} not found"
+                                f"Nextflow path {relIncludePath} included from {relNxfScript} not found (tried path {absIncludePath})"
                             )
 
                     # And register the templates from each
@@ -715,16 +743,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     def materializeEngineVersion(
         self, engineVersion: "EngineVersion"
-    ) -> "Tuple[EngineVersion, EnginePath, Fingerprint]":
+    ) -> "Tuple[EngineVersion, pathlib.Path, Fingerprint]":
         """
         Method to ensure the required engine version is materialized
         It should raise an exception when the exact version is unavailable,
         and no replacement could be fetched
         """
 
-        nextflow_install_dir = cast(
-            "EnginePath", os.path.join(self.weCacheDir, engineVersion)
-        )
+        nextflow_install_dir = self.weCacheDir / engineVersion
         retval, nxf_install_stdout_v, nxf_install_stderr_v = self.runNextflowCommand(
             engineVersion, ["info"], nextflow_path=nextflow_install_dir
         )
@@ -732,7 +758,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             errstr = "Could not install Nextflow {} . Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
                 engineVersion, retval, nxf_install_stdout_v, nxf_install_stderr_v
             )
-            raise WorkflowEngineException(errstr)
+            raise WorkflowEngineInstallException(errstr)
 
         # Getting the version label
         verPat = re.compile(r"Version: +(.*)$")
@@ -751,20 +777,18 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
-        containers_path: "Optional[AnyPath]" = None,
+        containers_path: "Optional[pathlib.Path]" = None,
         workdir: "Optional[pathlib.Path]" = None,
         intermediateDir: "Optional[pathlib.Path]" = None,
-        nextflow_path: "Optional[EnginePath]" = None,
-        stdoutFilename: "Optional[AbsPath]" = None,
-        stderrFilename: "Optional[AbsPath]" = None,
+        nextflow_path: "Optional[pathlib.Path]" = None,
+        stdoutFilename: "Optional[pathlib.Path]" = None,
+        stderrFilename: "Optional[pathlib.Path]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
     ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         self.logger.debug("Command => nextflow " + " ".join(commandLine))
 
         if containers_path is None:
-            containers_path = cast(
-                "AnyPath", self.container_factory.cacheDir.as_posix()
-            )
+            containers_path = self.container_factory.cacheDir
         if self.engine_mode == EngineMode.Docker:
             (
                 retval,
@@ -805,21 +829,19 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
-        containers_path: "AnyPath",
+        containers_path: "pathlib.Path",
         workdir: "Optional[pathlib.Path]" = None,
         intermediateDir: "Optional[pathlib.Path]" = None,
-        nextflow_install_dir: "Optional[EnginePath]" = None,
-        stdoutFilename: "Optional[AbsPath]" = None,
-        stderrFilename: "Optional[AbsPath]" = None,
+        nextflow_install_dir: "Optional[pathlib.Path]" = None,
+        stdoutFilename: "Optional[pathlib.Path]" = None,
+        stderrFilename: "Optional[pathlib.Path]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
     ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         if nextflow_install_dir is None:
-            nextflow_install_dir = cast(
-                "EnginePath", os.path.join(self.weCacheDir, nextflow_version)
-            )
-        cachedScript = cast("AbsPath", os.path.join(nextflow_install_dir, "nextflow"))
-        if not os.path.exists(cachedScript):
-            os.makedirs(nextflow_install_dir, exist_ok=True)
+            nextflow_install_dir = self.weCacheDir / nextflow_version
+        cachedScript = nextflow_install_dir / "nextflow"
+        if not cachedScript.exists():
+            nextflow_install_dir.mkdir(parents=True, exist_ok=True)
             nextflow_script_url = cast(
                 "URIType",
                 "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow-{0}-all".format(
@@ -835,12 +857,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         # Checking the installer has execution permissions
         if not os.access(cachedScript, os.R_OK | os.X_OK):
-            os.chmod(cachedScript, 0o555)
+            cachedScript.chmod(0o555)
 
         # Now, time to run it
-        NXF_HOME = os.path.join(nextflow_install_dir, ".nextflow")
+        NXF_HOME = self.nxf_home
         instEnv = dict(os.environ if runEnv is None else runEnv)
-        instEnv["NXF_HOME"] = NXF_HOME
+        instEnv["NXF_HOME"] = NXF_HOME.as_posix()
         # Needed for newer nextflow versions, so older workflows do not misbehave
         instEnv["NXF_DEFAULT_DSL"] = "1"
         instEnv["JAVA_CMD"] = self.java_cmd
@@ -854,7 +876,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         instEnv["NXF_WORK"] = (
             workdir if workdir is not None else jobIntermediateDir
         ).as_posix()
-        instEnv["NXF_ASSETS"] = self.nxf_assets
+        instEnv["NXF_ASSETS"] = self.nxf_assets.as_posix()
         if self.logger.getEffectiveLevel() <= logging.DEBUG:
             instEnv["NXF_DEBUG"] = "1"
         #    instEnv['NXF_DEBUG'] = '2'
@@ -862,8 +884,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         #    instEnv['NXF_DEBUG'] = '1'
 
         # FIXME: Should we set NXF_TEMP???
-        instEnv["NXF_TEMP"] = self.tempDir
-        instEnv["TMPDIR"] = self.tempDir
+        instEnv["NXF_TEMP"] = self.tempDir.as_posix()
+        instEnv["TMPDIR"] = self.tempDir.as_posix()
 
         # This is needed to have Nextflow using the cached contents
         if self.container_factory.containerType == ContainerType.Singularity:
@@ -873,7 +895,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             else:
                 env_sing_key = "NXF_SINGULARITY_CACHEDIR"
 
-            instEnv[env_sing_key] = containers_path
+            instEnv[env_sing_key] = containers_path.as_posix()
 
         # This is done only once
         retval = 0
@@ -887,7 +909,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             [cachedScript, "-version"],
                             stdout=nxf_install_stdout,
                             stderr=nxf_install_stderr,
-                            cwd=nextflow_install_dir,
+                            cwd=nextflow_install_dir.as_posix(),
                             env=instEnv,
                         ).wait()
 
@@ -917,15 +939,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
             try:
                 if stdoutFilename is None:
                     nxf_run_stdout = tempfile.NamedTemporaryFile()
-                    stdoutFilename = cast("AbsPath", nxf_run_stdout.name)
+                    stdoutFilename = pathlib.Path(nxf_run_stdout.name)
                 else:
-                    nxf_run_stdout = open(stdoutFilename, mode="ab+")
+                    nxf_run_stdout = stdoutFilename.open(mode="ab+")
 
                 if stderrFilename is None:
                     nxf_run_stderr = tempfile.NamedTemporaryFile()
-                    stderrFilename = cast("AbsPath", nxf_run_stderr.name)
+                    stderrFilename = pathlib.Path(nxf_run_stderr.name)
                 else:
-                    nxf_run_stderr = open(stderrFilename, mode="ab+")
+                    nxf_run_stderr = stderrFilename.open(mode="ab+")
 
                 retval = subprocess.Popen(
                     [cachedScript, *commandLine],
@@ -953,11 +975,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self,
         nextflow_version: "EngineVersion",
         commandLine: "Sequence[str]",
-        containers_path: "AnyPath",
+        containers_path: "pathlib.Path",
         workdir: "Optional[pathlib.Path]" = None,
         intermediateDir: "Optional[pathlib.Path]" = None,
-        stdoutFilename: "Optional[AbsPath]" = None,
-        stderrFilename: "Optional[AbsPath]" = None,
+        stdoutFilename: "Optional[pathlib.Path]" = None,
+        stderrFilename: "Optional[pathlib.Path]" = None,
         runEnv: "Optional[Mapping[str, str]]" = None,
     ) -> "Tuple[ExitVal, Optional[str], Optional[str]]":
         # Now, we have to assure the nextflow image is already here
@@ -1049,12 +1071,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # FIXME: should it be something more restrictive?
             homedir = os.path.expanduser("~")
 
-            nextflow_install_dir = os.path.join(self.weCacheDir, nextflow_version)
-            nxf_home = os.path.join(nextflow_install_dir, ".nextflow")
+            nextflow_install_dir = self.weCacheDir / nextflow_version
+            nxf_home = self.nxf_home
             nxf_assets_dir = self.nxf_assets
             try:
                 # Directories required by Nextflow in a Docker
-                os.makedirs(nxf_assets_dir, exist_ok=True)
+                nxf_assets_dir.mkdir(parents=True, exist_ok=True)
             except Exception as error:
                 raise WorkflowEngineException(
                     "ERROR: Unable to create nextflow assets directory. Error: "
@@ -1077,7 +1099,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 "-e",
                 "HOME=" + homedir,
                 "-e",
-                "NXF_ASSETS=" + nxf_assets_dir,
+                "NXF_ASSETS=" + nxf_assets_dir.as_posix(),
+                "-e",
+                "NXF_HOME=" + nxf_home.as_posix(),
                 "-e",
                 "NXF_USRMAP=" + uid,
                 # "-e", "NXF_DOCKER_OPTS=-u "+uid+":"+gid+" -e HOME="+homedir+" -e TZ="+tzstring+" -v "+workdir+":"+workdir+":rw,rprivate,z -v "+project_path+":"+project_path+":rw,rprivate,z",
@@ -1099,7 +1123,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 "/var/run/docker.sock:/var/run/docker.sock:rw,rprivate,z",
             ]
 
-            validation_cmd_post_vol = ["-w", workdir, docker_tag, "nextflow"]
+            validation_cmd_post_vol: "MutableSequence[str]" = [
+                "-w",
+                workdir.as_posix(),
+                docker_tag,
+                "nextflow",
+            ]
             validation_cmd_post_vol.extend(commandLine)
 
             validation_cmd_post_vol_resume = [*validation_cmd_post_vol, "-resume"]
@@ -1111,7 +1140,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # to generate the volume parameters
             volumes = [
                 (homedir + "/", "ro,rprivate,z"),
-                #    (nxf_assets_dir,"rprivate,z"),
+                (nxf_assets_dir.as_posix() + "/", "rprivate,z"),
+                (nxf_home.as_posix() + "/", "rprivate,z"),
                 (workdir.as_posix() + "/", "rw,rprivate,z"),
                 #    (project_path+'/',"rw,rprivate,z"),
                 #    (repo_dir+'/',"ro,rprivate,z")
@@ -1217,15 +1247,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
             try:
                 if stdoutFilename is None:
                     run_stdout = tempfile.NamedTemporaryFile()
-                    stdoutFilename = cast("AbsPath", run_stdout.name)
+                    stdoutFilename = pathlib.Path(run_stdout.name)
                 else:
-                    run_stdout = open(stdoutFilename, mode="ab+")
+                    run_stdout = stdoutFilename.open(mode="ab+")
 
                 if stderrFilename is None:
                     run_stderr = tempfile.NamedTemporaryFile()
-                    stderrFilename = cast("AbsPath", run_stderr.name)
+                    stderrFilename = pathlib.Path(run_stderr.name)
                 else:
-                    run_stderr = open(stderrFilename, mode="ab+")
+                    run_stderr = stderrFilename.open(mode="ab+")
 
                 while retries > 0 and retval != 0:
                     self.logger.debug('"' + '" "'.join(validation_params_cmd) + '"')
@@ -1351,7 +1381,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     def materializeWorkflow(
         self,
         matWorkflowEngine: "MaterializedWorkflowEngine",
-        consolidatedWorkflowDir: "AbsPath",
+        consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
@@ -1464,8 +1494,11 @@ STDERR
                         includes,
                         workflows,
                         _,
+                        _,
                         interesting_assignments,
-                    ) = analyze_nf_content(content, cache_dir=self.groovy_cache_dir)
+                    ) = analyze_nf_content(
+                        content, cache_dir=self.groovy_cache_dir.as_posix()
+                    )
                 except Exception as e:
                     errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
                     self.logger.exception(errstr)
@@ -1507,6 +1540,71 @@ STDERR
         # Join both lists
         if len(containerTagsConda) > 0:
             containerTags.extend(containerTagsConda)
+
+        # Now, search for the plugins
+        plugins: "MutableSequence[NfPlugin]" = []
+        for relNxfScript in matWorkflowEngine.workflow.relPathFiles:
+            # Skipping nextflow files
+            if relNxfScript.endswith(".nf"):
+                continue
+
+            nxfScript = (nfDir / relNxfScript).resolve(strict=False)
+            # If it is an special directory, skip it!
+            if nxfScript.is_dir():
+                continue
+
+            self.logger.debug(f"Searching plugin declarations at {relNxfScript}")
+            with nxfScript.open(mode="rt", encoding="utf-8") as wfH:
+                # This is needed for multi-line pattern matching
+                content = wfH.read()
+
+                try:
+                    (
+                        _,
+                        _,
+                        _,
+                        _,
+                        _,
+                        l_plugins,
+                        _,
+                    ) = analyze_nf_content(
+                        content, cache_dir=self.groovy_cache_dir.as_posix()
+                    )
+                except Exception as e:
+                    errstr = f"Failed to parse file {relNxfScript} with groovy parser while looking for plugins"
+                    self.logger.warning(errstr)
+
+            plugins.extend(l_plugins)
+
+        # And materialize/install them
+        pluginsline = ",".join(map(lambda plugin: plugin.label, plugins))
+        if len(pluginsline) > 0:
+            (
+                retval,
+                nxf_plugin_inst_stdout_v,
+                nxf_plugin_inst_stderr_v,
+            ) = self.runNextflowCommand(
+                matWorkflowEngine.version,
+                ["plugin", "install", pluginsline],
+                workdir=pathlib.Path(matWorkflowEngine.engine_path),
+                nextflow_path=matWorkflowEngine.engine_path,
+            )
+            self.logger.info(f"Installing nextflow plugins {pluginsline}")
+            if retval != 0:
+                errstr = f"""\
+Could not install Nextflow plugins {pluginsline} . Retval {retval}
+======
+STDOUT
+======
+{nxf_plugin_inst_stdout_v}
+======
+STDERR
+======
+{nxf_plugin_inst_stderr_v}
+"""
+                self.logger.error(errstr)
+                raise WorkflowEngineInstallException(errstr)
+
         return matWorkflowEngine, containerTags
 
     def simpleContainerFileName(self, imageUrl: "URIType") -> "Sequence[RelPath]":
@@ -1752,7 +1850,7 @@ STDERR
             originalConfFile = None
 
         # File where all the gathered parameters are going to be stored
-        allParamsFile = os.path.join(outputMetaDir, "all-params.json")
+        allParamsFile = outputMetaDir / "all-params.json"
 
         with forceParamsConfFile.open(mode="w", encoding="utf-8") as fPC:
             # First of all, we have to replicate the contents of the
@@ -1860,7 +1958,7 @@ def wfexs_allParams()
 
 wfexs_allParams()
 """.format(
-                    allParamsFile
+                    allParamsFile.as_posix()
                 ),
                 file=fPC,
             )
@@ -1883,7 +1981,7 @@ wfexs_allParams()
 
         runName = "WfExS-run_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
-        nxf_params = [
+        nxf_params: "MutableSequence[str]" = [
             "-log",
             (outputStatsDir / "log.txt").as_posix(),
             "-C",
@@ -1913,12 +2011,8 @@ wfexs_allParams()
         # Using the copy of the original workflow
         nxf_params.append(wDir.as_posix())
 
-        stdoutFilename = cast(
-            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STDOUT_FILE)
-        )
-        stderrFilename = cast(
-            "AbsPath", os.path.join(outputMetaDir, WORKDIR_STDERR_FILE)
-        )
+        stdoutFilename = outputMetaDir / WORKDIR_STDOUT_FILE
+        stderrFilename = outputMetaDir / WORKDIR_STDERR_FILE
 
         started = datetime.datetime.now(datetime.timezone.utc)
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(

@@ -22,7 +22,7 @@ import copy
 import datetime
 import logging
 
-from pathlib import Path
+import pathlib
 
 import os
 import sys
@@ -84,7 +84,7 @@ def test_b2share_basic_fail_nosandbox() -> "None":
     Check B2SHARE plugin complains about missing sandbox parameter
     """
     with pytest.raises(ExportPluginException):
-        B2SHAREPublisher(cast("AbsPath", "/"), setup_block={"token": ""})
+        B2SHAREPublisher(pathlib.Path("/"), setup_block={"token": ""})
 
 
 # @pytest.mark.xfail(raises=ExportPluginException, reason="Check B2SHARE plugin complains about missing sandbox parameter")
@@ -94,7 +94,7 @@ def test_b2share_basic_fail_notoken() -> "None":
     Check B2SHARE plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
-        bep = B2SHAREPublisher(cast("AbsPath", "/"), setup_block={"sandbox": True})
+        bep = B2SHAREPublisher(pathlib.Path("/"), setup_block={"sandbox": True})
 
 
 basic_deps = [
@@ -123,7 +123,7 @@ def test_b2share_basic(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -145,7 +145,7 @@ def test_b2share_get_pid_metadata(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
     existing_pid = file_params.extra["owned_existing_pid"]
 
     pid_metadata = bep.get_pid_metadata(existing_pid)
@@ -167,7 +167,7 @@ def test_b2share_book_new_pid(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -203,7 +203,7 @@ def test_b2share_book_draft_pid(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     booked_entry_take2 = None
@@ -254,7 +254,7 @@ def test_b2share_book_new_version_pid(file_params: "ParamTestData") -> "None":
         "sandbox": file_params.extra["sandbox"],
     }
     bep = B2SHAREPublisher(
-        cast("AbsPath", "/tofill"),
+        pathlib.Path("/tofill"),
         setup_block=setup_block,
         default_preferred_id=file_params.extra["owned_existing_pid"],
     )
@@ -297,7 +297,7 @@ def test_b2share_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         "sandbox": file_params.extra["sandbox"],
     }
     bep = B2SHAREPublisher(
-        cast("AbsPath", os.path.join(os.path.dirname(__file__), "data")),
+        pathlib.Path(__file__).parent / "data",
         setup_block=setup_block,
     )
 
@@ -350,7 +350,7 @@ def test_b2share_upload_stream_to_draft(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -435,7 +435,7 @@ def test_b2share_update_record_metadata_raw(file_params: "ParamTestData") -> "No
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -489,7 +489,7 @@ def test_b2share_update_record_metadata_facets(file_params: "ParamTestData") -> 
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -548,7 +548,7 @@ def test_b2share_failed_update_record_metadata_raw(
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     with pytest.raises(ExportPluginException):
         booked_entry = None
@@ -608,7 +608,7 @@ def test_b2share_publish_new_pid(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     published_meta = None

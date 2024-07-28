@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         SecurityContextConfig,
@@ -95,7 +96,7 @@ class FASPFetcher(AbstractStatefulFetcher):
     def fetch(
         self,
         remote_file: "URIType",
-        cachedFilename: "AbsPath",
+        cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
     ) -> "ProtocolFetcherReturn":
         # Sanitizing possible ill-formed inputs

@@ -63,6 +63,7 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoTag,
@@ -373,7 +374,7 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
 
 
 class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
-    def write(self, base_path: "Union[str, os.PathLike[str]]") -> "None":
+    def write(self, base_path: "PathLikePath") -> "None":
         base_path_p: "pathlib.Path"
         if isinstance(base_path, pathlib.Path):
             base_path_p = base_path
@@ -785,7 +786,7 @@ class WorkflowRunROCrate:
         licences: "Sequence[LicenceDescription]" = [],
         orcids: "Sequence[Union[str, ResolvedORCID]]" = [],
         progs: "ProgsMapping" = {},
-        tempdir: "Optional[str]" = None,
+        tempdir: "Optional[pathlib.Path]" = None,
         scheme_desc: "Sequence[Tuple[str, str, int]]" = [],
         crate_pid: "Optional[str]" = None,
         licence_matcher: "Optional[LicenceMatcher]" = None,
@@ -1512,7 +1513,8 @@ you can find here an almost complete list of the possible ones:
             item_signature = cast(
                 "bytes",
                 ComputeDigestFromObject(
-                    marshall_namedtuple(in_item.values), repMethod=nullProcessDigest
+                    marshall_namedtuple(in_item.values, workdir=self.work_dir),
+                    repMethod=nullProcessDigest,
                 ),
             ) + formal_parameter_id.encode("utf-8")
             # Do we already have the value in cache?
@@ -2413,7 +2415,7 @@ you can find here an almost complete list of the possible ones:
             ):
                 self.wf_file.append_to("output", formal_parameter, compact=True)
 
-    def writeWRROC(self, filename: "AnyPath") -> None:
+    def writeWRROC(self, filename: "pathlib.Path") -> None:
         with warnings.catch_warnings():
             # Disable possible warnings emitted by rocrate-py library
             # when it is not run in debug mode
@@ -2421,7 +2423,7 @@ you can find here an almost complete list of the possible ones:
                 warnings.filterwarnings(
                     "ignore", category=UserWarning, module=r"^rocrate\.model\.file$"
                 )
-            self.crate.write_zip(filename)
+            self.crate.write_zip(filename.as_posix())
 
     def addStagedWorkflowDetails(
         self,

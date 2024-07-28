@@ -74,7 +74,9 @@ if TYPE_CHECKING:
         ContainerTaggedName,
         Fingerprint,
         PathlibLike,
+        ProgsMapping,
         RelPath,
+        SymbolicName,
         URIType,
     )
 
@@ -547,7 +549,7 @@ class ContainerFactory(abc.ABC):
         simpleFileNameMethod: "ContainerFileNamingMethod",
         containersCacheDir: "Optional[pathlib.Path]" = None,
         stagedContainersDir: "Optional[pathlib.Path]" = None,
-        tools_config: "Optional[ContainerLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
         engine_name: "str" = "unset",
         tempDir: "Optional[pathlib.Path]" = None,
     ):
@@ -560,9 +562,9 @@ class ContainerFactory(abc.ABC):
         # provides its file naming method
         self.simpleFileNameMethod = simpleFileNameMethod
 
-        if tools_config is None:
-            tools_config = dict()
-        self.tools_config = tools_config
+        if progs_mapping is None:
+            progs_mapping = dict()
+        self.progs_mapping = progs_mapping
 
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(

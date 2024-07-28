@@ -95,6 +95,7 @@ if TYPE_CHECKING:
     AnyPath: TypeAlias = Union[RelPath, AbsPath]
 
     PathlibLike: TypeAlias = pathlib.Path
+    PathLikePath: TypeAlias = Union[str, os.PathLike[str]]
 
 
 DEFAULT_DOCKER_CMD = cast("SymbolicName", "docker")
@@ -376,13 +377,21 @@ class MaterializedContent(NamedTuple):
     fingerprint: "Optional[Fingerprint]" = None
 
     @classmethod
-    def _mapping_fixes(cls, orig: "Mapping[str, Any]") -> "Mapping[str, Any]":
+    def _mapping_fixes(
+        cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
+    ) -> "Mapping[str, Any]":
         dest = cast("MutableMapping[str, Any]", copy.copy(orig))
-        dest["local"] = pathlib.Path(dest["local"])
+        dest["local"] = pathlib.Path(orig["local"])
+        if workdir is not None and not dest["local"].is_absolute():
+            dest["local"] = (workdir / dest["local"]).resolve()
 
-        extra = dest.get("extrapolated_local")
+        extra = orig.get("extrapolated_local")
         if extra is not None:
             dest["extrapolated_local"] = pathlib.Path(extra)
+            if workdir is not None and not dest["extrapolated_local"].is_absolute():
+                dest["extrapolated_local"] = (
+                    workdir / dest["extrapolated_local"]
+                ).resolve()
 
         return dest
 
@@ -521,9 +530,13 @@ class AbstractGeneratedContent(abc.ABC):
     preferredFilename: "Optional[RelPath]" = None
 
     @classmethod
-    def _mapping_fixes(cls, orig: "Mapping[str, Any]") -> "Mapping[str, Any]":
+    def _mapping_fixes(
+        cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
+    ) -> "Mapping[str, Any]":
         dest = cast("MutableMapping[str, Any]", copy.copy(orig))
-        dest["local"] = pathlib.Path(dest["local"])
+        dest["local"] = pathlib.Path(orig["local"])
+        if workdir is not None and not dest["local"].is_absolute():
+            dest["local"] = (workdir / dest["local"]).resolve()
 
         return dest
 
@@ -603,9 +616,13 @@ class LocalWorkflow(NamedTuple):
     relPathFiles: "Optional[Sequence[Union[RelPath, URIType]]]" = None
 
     @classmethod
-    def _mapping_fixes(cls, orig: "Mapping[str, Any]") -> "Mapping[str, Any]":
+    def _mapping_fixes(
+        cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
+    ) -> "Mapping[str, Any]":
         dest = cast("MutableMapping[str, Any]", copy.copy(orig))
-        dest["dir"] = pathlib.Path(dest["dir"])
+        dest["dir"] = pathlib.Path(orig["dir"])
+        if workdir is not None and not dest["dir"].is_absolute():
+            dest["dir"] = (workdir / dest["dir"]).resolve()
 
         return dest
 
@@ -620,18 +637,18 @@ class StagedSetup(NamedTuple):
     nickname: "Optional[str]"
     creation: "datetime.datetime"
     workflow_config: "Optional[Mapping[str, Any]]"
-    engine_tweaks_dir: "Optional[AbsPath]"
-    raw_work_dir: "AbsPath"
-    work_dir: "Optional[AbsPath]"
-    workflow_dir: "Optional[AbsPath]"
-    consolidated_workflow_dir: "Optional[AbsPath]"
-    inputs_dir: "Optional[AbsPath]"
-    extrapolated_inputs_dir: "Optional[AbsPath]"
-    outputs_dir: "Optional[AbsPath]"
-    intermediate_dir: "Optional[AbsPath]"
-    containers_dir: "Optional[AbsPath]"
-    meta_dir: "Optional[AbsPath]"
-    temp_dir: "AbsPath"
+    engine_tweaks_dir: "Optional[pathlib.Path]"
+    raw_work_dir: "pathlib.Path"
+    work_dir: "Optional[pathlib.Path]"
+    workflow_dir: "Optional[pathlib.Path]"
+    consolidated_workflow_dir: "Optional[pathlib.Path]"
+    inputs_dir: "Optional[pathlib.Path]"
+    extrapolated_inputs_dir: "Optional[pathlib.Path]"
+    outputs_dir: "Optional[pathlib.Path]"
+    intermediate_dir: "Optional[pathlib.Path]"
+    containers_dir: "Optional[pathlib.Path]"
+    meta_dir: "Optional[pathlib.Path]"
+    temp_dir: "pathlib.Path"
     secure_exec: "bool"
     allow_other: "bool"
     is_encrypted: "bool"

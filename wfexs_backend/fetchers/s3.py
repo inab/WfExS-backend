@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         SecurityContextConfig,
         URIType,
     )
@@ -62,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 def downloadContentFrom_s3(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     urlParse = urlparse(remote_file)

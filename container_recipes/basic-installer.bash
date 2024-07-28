@@ -16,7 +16,7 @@
 # limitations under the License.
 
 # Getting the installation directory
-scriptDir="$(dirname "$0")"
+scriptDir="$(dirname "$(readlink -f "$0")")"
 case "${scriptDir}" in
 	/*)
 		# Path is absolute
@@ -90,7 +90,7 @@ checkInstallGO() {
 	fi
 }
 
-for cmd in python3 pip ; do
+for cmd in python3 ; do
 	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
@@ -101,6 +101,21 @@ for cmd in python3 pip ; do
 	fi
 done
 
+for cmd in dot ; do
+	set +e
+	type -a "$cmd" 2> /dev/null
+	retval=$?
+	set -e
+	if [ "$retval" -ne 0 ] ; then
+		failed=1
+		echo "ERROR: Command $cmd not found in PATH and needed by WfExS runtime"
+	fi
+done
+
+if [ -n "$failed" ] ; then
+	exit 1
+fi
+
 failed=
 for lib in libmagic.so ; do
 	set +e
@@ -109,7 +124,7 @@ for lib in libmagic.so ; do
 	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
-		echo "ERROR: Library $lib found in ldconfig cache and needed for the installation"
+		echo "ERROR: Library $lib found in ldconfig cache and needed by WfExS runtime"
 	fi
 done
 
@@ -126,7 +141,49 @@ fi
 
 # Is WfExS already installed??? (case of Docker)
 set +eu
-python3 -P -c "import sys"$'\n'"try:"$'\n'"  import wfexs_backend"$'\n'"except:"$'\n'"  sys.exit(1)"$'\n'"sys.exit(0)"
+python3 --help | grep -q '^-P '
+retval=$?
+if [ "$retval" -eq 0 ] ; then
+	python_p_flag="-P"
+	read -r -d "" CHECKWFEXS <<EOF
+import sys
+
+try:
+	import wfexs_backend
+except:
+	sys.exit(1)
+
+sys.exit(0)
+EOF
+	python3 -P -c "$CHECKWFEXS"
+	retval=$?
+else
+	python_p_flag=""
+	read -r -d "" CHECKWFEXS <<EOF
+import sys
+
+try:
+	# Let's remove current directory
+	sys.path.remove("")
+except:
+	pass
+
+try:
+	import os
+	# Let's remove current directory
+	sys.path.remove(os.getcwd())
+except:
+	pass
+
+try:
+	import wfexs_backend
+except:
+	sys.exit(1)
+
+sys.exit(0)
+EOF
+fi
+python3 $python_p_flag -c "$CHECKWFEXS"
 retval=$?
 set -eu
 if [ "$retval" -eq 0 ] ; then
@@ -161,12 +218,45 @@ if [ -z "$envDir" ]; then
 		# Activating the python environment
 		envActivate="${envDir}/bin/activate"
 		source "${envActivate}"
+
+		# Pip should be available
+		for cmd in pip ; do
+			set +e
+			type -a "$cmd" 2> /dev/null
+			retval=$?
+			set -e
+			if [ "$retval" -ne 0 ] ; then
+				failed=1
+				echo "ERROR: Command $cmd not found in PATH and needed for the installation"
+				exit 1
+			fi
+		done
+
 		pip install --require-virtualenv --upgrade pip wheel
 	fi
 
+	# Pip should be available
+	for cmd in pip ; do
+		set +e
+		type -a "$cmd" 2> /dev/null
+		retval=$?
+		set -e
+		if [ "$retval" -ne 0 ] ; then
+			failed=1
+			echo "ERROR: Command $cmd not found in PATH and needed for the installation"
+			exit 1
+		fi
+	done
+
 	# Checking whether the modules were already installed
-	echo "Installing WfExS-backend python dependencies"
-	pip install --require-virtualenv -r "${requirementsFile}"
+	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))')
+	constraintsFile="$(readlink -f "${scriptDir}"/../constraints-${PYVER}.txt)"
+	echo "Installing WfExS-backend python dependencies (${PYVER})"
+	PIP_INSTALL_PARAMS=( -r "${requirementsFile}" )
+	if [ -f "$constraintsFile" ] ; then
+		PIP_INSTALL_PARAMS+=( -c "${constraintsFile}" )
+	fi
+	pip install --require-virtualenv "${PIP_INSTALL_PARAMS[@]}"
 
 	# Now, should we run something wrapped?
 	if [ $# != 0 ] ; then

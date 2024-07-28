@@ -19,8 +19,6 @@
 import pytest
 import logging
 
-from pathlib import Path
-
 import os
 import pathlib
 import sys
@@ -44,6 +42,7 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from py.path.local import LocalPath  # type: ignore[import]
     from wfexs_backend.common import (
         AbsPath,
         SecurityContextConfig,
@@ -65,14 +64,14 @@ def test_cache_basic() -> "None":
     """
     Check cache export plugin instantiation
     """
-    CacheExportPlugin(cast("AbsPath", "/"), setup_block={})
+    CacheExportPlugin(pathlib.Path("/"), setup_block={})
 
 
 def test_cache_book_pid_noparam_fail() -> "None":
     """
     Check cache plugin cannot "book" without a hint
     """
-    cep = CacheExportPlugin(cast("AbsPath", "/"), setup_block={})
+    cep = CacheExportPlugin(pathlib.Path("/"), setup_block={})
     with pytest.raises(ValueError):
         cep.book_pid()
 
@@ -82,7 +81,7 @@ def test_cache_book_pid_nouri_fail() -> "None":
     Check cache plugin cannot "book" a preferred id which is not an URI
     """
 
-    cep = CacheExportPlugin(cast("AbsPath", "/"), setup_block={})
+    cep = CacheExportPlugin(pathlib.Path("/"), setup_block={})
     with pytest.raises(ValueError):
         cep.book_pid("nonamespace")
 
@@ -92,7 +91,7 @@ def test_cache_book_pid() -> "None":
     Check cache plugin "books" an URI
     """
 
-    cep = CacheExportPlugin(cast("AbsPath", "/"), setup_block={})
+    cep = CacheExportPlugin(pathlib.Path("/"), setup_block={})
     pid = "the:test"
     booked_pid = cep.book_pid(pid)
     assert booked_pid is not None
@@ -104,18 +103,18 @@ def test_cache_push_nocontext_fail() -> "None":
     Check cache plugin complains about no contextualized instance
     """
 
-    cep = CacheExportPlugin(cast("AbsPath", "/"), setup_block={})
+    cep = CacheExportPlugin(pathlib.Path("/"), setup_block={})
     with pytest.raises(ValueError):
         cep.push([])
 
 
-def test_cache_push(tmpdir) -> "None":  # type: ignore[no-untyped-def]
+def test_cache_push(tmpdir: "LocalPath") -> "None":
     """
     Check cache plugin complains about no contextualized instance
     """
 
-    naive_path = get_path(os.path.join("data", "naive_file.txt"))
-    assert os.path.isfile(naive_path), f"Test file {naive_path} is not available"
+    naive_path = pathlib.Path(get_path(os.path.join("data", "naive_file.txt")))
+    assert naive_path.is_file(), f"Test file {naive_path} is not available"
 
     # First, instantiate WfExS backend
     temppath = tmpdir.mkdir("TEMP")
@@ -135,7 +134,7 @@ def test_cache_push(tmpdir) -> "None":  # type: ignore[no-untyped-def]
 
     # Second, instantiate the cache plugin
     cep = CacheExportPlugin(
-        cast("AbsPath", os.path.dirname(naive_path)),
+        naive_path.parent,
         setup_block={},
     )
 

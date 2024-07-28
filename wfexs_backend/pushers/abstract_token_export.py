@@ -30,6 +30,7 @@ import urllib.error
 import urllib.parse
 
 if TYPE_CHECKING:
+    import pathlib
     from typing import (
         Any,
         ClassVar,
@@ -75,7 +76,7 @@ from ..common import (
 class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
     def __init__(
         self,
-        refdir: "AbsPath",
+        refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],

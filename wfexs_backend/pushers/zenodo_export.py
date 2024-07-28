@@ -41,6 +41,7 @@ from ..common import (
 )
 
 if TYPE_CHECKING:
+    import pathlib
     from typing import (
         Any,
         ClassVar,
@@ -99,7 +100,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
 
     def __init__(
         self,
-        refdir: "AbsPath",
+        refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
         default_licences: "Sequence[LicenceDescription]" = [],
         default_orcids: "Sequence[ResolvedORCID]" = [],

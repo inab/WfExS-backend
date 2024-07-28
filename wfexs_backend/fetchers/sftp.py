@@ -60,6 +60,7 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
+        PathLikePath,
         ProgsMapping,
         RelPath,
         RepoURL,
@@ -91,7 +92,7 @@ from ..common import (
 def sftpCopy(
     sftp: "paramiko.SFTPClient",
     sshPath: "AbsPath",
-    localPath: "AbsPath",
+    localPath: "PathLikePath",
     sshStat: "Optional[paramiko.SFTPAttributes]" = None,
 ) -> "Tuple[Union[int, Literal[False]], Optional[ContentKind]]":
     if sshStat is None:
@@ -105,7 +106,7 @@ def sftpCopy(
     kind: "Optional[ContentKind]" = None
     if sshStat.st_mode is not None:
         if stat.S_ISREG(sshStat.st_mode):
-            transTrios.append((sshPath, sshStat, localPath))
+            transTrios.append((sshPath, sshStat, str(localPath)))
             kind = ContentKind.File
         elif stat.S_ISDIR(sshStat.st_mode):
             # Recursive
@@ -158,7 +159,7 @@ def sftpCopy(
 # TODO: test this codepath
 def fetchSSHURL(
     remote_file: "URIType",
-    cachedFilename: "AbsPath",
+    cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
 ) -> "ProtocolFetcherReturn":
     """

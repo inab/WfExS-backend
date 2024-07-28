@@ -27,6 +27,7 @@ from typing import (
 import urllib.parse
 
 if TYPE_CHECKING:
+    import pathlib
     from typing import (
         MutableMapping,
         MutableSequence,
@@ -150,9 +151,9 @@ class SecurityContextVault(abc.ABC):
 
     @classmethod
     def ReadSecurityContextFile(
-        cls, securityContextsConfigFilename: "AnyPath"
+        cls, securityContextsConfigFilename: "pathlib.Path"
     ) -> "Tuple[SecurityContextConfigBlock, Sequence[ValidationError]]":
-        with open(securityContextsConfigFilename, mode="r", encoding="utf-8") as scf:
+        with securityContextsConfigFilename.open(mode="r", encoding="utf-8") as scf:
             creds_config = unmarshall_namedtuple(yaml.safe_load(scf))
 
         valErrors = config_validate(creds_config, cls.SECURITY_CONTEXT_SCHEMA)
@@ -161,7 +162,7 @@ class SecurityContextVault(abc.ABC):
 
     @classmethod
     def FromFile(
-        cls, securityContextsConfigFilename: "AnyPath"
+        cls, securityContextsConfigFilename: "pathlib.Path"
     ) -> "SecurityContextVault":
         creds_config, val_errors = cls.ReadSecurityContextFile(
             securityContextsConfigFilename

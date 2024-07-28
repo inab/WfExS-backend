@@ -23,7 +23,7 @@ import datetime
 import json
 import logging
 
-from pathlib import Path
+import pathlib
 
 import os
 import sys
@@ -81,7 +81,7 @@ def test_dataverse_basic_fail_noapiprefix() -> "None":
     Check Dataverse plugin complains about missing api-prefix parameter
     """
     with pytest.raises(ExportPluginException):
-        DataversePublisher(cast("AbsPath", "/"), setup_block={"token": ""})
+        DataversePublisher(pathlib.Path("/"), setup_block={"token": ""})
 
 
 @pytest.mark.dependency
@@ -91,7 +91,7 @@ def test_dataverse_basic_fail_notoken() -> "None":
     """
     with pytest.raises(ExportPluginException):
         dep = DataversePublisher(
-            cast("AbsPath", "/"), setup_block={"api-prefix": "example.org"}
+            pathlib.Path("/"), setup_block={"api-prefix": "example.org"}
         )
 
 
@@ -125,7 +125,7 @@ def test_dataverse_basic(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -151,7 +151,7 @@ def test_dataverse_get_pid_metadata(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
     existing_pid = file_params.extra["owned_existing_pid"]
 
     pid_metadata = dep.get_pid_metadata(existing_pid)
@@ -177,7 +177,7 @@ def test_dataverse_book_new_pid(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -217,7 +217,7 @@ def test_dataverse_book_draft_pid(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     booked_entry_take2 = None
@@ -272,7 +272,7 @@ def test_dataverse_book_new_version_pid(file_params: "ParamTestData") -> "None":
         "dataverse-id": file_params.extra["dataverse-id"],
     }
     dep = DataversePublisher(
-        cast("AbsPath", "/tofill"),
+        pathlib.Path("/tofill"),
         setup_block=setup_block,
         default_preferred_id=file_params.extra["owned_existing_pid"],
     )
@@ -342,7 +342,7 @@ def test_dataverse_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         "dataverse-id": file_params.extra["dataverse-id"],
     }
     dep = DataversePublisher(
-        cast("AbsPath", os.path.join(os.path.dirname(__file__), "data")),
+        pathlib.Path(__file__).parent / "data",
         setup_block=setup_block,
     )
 
@@ -403,7 +403,7 @@ def test_dataverse_upload_stream_to_draft(file_params: "ParamTestData") -> "None
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -467,7 +467,7 @@ def test_dataverse_update_record_metadata_raw(file_params: "ParamTestData") -> "
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -581,7 +581,7 @@ def test_dataverse_update_record_metadata_facets(
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     try:
@@ -672,7 +672,7 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(cast("AbsPath", "/tofill"), setup_block=setup_block)
+    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
 
     booked_entry = None
     published_meta = None

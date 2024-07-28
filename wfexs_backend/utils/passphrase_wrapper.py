@@ -18,6 +18,7 @@
 from __future__ import absolute_import
 
 import os
+import pathlib
 import random
 import secrets
 import tempfile
@@ -111,7 +112,7 @@ class WfExSPassphraseGenerator:
     def __init__(
         self,
         cacheHandler: "SchemeHandlerCacheHandler",
-        cacheDir: "Optional[AbsPath]" = None,
+        cacheDir: "Optional[pathlib.Path]" = None,
         word_sets: "Mapping[str, Sequence[RemoteWordlistResource]]" = DEFAULT_WORD_SETS,
     ):
         # The cache is an integral part, as it is where the
@@ -185,9 +186,7 @@ class WfExSPassphraseGenerator:
                         indexed_filename, _ = self.cacheHandler.inject(
                             wordlist_internal_uri,
                             destdir=self.cacheDir,
-                            tempCachedFilename=cast(
-                                "AbsPath", tmp_indexed_filename.name
-                            ),
+                            tempCachedFilename=pathlib.Path(tmp_indexed_filename.name),
                         )
 
                 assert indexed_filename is not None
@@ -268,8 +267,7 @@ class WfExSPassGenSingleton(WfExSPassphraseGenerator):
 
     def __new__(cls) -> "WfExSPassphraseGenerator":  # type: ignore
         if cls.__instance is None:
-            cachePath = cast(
-                "AbsPath",
+            cachePath = pathlib.Path(
                 xdg.BaseDirectory.save_cache_path("es.elixir.WfExSPassGenSingleton"),
             )
 

@@ -45,7 +45,9 @@ if TYPE_CHECKING:
         AnyPath,
         ContainerTaggedName,
         Fingerprint,
+        ProgsMapping,
         RelPath,
+        SymbolicName,
         URIType,
     )
 
@@ -97,7 +99,7 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
         simpleFileNameMethod: "ContainerFileNamingMethod",
         containersCacheDir: "Optional[pathlib.Path]" = None,
         stagedContainersDir: "Optional[pathlib.Path]" = None,
-        tools_config: "Optional[ContainerLocalConfig]" = None,
+        progs_mapping: "Optional[ProgsMapping]" = None,
         engine_name: "str" = "unset",
         tempDir: "Optional[pathlib.Path]" = None,
     ):
@@ -105,11 +107,13 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
             simpleFileNameMethod=simpleFileNameMethod,
             containersCacheDir=containersCacheDir,
             stagedContainersDir=stagedContainersDir,
-            tools_config=tools_config,
+            progs_mapping=progs_mapping,
             engine_name=engine_name,
             tempDir=tempDir,
         )
-        self.runtime_cmd = self.tools_config.get("dockerCommand", DEFAULT_DOCKER_CMD)
+        self.runtime_cmd = self.progs_mapping.get(
+            cast("SymbolicName", "docker"), DEFAULT_DOCKER_CMD
+        )
 
     @classmethod
     def ContainerType(cls) -> "ContainerType":
