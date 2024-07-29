@@ -109,6 +109,7 @@ WORKFLOW_TESTBED = pytest.mark.parametrize(
     [
         ("test-hello-cwl.wfex.stage", None),
         ("test-hello-cwl-secure.wfex.stage", None),
+        ("test-hello-nxf-docker.wfex.stage", None),
     ],
 )
 
