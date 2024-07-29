@@ -295,7 +295,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.max_retries = self.engine_config.get(
             "maxRetries", self.DEFAULT_MAX_RETRIES
         )
-        self.max_cpus = self.engine_config.get("maxProcesses", self.DEFAULT_MAX_CPUS)
+        self.max_cpus = self.engine_config.get(
+            "maxCPUs", self.engine_config.get("maxProcesses", self.DEFAULT_MAX_CPUS)
+        )
+        self.max_task_duration: "Optional[str]" = self.engine_config.get(
+            "maxTaskDuration"
+        )
 
         # The profile to force, in case it cannot be guessed
         nxf_profile: "Union[str, Sequence[str]]" = self.engine_config.get("profile", [])
@@ -1941,6 +1946,18 @@ dag {{
                 print(
                     f"""
 executor.cpus={self.max_cpus}
+""",
+                    file=fPC,
+                )
+
+            if self.max_task_duration is not None:
+                print(
+                    f"""
+process {{
+    withName: '.*' {{
+        time = '{self.max_task_duration}'
+    }}
+}}
 """,
                     file=fPC,
                 )
