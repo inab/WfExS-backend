@@ -870,13 +870,13 @@ def processStagedWorkdirCommand(
                                 wfSetup.nickname,
                             )
                         )
-                        exit_val = wfInstance.executeWorkflow(offline=True)
+                        staged_exec = wfInstance.executeWorkflow(offline=True)
                         print(
                             "\t- Instance {} (nickname '{}') exit value: {} ({})\n".format(
                                 wfSetup.instance_id,
                                 wfSetup.nickname,
-                                exit_val,
-                                "FAILED" if exit_val != 0 else "DONE",
+                                staged_exec.exitVal,
+                                "FAILED" if staged_exec.exitVal != 0 else "DONE",
                             )
                         )
                     except Exception as e:
@@ -1615,15 +1615,15 @@ def main() -> None:
                 wfSetup.nickname,
             )
         )
-        exit_val = wfInstance.executeWorkflow(
+        staged_exec = wfInstance.executeWorkflow(
             offline=command == WfExS_Commands.OfflineExecute
         )
         print(
             "\t- Instance {} (nickname '{}') exit value: {} ({})".format(
                 wfSetup.instance_id,
                 wfSetup.nickname,
-                exit_val,
-                "FAILED" if exit_val != 0 else "DONE",
+                staged_exec.exitVal,
+                "FAILED" if staged_exec.exitVal != 0 else "DONE",
             )
         )
 

@@ -48,11 +48,11 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-# @pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
+@pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
 @WORKFLOW_TESTBED
 def test_workflow_stage(
     tmppath: "pathlib.Path", stage_file: "str", context_file: "Optional[str]"
-) -> "None":
+) -> "WF":
     wfInstance = test_wfexsbackend_stage(tmppath, stage_file, context_file)
 
     wfSetup = wfInstance.getStagedSetup()
@@ -67,3 +67,18 @@ def test_workflow_stage(
 
     assert not stagedSetup.is_damaged
     assert isinstance(wfInstance.stageMarshalled, datetime.datetime)
+
+    return wfInstance
+
+
+@pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
+@WORKFLOW_TESTBED
+def test_workflow_offline_exec(
+    tmppath: "pathlib.Path", stage_file: "str", context_file: "Optional[str]"
+) -> "WF":
+    wfInstance = test_workflow_stage(tmppath, stage_file, context_file)
+    staged_exec = wfInstance.executeWorkflow(offline=True)
+
+    assert staged_exec.exitVal == 0
+
+    return wfInstance

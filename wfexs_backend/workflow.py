@@ -3704,7 +3704,7 @@ class WF:
 
         return actions
 
-    def executeWorkflow(self, offline: "bool" = False) -> "ExitVal":
+    def executeWorkflow(self, offline: "bool" = False) -> "StagedExecution":
         self.unmarshallStage(offline=offline)
         self.unmarshallExecute(offline=offline, fail_ok=True)
 
@@ -3735,8 +3735,8 @@ class WF:
         # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
         self.marshallExecute(overwrite=True)
 
-        # And last, report the exit value
-        return stagedExec.exitVal
+        # And last, report the staged execution
+        return stagedExec
 
     def listMaterializedExportActions(self) -> "Sequence[MaterializedExportAction]":
         """
