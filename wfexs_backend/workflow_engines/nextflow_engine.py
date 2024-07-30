@@ -954,6 +954,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 else:
                     nxf_run_stderr = stderrFilename.open(mode="ab+")
 
+                self.logger.error(
+                    f"Command line {cachedScript} {' '.join(commandLine)}"
+                )
                 retval = subprocess.Popen(
                     [cachedScript, *commandLine],
                     stdout=nxf_run_stdout,

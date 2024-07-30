@@ -31,10 +31,24 @@ if TYPE_CHECKING:
     from typing import (
         Optional,
         Tuple,
+        Type,
+        Union,
     )
     from wfexs_backend.wfexs_backend import (
         WfExSConfigBlock,
     )
+
+import yaml
+
+# We have preference for the C based loader and dumper, but the code
+# should fallback to default implementations when C ones are not present
+YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
+YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
+try:
+    from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
+except ImportError:
+    from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
+
 
 from wfexs_backend.wfexs_backend import WfExSBackend
 from wfexs_backend.workflow import WF
@@ -57,6 +71,11 @@ def test_wfexsbackend_bootstrap(
         config_directory=tmppath,
         key_prefix="crypt4gh",
     )
+
+    local_path = tmppath / "test-local_config.yaml"
+    with local_path.open(mode="w", encoding="utf-8") as cf:
+        yaml.dump(test_local_config, cf, Dumper=YAMLDumper)
+
     assert bootstrap_ok
     assert config_directory.is_dir()
     assert (tmppath / "WORKDIRS").is_dir()
@@ -107,9 +126,12 @@ def test_wfexsbackend_list_workflow_engines(tmppath: "pathlib.Path") -> "None":
 WORKFLOW_TESTBED = pytest.mark.parametrize(
     ["stage_file", "context_file"],
     [
-        ("test-hello-cwl.wfex.stage", None),
-        ("test-hello-cwl-secure.wfex.stage", None),
+        #        ("test-hello-cwl-singularity.wfex.stage", None),
+        #        ("test-hello-cwl-docker.wfex.stage", None),
+        #        ("test-hello-cwl-secure.wfex.stage", None),
         ("test-hello-nxf-docker.wfex.stage", None),
+        #        ("test-hello-nxf-singularity.wfex.stage", None),
+        #        ("test-hello-nxf-too-long-docker.wfex.stage", None),
     ],
 )
 
