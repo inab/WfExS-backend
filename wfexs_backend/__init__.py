@@ -57,7 +57,11 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
         import dulwich.repo
         import dulwich.walk
 
-    active_branch = dulwich.porcelain.active_branch(repo)  # type: ignore[no-untyped-call]
+    try:
+        active_branch = dulwich.porcelain.active_branch(repo)  # type: ignore[no-untyped-call]
+    except IndexError:
+        # This happens when it is queried over a disengaged checkout
+        active_branch = b""
     active_branch_decode = active_branch.decode("utf-8", errors="ignore")
     # Get the repository
     r: "dulwich.repo.Repo"
