@@ -628,7 +628,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         ):
             engineVer = minimalEngineVer
 
-        if engineVer is None:
+        if engineVer is None or engineVer < self.nxf_version:
             engineVer = self.nxf_version
         elif (
             self.container_factory.containerType == ContainerType.Podman
