@@ -2190,6 +2190,12 @@ class WF:
                     operational_containers=self.materializedEngine.operational_containers,
                 )
         self.materializedEngine = matWfEngV2
+        if matWfEngV2 is not None:
+            self.logger.info(
+                f"Engine {matWfEngV2.instance.__class__.__name__} version {matWfEngV2.version} being used"
+            )
+        else:
+            self.logger.warning("No engine was selected (it may fail later)")
 
     def materializeWorkflowAndContainers(
         self,
