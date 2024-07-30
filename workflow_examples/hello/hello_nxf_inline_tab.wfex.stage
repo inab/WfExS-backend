@@ -1,4 +1,4 @@
-workflow_id: github:inab/hello-workflows/227d4b7b0c925b3baf8241fecd3dd29b1d586a41/nextflow
+workflow_id: github:inab/hello-workflows/26b45a412bb91e05c230a39fd268e65386c59d48/nextflow
 workflow_config:
   secure: false
 # All the inputs must be URLs or CURIEs from identifiers.org

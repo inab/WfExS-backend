@@ -1,4 +1,4 @@
-workflow_id: github:inab/hello-workflows/840236984ef4ea967b62b8a2dac1da22f7766b29/nextflow
+workflow_id: github:inab/hello-workflows/26b45a412bb91e05c230a39fd268e65386c59d48/nextflow
 workflow_config:
   secure: false
   containerType: singularity
