@@ -1,0 +1,22 @@
+workflow_id: github:inab/hello-workflows/26b45a412bb91e05c230a39fd268e65386c59d48/nextflow-too-long
+workflow_config:
+  secure: false
+  containerType: docker
+  nextflow:
+    maxTaskDuration: "1m"
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  an_input:
+    c-l-a-s-s: File
+    url: github:inab/hello-workflows/840236984ef4ea967b62b8a2dac1da22f7766b29/nextflow/singularity-params.config
+  output_dir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: true
+environment:
+  SECRET_VARIABLE: "The secret content"
+outputs:
+  hello_output:
+    c-l-a-s-s: File
+    glob: "output_dir/*"

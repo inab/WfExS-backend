@@ -30,6 +30,7 @@ from typing import (
 if TYPE_CHECKING:
     from typing import (
         Optional,
+        Sequence,
         Tuple,
         Type,
         Union,
@@ -124,14 +125,19 @@ def test_wfexsbackend_list_workflow_engines(tmppath: "pathlib.Path") -> "None":
 
 
 WORKFLOW_TESTBED = pytest.mark.parametrize(
-    ["stage_file", "context_file"],
+    ["stage_file", "context_file", "should_fail"],
     [
-        #        ("test-hello-cwl-singularity.wfex.stage", None),
-        #        ("test-hello-cwl-docker.wfex.stage", None),
-        #        ("test-hello-cwl-secure.wfex.stage", None),
-        ("test-hello-nxf-docker.wfex.stage", None),
-        #        ("test-hello-nxf-singularity.wfex.stage", None),
-        #        ("test-hello-nxf-too-long-docker.wfex.stage", None),
+        ("test-hello-cwl-singularity.wfex.stage", None, None),
+        ("test-hello-cwl-docker.wfex.stage", None, None),
+        ("test-hello-cwl-secure.wfex.stage", None, None),
+        ("test-hello-nxf-docker.wfex.stage", None, None),
+        ("test-hello-nxf-singularity.wfex.stage", None, None),
+        (
+            "test-hello-nxf-too-long-docker-fails.wfex.stage",
+            None,
+            ["test_workflow_offline_exec"],
+        ),
+        ("test-hello-nxf-too-long-docker-fixed.wfex.stage", None, None),
     ],
 )
 
@@ -139,7 +145,10 @@ WORKFLOW_TESTBED = pytest.mark.parametrize(
 @pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
 @WORKFLOW_TESTBED
 def test_wfexsbackend_stage(
-    tmppath: "pathlib.Path", stage_file: "str", context_file: "Optional[str]"
+    tmppath: "pathlib.Path",
+    stage_file: "str",
+    context_file: "Optional[str]",
+    should_fail: "Optional[Sequence[str]]",
 ) -> "WF":
     wfBackend = test_wfexsbackend_init(tmppath)
 
