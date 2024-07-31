@@ -655,6 +655,17 @@ class StagedSetup(NamedTuple):
     is_damaged: "bool"
 
 
+class ExecutionStatus(enum.Enum):
+    """
+    The status of a workflow execution
+    """
+
+    Queued = "queued"
+    Running = "running"
+    Finished = "finished"
+    Died = "died"
+
+
 class MarshallingStatus(NamedTuple):
     pid: "Optional[str]"
     workflow_type: "Optional[str]"
@@ -663,7 +674,7 @@ class MarshallingStatus(NamedTuple):
     stage: "Optional[Union[bool, datetime.datetime]]"
     execution: "Optional[Union[bool, datetime.datetime]]"
     export: "Optional[Union[bool, datetime.datetime]]"
-    execution_stats: "Optional[Sequence[Tuple[datetime.datetime, datetime.datetime, ExitVal]]]"
+    execution_stats: "Optional[Sequence[Tuple[ExecutionStatus, Optional[datetime.datetime], datetime.datetime, datetime.datetime, ExitVal]]]"
     export_stamps: "Optional[Sequence[datetime.datetime]]"
 
     def __repr__(self) -> "str":
@@ -677,7 +688,7 @@ class MarshallingStatus(NamedTuple):
   - execution: {"(never done)" if self.execution is None  else  self.execution.isoformat()  if isinstance(self.execution, datetime.datetime)  else  "(failed/not done yet)"}
   - export: {"(never done)" if self.export is None  else  self.export.isoformat()  if isinstance(self.export, datetime.datetime)  else  "(failed/not done yet)"}
 * Execution stats:
-{'  (none)' if self.execution_stats is None or len(self.execution_stats) == 0 else chr(10).join(map(lambda ss: '  - Started ' + ss[0].isoformat() + ' , ended ' + ss[1].isoformat() + ' (exit ' + str(ss[2]) + ')', self.execution_stats))}
+{'  (none)' if self.execution_stats is None or len(self.execution_stats) == 0 else chr(10).join(map(lambda ss: ' - Status:' + ss[0].value + ' (queued ' + (ss[1].isoformat() if ss[1] is not None else '(unknown)') + ' , started ' + ss[2].isoformat() + ' , ended ' + ss[3].isoformat() + ' ) (exit ' + str(ss[4]) + ')', self.execution_stats))}
 * Exported at:
 {'  (none)' if self.export_stamps is None or len(self.export_stamps) == 0 else chr(10).join(map(lambda ea: '  - ' + ea.isoformat(), self.export_stamps))}\
 """
@@ -778,21 +789,3 @@ class CratableItem(enum.IntFlag):
 
 
 NoCratableItem = CratableItem(0)
-
-
-class StagedExecution(NamedTuple):
-    """
-    The description of the execution of a workflow, giving the relative directory of the output
-    """
-
-    exitVal: "ExitVal"
-    augmentedInputs: "Sequence[MaterializedInput]"
-    matCheckOutputs: "Sequence[MaterializedOutput]"
-    outputsDir: "RelPath"
-    started: "datetime.datetime"
-    ended: "datetime.datetime"
-    environment: "Sequence[MaterializedInput]" = []
-    outputMetaDir: "Optional[RelPath]" = None
-    diagram: "Optional[RelPath]" = None
-    logfile: "Sequence[RelPath]" = []
-    profiles: "Optional[Sequence[str]]" = None

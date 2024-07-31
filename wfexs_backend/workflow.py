@@ -52,9 +52,9 @@ from .common import (
     ContentWithURIsDesc,
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
+    ExecutionStatus,
     NoCratableItem,
     ResolvedORCID,
-    StagedExecution,
 )
 
 from .fetchers import (
@@ -234,6 +234,7 @@ from .container_factories import (
     Container,
 )
 from .workflow_engines import (
+    StagedExecution,
     WorkflowType,
 )
 
@@ -1175,7 +1176,10 @@ class WF:
             execution=self.executionMarshalled,
             export=self.exportMarshalled,
             execution_stats=list(
-                map(lambda r: (r.started, r.ended, r.exitVal), self.stagedExecutions)
+                map(
+                    lambda r: (r.status, r.queued, r.started, r.ended, r.exitVal),
+                    self.stagedExecutions,
+                )
             )
             if self.stagedExecutions is not None
             else [],
@@ -3722,27 +3726,25 @@ class WF:
         if self.stagedExecutions is None:
             self.stagedExecutions = []
 
-        stagedExec = WorkflowEngine.ExecuteWorkflow(
+        for staged_exec in WorkflowEngine.ExecuteWorkflow(
             self.materializedEngine,
             self.materializedParams,
             self.materializedEnvironment,
             self.expected_outputs,
             self.enabled_profiles,
-        )
+        ):
+            self.logger.debug(staged_exec.exitVal)
+            self.logger.debug(staged_exec.started)
+            self.logger.debug(staged_exec.ended)
+            self.logger.debug(staged_exec.augmentedInputs)
+            self.logger.debug(staged_exec.matCheckOutputs)
 
-        self.stagedExecutions.append(stagedExec)
+            # TODO: store only the last update
+            # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
+            self.marshallExecute(staged_exec, overwrite=True)
 
-        self.logger.debug(stagedExec.exitVal)
-        self.logger.debug(stagedExec.started)
-        self.logger.debug(stagedExec.ended)
-        self.logger.debug(stagedExec.augmentedInputs)
-        self.logger.debug(stagedExec.matCheckOutputs)
-
-        # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
-        self.marshallExecute(overwrite=True)
-
-        # And last, report the staged execution
-        return stagedExec
+        # And last, report the last staged execution
+        return staged_exec
 
     def listMaterializedExportActions(self) -> "Sequence[MaterializedExportAction]":
         """
@@ -4518,7 +4520,10 @@ This is an enumeration of the types of collected contents:
         return self.stageMarshalled
 
     def marshallExecute(
-        self, exist_ok: "bool" = True, overwrite: "bool" = False
+        self,
+        staged_exec: "StagedExecution",
+        exist_ok: "bool" = True,
+        overwrite: "bool" = False,
     ) -> "Optional[Union[bool, datetime.datetime]]":
         if overwrite or (self.executionMarshalled is None):
             if self.marshallStage() is None:
@@ -4529,6 +4534,16 @@ This is an enumeration of the types of collected contents:
             ), "The metadata directory should be available"
 
             assert self.stagedExecutions is not None
+
+            # Overwrite previous versions of the very same staged execution
+            for candidate_stage_pos, candidate_stage in enumerate(
+                self.stagedExecutions
+            ):
+                if candidate_stage.outputsDir.samefile(staged_exec.outputsDir):
+                    self.stagedExecutions[candidate_stage_pos] = staged_exec
+                    break
+            else:
+                self.stagedExecutions.append(staged_exec)
 
             marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
             executionAlreadyMarshalled = False
@@ -4545,13 +4560,20 @@ This is an enumeration of the types of collected contents:
                 executions = []
                 for stagedExec in self.stagedExecutions:
                     execution = {
-                        "outputsDir": stagedExec.outputsDir,
                         "exitVal": stagedExec.exitVal,
                         "augmentedInputs": stagedExec.augmentedInputs,
                         "matCheckOutputs": stagedExec.matCheckOutputs,
+                        "outputsDir": stagedExec.outputsDir,
                         "started": stagedExec.started,
                         "ended": stagedExec.ended,
-                        # TODO: check nothing essential was left
+                        "environment": stagedExec.environment,
+                        "outputMetaDir": stagedExec.outputMetaDir,
+                        "diagram": stagedExec.diagram,
+                        "logfile": stagedExec.logfile,
+                        "profiles": stagedExec.profiles,
+                        "queued": stagedExec.queued,
+                        "status": stagedExec.status,
+                        "job_id": stagedExec.job_id,
                     }
                     executions.append(execution)
 
@@ -4584,6 +4606,7 @@ This is an enumeration of the types of collected contents:
             if not retval:
                 return None
 
+            assert self.workDir is not None
             assert (
                 self.metaDir is not None
             ), "The metadata directory should be available"
@@ -4622,47 +4645,57 @@ This is an enumeration of the types of collected contents:
                         executions = execution_read
 
                     self.stagedExecutions = []
-                    for execution in executions:
+                    for execution in cast("Sequence[Mapping[str, Any]]", executions):
+                        execution = StagedExecution._mapping_fixes(
+                            execution, self.workDir
+                        )
+
                         # We might need to learn where the metadata of this
                         # specific execution is living
-                        outputsDir = execution.get("outputsDir", WORKDIR_OUTPUTS_RELDIR)
-                        absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
-                        if outputsDir != WORKDIR_OUTPUTS_RELDIR:
-                            jobOutputMetaDir = self.metaDir / outputsDir
-                        else:
-                            jobOutputMetaDir = absOutputMetaDir
+                        default_outputs_dir = self.workDir / WORKDIR_OUTPUTS_RELDIR
+                        outputsDir = execution.get("outputsDir", default_outputs_dir)
+                        jobOutputMetaDir = execution.get("outputMetaDir")
+                        if jobOutputMetaDir is None:
+                            absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
+                            if not outputsDir.samefile(default_outputs_dir):
+                                jobOutputMetaDir = (
+                                    self.metaDir / outputsDir.relative_to(self.workDir)
+                                )
+                            else:
+                                jobOutputMetaDir = absOutputMetaDir
 
                         # For backward compatibility, let's find the
                         # logfiles and generated charts
-                        logfile: "Optional[MutableSequence[RelPath]]" = execution.get(
-                            "logfile"
+                        logfiles: "Optional[MutableSequence[pathlib.Path]]" = (
+                            execution.get("logfile")
                         )
-                        if not isinstance(logfile, list) or len(logfile) == 0:
-                            logfile = []
-                            for logfname in (
+                        if logfiles is None:
+                            candidate_logfiles_str = [
                                 WORKDIR_STDOUT_FILE,
                                 WORKDIR_STDERR_FILE,
-                                "log.txt",
-                            ):
-                                putative_fname = jobOutputMetaDir / logfname
-                                if (
-                                    not putative_fname.exists()
-                                    and not jobOutputMetaDir.samefile(absOutputMetaDir)
-                                ):
-                                    putative_fname = absOutputMetaDir / logfname
+                                cast("RelPath", "log.txt"),
+                            ]
 
-                                if putative_fname.exists():
-                                    logfile.append(
-                                        cast(
-                                            "RelPath",
-                                            os.path.relpath(
-                                                putative_fname, self.workDir
-                                            ),
-                                        )
-                                    )
+                            logfiles = []
+                            for logfname in candidate_logfiles_str:
+                                logfile = pathlib.Path(logfname)
+                                if not logfile.is_absolute():
+                                    logfile = self.workDir / logfname
 
-                        diagram: "Optional[RelPath]" = execution.get("diagram")
-                        if diagram is None:
+                                if not logfile.exists():
+                                    logfile = jobOutputMetaDir / logfname
+
+                                if not logfile.exists():
+                                    logfile = absOutputMetaDir / logfname
+
+                                if logfile.exists():
+                                    logfiles.append(logfile)
+
+                        diagram: "Optional[pathlib.Path]" = execution.get("diagram")
+                        if diagram is not None:
+                            if not diagram.is_absolute():
+                                diagram = (self.workDir / diagram).resolve()
+                        else:
                             putative_diagram = (
                                 jobOutputMetaDir
                                 / WORKDIR_STATS_RELDIR
@@ -4680,10 +4713,7 @@ This is an enumeration of the types of collected contents:
                                 )
 
                             if putative_diagram.exists():
-                                diagram = cast(
-                                    "RelPath",
-                                    os.path.relpath(putative_diagram, self.workDir),
-                                )
+                                diagram = putative_diagram
 
                         profiles: "Optional[Sequence[str]]" = execution.get("profiles")
                         # Backward <=> forward compatibility
@@ -4697,9 +4727,17 @@ This is an enumeration of the types of collected contents:
                             outputsDir=outputsDir,
                             started=execution.get("started", executionMarshalled),
                             ended=execution.get("ended", executionMarshalled),
-                            logfile=logfile,
+                            environment=execution.get("environment", []),
+                            outputMetaDir=absOutputMetaDir,
                             diagram=diagram,
+                            logfile=logfiles,
                             profiles=profiles,
+                            queued=execution.get("ended", datetime.datetime.min),
+                            status=cast(
+                                "ExecutionStatus",
+                                execution.get("status", ExecutionStatus.Finished),
+                            ),
+                            job_id=execution.get("job_id"),
                         )
                         self.stagedExecutions.append(stagedExec)
             except Exception as e:

@@ -44,16 +44,17 @@ from ..common import (
     ContentKind,
     DEFAULT_JAVA_CMD,
     EngineMode,
+    ExecutionStatus,
     LocalWorkflow,
     MaterializedContent,
     MaterializedInput,
-    StagedExecution,
 )
 
 if TYPE_CHECKING:
     from typing import (
         Any,
         IO,
+        Iterator,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -104,6 +105,7 @@ if TYPE_CHECKING:
     )
 
 from . import (
+    StagedExecution,
     WorkflowEngine,
     WorkflowEngineException,
     WorkflowEngineInstallException,
@@ -1734,7 +1736,7 @@ STDERR
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
-    ) -> "StagedExecution":
+    ) -> "Iterator[StagedExecution]":
         # TODO: implement usage of materialized environment variables
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
@@ -1759,6 +1761,24 @@ STDERR
         reportFile = outputStatsDir / "report.html"
         traceFile = outputStatsDir / "trace.tsv"
         dagFile = outputStatsDir / STATS_DAG_DOT_FILE
+
+        queued = datetime.datetime.now(datetime.timezone.utc)
+        yield StagedExecution(
+            status=ExecutionStatus.Queued,
+            job_id=str(os.getpid()),
+            exitVal=cast("ExitVal", -1),
+            augmentedInputs=[],
+            # TODO: store the augmentedEnvironment instead
+            # of the materialized one
+            environment=matEnvironment,
+            matCheckOutputs=[],
+            outputsDir=outputsDir,
+            queued=queued,
+            started=datetime.datetime.min,
+            ended=datetime.datetime.min,
+            logfile=[],
+            profiles=profiles,
+        )
 
         # Custom variables setup
         runEnv = dict(os.environ)
@@ -2035,6 +2055,27 @@ wfexs_allParams()
         stderrFilename = outputMetaDir / WORKDIR_STDERR_FILE
 
         started = datetime.datetime.now(datetime.timezone.utc)
+        yield StagedExecution(
+            status=ExecutionStatus.Running,
+            job_id=str(os.getpid()),
+            exitVal=cast("ExitVal", -1),
+            augmentedInputs=[],
+            # TODO: store the augmentedEnvironment instead
+            # of the materialized one
+            environment=matEnvironment,
+            matCheckOutputs=[],
+            outputsDir=outputsDir,
+            queued=queued,
+            started=started,
+            ended=datetime.datetime.min,
+            diagram=dagFile,
+            logfile=[
+                stdoutFilename,
+                stderrFilename,
+            ],
+            profiles=profiles,
+        )
+
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
             nxf_params,
@@ -2073,20 +2114,22 @@ wfexs_allParams()
         matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, outputsDir)
 
         relOutputsDir = cast("RelPath", os.path.relpath(outputsDir, self.workDir))
-        return StagedExecution(
+        yield StagedExecution(
+            status=ExecutionStatus.Finished,
             exitVal=launch_retval,
             augmentedInputs=augmentedInputs,
             matCheckOutputs=matOutputs,
-            outputsDir=relOutputsDir,
+            outputsDir=outputsDir,
+            queued=queued,
             started=started,
             ended=ended,
             # TODO: store the augmentedEnvironment instead
             # of the materialized one
             environment=matEnvironment,
-            diagram=cast("RelPath", os.path.relpath(dagFile, self.workDir)),
+            diagram=dagFile,
             logfile=[
-                cast("RelPath", os.path.relpath(stdoutFilename, self.workDir)),
-                cast("RelPath", os.path.relpath(stderrFilename, self.workDir)),
+                stdoutFilename,
+                stderrFilename,
             ],
             profiles=profiles,
         )

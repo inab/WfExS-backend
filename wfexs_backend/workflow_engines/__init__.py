@@ -43,15 +43,18 @@ from ..common import (
     DEFAULT_DOCKER_CMD,
     DEFAULT_ENGINE_MODE,
     EngineMode,
+    ExecutionStatus,
     GeneratedContent,
     GeneratedDirectoryContent,
     MaterializedOutput,
 )
 
 if TYPE_CHECKING:
+    import datetime
     from typing import (
         Any,
         Callable,
+        Iterator,
         Mapping,
         MutableSequence,
         MutableMapping,
@@ -76,6 +79,7 @@ if TYPE_CHECKING:
         AnyPath,
         ContainerTaggedName,
         EngineVersion,
+        ExecutionStatus,
         ExitVal,
         ExpectedOutput,
         Fingerprint,
@@ -84,7 +88,6 @@ if TYPE_CHECKING:
         MaterializedContent,
         ProgsMapping,
         RelPath,
-        StagedExecution,
         StagedSetup,
         SymbolicName,
         SymbolicOutputName,
@@ -128,20 +131,20 @@ WORKDIR_WORKFLOW_RELDIR = "workflow"
 WORKDIR_CONSOLIDATED_WORKFLOW_RELDIR = "consolidated-workflow"
 WORKDIR_CONTAINERS_RELDIR = "containers"
 
-WORKDIR_STDOUT_FILE = "stdout.txt"
-WORKDIR_STDERR_FILE = "stderr.txt"
+WORKDIR_STDOUT_FILE = cast("RelPath", "stdout.txt")
+WORKDIR_STDERR_FILE = cast("RelPath", "stderr.txt")
 
-WORKDIR_WORKFLOW_META_FILE = "workflow_meta.yaml"
+WORKDIR_WORKFLOW_META_FILE = cast("RelPath", "workflow_meta.yaml")
 
 # This one is commented-out, as credentials SHOULD NEVER BE SAVED
-# WORKDIR_SECURITY_CONTEXT_FILE = 'credentials.yaml'
+# WORKDIR_SECURITY_CONTEXT_FILE = cast("RelPath", 'credentials.yaml')
 
-WORKDIR_MARSHALLED_STAGE_FILE = "stage-state.yaml"
-WORKDIR_MARSHALLED_EXECUTE_FILE = "execution-state.yaml"
-WORKDIR_MARSHALLED_EXPORT_FILE = "export-state.yaml"
-WORKDIR_PASSPHRASE_FILE = ".passphrase"
+WORKDIR_MARSHALLED_STAGE_FILE = cast("RelPath", "stage-state.yaml")
+WORKDIR_MARSHALLED_EXECUTE_FILE = cast("RelPath", "execution-state.yaml")
+WORKDIR_MARSHALLED_EXPORT_FILE = cast("RelPath", "export-state.yaml")
+WORKDIR_PASSPHRASE_FILE = cast("RelPath", ".passphrase")
 
-STATS_DAG_DOT_FILE = "dag.dot"
+STATS_DAG_DOT_FILE = cast("RelPath", "dag.dot")
 
 
 # Default priority
@@ -217,6 +220,53 @@ class MaterializedWorkflowEngine(NamedTuple):
             dest["containers_path"] = pathlib.Path(orig["containers_path"])
             if workdir is not None and not dest["containers_path"].is_absolute():
                 dest["containers_path"] = (workdir / dest["containers_path"]).resolve()
+
+        return dest
+
+
+class StagedExecution(NamedTuple):
+    """
+    The description of the execution of a workflow, giving the relative directory of the output
+    """
+
+    exitVal: "ExitVal"
+    augmentedInputs: "Sequence[MaterializedInput]"
+    matCheckOutputs: "Sequence[MaterializedOutput]"
+    outputsDir: "pathlib.Path"
+    started: "datetime.datetime"
+    ended: "datetime.datetime"
+    environment: "Sequence[MaterializedInput]" = []
+    outputMetaDir: "Optional[pathlib.Path]" = None
+    diagram: "Optional[pathlib.Path]" = None
+    logfile: "Sequence[pathlib.Path]" = []
+    profiles: "Optional[Sequence[str]]" = None
+    queued: "Optional[datetime.datetime]" = None
+    status: "ExecutionStatus" = ExecutionStatus.Finished
+    job_id: "Optional[str]" = None
+
+    @classmethod
+    def _mapping_fixes(
+        cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
+    ) -> "Mapping[str, Any]":
+        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+
+        for keypath in ("outputsDir", "outputMetaDir", "diagram"):
+            keyval = orig.get(keypath)
+            if keyval is not None:
+                dest[keypath] = pathlib.Path(keyval)
+                if workdir is not None and not dest[keypath].is_absolute():
+                    dest[keypath] = (workdir / keyval).resolve()
+
+        for keyarrpath in ("logfile",):
+            keyarrval = orig.get(keyarrpath)
+            if isinstance(keyarrval, list):
+                destarrval = []
+                for keyval in keyarrval:
+                    destval = pathlib.Path(keyval)
+                    if workdir is not None and not destval.is_absolute():
+                        destval = (workdir / keyval).resolve()
+                    destarrval.append(destval)
+                dest[keyarrpath] = destarrval
 
         return dest
 
@@ -333,7 +383,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
-    ) -> "StagedExecution":
+    ) -> "Iterator[StagedExecution]":
         pass
 
     @classmethod
@@ -884,7 +934,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
-    ) -> "StagedExecution":
+    ) -> "Iterator[StagedExecution]":
         pass
 
     @classmethod
@@ -895,7 +945,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
-    ) -> "StagedExecution":
+    ) -> "Iterator[StagedExecution]":
         # Now, deploy the containers to the local registry (needed for Docker)
         if matWfEng.containers is not None:
             matWfEng.instance.deploy_containers(
@@ -907,15 +957,13 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             )
 
         # And once deployed, let's run the workflow!
-        stagedExec = matWfEng.instance.launchWorkflow(
+        yield from matWfEng.instance.launchWorkflow(
             matWfEng,
             inputs,
             environment,
             outputs,
             profiles,
         )
-
-        return stagedExec
 
     @classmethod
     def MaterializeWorkflowAndContainers(

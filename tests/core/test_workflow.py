@@ -42,6 +42,7 @@ from tests.core.test_wfexsbackend import (
     test_wfexsbackend_stage,
     WORKFLOW_TESTBED,
 )
+from wfexs_backend.common import ExecutionStatus
 from wfexs_backend.workflow import WF
 
 from tests.util import get_path
@@ -96,6 +97,7 @@ def test_workflow_offline_exec(
     try:
         staged_exec = wfInstance.executeWorkflow(offline=True)
 
+        assert staged_exec.status == ExecutionStatus.Finished
         assert staged_exec.exitVal == 0
     except:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
