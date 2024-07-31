@@ -66,7 +66,7 @@ def marshall_namedtuple(obj: "Any", workdir: "Optional[pathlib.Path]" = None) ->
         if workdir is not None:
             # Path.is_relative_to was introduced in Python 3.9
             # is_relative_path = obj.is_relative_to(workdir)
-            is_relative_path = obj.samefile(workdir) or workdir in obj.parents
+            is_relative_path = obj == workdir or workdir in obj.parents
         return (
             obj.relative_to(workdir).as_posix() if is_relative_path else obj.as_posix()
         )
