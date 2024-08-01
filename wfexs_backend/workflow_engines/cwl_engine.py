@@ -110,6 +110,7 @@ if TYPE_CHECKING:
 
 import jsonpath_ng
 import jsonpath_ng.ext
+import psutil
 import yaml
 
 from . import (
@@ -1114,7 +1115,9 @@ STDERR
 
         dagFile = outputStatsDir / STATS_DAG_DOT_FILE
 
-        queued = datetime.datetime.now(datetime.timezone.utc)
+        queued = datetime.datetime.fromtimestamp(
+            psutil.Process(os.getpid()).create_time()
+        ).astimezone()
         yield StagedExecution(
             status=ExecutionStatus.Queued,
             job_id=str(os.getpid()),
@@ -1370,7 +1373,7 @@ STDERR
                             )
                             self.logger.debug("Command => {}".format(" ".join(cmd_arr)))
 
-                            started = datetime.datetime.now(datetime.timezone.utc)
+                            started = datetime.datetime.now().astimezone()
                             yield StagedExecution(
                                 status=ExecutionStatus.Running,
                                 exitVal=cast("ExitVal", -1),
@@ -1382,7 +1385,7 @@ STDERR
                                 outputsDir=outputsDir,
                                 queued=queued,
                                 started=started,
-                                ended=datetime.datetime.now(datetime.timezone.utc),
+                                ended=datetime.datetime.min,
                                 diagram=dagFile,
                                 logfile=[
                                     stdoutFilename,
@@ -1463,7 +1466,7 @@ STDERR
                         outputsDir=outputsDir,
                         queued=queued,
                         started=started,
-                        ended=datetime.datetime.now(datetime.timezone.utc),
+                        ended=datetime.datetime.now().astimezone(),
                         diagram=dagFile,
                         logfile=[],
                     )

@@ -104,6 +104,8 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
+import psutil
+
 from . import (
     StagedExecution,
     WorkflowEngine,
@@ -1762,7 +1764,9 @@ STDERR
         traceFile = outputStatsDir / "trace.tsv"
         dagFile = outputStatsDir / STATS_DAG_DOT_FILE
 
-        queued = datetime.datetime.now(datetime.timezone.utc)
+        queued = datetime.datetime.fromtimestamp(
+            psutil.Process(os.getpid()).create_time()
+        ).astimezone()
         yield StagedExecution(
             status=ExecutionStatus.Queued,
             job_id=str(os.getpid()),
