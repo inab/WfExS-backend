@@ -37,6 +37,8 @@ import time
 import warnings
 import zipfile
 
+import daemon  # type: ignore[import-untyped]
+
 from typing import (
     cast,
     Dict,
@@ -1177,7 +1179,14 @@ class WF:
             export=self.exportMarshalled,
             execution_stats=list(
                 map(
-                    lambda r: (r.status, r.queued, r.started, r.ended, r.exitVal),
+                    lambda r: (
+                        r.outputsDir.name,
+                        r.status,
+                        r.queued,
+                        r.started,
+                        r.ended,
+                        r.exitVal,
+                    ),
                     self.stagedExecutions,
                 )
             )
@@ -3746,6 +3755,41 @@ class WF:
         # And last, report the last staged execution
         return staged_exec
 
+    def queueExecution(self, offline: "bool" = False) -> "str":
+        self.unmarshallStage(offline=offline)
+        self.unmarshallExecute(offline=offline, fail_ok=True)
+
+        assert self.materializedEngine is not None
+        assert self.materializedParams is not None
+        assert self.materializedEnvironment is not None
+        assert self.expected_outputs is not None
+
+        if self.stagedExecutions is None:
+            self.stagedExecutions = []
+
+        # And once deployed, let's run the workflow in background!
+        job_id = os.fork()
+        if job_id == 0:
+            # This is the child
+            with daemon.DaemonContext(detach_process=False):
+                for staged_exec in WorkflowEngine.ExecuteWorkflow(
+                    self.materializedEngine,
+                    self.materializedParams,
+                    self.materializedEnvironment,
+                    self.expected_outputs,
+                    self.enabled_profiles,
+                ):
+                    # TODO: store only the last update
+                    # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
+                    self.marshallExecute(staged_exec, overwrite=True)
+        elif job_id > 0:
+            # This is the parent
+            return str(job_id)
+
+        raise WFException(
+            f"Unable to create a background jobs for {self.instanceId} ({self.nickname})"
+        )
+
     def listMaterializedExportActions(self) -> "Sequence[MaterializedExportAction]":
         """
         This method should return the pids generated from the contents
@@ -4663,6 +4707,8 @@ This is an enumeration of the types of collected contents:
                                 )
                             else:
                                 jobOutputMetaDir = absOutputMetaDir
+                        else:
+                            absOutputMetaDir = jobOutputMetaDir
 
                         # For backward compatibility, let's find the
                         # logfiles and generated charts
@@ -4685,7 +4731,10 @@ This is an enumeration of the types of collected contents:
                                 if not logfile.exists():
                                     logfile = jobOutputMetaDir / logfname
 
-                                if not logfile.exists():
+                                if (
+                                    not logfile.exists()
+                                    and jobOutputMetaDir != absOutputMetaDir
+                                ):
                                     logfile = absOutputMetaDir / logfname
 
                                 if logfile.exists():

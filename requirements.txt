@@ -37,3 +37,4 @@ pyld
 rdflib >= 7.0.0 ; python_version >= '3.8'
 rdflib < 7.0.0 ; python_version < '3.8'
 psutil
+python-daemon

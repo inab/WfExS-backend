@@ -186,6 +186,10 @@ class WfExS_Staged_WorkDir_Commands(StrDocEnum):
         "offline-exec",
         "Offline execute the staged instances which match the input pattern",
     )
+    OfflineQueueExecute = (
+        "offline-queue",
+        "Queue offline execution about the staged instances which match the input pattern",
+    )
     List = (
         "ls",
         "List the staged instances\n\tIt shows the instance id, nickname,\n\tencryption and whether they are damaged",
@@ -813,7 +817,7 @@ def processStagedWorkdirCommand(
                     (
                         instance_id,
                         nickname,
-                        creation.isoformat(),
+                        creation.astimezone().isoformat(),
                         "(unknown)" if engineName is None else engineName,
                         "(unknown)" if containerType is None else containerType.value,
                         "(unknown)" if wfPID is None else wfPID,
@@ -885,6 +889,43 @@ def processStagedWorkdirCommand(
                         )
                     finally:
                         wfInstance.cleanup()
+    elif (
+        args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineQueueExecute
+    ):
+        if len(args.staged_workdir_command_args) > 0:
+            for (
+                instance_id,
+                nickname,
+                creation,
+                wfSetup,
+                wfInstance,
+            ) in wB.listStagedWorkflows(
+                *args.staged_workdir_command_args,
+                acceptGlob=args.filesAsGlobs,
+                doCleanup=False,
+                private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
+            ):
+                is_damaged = True if wfSetup is None else wfSetup.is_damaged
+                if not is_damaged and (wfInstance is not None):
+                    try:
+                        assert wfSetup is not None
+                        print(
+                            "\t- Instance {} (nickname '{}') is being run\n".format(
+                                wfSetup.instance_id,
+                                wfSetup.nickname,
+                            )
+                        )
+                        job_id = wfInstance.queueExecution(offline=True)
+                        print(
+                            f"\t- Instance {wfSetup.instance_id} (nickname '{wfSetup.nickname}') job id {job_id}"
+                        )
+                    except Exception as e:
+                        logging.exception(
+                            f"Error while queueing {instance_id} ({nickname})"
+                        )
+                    finally:
+                        wfInstance.cleanup()
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Status:
         if len(args.staged_workdir_command_args) > 0:
             for (
@@ -911,7 +952,7 @@ def processStagedWorkdirCommand(
                     f"""=> Instance {instance_id} ({nickname})
 * Id: {instance_id}
 * Nickname: {nickname}
-* Created: {creation.isoformat()}
+* Created: {creation.astimezone().isoformat()}
 * Secure (encrypted)? {is_encrypted}
 {repr(mStatus)}
 * Is damaged? {is_damaged}
