@@ -38,6 +38,7 @@ import warnings
 import zipfile
 
 import daemon  # type: ignore[import-untyped]
+from RWFileLock import RWFileLock
 
 from typing import (
     cast,
