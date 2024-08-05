@@ -80,6 +80,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         ClassVar,
+        IO,
         Iterable,
         Iterator,
         Mapping,
@@ -4588,16 +4589,6 @@ This is an enumeration of the types of collected contents:
 
             assert self.stagedExecutions is not None
 
-            # Overwrite previous versions of the very same staged execution
-            for candidate_stage_pos, candidate_stage in enumerate(
-                self.stagedExecutions
-            ):
-                if candidate_stage.outputsDir.samefile(staged_exec.outputsDir):
-                    self.stagedExecutions[candidate_stage_pos] = staged_exec
-                    break
-            else:
-                self.stagedExecutions.append(staged_exec)
-
             marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
             executionAlreadyMarshalled = False
             if marshalled_execution_file.exists():
@@ -4610,41 +4601,81 @@ This is an enumeration of the types of collected contents:
                 executionAlreadyMarshalled = True
 
             if not executionAlreadyMarshalled or overwrite:
-                executions = []
-                for stagedExec in self.stagedExecutions:
-                    execution = {
-                        "exitVal": stagedExec.exitVal,
-                        "augmentedInputs": stagedExec.augmentedInputs,
-                        "matCheckOutputs": stagedExec.matCheckOutputs,
-                        "outputsDir": stagedExec.outputsDir,
-                        "started": stagedExec.started,
-                        "ended": stagedExec.ended,
-                        "environment": stagedExec.environment,
-                        "outputMetaDir": stagedExec.outputMetaDir,
-                        "diagram": stagedExec.diagram,
-                        "logfile": stagedExec.logfile,
-                        "profiles": stagedExec.profiles,
-                        "queued": stagedExec.queued,
-                        "status": stagedExec.status,
-                        "job_id": stagedExec.job_id,
-                    }
-                    executions.append(execution)
+                # The file contents must be kept INTACT (or created)!!!
+                emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT)
+                ewlock = RWFileLock(emF)
+                with ewlock.exclusive_blocking_lock(), os.fdopen(
+                    emF, mode="r+", encoding="utf-8"
+                ) as msF:
+                    if os.fstat(emF).st_size > 0:
+                        try:
+                            (
+                                staged_executions,
+                                creation_timestamp,
+                            ) = self._unmarshallExecuteFH(msF, os.fstat(emF).st_ctime)
+                        except:
+                            self.logger.error(
+                                f"Unable to unmarshall executions metadata file {marshalled_execution_file}"
+                            )
+                            staged_executions = []
+                    else:
+                        staged_executions = []
+                        creation_timestamp = datetime.datetime.fromtimestamp(
+                            os.fstat(emF).st_ctime
+                        ).astimezone()
 
-                self.logger.debug(
-                    "Creating marshalled execution file {}".format(
-                        marshalled_execution_file
+                    # Overwrite previous versions of the very same staged execution
+                    for candidate_stage_pos, candidate_stage in enumerate(
+                        staged_executions
+                    ):
+                        if candidate_stage.outputsDir.samefile(staged_exec.outputsDir):
+                            staged_executions[candidate_stage_pos] = staged_exec
+                            break
+                    else:
+                        staged_executions.append(staged_exec)
+
+                    # And now, store!
+                    executions = []
+                    for stagedExec in staged_executions:
+                        execution = {
+                            "exitVal": stagedExec.exitVal,
+                            "augmentedInputs": stagedExec.augmentedInputs,
+                            "matCheckOutputs": stagedExec.matCheckOutputs,
+                            "outputsDir": stagedExec.outputsDir,
+                            "started": stagedExec.started,
+                            "ended": stagedExec.ended,
+                            "environment": stagedExec.environment,
+                            "outputMetaDir": stagedExec.outputMetaDir,
+                            "diagram": stagedExec.diagram,
+                            "logfile": stagedExec.logfile,
+                            "profiles": stagedExec.profiles,
+                            "queued": stagedExec.queued,
+                            "status": stagedExec.status,
+                            "job_id": stagedExec.job_id,
+                        }
+                        executions.append(execution)
+
+                    self.logger.debug(
+                        "Writing marshalled execution file {}".format(
+                            marshalled_execution_file
+                        )
                     )
-                )
-                with marshalled_execution_file.open(mode="w", encoding="utf-8") as msF:
+
+                    msF.seek(0)
                     yaml.dump(
                         marshall_namedtuple(executions, workdir=self.workDir),
                         msF,
                         Dumper=YAMLDumper,
                     )
+                    # Last, remove possible last bytes
+                    msF.truncate(msF.tell())
 
-            self.executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file)
-            ).astimezone()
+            else:
+                creation_timestamp = datetime.datetime.fromtimestamp(
+                    os.path.getctime(marshalled_execution_file)
+                ).astimezone()
+
+            self.executionMarshalled = creation_timestamp
         elif not exist_ok:
             raise WFException("Marshalled execution file already exists")
 
@@ -4659,7 +4690,6 @@ This is an enumeration of the types of collected contents:
             if not retval:
                 return None
 
-            assert self.workDir is not None
             assert (
                 self.metaDir is not None
             ), "The metadata directory should be available"
@@ -4679,125 +4709,14 @@ This is an enumeration of the types of collected contents:
                 )
             )
 
-            executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file)
-            ).astimezone()
             try:
                 with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
-                    marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = self.__get_combined_globals()
-                    execution_read = unmarshall_namedtuple(
-                        marshalled_execution,
-                        myglobals=combined_globals,
-                        workdir=self.workDir,
-                    )
-
-                    if isinstance(execution_read, dict):
-                        executions = [execution_read]
-                    else:
-                        executions = execution_read
-
-                    self.stagedExecutions = []
-                    for execution in cast("Sequence[Mapping[str, Any]]", executions):
-                        execution = StagedExecution._mapping_fixes(
-                            execution, self.workDir
-                        )
-
-                        # We might need to learn where the metadata of this
-                        # specific execution is living
-                        default_outputs_dir = self.workDir / WORKDIR_OUTPUTS_RELDIR
-                        outputsDir = execution.get("outputsDir", default_outputs_dir)
-                        jobOutputMetaDir = execution.get("outputMetaDir")
-                        if jobOutputMetaDir is None:
-                            absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
-                            if not outputsDir.samefile(default_outputs_dir):
-                                jobOutputMetaDir = (
-                                    self.metaDir / outputsDir.relative_to(self.workDir)
-                                )
-                            else:
-                                jobOutputMetaDir = absOutputMetaDir
-                        else:
-                            absOutputMetaDir = jobOutputMetaDir
-
-                        # For backward compatibility, let's find the
-                        # logfiles and generated charts
-                        logfiles: "Optional[MutableSequence[pathlib.Path]]" = (
-                            execution.get("logfile")
-                        )
-                        if logfiles is None:
-                            candidate_logfiles_str = [
-                                WORKDIR_STDOUT_FILE,
-                                WORKDIR_STDERR_FILE,
-                                cast("RelPath", "log.txt"),
-                            ]
-
-                            logfiles = []
-                            for logfname in candidate_logfiles_str:
-                                logfile = pathlib.Path(logfname)
-                                if not logfile.is_absolute():
-                                    logfile = self.workDir / logfname
-
-                                if not logfile.exists():
-                                    logfile = jobOutputMetaDir / logfname
-
-                                if (
-                                    not logfile.exists()
-                                    and jobOutputMetaDir != absOutputMetaDir
-                                ):
-                                    logfile = absOutputMetaDir / logfname
-
-                                if logfile.exists():
-                                    logfiles.append(logfile)
-
-                        diagram: "Optional[pathlib.Path]" = execution.get("diagram")
-                        if diagram is not None:
-                            if not diagram.is_absolute():
-                                diagram = (self.workDir / diagram).resolve()
-                        else:
-                            putative_diagram = (
-                                jobOutputMetaDir
-                                / WORKDIR_STATS_RELDIR
-                                / STATS_DAG_DOT_FILE
-                            )
-
-                            if (
-                                not putative_diagram.exists()
-                                and not jobOutputMetaDir.samefile(absOutputMetaDir)
-                            ):
-                                putative_diagram = (
-                                    absOutputMetaDir
-                                    / WORKDIR_STATS_RELDIR
-                                    / STATS_DAG_DOT_FILE
-                                )
-
-                            if putative_diagram.exists():
-                                diagram = putative_diagram
-
-                        profiles: "Optional[Sequence[str]]" = execution.get("profiles")
-                        # Backward <=> forward compatibility
-                        if profiles is None:
-                            profiles = self.enabled_profiles
-
-                        stagedExec = StagedExecution(
-                            exitVal=execution["exitVal"],
-                            augmentedInputs=execution["augmentedInputs"],
-                            matCheckOutputs=execution["matCheckOutputs"],
-                            outputsDir=outputsDir,
-                            started=execution.get("started", executionMarshalled),
-                            ended=execution.get("ended", executionMarshalled),
-                            environment=execution.get("environment", []),
-                            outputMetaDir=absOutputMetaDir,
-                            diagram=diagram,
-                            logfile=logfiles,
-                            profiles=profiles,
-                            queued=execution.get("ended", datetime.datetime.min),
-                            status=cast(
-                                "ExecutionStatus",
-                                execution.get("status", ExecutionStatus.Finished),
-                            ),
-                            job_id=execution.get("job_id"),
-                        )
-                        self.stagedExecutions.append(stagedExec)
+                    erlock = RWFileLock(meF)
+                    with erlock.shared_blocking_lock():
+                        (
+                            self.stagedExecutions,
+                            creation_timestamp,
+                        ) = self._unmarshallExecuteFH(meF)
             except Exception as e:
                 errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
                     marshalled_execution_file, e
@@ -4809,11 +4728,135 @@ This is an enumeration of the types of collected contents:
                 self.logger.exception(errmsg)
                 raise WFException(errmsg) from e
 
-            self.executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file)
-            ).astimezone()
+            self.executionMarshalled = creation_timestamp
 
         return self.executionMarshalled
+
+    def _unmarshallExecuteFH(
+        self, meF: "IO[str]", creation_time: "Optional[float]" = None
+    ) -> "Tuple[MutableSequence[StagedExecution], datetime.datetime]":
+        """
+        Internal method used to unmarshall staged executions metadata.
+
+        :param meF: open file (or similar), with fileno method
+        :param creation_time: when the marshalled execution file was created, measured in number of seconds since epoch
+        :returns: The list of unmarshalled, staged executions
+        """
+        assert self.workDir is not None
+        assert self.metaDir is not None, "The metadata directory should be available"
+
+        if creation_time is None:
+            creation_time = os.fstat(meF.fileno()).st_ctime
+
+        # The default
+        creation_timestamp = datetime.datetime.fromtimestamp(creation_time).astimezone()
+
+        marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
+        combined_globals = self.__get_combined_globals()
+        execution_read = unmarshall_namedtuple(
+            marshalled_execution,
+            myglobals=combined_globals,
+            workdir=self.workDir,
+        )
+
+        if isinstance(execution_read, dict):
+            executions = [execution_read]
+        else:
+            executions = execution_read
+
+        staged_executions: "MutableSequence[StagedExecution]" = []
+        for execution in cast("Sequence[Mapping[str, Any]]", executions):
+            execution = StagedExecution._mapping_fixes(execution, self.workDir)
+
+            # We might need to learn where the metadata of this
+            # specific execution is living
+            default_outputs_dir = self.workDir / WORKDIR_OUTPUTS_RELDIR
+            outputsDir = execution.get("outputsDir", default_outputs_dir)
+            jobOutputMetaDir = execution.get("outputMetaDir")
+            if jobOutputMetaDir is None:
+                absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
+                if not outputsDir.samefile(default_outputs_dir):
+                    jobOutputMetaDir = self.metaDir / outputsDir.relative_to(
+                        self.workDir
+                    )
+                else:
+                    jobOutputMetaDir = absOutputMetaDir
+            else:
+                absOutputMetaDir = jobOutputMetaDir
+
+            # For backward compatibility, let's find the
+            # logfiles and generated charts
+            logfiles: "Optional[MutableSequence[pathlib.Path]]" = execution.get(
+                "logfile"
+            )
+            if logfiles is None:
+                candidate_logfiles_str = [
+                    WORKDIR_STDOUT_FILE,
+                    WORKDIR_STDERR_FILE,
+                    cast("RelPath", "log.txt"),
+                ]
+
+                logfiles = []
+                for logfname in candidate_logfiles_str:
+                    logfile = pathlib.Path(logfname)
+                    if not logfile.is_absolute():
+                        logfile = self.workDir / logfname
+
+                    if not logfile.exists():
+                        logfile = jobOutputMetaDir / logfname
+
+                    if not logfile.exists() and jobOutputMetaDir != absOutputMetaDir:
+                        logfile = absOutputMetaDir / logfname
+
+                    if logfile.exists():
+                        logfiles.append(logfile)
+
+            diagram: "Optional[pathlib.Path]" = execution.get("diagram")
+            if diagram is not None:
+                if not diagram.is_absolute():
+                    diagram = (self.workDir / diagram).resolve()
+            else:
+                putative_diagram = (
+                    jobOutputMetaDir / WORKDIR_STATS_RELDIR / STATS_DAG_DOT_FILE
+                )
+
+                if not putative_diagram.exists() and not jobOutputMetaDir.samefile(
+                    absOutputMetaDir
+                ):
+                    putative_diagram = (
+                        absOutputMetaDir / WORKDIR_STATS_RELDIR / STATS_DAG_DOT_FILE
+                    )
+
+                if putative_diagram.exists():
+                    diagram = putative_diagram
+
+            profiles: "Optional[Sequence[str]]" = execution.get("profiles")
+            # Backward <=> forward compatibility
+            if profiles is None:
+                profiles = self.enabled_profiles
+
+            stagedExec = StagedExecution(
+                exitVal=execution["exitVal"],
+                augmentedInputs=execution["augmentedInputs"],
+                matCheckOutputs=execution["matCheckOutputs"],
+                outputsDir=outputsDir,
+                started=execution.get("started", creation_timestamp),
+                ended=execution.get("ended", creation_timestamp),
+                environment=execution.get("environment", []),
+                outputMetaDir=absOutputMetaDir,
+                diagram=diagram,
+                logfile=logfiles,
+                profiles=profiles,
+                queued=execution.get("ended", datetime.datetime.min),
+                status=cast(
+                    "ExecutionStatus",
+                    execution.get("status", ExecutionStatus.Finished),
+                ),
+                job_id=execution.get("job_id"),
+            )
+            staged_executions.append(stagedExec)
+
+        return staged_executions, creation_timestamp
 
     def marshallExport(
         self, exist_ok: "bool" = True, overwrite: "bool" = False
