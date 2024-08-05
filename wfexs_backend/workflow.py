@@ -4315,8 +4315,8 @@ This is an enumeration of the types of collected contents:
                 self.vault = SecurityContextVault()
 
                 self.configMarshalled = datetime.datetime.fromtimestamp(
-                    os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc
-                )
+                    os.path.getctime(workflow_meta_filename)
+                ).astimezone()
 
         return self.configMarshalled
 
@@ -4371,11 +4371,13 @@ This is an enumeration of the types of collected contents:
                 )
                 with marshalled_stage_file.open(mode="w", encoding="utf-8") as msF:
                     marshalled_stage = marshall_namedtuple(stage, workdir=self.workDir)
-                    yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
+                    swlock = RWFileLock(msF)
+                    with swlock.exclusive_lock():
+                        yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_stage_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_stage_file)
+            ).astimezone()
         elif not exist_ok:
             raise WFException(f"Marshalled stage file already exists")
 
@@ -4412,7 +4414,9 @@ This is an enumeration of the types of collected contents:
             try:
                 # These symbols are needed to properly deserialize the yaml
                 with marshalled_stage_file.open(mode="r", encoding="utf-8") as msF:
-                    marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
+                    srlock = RWFileLock(msF)
+                    with srlock.shared_blocking_lock():
+                        marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
 
                     combined_globals = self.__get_combined_globals()
                     stage = unmarshall_namedtuple(
@@ -4563,8 +4567,8 @@ This is an enumeration of the types of collected contents:
                 self.marshallConfig(overwrite=True)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_stage_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_stage_file)
+            ).astimezone()
 
         return self.stageMarshalled
 
@@ -4639,8 +4643,8 @@ This is an enumeration of the types of collected contents:
                     )
 
             self.executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_execution_file)
+            ).astimezone()
         elif not exist_ok:
             raise WFException("Marshalled execution file already exists")
 
@@ -4676,8 +4680,8 @@ This is an enumeration of the types of collected contents:
             )
 
             executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_execution_file)
+            ).astimezone()
             try:
                 with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
                     marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
@@ -4806,8 +4810,8 @@ This is an enumeration of the types of collected contents:
                 raise WFException(errmsg) from e
 
             self.executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_execution_file)
+            ).astimezone()
 
         return self.executionMarshalled
 
@@ -4853,8 +4857,8 @@ This is an enumeration of the types of collected contents:
                     )
 
             self.exportMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_export_file)
+            ).astimezone()
         elif not exist_ok:
             raise WFException("Marshalled export results file already exists")
 
@@ -4908,8 +4912,8 @@ This is an enumeration of the types of collected contents:
                 raise WFException(errmsg) from e
 
             self.exportMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_export_file)
+            ).astimezone()
 
         return self.exportMarshalled
 
