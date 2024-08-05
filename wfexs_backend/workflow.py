@@ -4153,11 +4153,13 @@ This is an enumeration of the types of collected contents:
             ):
                 staging_recipe = self.staging_recipe
                 with workflow_meta_filename.open(mode="w", encoding="utf-8") as wmF:
-                    yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
+                    wmlock = RWFileLock(wmF)
+                    with wmlock.exclusive_lock():
+                        yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
 
             self.configMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc
-            )
+                os.path.getctime(workflow_meta_filename)
+            ).astimezone()
 
         return self.configMarshalled
 
@@ -4200,9 +4202,11 @@ This is an enumeration of the types of collected contents:
             workflow_meta = None
             try:
                 with workflow_meta_filename.open(mode="r", encoding="utf-8") as wcf:
-                    workflow_meta = unmarshall_namedtuple(
-                        yaml.safe_load(wcf), workdir=self.workDir
-                    )
+                    rmlock = RWFileLock(wcf)
+                    with rmlock.shared_blocking_lock():
+                        workflow_meta = unmarshall_namedtuple(
+                            yaml.safe_load(wcf), workdir=self.workDir
+                        )
 
                     # If the file decodes to None, fail fast
                     if workflow_meta is None:
