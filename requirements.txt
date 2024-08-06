@@ -38,4 +38,4 @@ rdflib >= 7.0.0 ; python_version >= '3.8'
 rdflib < 7.0.0 ; python_version < '3.8'
 psutil
 python-daemon
-RWFileLock >= 0.2.0
+RWFileLock >= 0.2.1
