@@ -3752,7 +3752,7 @@ class WF:
 
             # TODO: store only the last update
             # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
-            self.marshallExecute(staged_exec, overwrite=True)
+            self.marshallExecute(staged_exec)
 
         # And last, report the last staged execution
         return staged_exec
@@ -3783,7 +3783,7 @@ class WF:
                 ):
                     # TODO: store only the last update
                     # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
-                    self.marshallExecute(staged_exec, overwrite=True)
+                    self.marshallExecute(staged_exec)
         elif job_id > 0:
             # This is the parent
             return str(job_id)
@@ -4098,7 +4098,7 @@ This is an enumeration of the types of collected contents:
             self.runExportActions.extend(matActions)
 
         # And record them
-        self.marshallExport(overwrite=len(matActions) > 0)
+        self.marshallExport(matActions)
 
         return matActions, actionErrors
 
@@ -4576,108 +4576,81 @@ This is an enumeration of the types of collected contents:
     def marshallExecute(
         self,
         staged_exec: "StagedExecution",
-        exist_ok: "bool" = True,
-        overwrite: "bool" = False,
     ) -> "Optional[Union[bool, datetime.datetime]]":
-        if overwrite or (self.executionMarshalled is None):
-            if self.marshallStage() is None:
-                return None
+        if self.marshallStage() is None:
+            return None
 
-            assert (
-                self.metaDir is not None
-            ), "The metadata directory should be available"
+        assert self.metaDir is not None, "The metadata directory should be available"
 
-            assert self.stagedExecutions is not None
+        assert self.stagedExecutions is not None
 
-            marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
-            executionAlreadyMarshalled = False
-            if marshalled_execution_file.exists():
-                errmsg = "Marshalled execution file {} already exists".format(
-                    marshalled_execution_file
-                )
-                if not overwrite and not exist_ok:
-                    raise WFException(errmsg)
-                self.logger.debug(errmsg)
-                executionAlreadyMarshalled = True
+        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
 
-            if not executionAlreadyMarshalled or overwrite:
-                # The file contents must be kept INTACT (or created)!!!
-                emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT)
-                ewlock = RWFileLock(emF)
-                with ewlock.exclusive_blocking_lock(), os.fdopen(
-                    emF, mode="r+", encoding="utf-8"
-                ) as msF:
-                    if os.fstat(emF).st_size > 0:
-                        try:
-                            (
-                                staged_executions,
-                                creation_timestamp,
-                            ) = self._unmarshallExecuteFH(msF, os.fstat(emF).st_ctime)
-                        except:
-                            self.logger.error(
-                                f"Unable to unmarshall executions metadata file {marshalled_execution_file}"
-                            )
-                            staged_executions = []
-                    else:
-                        staged_executions = []
-                        creation_timestamp = datetime.datetime.fromtimestamp(
-                            os.fstat(emF).st_ctime
-                        ).astimezone()
-
-                    # Overwrite previous versions of the very same staged execution
-                    for candidate_stage_pos, candidate_stage in enumerate(
-                        staged_executions
-                    ):
-                        if candidate_stage.outputsDir.samefile(staged_exec.outputsDir):
-                            staged_executions[candidate_stage_pos] = staged_exec
-                            break
-                    else:
-                        staged_executions.append(staged_exec)
-
-                    # And now, store!
-                    executions = []
-                    for stagedExec in staged_executions:
-                        execution = {
-                            "exitVal": stagedExec.exitVal,
-                            "augmentedInputs": stagedExec.augmentedInputs,
-                            "matCheckOutputs": stagedExec.matCheckOutputs,
-                            "outputsDir": stagedExec.outputsDir,
-                            "started": stagedExec.started,
-                            "ended": stagedExec.ended,
-                            "environment": stagedExec.environment,
-                            "outputMetaDir": stagedExec.outputMetaDir,
-                            "diagram": stagedExec.diagram,
-                            "logfile": stagedExec.logfile,
-                            "profiles": stagedExec.profiles,
-                            "queued": stagedExec.queued,
-                            "status": stagedExec.status,
-                            "job_id": stagedExec.job_id,
-                        }
-                        executions.append(execution)
-
-                    self.logger.debug(
-                        "Writing marshalled execution file {}".format(
-                            marshalled_execution_file
-                        )
+        # The file contents must be kept INTACT (or created)!!!
+        emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT)
+        ewlock = RWFileLock(emF)
+        with ewlock.exclusive_blocking_lock(), os.fdopen(
+            emF, mode="r+", encoding="utf-8"
+        ) as msF:
+            staged_executions: "MutableSequence[StagedExecution]" = []
+            creation_timestamp = datetime.datetime.fromtimestamp(
+                os.fstat(emF).st_ctime
+            ).astimezone()
+            if os.fstat(emF).st_size > 0:
+                try:
+                    (
+                        staged_executions,
+                        creation_timestamp,
+                    ) = self._unmarshallExecuteFH(msF, os.fstat(emF).st_ctime)
+                except:
+                    self.logger.error(
+                        f"Unable to unmarshall executions metadata file {marshalled_execution_file}"
                     )
 
-                    msF.seek(0)
-                    yaml.dump(
-                        marshall_namedtuple(executions, workdir=self.workDir),
-                        msF,
-                        Dumper=YAMLDumper,
-                    )
-                    # Last, remove possible last bytes
-                    msF.truncate(msF.tell())
-
+            # Overwrite previous versions of the very same staged execution
+            for candidate_stage_pos, candidate_stage in enumerate(staged_executions):
+                if candidate_stage.outputsDir.samefile(staged_exec.outputsDir):
+                    staged_executions[candidate_stage_pos] = staged_exec
+                    break
             else:
-                creation_timestamp = datetime.datetime.fromtimestamp(
-                    os.path.getctime(marshalled_execution_file)
-                ).astimezone()
+                staged_executions.append(staged_exec)
 
-            self.executionMarshalled = creation_timestamp
-        elif not exist_ok:
-            raise WFException("Marshalled execution file already exists")
+            # And now, store!
+            executions = []
+            for stagedExec in staged_executions:
+                execution = {
+                    "exitVal": stagedExec.exitVal,
+                    "augmentedInputs": stagedExec.augmentedInputs,
+                    "matCheckOutputs": stagedExec.matCheckOutputs,
+                    "outputsDir": stagedExec.outputsDir,
+                    "started": stagedExec.started,
+                    "ended": stagedExec.ended,
+                    "environment": stagedExec.environment,
+                    "outputMetaDir": stagedExec.outputMetaDir,
+                    "diagram": stagedExec.diagram,
+                    "logfile": stagedExec.logfile,
+                    "profiles": stagedExec.profiles,
+                    "queued": stagedExec.queued,
+                    "status": stagedExec.status,
+                    "job_id": stagedExec.job_id,
+                }
+                executions.append(execution)
+
+            self.logger.debug(
+                "Writing marshalled execution file {}".format(marshalled_execution_file)
+            )
+
+            msF.seek(0)
+            yaml.dump(
+                marshall_namedtuple(executions, workdir=self.workDir),
+                msF,
+                Dumper=YAMLDumper,
+            )
+            # Last, remove possible last bytes
+            msF.truncate(msF.tell())
+
+        self.executionMarshalled = creation_timestamp
+        self.stagedExecutions = staged_executions
 
         return self.executionMarshalled
 
@@ -4859,51 +4832,55 @@ This is an enumeration of the types of collected contents:
         return staged_executions, creation_timestamp
 
     def marshallExport(
-        self, exist_ok: "bool" = True, overwrite: "bool" = False
+        self, new_mat_actions: "Sequence[MaterializedExportAction]"
     ) -> "Optional[Union[bool, datetime.datetime]]":
-        if overwrite or (self.exportMarshalled is None):
-            # Do not even try saving the state
-            if self.marshallStage() is None:
-                return None
+        # Do not even try saving the state
+        if self.marshallStage() is None:
+            return None
 
-            assert (
-                self.metaDir is not None
-            ), "The metadata directory should be available"
+        assert self.metaDir is not None, "The metadata directory should be available"
 
-            marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
-            exportAlreadyMarshalled = False
-            if marshalled_export_file.exists():
-                errmsg = "Marshalled export results file {} already exists".format(
+        marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
+
+        # The file contents must be kept INTACT (or created)!!!
+        emF = os.open(marshalled_export_file, os.O_RDWR | os.O_CREAT)
+        ewlock = RWFileLock(emF)
+        with ewlock.exclusive_blocking_lock(), os.fdopen(
+            emF, mode="r+", encoding="utf-8"
+        ) as msF:
+            run_export_actions: "MutableSequence[MaterializedExportAction]" = []
+            creation_timestamp = datetime.datetime.fromtimestamp(
+                os.fstat(emF).st_ctime
+            ).astimezone()
+            if os.fstat(emF).st_size > 0:
+                try:
+                    (
+                        run_export_actions,
+                        creation_timestamp,
+                    ) = self._unmarshallExportFH(msF, os.fstat(emF).st_ctime)
+                except:
+                    self.logger.error(
+                        f"Unable to unmarshall exports metadata file {marshalled_export_file}"
+                    )
+
+            run_export_actions.extend(new_mat_actions)
+
+            self.logger.debug(
+                "Writing marshalled export results file {}".format(
                     marshalled_export_file
                 )
-                if not overwrite and not exist_ok:
-                    raise WFException(errmsg)
-                self.logger.debug(errmsg)
-                exportAlreadyMarshalled = True
+            )
+            msF.seek(0)
+            yaml.dump(
+                marshall_namedtuple(run_export_actions, workdir=self.workDir),
+                msF,
+                Dumper=YAMLDumper,
+            )
+            # Last, remove possible last bytes
+            msF.truncate(msF.tell())
 
-            if not exportAlreadyMarshalled or overwrite:
-                if self.runExportActions is None:
-                    self.runExportActions = []
-
-                self.logger.debug(
-                    "Creating marshalled export results file {}".format(
-                        marshalled_export_file
-                    )
-                )
-                with marshalled_export_file.open(mode="w", encoding="utf-8") as msF:
-                    yaml.dump(
-                        marshall_namedtuple(
-                            self.runExportActions, workdir=self.workDir
-                        ),
-                        msF,
-                        Dumper=YAMLDumper,
-                    )
-
-            self.exportMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_export_file)
-            ).astimezone()
-        elif not exist_ok:
-            raise WFException("Marshalled export results file already exists")
+        self.exportMarshalled = creation_timestamp
+        self.runExportActions = run_export_actions
 
         return self.exportMarshalled
 
@@ -4936,13 +4913,12 @@ This is an enumeration of the types of collected contents:
             )
             try:
                 with marshalled_export_file.open(mode="r", encoding="utf-8") as meF:
-                    marshalled_export = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = self.__get_combined_globals()
-                    self.runExportActions = unmarshall_namedtuple(
-                        marshalled_export,
-                        myglobals=combined_globals,
-                        workdir=self.workDir,
-                    )
+                    erlock = RWFileLock(meF)
+                    with erlock.shared_blocking_lock():
+                        (
+                            self.runExportActions,
+                            self.exportMarshalled,
+                        ) = self._unmarshallExportFH(meF)
 
             except Exception as e:
                 errmsg = f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}"
@@ -4954,11 +4930,26 @@ This is an enumeration of the types of collected contents:
                     self.logger.exception(errmsg)
                 raise WFException(errmsg) from e
 
-            self.exportMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_export_file)
-            ).astimezone()
-
         return self.exportMarshalled
+
+    def _unmarshallExportFH(
+        self, meF: "IO[str]", creation_time: "Optional[float]" = None
+    ) -> "Tuple[MutableSequence[MaterializedExportAction], datetime.datetime]":
+        if creation_time is None:
+            creation_time = os.fstat(meF.fileno()).st_ctime
+
+        # The default
+        creation_timestamp = datetime.datetime.fromtimestamp(creation_time).astimezone()
+
+        marshalled_export = yaml.load(meF, Loader=YAMLLoader)
+        combined_globals = self.__get_combined_globals()
+        run_export_actions = unmarshall_namedtuple(
+            marshalled_export,
+            myglobals=combined_globals,
+            workdir=self.workDir,
+        )
+
+        return run_export_actions, creation_timestamp
 
     ExportROCrate2Payloads: "Final[Mapping[str, CratableItem]]" = {
         "": NoCratableItem,
