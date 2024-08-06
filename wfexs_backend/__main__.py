@@ -817,7 +817,7 @@ def processStagedWorkdirCommand(
                     (
                         instance_id,
                         nickname,
-                        creation.astimezone().isoformat(),
+                        creation.isoformat(),
                         "(unknown)" if engineName is None else engineName,
                         "(unknown)" if containerType is None else containerType.value,
                         "(unknown)" if wfPID is None else wfPID,
@@ -952,7 +952,7 @@ def processStagedWorkdirCommand(
                     f"""=> Instance {instance_id} ({nickname})
 * Id: {instance_id}
 * Nickname: {nickname}
-* Created: {creation.astimezone().isoformat()}
+* Created: {creation.isoformat()}
 * Secure (encrypted)? {is_encrypted}
 {repr(mStatus)}
 * Is damaged? {is_damaged}
