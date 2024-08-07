@@ -29,6 +29,15 @@ and [cwltool](https://github.com/common-workflow-language/cwltool)).
 
 Additional present and future documentation is hosted at [development-docs](development-docs/index.md) subfolder, until it is migrated to a proper documentation service.
 
+##  Cite as
+
+José María Fernández, Laura Rodríguez-Navas, Adrián Muñoz-Cívico, Paula Iborra, Daniel Lea (2024):  
+**WfExS-backend**.  
+_Zenodo_  
+<https://doi.org/10.5281/zenodo.6567591>
+
+Visit the [Zenodo record](https://doi.org/10.5281/zenodo.6567591) for the latest versioned DOI and author list.
+
 ### Presentations and outreach
 
 Paula Iborra, José M. Fernández, Salvador Capella-Gutierrez (2024):  
@@ -83,6 +92,11 @@ Bietrix, Florence; Carazo, José Maria; Capella-Gutierrez, Salvador; Coppens, Fr
 EOSC-Life deliverable D8.1, _Zenodo_
 <https://doi.org/10.5281/zenodo.4705078>
 
+## Example RO-Crate outputs
+
+* <https://doi.org/10.5281/zenodo.12588049> -- execution of [WOMBAT-Pipelines](https://github.com/wombat-p/WOMBAT-Pipelines) Nextflow workflow
+* <https://doi.org/10.5281/zenodo.12622362> -- execution of [Wetlab2Variations](https://github.com/inab/Wetlab2Variations/) CWL workflow
+ 
 
 ## WfExS-backend Usage
 
