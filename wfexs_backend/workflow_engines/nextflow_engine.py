@@ -44,16 +44,17 @@ from ..common import (
     ContentKind,
     DEFAULT_JAVA_CMD,
     EngineMode,
+    ExecutionStatus,
     LocalWorkflow,
     MaterializedContent,
     MaterializedInput,
-    StagedExecution,
 )
 
 if TYPE_CHECKING:
     from typing import (
         Any,
         IO,
+        Iterator,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -103,7 +104,10 @@ if TYPE_CHECKING:
         WorkflowEngineVersionStr,
     )
 
+import psutil
+
 from . import (
+    StagedExecution,
     WorkflowEngine,
     WorkflowEngineException,
     WorkflowEngineInstallException,
@@ -295,7 +299,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.max_retries = self.engine_config.get(
             "maxRetries", self.DEFAULT_MAX_RETRIES
         )
-        self.max_cpus = self.engine_config.get("maxProcesses", self.DEFAULT_MAX_CPUS)
+        self.max_cpus = self.engine_config.get(
+            "maxCPUs", self.engine_config.get("maxProcesses", self.DEFAULT_MAX_CPUS)
+        )
+        self.max_task_duration: "Optional[str]" = self.engine_config.get(
+            "maxTaskDuration"
+        )
 
         # The profile to force, in case it cannot be guessed
         nxf_profile: "Union[str, Sequence[str]]" = self.engine_config.get("profile", [])
@@ -623,7 +632,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         ):
             engineVer = minimalEngineVer
 
-        if engineVer is None:
+        if engineVer is None or engineVer < self.nxf_version:
             engineVer = self.nxf_version
         elif (
             self.container_factory.containerType == ContainerType.Podman
@@ -909,6 +918,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             [cachedScript, "-version"],
                             stdout=nxf_install_stdout,
                             stderr=nxf_install_stderr,
+                            stdin=subprocess.DEVNULL,
                             cwd=nextflow_install_dir.as_posix(),
                             env=instEnv,
                         ).wait()
@@ -949,10 +959,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 else:
                     nxf_run_stderr = stderrFilename.open(mode="ab+")
 
+                self.logger.debug(
+                    f"Command line {cachedScript} {' '.join(commandLine)}"
+                )
                 retval = subprocess.Popen(
                     [cachedScript, *commandLine],
                     stdout=nxf_run_stdout,
                     stderr=nxf_run_stderr,
+                    stdin=subprocess.DEVNULL,
                     cwd=nextflow_install_dir if workdir is None else workdir,
                     env=instEnv,
                 ).wait()
@@ -1001,6 +1015,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     checkimage_params,
                     stdout=checkimage_stdout,
                     stderr=checkimage_stderr,
+                    stdin=subprocess.DEVNULL,
                 )
 
                 if retval != 0:
@@ -1027,6 +1042,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         pullimage_params,
                         stdout=pullimage_stdout,
                         stderr=pullimage_stderr,
+                        stdin=subprocess.DEVNULL,
                     )
                     if retval != 0:
                         # Reading the output and error for the report
@@ -1263,7 +1279,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     run_stderr.flush()
 
                     retval = subprocess.call(
-                        validation_params_cmd, stdout=run_stdout, stderr=run_stderr
+                        validation_params_cmd,
+                        stdout=run_stdout,
+                        stderr=run_stderr,
+                        stdin=subprocess.DEVNULL,
                     )
                     if retval != 0:
                         retries -= 1
@@ -1726,7 +1745,7 @@ STDERR
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
-    ) -> "StagedExecution":
+    ) -> "Iterator[StagedExecution]":
         # TODO: implement usage of materialized environment variables
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
             raise WorkflowEngineException("FATAL ERROR: Execution with no inputs")
@@ -1751,6 +1770,26 @@ STDERR
         reportFile = outputStatsDir / "report.html"
         traceFile = outputStatsDir / "trace.tsv"
         dagFile = outputStatsDir / STATS_DAG_DOT_FILE
+
+        queued = datetime.datetime.fromtimestamp(
+            psutil.Process(os.getpid()).create_time()
+        ).astimezone()
+        yield StagedExecution(
+            status=ExecutionStatus.Queued,
+            job_id=str(os.getpid()),
+            exitVal=cast("ExitVal", -1),
+            augmentedInputs=[],
+            # TODO: store the augmentedEnvironment instead
+            # of the materialized one
+            environment=matEnvironment,
+            matCheckOutputs=[],
+            outputsDir=outputsDir,
+            queued=queued,
+            started=datetime.datetime.min,
+            ended=datetime.datetime.min,
+            logfile=[],
+            profiles=profiles,
+        )
 
         # Custom variables setup
         runEnv = dict(os.environ)
@@ -1945,6 +1984,18 @@ executor.cpus={self.max_cpus}
                     file=fPC,
                 )
 
+            if self.max_task_duration is not None:
+                print(
+                    f"""
+process {{
+    withName: '.*' {{
+        time = '{self.max_task_duration}'
+    }}
+}}
+""",
+                    file=fPC,
+                )
+
             # Last, the trojan horse in the configuration file for input parameter
             # provenance, which only works when this is done after loading the original nextflow.config
             print(
@@ -2015,6 +2066,27 @@ wfexs_allParams()
         stderrFilename = outputMetaDir / WORKDIR_STDERR_FILE
 
         started = datetime.datetime.now(datetime.timezone.utc)
+        yield StagedExecution(
+            status=ExecutionStatus.Running,
+            job_id=str(os.getpid()),
+            exitVal=cast("ExitVal", -1),
+            augmentedInputs=[],
+            # TODO: store the augmentedEnvironment instead
+            # of the materialized one
+            environment=matEnvironment,
+            matCheckOutputs=[],
+            outputsDir=outputsDir,
+            queued=queued,
+            started=started,
+            ended=datetime.datetime.min,
+            diagram=dagFile,
+            logfile=[
+                stdoutFilename,
+                stderrFilename,
+            ],
+            profiles=profiles,
+        )
+
         launch_retval, launch_stdout, launch_stderr = self.runNextflowCommand(
             matWfEng.version,
             nxf_params,
@@ -2053,20 +2125,22 @@ wfexs_allParams()
         matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, outputsDir)
 
         relOutputsDir = cast("RelPath", os.path.relpath(outputsDir, self.workDir))
-        return StagedExecution(
+        yield StagedExecution(
+            status=ExecutionStatus.Finished,
             exitVal=launch_retval,
             augmentedInputs=augmentedInputs,
             matCheckOutputs=matOutputs,
-            outputsDir=relOutputsDir,
+            outputsDir=outputsDir,
+            queued=queued,
             started=started,
             ended=ended,
             # TODO: store the augmentedEnvironment instead
             # of the materialized one
             environment=matEnvironment,
-            diagram=cast("RelPath", os.path.relpath(dagFile, self.workDir)),
+            diagram=dagFile,
             logfile=[
-                cast("RelPath", os.path.relpath(stdoutFilename, self.workDir)),
-                cast("RelPath", os.path.relpath(stderrFilename, self.workDir)),
+                stdoutFilename,
+                stderrFilename,
             ],
             profiles=profiles,
         )

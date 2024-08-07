@@ -21,7 +21,7 @@ __copyright__ = "© 2020-2024 Barcelona Supercomputing Center (BSC), ES"
 __license__ = "Apache 2.0"
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = "1.0.0a2"
+__version__ = "1.0.0b0"
 __url__ = "https://github.com/inab/WfExS-backend"
 __official_name__ = "WfExS-backend"
 
@@ -57,7 +57,11 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
         import dulwich.repo
         import dulwich.walk
 
-    active_branch = dulwich.porcelain.active_branch(repo)  # type: ignore[no-untyped-call]
+    try:
+        active_branch = dulwich.porcelain.active_branch(repo)  # type: ignore[no-untyped-call]
+    except IndexError:
+        # This happens when it is queried over a disengaged checkout
+        active_branch = b""
     active_branch_decode = active_branch.decode("utf-8", errors="ignore")
     # Get the repository
     r: "dulwich.repo.Repo"

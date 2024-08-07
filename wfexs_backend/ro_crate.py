@@ -68,7 +68,6 @@ if TYPE_CHECKING:
         RelPath,
         RepoTag,
         RepoURL,
-        StagedExecution,
         StagedSetup,
         SymbolicParamName,
         SymbolicOutputName,
@@ -89,6 +88,7 @@ if TYPE_CHECKING:
 
     from .workflow_engines import (
         MaterializedWorkflowEngine,
+        StagedExecution,
         WorkflowType,
         WorkflowEngineVersionStr,
     )
@@ -2470,7 +2470,7 @@ you can find here an almost complete list of the possible ones:
 
         crate_action = CreateAction(
             self.crate,
-            "Run " + stagedExec.outputsDir + " of " + self.wf_file.id,
+            "Run " + stagedExec.outputsDir.name + " of " + self.wf_file.id,
             stagedExec.started,
             stagedExec.ended,
         )
@@ -2615,7 +2615,7 @@ you can find here an almost complete list of the possible ones:
 
         crate_outputs = self._add_workflow_execution_outputs(
             augmented_outputs,
-            rel_work_dir=stagedExec.outputsDir,
+            job_work_dir=stagedExec.outputsDir,
         )
 
         # Now, the logfiles and diagram
@@ -2655,11 +2655,16 @@ you can find here an almost complete list of the possible ones:
 
             with tempfile.NamedTemporaryFile() as d_err:
                 dot_cmd = [self.dot_binary, "-Tpng", "-o" + png_dot_path, abs_diagram]
+
+                diagram_dot_path_for_rocrate = stagedExec.diagram.relative_to(
+                    self.work_dir
+                ).as_posix()
+                diagram_png_path_for_rocrate = diagram_dot_path_for_rocrate + ".png"
                 dot_cmd_for_rocrate = [
-                    DEFAULT_DOT_CMD,
+                    DEFAULT_DOT_CMD,  # This path must be agnostic
                     "-Tpng",
-                    "-o" + stagedExec.diagram + ".png",
-                    stagedExec.diagram,
+                    "-o" + diagram_png_path_for_rocrate,
+                    diagram_dot_path_for_rocrate,
                 ]
                 d_retval = subprocess.Popen(
                     dot_cmd,
@@ -2673,7 +2678,7 @@ you can find here an almost complete list of the possible ones:
                     png_dot_file = WorkflowDiagram(
                         self.crate,
                         source=png_dot_path,
-                        dest_path=stagedExec.diagram + ".png",
+                        dest_path=stagedExec.diagram.as_posix() + ".png",
                         fetch_remote=False,
                         validate_url=False,
                         properties={
@@ -2729,7 +2734,11 @@ you can find here an almost complete list of the possible ones:
 
             for logfile in stagedExec.logfile:
                 the_log_file = self._add_file_to_crate(
-                    work_dir / logfile, the_uri=None, the_name=logfile
+                    logfile,
+                    the_uri=None,
+                    the_name=cast(
+                        "RelPath", logfile.relative_to(self.work_dir).as_posix()
+                    ),
                 )
                 if crate_coll is None:
                     crate_coll = the_log_file
@@ -2777,7 +2786,7 @@ you can find here an almost complete list of the possible ones:
     def _add_workflow_execution_outputs(
         self,
         outputs: "Sequence[MaterializedOutput]",
-        rel_work_dir: "RelPath",
+        job_work_dir: "pathlib.Path",
     ) -> "Sequence[rocrate.model.entity.Entity]":
         """
         Add the output's provenance data to a Research Object.
@@ -2872,7 +2881,7 @@ you can find here an almost complete list of the possible ones:
                                 _,
                             ) = self._add_GeneratedDirectoryContent_as_dataset(
                                 itemOutValues,
-                                rel_work_dir=rel_work_dir,
+                                job_work_dir=job_work_dir,
                                 do_attach=do_attach,
                             )
 
@@ -2895,7 +2904,7 @@ you can find here an almost complete list of the possible ones:
                         if os.path.isfile(itemOutLocalSource):
                             crate_file = self._add_GeneratedContent_to_crate(
                                 itemOutValues,
-                                rel_work_dir=rel_work_dir,
+                                job_work_dir=job_work_dir,
                                 do_attach=do_attach,
                             )
 
@@ -2940,7 +2949,7 @@ you can find here an almost complete list of the possible ones:
     def _add_GeneratedContent_to_crate(
         self,
         the_content: "GeneratedContent",
-        rel_work_dir: "RelPath",
+        job_work_dir: "pathlib.Path",
         do_attach: "bool" = True,
     ) -> "Union[FixedFile, Collection]":
         assert the_content.signature is not None
@@ -2952,9 +2961,7 @@ you can find here an almost complete list of the possible ones:
         dest_path = os.path.relpath(the_content.local, self.work_dir)
         # dest_path = hexDigest(algo, digest)
 
-        alternateName = os.path.relpath(
-            the_content.local, os.path.join(self.work_dir, rel_work_dir)
-        )
+        alternateName = os.path.relpath(the_content.local, job_work_dir)
 
         if the_content.uri is not None and not the_content.uri.uri.startswith("nih:"):
             the_content_uri = the_content.uri.uri
@@ -2987,14 +2994,14 @@ you can find here an almost complete list of the possible ones:
                 if isinstance(secFile, GeneratedContent):
                     gen_content = self._add_GeneratedContent_to_crate(
                         secFile,
-                        rel_work_dir=rel_work_dir,
+                        job_work_dir=job_work_dir,
                         do_attach=do_attach,
                     )
                 else:
                     # elif isinstance(secFile, GeneratedDirectoryContent):
                     gen_dir_content, _ = self._add_GeneratedDirectoryContent_as_dataset(
                         secFile,
-                        rel_work_dir=rel_work_dir,
+                        job_work_dir=job_work_dir,
                         do_attach=do_attach,
                     )
                     assert gen_dir_content is not None
@@ -3009,7 +3016,7 @@ you can find here an almost complete list of the possible ones:
     def _add_GeneratedDirectoryContent_as_dataset(
         self,
         the_content: "GeneratedDirectoryContent",
-        rel_work_dir: "RelPath",
+        job_work_dir: "pathlib.Path",
         do_attach: "bool" = True,
     ) -> "Union[Tuple[Union[FixedDataset, Collection], Sequence[Union[FixedFile, Collection]]], Tuple[None, None]]":
         if os.path.isdir(the_content.local):
@@ -3053,12 +3060,7 @@ you can find here an almost complete list of the possible ones:
                     uri_key = "identifier"
 
                 crate_dataset[uri_key] = the_uri
-            alternateName = (
-                os.path.relpath(
-                    the_content.local, os.path.join(self.work_dir, rel_work_dir)
-                )
-                + "/"
-            )
+            alternateName = os.path.relpath(the_content.local, job_work_dir) + "/"
             crate_dataset["alternateName"] = alternateName
 
             if isinstance(the_content.values, list):
@@ -3066,7 +3068,7 @@ you can find here an almost complete list of the possible ones:
                     if isinstance(the_val, GeneratedContent):
                         the_val_file = self._add_GeneratedContent_to_crate(
                             the_val,
-                            rel_work_dir=rel_work_dir,
+                            job_work_dir=job_work_dir,
                             do_attach=do_attach,
                         )
                         crate_dataset.append_to("hasPart", the_val_file, compact=True)
@@ -3077,7 +3079,7 @@ you can find here an almost complete list of the possible ones:
                             the_subfiles_crates,
                         ) = self._add_GeneratedDirectoryContent_as_dataset(
                             the_val,
-                            rel_work_dir=rel_work_dir,
+                            job_work_dir=job_work_dir,
                             do_attach=do_attach,
                         )
                         if the_val_dataset is not None:
@@ -3103,7 +3105,7 @@ you can find here an almost complete list of the possible ones:
                     if isinstance(secFile, GeneratedContent):
                         gen_content = self._add_GeneratedContent_to_crate(
                             secFile,
-                            rel_work_dir=rel_work_dir,
+                            job_work_dir=job_work_dir,
                             do_attach=do_attach,
                         )
                     else:
@@ -3113,7 +3115,7 @@ you can find here an almost complete list of the possible ones:
                             _,
                         ) = self._add_GeneratedDirectoryContent_as_dataset(
                             secFile,
-                            rel_work_dir=rel_work_dir,
+                            job_work_dir=job_work_dir,
                             do_attach=do_attach,
                         )
                         assert gen_dir_content is not None

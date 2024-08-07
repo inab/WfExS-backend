@@ -60,6 +60,8 @@ from .utils.misc import lazy_import
 magic = lazy_import("magic")
 # import magic
 
+from RWFileLock import RWFileLock
+
 from .common import (
     AbstractWfExSException,
     CacheType,
@@ -1246,27 +1248,33 @@ class WfExSBackend:
                 nickname = self.GetPassGen().generate_nickname()
             creation = datetime.datetime.now(tz=datetime.timezone.utc)
             with id_json_path.open(mode="w", encoding="utf-8") as idF:
-                idNick = {
-                    "instance_id": instanceId,
-                    "nickname": nickname,
-                    "creation": creation,
-                    "orcids": orcids,
-                }
-                json.dump(idNick, idF, cls=DatetimeEncoder)
+                wlock = RWFileLock(idF)
+                with wlock.exclusive_lock():
+                    idNick = {
+                        "instance_id": instanceId,
+                        "nickname": nickname,
+                        "creation": creation,
+                        "orcids": orcids,
+                    }
+                    json.dump(idNick, idF, cls=DatetimeEncoder)
             id_json_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
         elif id_json_path.exists():
             with id_json_path.open(mode="r", encoding="utf-8") as iH:
-                idNick = jsonFilterDecodeFromStream(iH)
-                instanceId = cast("WfExSInstanceId", idNick["instance_id"])
-                nickname = cast("str", idNick.get("nickname", instanceId))
-                creation = cast("Optional[datetime.datetime]", idNick.get("creation"))
-                orcids = cast("Sequence[str]", idNick.get("orcids", []))
+                rlock = RWFileLock(iH)
+                with rlock.shared_blocking_lock():
+                    idNick = jsonFilterDecodeFromStream(iH)
+                    instanceId = cast("WfExSInstanceId", idNick["instance_id"])
+                    nickname = cast("str", idNick.get("nickname", instanceId))
+                    creation = cast(
+                        "Optional[datetime.datetime]", idNick.get("creation")
+                    )
+                    orcids = cast("Sequence[str]", idNick.get("orcids", []))
 
             # This file should not change
             if creation is None:
                 creation = datetime.datetime.fromtimestamp(
-                    os.path.getctime(id_json_path), tz=datetime.timezone.utc
-                )
+                    os.path.getctime(id_json_path)
+                ).astimezone()
         else:
             instanceId = cast("WfExSInstanceId", uniqueRawWorkDir.name)
             nickname = instanceId
@@ -1290,8 +1298,8 @@ class WfExSBackend:
                 reference_path = uniqueRawWorkDir
 
             creation = datetime.datetime.fromtimestamp(
-                os.path.getctime(reference_path), tz=datetime.timezone.utc
-            )
+                os.path.getctime(reference_path)
+            ).astimezone()
 
         return instanceId, nickname, creation, orcids, uniqueRawWorkDir
 
@@ -1594,14 +1602,16 @@ class WfExSBackend:
             )
 
         with workdir_passphrase_file.open(mode="rb") as encF:
-            crypt4gh.lib.decrypt(
-                [(0, private_key, None)],
-                encF,
-                clearF,
-                offset=0,
-                span=None,
-                sender_pubkey=None,
-            )
+            rplock = RWFileLock(encF)
+            with rplock.shared_blocking_lock():
+                crypt4gh.lib.decrypt(
+                    [(0, private_key, None)],
+                    encF,
+                    clearF,
+                    offset=0,
+                    span=None,
+                    sender_pubkey=None,
+                )
 
         encfs_type_str, _, secureWorkdirPassphrase = (
             clearF.getvalue().decode("utf-8").partition("=")
@@ -1690,7 +1700,9 @@ class WfExSBackend:
         for pub_key in public_keys:
             encrypt_keys.append((0, private_key, pub_key))
         with workdir_passphrase_file.open(mode="wb") as encF:
-            crypt4gh.lib.encrypt(encrypt_keys, clearF, encF, offset=0, span=None)
+            wplock = RWFileLock(encF)
+            with wplock.exclusive_lock():
+                crypt4gh.lib.encrypt(encrypt_keys, clearF, encF, offset=0, span=None)
         del clearF
 
         return (

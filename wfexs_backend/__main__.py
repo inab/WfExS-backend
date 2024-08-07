@@ -186,6 +186,10 @@ class WfExS_Staged_WorkDir_Commands(StrDocEnum):
         "offline-exec",
         "Offline execute the staged instances which match the input pattern",
     )
+    OfflineQueueExecute = (
+        "offline-queue",
+        "Queue offline execution about the staged instances which match the input pattern",
+    )
     List = (
         "ls",
         "List the staged instances\n\tIt shows the instance id, nickname,\n\tencryption and whether they are damaged",
@@ -870,18 +874,55 @@ def processStagedWorkdirCommand(
                                 wfSetup.nickname,
                             )
                         )
-                        exit_val = wfInstance.executeWorkflow(offline=True)
+                        staged_exec = wfInstance.executeWorkflow(offline=True)
                         print(
                             "\t- Instance {} (nickname '{}') exit value: {} ({})\n".format(
                                 wfSetup.instance_id,
                                 wfSetup.nickname,
-                                exit_val,
-                                "FAILED" if exit_val != 0 else "DONE",
+                                staged_exec.exitVal,
+                                "FAILED" if staged_exec.exitVal != 0 else "DONE",
                             )
                         )
                     except Exception as e:
                         logging.exception(
                             f"Error while executing {instance_id} ({nickname})"
+                        )
+                    finally:
+                        wfInstance.cleanup()
+    elif (
+        args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineQueueExecute
+    ):
+        if len(args.staged_workdir_command_args) > 0:
+            for (
+                instance_id,
+                nickname,
+                creation,
+                wfSetup,
+                wfInstance,
+            ) in wB.listStagedWorkflows(
+                *args.staged_workdir_command_args,
+                acceptGlob=args.filesAsGlobs,
+                doCleanup=False,
+                private_key_filename=args.private_key_file,
+                private_key_passphrase=private_key_passphrase,
+            ):
+                is_damaged = True if wfSetup is None else wfSetup.is_damaged
+                if not is_damaged and (wfInstance is not None):
+                    try:
+                        assert wfSetup is not None
+                        print(
+                            "\t- Instance {} (nickname '{}') is being run\n".format(
+                                wfSetup.instance_id,
+                                wfSetup.nickname,
+                            )
+                        )
+                        job_id = wfInstance.queueExecution(offline=True)
+                        print(
+                            f"\t- Instance {wfSetup.instance_id} (nickname '{wfSetup.nickname}') job id {job_id}"
+                        )
+                    except Exception as e:
+                        logging.exception(
+                            f"Error while queueing {instance_id} ({nickname})"
                         )
                     finally:
                         wfInstance.cleanup()
@@ -1615,15 +1656,15 @@ def main() -> None:
                 wfSetup.nickname,
             )
         )
-        exit_val = wfInstance.executeWorkflow(
+        staged_exec = wfInstance.executeWorkflow(
             offline=command == WfExS_Commands.OfflineExecute
         )
         print(
             "\t- Instance {} (nickname '{}') exit value: {} ({})".format(
                 wfSetup.instance_id,
                 wfSetup.nickname,
-                exit_val,
-                "FAILED" if exit_val != 0 else "DONE",
+                staged_exec.exitVal,
+                "FAILED" if staged_exec.exitVal != 0 else "DONE",
             )
         )
 

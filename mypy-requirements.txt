@@ -12,6 +12,7 @@ types-mypy-extensions
 types-openpyxl
 types-paramiko
 types-pluggy
+types-psutil
 types-pyxdg
 types-PyYAML
 types-requests

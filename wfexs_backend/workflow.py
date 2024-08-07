@@ -37,6 +37,9 @@ import time
 import warnings
 import zipfile
 
+import psutil
+from RWFileLock import RWFileLock
+
 from typing import (
     cast,
     Dict,
@@ -52,9 +55,9 @@ from .common import (
     ContentWithURIsDesc,
     CratableItem,
     DEFAULT_CONTAINER_TYPE,
+    ExecutionStatus,
     NoCratableItem,
     ResolvedORCID,
-    StagedExecution,
 )
 
 from .fetchers import (
@@ -77,6 +80,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         ClassVar,
+        IO,
         Iterable,
         Iterator,
         Mapping,
@@ -234,6 +238,7 @@ from .container_factories import (
     Container,
 )
 from .workflow_engines import (
+    StagedExecution,
     WorkflowType,
 )
 
@@ -329,6 +334,7 @@ from .utils.contents import (
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import (
     config_validate,
+    get_maximum_file_descriptors,
     is_uri,
 )
 from .utils.zipfile_path import path_relative_to
@@ -377,9 +383,7 @@ class MaterializedExportAction(NamedTuple):
     action: "ExportAction"
     elems: "Sequence[AnyContent]"
     pids: "Sequence[URIWithMetadata]"
-    when: "datetime.datetime" = datetime.datetime.now(
-        tz=datetime.timezone.utc
-    ).astimezone()
+    when: "datetime.datetime" = datetime.datetime.now().astimezone()
 
 
 KT = TypeVar("KT")
@@ -1069,9 +1073,7 @@ class WF:
                         base_keys_dir.mkdir(parents=True, exist_ok=True)
                         key_fns: "MutableSequence[str]" = []
                         manifest = {
-                            "creation": datetime.datetime.now(
-                                tz=datetime.timezone.utc
-                            ).astimezone(),
+                            "creation": datetime.datetime.now().astimezone(),
                             "keys": key_fns,
                         }
                         for i_key, key_fn in enumerate(used_public_key_filenames):
@@ -1175,7 +1177,17 @@ class WF:
             execution=self.executionMarshalled,
             export=self.exportMarshalled,
             execution_stats=list(
-                map(lambda r: (r.started, r.ended, r.exitVal), self.stagedExecutions)
+                map(
+                    lambda r: (
+                        r.outputsDir.name,
+                        r.status,
+                        r.queued,
+                        r.started,
+                        r.ended,
+                        r.exitVal,
+                    ),
+                    self.stagedExecutions,
+                )
             )
             if self.stagedExecutions is not None
             else [],
@@ -2190,6 +2202,12 @@ class WF:
                     operational_containers=self.materializedEngine.operational_containers,
                 )
         self.materializedEngine = matWfEngV2
+        if matWfEngV2 is not None:
+            self.logger.info(
+                f"Engine {matWfEngV2.instance.__class__.__name__} version {matWfEngV2.version} being used"
+            )
+        else:
+            self.logger.warning("No engine was selected (it may fail later)")
 
     def materializeWorkflowAndContainers(
         self,
@@ -3704,7 +3722,7 @@ class WF:
 
         return actions
 
-    def executeWorkflow(self, offline: "bool" = False) -> "ExitVal":
+    def executeWorkflow(self, offline: "bool" = False) -> "StagedExecution":
         self.unmarshallStage(offline=offline)
         self.unmarshallExecute(offline=offline, fail_ok=True)
 
@@ -3712,31 +3730,123 @@ class WF:
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
         assert self.expected_outputs is not None
+        assert self.outputsDir is not None
 
         if self.stagedExecutions is None:
             self.stagedExecutions = []
 
-        stagedExec = WorkflowEngine.ExecuteWorkflow(
+        # First, the job tries to add itself to the list ASAP
+        job_id = os.getpid()
+        queued = datetime.datetime.fromtimestamp(
+            psutil.Process(job_id).create_time()
+        ).astimezone()
+        initial_staged_exec = StagedExecution(
+            exitVal=cast("ExitVal", -1),
+            augmentedInputs=[],
+            matCheckOutputs=[],
+            outputsDir=self.outputsDir,
+            queued=queued,
+            started=datetime.datetime.min,
+            ended=datetime.datetime.min,
+            status=ExecutionStatus.Queued,
+            job_id=str(job_id),
+        )
+        self.marshallExecute(initial_staged_exec)
+
+        # Now, execute the job in foreground
+        for staged_exec in WorkflowEngine.ExecuteWorkflow(
             self.materializedEngine,
             self.materializedParams,
             self.materializedEnvironment,
             self.expected_outputs,
             self.enabled_profiles,
+        ):
+            self.logger.debug(staged_exec.exitVal)
+            self.logger.debug(staged_exec.started)
+            self.logger.debug(staged_exec.ended)
+            self.logger.debug(staged_exec.augmentedInputs)
+            self.logger.debug(staged_exec.matCheckOutputs)
+
+            # TODO: store only the last update
+            # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
+            self.marshallExecute(staged_exec)
+
+        # And last, report the last staged execution
+        return staged_exec
+
+    def queueExecution(self, offline: "bool" = False) -> "str":
+        self.unmarshallStage(offline=offline)
+        self.unmarshallExecute(offline=offline, fail_ok=True)
+
+        assert self.materializedEngine is not None
+        assert self.materializedParams is not None
+        assert self.materializedEnvironment is not None
+        assert self.expected_outputs is not None
+        assert self.outputsDir is not None
+
+        if self.stagedExecutions is None:
+            self.stagedExecutions = []
+
+        # And once deployed, let's run the workflow in background!
+        job_id = os.fork()
+        if job_id == 0:
+            os.setsid()
+            os.closerange(0, get_maximum_file_descriptors())
+
+            # This is the child
+            # First, the child tries to add itself to the list ASAP
+            job_id = os.getpid()
+            queued = datetime.datetime.fromtimestamp(
+                psutil.Process(job_id).create_time()
+            ).astimezone()
+            initial_staged_exec = StagedExecution(
+                exitVal=cast("ExitVal", -1),
+                augmentedInputs=[],
+                matCheckOutputs=[],
+                outputsDir=self.outputsDir,
+                queued=queued,
+                started=datetime.datetime.min,
+                ended=datetime.datetime.min,
+                status=ExecutionStatus.Queued,
+                job_id=str(job_id),
+            )
+            self.marshallExecute(initial_staged_exec)
+
+            # Then, listen to the events
+            # with daemon.DaemonContext(detach_process=False) as dc:
+            for staged_exec in WorkflowEngine.ExecuteWorkflow(
+                self.materializedEngine,
+                self.materializedParams,
+                self.materializedEnvironment,
+                self.expected_outputs,
+                self.enabled_profiles,
+            ):
+                # TODO: store only the last update
+                # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
+                self.marshallExecute(staged_exec)
+        elif job_id > 0:
+            # This is the parent
+            # As a redundancy, add the child to the list
+            queued = datetime.datetime.fromtimestamp(
+                psutil.Process(job_id).create_time()
+            ).astimezone()
+            initial_staged_exec = StagedExecution(
+                exitVal=cast("ExitVal", -1),
+                augmentedInputs=[],
+                matCheckOutputs=[],
+                outputsDir=self.outputsDir,
+                queued=queued,
+                started=datetime.datetime.min,
+                ended=datetime.datetime.min,
+                status=ExecutionStatus.Queued,
+                job_id=str(job_id),
+            )
+            self.marshallExecute(initial_staged_exec)
+            return str(job_id)
+
+        raise WFException(
+            f"Unable to create a background jobs for {self.instanceId} ({self.nickname})"
         )
-
-        self.stagedExecutions.append(stagedExec)
-
-        self.logger.debug(stagedExec.exitVal)
-        self.logger.debug(stagedExec.started)
-        self.logger.debug(stagedExec.ended)
-        self.logger.debug(stagedExec.augmentedInputs)
-        self.logger.debug(stagedExec.matCheckOutputs)
-
-        # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
-        self.marshallExecute(overwrite=True)
-
-        # And last, report the exit value
-        return stagedExec.exitVal
 
     def listMaterializedExportActions(self) -> "Sequence[MaterializedExportAction]":
         """
@@ -4044,7 +4154,7 @@ This is an enumeration of the types of collected contents:
             self.runExportActions.extend(matActions)
 
         # And record them
-        self.marshallExport(overwrite=len(matActions) > 0)
+        self.marshallExport(matActions)
 
         return matActions, actionErrors
 
@@ -4100,11 +4210,13 @@ This is an enumeration of the types of collected contents:
             ):
                 staging_recipe = self.staging_recipe
                 with workflow_meta_filename.open(mode="w", encoding="utf-8") as wmF:
-                    yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
+                    wmlock = RWFileLock(wmF)
+                    with wmlock.exclusive_lock():
+                        yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
 
             self.configMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc
-            )
+                os.path.getctime(workflow_meta_filename)
+            ).astimezone()
 
         return self.configMarshalled
 
@@ -4147,9 +4259,11 @@ This is an enumeration of the types of collected contents:
             workflow_meta = None
             try:
                 with workflow_meta_filename.open(mode="r", encoding="utf-8") as wcf:
-                    workflow_meta = unmarshall_namedtuple(
-                        yaml.safe_load(wcf), workdir=self.workDir
-                    )
+                    rmlock = RWFileLock(wcf)
+                    with rmlock.shared_blocking_lock():
+                        workflow_meta = unmarshall_namedtuple(
+                            yaml.safe_load(wcf), workdir=self.workDir
+                        )
 
                     # If the file decodes to None, fail fast
                     if workflow_meta is None:
@@ -4258,8 +4372,8 @@ This is an enumeration of the types of collected contents:
                 self.vault = SecurityContextVault()
 
                 self.configMarshalled = datetime.datetime.fromtimestamp(
-                    os.path.getctime(workflow_meta_filename), tz=datetime.timezone.utc
-                )
+                    os.path.getctime(workflow_meta_filename)
+                ).astimezone()
 
         return self.configMarshalled
 
@@ -4314,11 +4428,13 @@ This is an enumeration of the types of collected contents:
                 )
                 with marshalled_stage_file.open(mode="w", encoding="utf-8") as msF:
                     marshalled_stage = marshall_namedtuple(stage, workdir=self.workDir)
-                    yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
+                    swlock = RWFileLock(msF)
+                    with swlock.exclusive_lock():
+                        yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_stage_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_stage_file)
+            ).astimezone()
         elif not exist_ok:
             raise WFException(f"Marshalled stage file already exists")
 
@@ -4355,7 +4471,9 @@ This is an enumeration of the types of collected contents:
             try:
                 # These symbols are needed to properly deserialize the yaml
                 with marshalled_stage_file.open(mode="r", encoding="utf-8") as msF:
-                    marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
+                    srlock = RWFileLock(msF)
+                    with srlock.shared_blocking_lock():
+                        marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
 
                     combined_globals = self.__get_combined_globals()
                     stage = unmarshall_namedtuple(
@@ -4506,259 +4624,337 @@ This is an enumeration of the types of collected contents:
                 self.marshallConfig(overwrite=True)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_stage_file), tz=datetime.timezone.utc
-            )
+                os.path.getctime(marshalled_stage_file)
+            ).astimezone()
 
         return self.stageMarshalled
 
     def marshallExecute(
-        self, exist_ok: "bool" = True, overwrite: "bool" = False
+        self,
+        staged_exec: "StagedExecution",
     ) -> "Optional[Union[bool, datetime.datetime]]":
-        if overwrite or (self.executionMarshalled is None):
-            if self.marshallStage() is None:
-                return None
+        if self.marshallStage() is None:
+            return None
 
-            assert (
-                self.metaDir is not None
-            ), "The metadata directory should be available"
+        assert self.metaDir is not None, "The metadata directory should be available"
 
-            assert self.stagedExecutions is not None
+        assert self.stagedExecutions is not None
 
-            marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
-            executionAlreadyMarshalled = False
-            if marshalled_execution_file.exists():
-                errmsg = "Marshalled execution file {} already exists".format(
-                    marshalled_execution_file
-                )
-                if not overwrite and not exist_ok:
-                    raise WFException(errmsg)
-                self.logger.debug(errmsg)
-                executionAlreadyMarshalled = True
+        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
 
-            if not executionAlreadyMarshalled or overwrite:
-                executions = []
-                for stagedExec in self.stagedExecutions:
-                    execution = {
-                        "outputsDir": stagedExec.outputsDir,
-                        "exitVal": stagedExec.exitVal,
-                        "augmentedInputs": stagedExec.augmentedInputs,
-                        "matCheckOutputs": stagedExec.matCheckOutputs,
-                        "started": stagedExec.started,
-                        "ended": stagedExec.ended,
-                        # TODO: check nothing essential was left
-                    }
-                    executions.append(execution)
-
-                self.logger.debug(
-                    "Creating marshalled execution file {}".format(
-                        marshalled_execution_file
-                    )
-                )
-                with marshalled_execution_file.open(mode="w", encoding="utf-8") as msF:
-                    yaml.dump(
-                        marshall_namedtuple(executions, workdir=self.workDir),
-                        msF,
-                        Dumper=YAMLDumper,
+        # The file contents must be kept INTACT (or created)!!!
+        emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT, mode=0o666)
+        ewlock = RWFileLock(emF)
+        with ewlock.exclusive_blocking_lock(), os.fdopen(
+            emF, mode="r+", encoding="utf-8"
+        ) as msF:
+            staged_executions: "MutableSequence[StagedExecution]" = []
+            creation_timestamp = datetime.datetime.fromtimestamp(
+                os.fstat(emF).st_ctime
+            ).astimezone()
+            if os.fstat(emF).st_size > 0:
+                try:
+                    (
+                        staged_executions,
+                        creation_timestamp,
+                    ) = self._unmarshallExecuteFH(msF, os.fstat(emF).st_ctime)
+                except:
+                    self.logger.error(
+                        f"Unable to unmarshall executions metadata file {marshalled_execution_file}"
                     )
 
-            self.executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
+            # Overwrite previous versions of the very same staged execution
+            for candidate_stage_pos, candidate_stage in enumerate(staged_executions):
+                if (
+                    candidate_stage.outputsDir == self.outputsDir
+                    and candidate_stage.job_id == staged_exec.job_id
+                ) or (
+                    candidate_stage.outputsDir != self.outputsDir
+                    and staged_exec.outputsDir != self.outputsDir
+                    and candidate_stage.outputsDir == staged_exec.outputsDir
+                ):
+                    staged_executions[candidate_stage_pos] = staged_exec
+                    break
+            else:
+                staged_executions.append(staged_exec)
+
+            # And now, store!
+            executions = []
+            for stagedExec in staged_executions:
+                execution = {
+                    "exitVal": stagedExec.exitVal,
+                    "augmentedInputs": stagedExec.augmentedInputs,
+                    "matCheckOutputs": stagedExec.matCheckOutputs,
+                    "outputsDir": stagedExec.outputsDir,
+                    "started": stagedExec.started,
+                    "ended": stagedExec.ended,
+                    "environment": stagedExec.environment,
+                    "outputMetaDir": stagedExec.outputMetaDir,
+                    "diagram": stagedExec.diagram,
+                    "logfile": stagedExec.logfile,
+                    "profiles": stagedExec.profiles,
+                    "queued": stagedExec.queued,
+                    "status": stagedExec.status,
+                    "job_id": stagedExec.job_id,
+                }
+                executions.append(execution)
+
+            self.logger.debug(
+                "Writing marshalled execution file {}".format(marshalled_execution_file)
             )
-        elif not exist_ok:
-            raise WFException("Marshalled execution file already exists")
+
+            msF.seek(0)
+            yaml.dump(
+                marshall_namedtuple(executions, workdir=self.workDir),
+                msF,
+                Dumper=YAMLDumper,
+            )
+            # Last, remove possible last bytes
+            msF.truncate(msF.tell())
+
+        self.executionMarshalled = creation_timestamp
+        self.stagedExecutions = staged_executions
 
         return self.executionMarshalled
 
     def unmarshallExecute(
         self, offline: "bool" = True, fail_ok: "bool" = False
-    ) -> "Optional[Union[bool, datetime.datetime]]":
-        if self.executionMarshalled is None:
-            # If stage state is not properly prepared, even do not try
-            retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
-            if not retval:
-                return None
+    ) -> "Tuple[Optional[Union[bool, datetime.datetime]], Sequence[StagedExecution]]":
+        # If stage state is not properly prepared, even do not try
+        retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
+        if not retval:
+            return None, []
 
-            assert (
-                self.metaDir is not None
-            ), "The metadata directory should be available"
+        assert self.metaDir is not None, "The metadata directory should be available"
 
-            marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
-            if not marshalled_execution_file.exists():
-                errmsg = f"Marshalled execution file {marshalled_execution_file} does not exists. Execution state was not stored"
-                self.logger.debug(errmsg)
-                self.executionMarshalled = False
-                if fail_ok:
-                    return self.executionMarshalled
-                raise WFException(errmsg)
+        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
+        if not marshalled_execution_file.exists():
+            errmsg = f"Marshalled execution file {marshalled_execution_file} does not exist. Execution state was not stored"
+            self.logger.debug(errmsg)
+            self.executionMarshalled = False
+            if fail_ok:
+                return self.executionMarshalled, []
+            raise WFException(errmsg)
 
-            self.logger.debug(
-                "Parsing marshalled execution state file {}".format(
-                    marshalled_execution_file
+        self.logger.debug(
+            "Parsing marshalled execution state file {}".format(
+                marshalled_execution_file
+            )
+        )
+
+        try:
+            with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
+                erlock = RWFileLock(meF)
+                with erlock.shared_blocking_lock():
+                    (
+                        self.stagedExecutions,
+                        creation_timestamp,
+                    ) = self._unmarshallExecuteFH(meF)
+                self.executionMarshalled = creation_timestamp
+
+                return self.executionMarshalled, self.stagedExecutions
+        except Exception as e:
+            errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
+                marshalled_execution_file, e
+            )
+            self.executionMarshalled = False
+            if fail_ok:
+                self.logger.exception(errmsg)
+                return self.executionMarshalled, []
+            self.logger.exception(errmsg)
+            raise WFException(errmsg) from e
+
+    def _unmarshallExecuteFH(
+        self, meF: "IO[str]", creation_time: "Optional[float]" = None
+    ) -> "Tuple[MutableSequence[StagedExecution], datetime.datetime]":
+        """
+        Internal method used to unmarshall staged executions metadata.
+
+        :param meF: open file (or similar), with fileno method
+        :param creation_time: when the marshalled execution file was created, measured in number of seconds since epoch
+        :returns: The list of unmarshalled, staged executions
+        """
+        assert self.workDir is not None
+        assert self.metaDir is not None, "The metadata directory should be available"
+
+        if creation_time is None:
+            creation_time = os.fstat(meF.fileno()).st_ctime
+
+        # The default
+        creation_timestamp = datetime.datetime.fromtimestamp(creation_time).astimezone()
+
+        marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
+        combined_globals = self.__get_combined_globals()
+        execution_read = unmarshall_namedtuple(
+            marshalled_execution,
+            myglobals=combined_globals,
+            workdir=self.workDir,
+        )
+
+        if isinstance(execution_read, dict):
+            executions = [execution_read]
+        else:
+            executions = execution_read
+
+        staged_executions: "MutableSequence[StagedExecution]" = []
+        for execution in cast("Sequence[Mapping[str, Any]]", executions):
+            execution = StagedExecution._mapping_fixes(execution, self.workDir)
+
+            # We might need to learn where the metadata of this
+            # specific execution is living
+            default_outputs_dir = self.workDir / WORKDIR_OUTPUTS_RELDIR
+            outputsDir = execution.get("outputsDir", default_outputs_dir)
+            jobOutputMetaDir = execution.get("outputMetaDir")
+            if jobOutputMetaDir is None:
+                absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
+                if not outputsDir.samefile(default_outputs_dir):
+                    jobOutputMetaDir = self.metaDir / outputsDir.relative_to(
+                        self.workDir
+                    )
+                else:
+                    jobOutputMetaDir = absOutputMetaDir
+            else:
+                absOutputMetaDir = jobOutputMetaDir
+
+            # For backward compatibility, let's find the
+            # logfiles and generated charts
+            logfiles: "Optional[MutableSequence[pathlib.Path]]" = execution.get(
+                "logfile"
+            )
+            if logfiles is None:
+                candidate_logfiles_str = [
+                    WORKDIR_STDOUT_FILE,
+                    WORKDIR_STDERR_FILE,
+                    cast("RelPath", "log.txt"),
+                ]
+
+                logfiles = []
+                for logfname in candidate_logfiles_str:
+                    logfile = pathlib.Path(logfname)
+                    if not logfile.is_absolute():
+                        logfile = self.workDir / logfname
+
+                    if not logfile.exists():
+                        logfile = jobOutputMetaDir / logfname
+
+                    if not logfile.exists() and jobOutputMetaDir != absOutputMetaDir:
+                        logfile = absOutputMetaDir / logfname
+
+                    if logfile.exists():
+                        logfiles.append(logfile)
+
+            diagram: "Optional[pathlib.Path]" = execution.get("diagram")
+            if diagram is not None:
+                if not diagram.is_absolute():
+                    diagram = (self.workDir / diagram).resolve()
+            else:
+                putative_diagram = (
+                    jobOutputMetaDir / WORKDIR_STATS_RELDIR / STATS_DAG_DOT_FILE
                 )
-            )
 
-            executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
-            )
-            try:
-                with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
-                    marshalled_execution = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = self.__get_combined_globals()
-                    execution_read = unmarshall_namedtuple(
-                        marshalled_execution,
-                        myglobals=combined_globals,
-                        workdir=self.workDir,
+                if not putative_diagram.exists() and not jobOutputMetaDir.samefile(
+                    absOutputMetaDir
+                ):
+                    putative_diagram = (
+                        absOutputMetaDir / WORKDIR_STATS_RELDIR / STATS_DAG_DOT_FILE
                     )
 
-                    if isinstance(execution_read, dict):
-                        executions = [execution_read]
-                    else:
-                        executions = execution_read
+                if putative_diagram.exists():
+                    diagram = putative_diagram
 
-                    self.stagedExecutions = []
-                    for execution in executions:
-                        # We might need to learn where the metadata of this
-                        # specific execution is living
-                        outputsDir = execution.get("outputsDir", WORKDIR_OUTPUTS_RELDIR)
-                        absOutputMetaDir = self.metaDir / WORKDIR_OUTPUTS_RELDIR
-                        if outputsDir != WORKDIR_OUTPUTS_RELDIR:
-                            jobOutputMetaDir = self.metaDir / outputsDir
-                        else:
-                            jobOutputMetaDir = absOutputMetaDir
+            profiles: "Optional[Sequence[str]]" = execution.get("profiles")
+            # Backward <=> forward compatibility
+            if profiles is None:
+                profiles = self.enabled_profiles
 
-                        # For backward compatibility, let's find the
-                        # logfiles and generated charts
-                        logfile: "Optional[MutableSequence[RelPath]]" = execution.get(
-                            "logfile"
-                        )
-                        if not isinstance(logfile, list) or len(logfile) == 0:
-                            logfile = []
-                            for logfname in (
-                                WORKDIR_STDOUT_FILE,
-                                WORKDIR_STDERR_FILE,
-                                "log.txt",
-                            ):
-                                putative_fname = jobOutputMetaDir / logfname
-                                if (
-                                    not putative_fname.exists()
-                                    and not jobOutputMetaDir.samefile(absOutputMetaDir)
-                                ):
-                                    putative_fname = absOutputMetaDir / logfname
-
-                                if putative_fname.exists():
-                                    logfile.append(
-                                        cast(
-                                            "RelPath",
-                                            os.path.relpath(
-                                                putative_fname, self.workDir
-                                            ),
-                                        )
-                                    )
-
-                        diagram: "Optional[RelPath]" = execution.get("diagram")
-                        if diagram is None:
-                            putative_diagram = (
-                                jobOutputMetaDir
-                                / WORKDIR_STATS_RELDIR
-                                / STATS_DAG_DOT_FILE
-                            )
-
-                            if (
-                                not putative_diagram.exists()
-                                and not jobOutputMetaDir.samefile(absOutputMetaDir)
-                            ):
-                                putative_diagram = (
-                                    absOutputMetaDir
-                                    / WORKDIR_STATS_RELDIR
-                                    / STATS_DAG_DOT_FILE
-                                )
-
-                            if putative_diagram.exists():
-                                diagram = cast(
-                                    "RelPath",
-                                    os.path.relpath(putative_diagram, self.workDir),
-                                )
-
-                        profiles: "Optional[Sequence[str]]" = execution.get("profiles")
-                        # Backward <=> forward compatibility
-                        if profiles is None:
-                            profiles = self.enabled_profiles
-
-                        stagedExec = StagedExecution(
-                            exitVal=execution["exitVal"],
-                            augmentedInputs=execution["augmentedInputs"],
-                            matCheckOutputs=execution["matCheckOutputs"],
-                            outputsDir=outputsDir,
-                            started=execution.get("started", executionMarshalled),
-                            ended=execution.get("ended", executionMarshalled),
-                            logfile=logfile,
-                            diagram=diagram,
-                            profiles=profiles,
-                        )
-                        self.stagedExecutions.append(stagedExec)
-            except Exception as e:
-                errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
-                    marshalled_execution_file, e
-                )
-                self.executionMarshalled = False
-                if fail_ok:
-                    self.logger.error(errmsg)
-                    return self.executionMarshalled
-                self.logger.exception(errmsg)
-                raise WFException(errmsg) from e
-
-            self.executionMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_execution_file), tz=datetime.timezone.utc
+            job_status = cast(
+                "ExecutionStatus",
+                execution.get("status", ExecutionStatus.Finished),
             )
 
-        return self.executionMarshalled
+            # Let's check how "alive" are the processes
+            if job_status in (ExecutionStatus.Queued, ExecutionStatus.Running):
+                try:
+                    job_id = int(execution.get("job_id", ""))
+                    queued = datetime.datetime.fromtimestamp(
+                        psutil.Process(job_id).create_time()
+                    ).astimezone()
+
+                    if queued != execution.get("queued", datetime.datetime.min):
+                        job_status = ExecutionStatus.Died
+                except (psutil.NoSuchProcess, ValueError, TypeError):
+                    job_status = ExecutionStatus.Died
+
+            stagedExec = StagedExecution(
+                exitVal=execution["exitVal"],
+                augmentedInputs=execution["augmentedInputs"],
+                matCheckOutputs=execution["matCheckOutputs"],
+                outputsDir=outputsDir,
+                started=execution.get("started", creation_timestamp),
+                ended=execution.get("ended", creation_timestamp),
+                environment=execution.get("environment", []),
+                outputMetaDir=absOutputMetaDir,
+                diagram=diagram,
+                logfile=logfiles,
+                profiles=profiles,
+                queued=execution.get("queued", datetime.datetime.min),
+                status=job_status,
+                job_id=execution.get("job_id"),
+            )
+            staged_executions.append(stagedExec)
+
+        return staged_executions, creation_timestamp
 
     def marshallExport(
-        self, exist_ok: "bool" = True, overwrite: "bool" = False
+        self, new_mat_actions: "Sequence[MaterializedExportAction]"
     ) -> "Optional[Union[bool, datetime.datetime]]":
-        if overwrite or (self.exportMarshalled is None):
-            # Do not even try saving the state
-            if self.marshallStage() is None:
-                return None
+        # Do not even try saving the state
+        if self.marshallStage() is None:
+            return None
 
-            assert (
-                self.metaDir is not None
-            ), "The metadata directory should be available"
+        assert self.metaDir is not None, "The metadata directory should be available"
 
-            marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
-            exportAlreadyMarshalled = False
-            if marshalled_export_file.exists():
-                errmsg = "Marshalled export results file {} already exists".format(
+        marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
+
+        # The file contents must be kept INTACT (or created)!!!
+        emF = os.open(marshalled_export_file, os.O_RDWR | os.O_CREAT, mode=0o666)
+        ewlock = RWFileLock(emF)
+        with ewlock.exclusive_blocking_lock(), os.fdopen(
+            emF, mode="r+", encoding="utf-8"
+        ) as msF:
+            run_export_actions: "MutableSequence[MaterializedExportAction]" = []
+            creation_timestamp = datetime.datetime.fromtimestamp(
+                os.fstat(emF).st_ctime
+            ).astimezone()
+            if os.fstat(emF).st_size > 0:
+                try:
+                    (
+                        run_export_actions,
+                        creation_timestamp,
+                    ) = self._unmarshallExportFH(msF, os.fstat(emF).st_ctime)
+                except:
+                    self.logger.error(
+                        f"Unable to unmarshall exports metadata file {marshalled_export_file}"
+                    )
+
+            run_export_actions.extend(new_mat_actions)
+
+            self.logger.debug(
+                "Writing marshalled export results file {}".format(
                     marshalled_export_file
                 )
-                if not overwrite and not exist_ok:
-                    raise WFException(errmsg)
-                self.logger.debug(errmsg)
-                exportAlreadyMarshalled = True
-
-            if not exportAlreadyMarshalled or overwrite:
-                if self.runExportActions is None:
-                    self.runExportActions = []
-
-                self.logger.debug(
-                    "Creating marshalled export results file {}".format(
-                        marshalled_export_file
-                    )
-                )
-                with marshalled_export_file.open(mode="w", encoding="utf-8") as msF:
-                    yaml.dump(
-                        marshall_namedtuple(
-                            self.runExportActions, workdir=self.workDir
-                        ),
-                        msF,
-                        Dumper=YAMLDumper,
-                    )
-
-            self.exportMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc
             )
-        elif not exist_ok:
-            raise WFException("Marshalled export results file already exists")
+            msF.seek(0)
+            yaml.dump(
+                marshall_namedtuple(run_export_actions, workdir=self.workDir),
+                msF,
+                Dumper=YAMLDumper,
+            )
+            # Last, remove possible last bytes
+            msF.truncate(msF.tell())
+
+        self.exportMarshalled = creation_timestamp
+        self.runExportActions = run_export_actions
 
         return self.exportMarshalled
 
@@ -4791,13 +4987,12 @@ This is an enumeration of the types of collected contents:
             )
             try:
                 with marshalled_export_file.open(mode="r", encoding="utf-8") as meF:
-                    marshalled_export = yaml.load(meF, Loader=YAMLLoader)
-                    combined_globals = self.__get_combined_globals()
-                    self.runExportActions = unmarshall_namedtuple(
-                        marshalled_export,
-                        myglobals=combined_globals,
-                        workdir=self.workDir,
-                    )
+                    erlock = RWFileLock(meF)
+                    with erlock.shared_blocking_lock():
+                        (
+                            self.runExportActions,
+                            self.exportMarshalled,
+                        ) = self._unmarshallExportFH(meF)
 
             except Exception as e:
                 errmsg = f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}"
@@ -4809,11 +5004,26 @@ This is an enumeration of the types of collected contents:
                     self.logger.exception(errmsg)
                 raise WFException(errmsg) from e
 
-            self.exportMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_export_file), tz=datetime.timezone.utc
-            )
-
         return self.exportMarshalled
+
+    def _unmarshallExportFH(
+        self, meF: "IO[str]", creation_time: "Optional[float]" = None
+    ) -> "Tuple[MutableSequence[MaterializedExportAction], datetime.datetime]":
+        if creation_time is None:
+            creation_time = os.fstat(meF.fileno()).st_ctime
+
+        # The default
+        creation_timestamp = datetime.datetime.fromtimestamp(creation_time).astimezone()
+
+        marshalled_export = yaml.load(meF, Loader=YAMLLoader)
+        combined_globals = self.__get_combined_globals()
+        run_export_actions = unmarshall_namedtuple(
+            marshalled_export,
+            myglobals=combined_globals,
+            workdir=self.workDir,
+        )
+
+        return run_export_actions, creation_timestamp
 
     ExportROCrate2Payloads: "Final[Mapping[str, CratableItem]]" = {
         "": NoCratableItem,

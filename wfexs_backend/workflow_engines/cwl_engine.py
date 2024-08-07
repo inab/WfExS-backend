@@ -41,16 +41,17 @@ from ..common import (
     ContainerType,
     ContentKind,
     EngineMode,
+    ExecutionStatus,
     LocalWorkflow,
     MaterializedContent,
     MaterializedInput,
-    StagedExecution,
 )
 
 if TYPE_CHECKING:
     import pathlib
     from typing import (
         Any,
+        Iterator,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -109,11 +110,13 @@ if TYPE_CHECKING:
 
 import jsonpath_ng
 import jsonpath_ng.ext
+import psutil
 import yaml
 
 from . import (
     DEFAULT_PRIORITY,
     MaterializedWorkflowEngine,
+    StagedExecution,
     STATS_DAG_DOT_FILE,
     WORKDIR_STATS_RELDIR,
     WORKDIR_STDOUT_FILE,
@@ -435,6 +438,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                         ],
                         stdout=cwltool_vers_stdout,
                         stderr=cwltool_vers_stderr,
+                        stdin=subprocess.DEVNULL,
                         env=instEnv,
                     ).wait()
                     with open(cwltool_vers_stdout.name, "r") as c_stF:
@@ -490,6 +494,7 @@ STDERR
                             ],
                             stdout=cwltool_venv_stdout,
                             stderr=cwltool_venv_stderr,
+                            stdin=subprocess.DEVNULL,
                             env=instEnv,
                         ).wait()
                         if retval_venv != 0:
@@ -583,6 +588,7 @@ STDERR
                         ],
                         stdout=cwltool_install_stdout,
                         stderr=cwltool_install_stderr,
+                        stdin=subprocess.DEVNULL,
                         cwd=cwltool_install_dir,
                         env=instEnv,
                     ).wait()
@@ -619,6 +625,7 @@ STDERR
                         #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
                         stdout=cwltool_install_stdout,
                         stderr=cwltool_install_stderr,
+                        stdin=subprocess.DEVNULL,
                         cwd=cwltool_install_dir,
                         env=instEnv,
                     ).wait()
@@ -652,6 +659,7 @@ STDERR
                                         #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
                                         stdout=cwltool_index_stdout,
                                         stderr=cwltool_index_stderr,
+                                        stdin=subprocess.DEVNULL,
                                         cwd=cwltool_install_dir,
                                         env=instEnv,
                                     ).wait()
@@ -737,6 +745,7 @@ STDERR
                 [f"{cwltool_install_dir}/bin/cwltool", "--version"],
                 stdout=subprocess.PIPE,
                 stderr=cwltool_version_stderr,
+                stdin=subprocess.DEVNULL,
                 cwd=cwltool_install_dir,
             ) as vP:
                 engine_ver: "str" = ""
@@ -784,6 +793,7 @@ STDERR
                 ],
                 stdout=subprocess.PIPE,
                 stderr=cwltool_printdeps_stderr,
+                stdin=subprocess.DEVNULL,
                 cwd=localWf.dir,
             ) as pP:
                 if pP.stdout is not None:
@@ -929,6 +939,7 @@ STDERR
                             ],
                             stdout=packedH,
                             stderr=cwltool_pack_stderr,
+                            stdin=subprocess.DEVNULL,
                             cwd=cwltool_install_dir,
                         ).wait()
 
@@ -1061,6 +1072,7 @@ STDERR
                     ],
                     stdout=packedH,
                     stderr=cwltool_dot_stderr,
+                    stdin=subprocess.DEVNULL,
                     cwd=cwltool_install_dir,
                 ).wait()
 
@@ -1084,7 +1096,7 @@ STDERR
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
-    ) -> "StagedExecution":
+    ) -> "Iterator[StagedExecution]":
         """
         Method to execute the workflow
         """
@@ -1111,6 +1123,25 @@ STDERR
         outputStatsDir.mkdir(parents=True, exist_ok=True)
 
         dagFile = outputStatsDir / STATS_DAG_DOT_FILE
+
+        queued = datetime.datetime.fromtimestamp(
+            psutil.Process(os.getpid()).create_time()
+        ).astimezone()
+        yield StagedExecution(
+            status=ExecutionStatus.Queued,
+            job_id=str(os.getpid()),
+            exitVal=cast("ExitVal", -1),
+            augmentedInputs=[],
+            # TODO: store the augmentedEnvironment instead
+            # of the materialized one
+            environment=matEnvironment,
+            matCheckOutputs=[],
+            outputsDir=outputsDir,
+            queued=queued,
+            started=datetime.datetime.min,
+            ended=datetime.datetime.min,
+            logfile=[],
+        )
 
         if localWorkflowFile.exists():
             # CWLWorkflowEngine directory is needed
@@ -1183,6 +1214,9 @@ STDERR
                             cast("SymbolicParamName", inputId)
                         ] = cwl_yaml_input
 
+            # Create augmentedInputs properly
+            augmentedInputs = self.augmentCWLInputs(matInputs, cwl_dict_inputs)
+
             inputsFileName = outputMetaDir / self.INPUT_DECLARATIONS_FILENAME
 
             try:
@@ -1192,15 +1226,15 @@ STDERR
                 )
                 if os.path.isfile(inputsFileName):
                     # Execute workflow
-                    stdoutFilename = os.path.join(outputMetaDir, WORKDIR_STDOUT_FILE)
-                    stderrFilename = os.path.join(outputMetaDir, WORKDIR_STDERR_FILE)
+                    stdoutFilename = outputMetaDir / WORKDIR_STDOUT_FILE
+                    stderrFilename = outputMetaDir / WORKDIR_STDERR_FILE
 
                     # As the stdout contains the description of the outputs
                     # which is parsed to identify them
                     # we have to overwrite it every time we are running
                     # the workflow
-                    with open(stdoutFilename, mode="wb+") as cwl_yaml_stdout:
-                        with open(stderrFilename, mode="ab+") as cwl_yaml_stderr:
+                    with stdoutFilename.open(mode="wb+") as cwl_yaml_stdout:
+                        with stderrFilename.open(mode="ab+") as cwl_yaml_stderr:
                             jobIntermediateDir = intermediateDir.as_posix() + "/"
                             outputDir = outputsDir.as_posix() + "/"
 
@@ -1348,11 +1382,31 @@ STDERR
                             )
                             self.logger.debug("Command => {}".format(" ".join(cmd_arr)))
 
-                            started = datetime.datetime.now(datetime.timezone.utc)
+                            started = datetime.datetime.now().astimezone()
+                            yield StagedExecution(
+                                status=ExecutionStatus.Running,
+                                exitVal=cast("ExitVal", -1),
+                                augmentedInputs=augmentedInputs,
+                                # TODO: store the augmentedEnvironment instead
+                                # of the materialized one
+                                environment=matEnvironment,
+                                matCheckOutputs=[],
+                                outputsDir=outputsDir,
+                                queued=queued,
+                                started=started,
+                                ended=datetime.datetime.min,
+                                diagram=dagFile,
+                                logfile=[
+                                    stdoutFilename,
+                                    stderrFilename,
+                                ],
+                            )
+
                             retVal = subprocess.Popen(
                                 cmd_arr,
                                 stdout=cwl_yaml_stdout,
                                 stderr=cwl_yaml_stderr,
+                                stdin=subprocess.DEVNULL,
                                 cwd=self.workDir,
                                 env=instEnv,
                             ).wait()
@@ -1391,32 +1445,41 @@ STDERR
                             matOutputs = self.identifyMaterializedOutputs(
                                 matInputs, outputs, outputsDir, outputsMapping
                             )
-                else:
-                    retVal = -1
-                    matOutputs = []
-                    started = ended = datetime.datetime.min
 
-                # Create augmentedInputs properly
-                augmentedInputs = self.augmentCWLInputs(matInputs, cwl_dict_inputs)
-                relOutputsDir = cast(
-                    "RelPath", os.path.relpath(outputsDir, self.workDir)
-                )
-                stagedExec = StagedExecution(
-                    exitVal=cast("ExitVal", retVal),
-                    augmentedInputs=augmentedInputs,
-                    # TODO: store the augmentedEnvironment instead
-                    # of the materialized one
-                    environment=matEnvironment,
-                    matCheckOutputs=matOutputs,
-                    outputsDir=relOutputsDir,
-                    started=started,
-                    ended=ended,
-                    diagram=cast("RelPath", os.path.relpath(dagFile, self.workDir)),
-                    logfile=[
-                        cast("RelPath", os.path.relpath(stderrFilename, self.workDir))
-                    ],
-                )
-                return stagedExec
+                    yield StagedExecution(
+                        status=ExecutionStatus.Finished,
+                        exitVal=cast("ExitVal", retVal),
+                        augmentedInputs=augmentedInputs,
+                        # TODO: store the augmentedEnvironment instead
+                        # of the materialized one
+                        environment=matEnvironment,
+                        matCheckOutputs=matOutputs,
+                        outputsDir=outputsDir,
+                        queued=queued,
+                        started=started,
+                        ended=ended,
+                        diagram=dagFile,
+                        logfile=[
+                            stdoutFilename,
+                            stderrFilename,
+                        ],
+                    )
+                else:
+                    yield StagedExecution(
+                        status=ExecutionStatus.Died,
+                        exitVal=cast("ExitVal", -1),
+                        augmentedInputs=augmentedInputs,
+                        # TODO: store the augmentedEnvironment instead
+                        # of the materialized one
+                        environment=matEnvironment,
+                        matCheckOutputs=[],
+                        outputsDir=outputsDir,
+                        queued=queued,
+                        started=started,
+                        ended=datetime.datetime.now().astimezone(),
+                        diagram=dagFile,
+                        logfile=[],
+                    )
 
             except WorkflowEngineException as wfex:
                 raise wfex

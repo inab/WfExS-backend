@@ -608,13 +608,40 @@
 							"default": 5
 						},
 						"maxProcesses": {
-							"title": "Max number of CPUs",
+							"title": "(deprecated) Max number of CPUs",
 							"description": "Number of CPUs to be used by Nextflow. When this key has an explicit value of `null`, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes",
 							"oneOf": [
 								{
 									"type": "integer",
 									"minimum": 1,
 									"default": 4
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"maxCPUs": {
+							"title": "(deprecated) Max number of CPUs",
+							"description": "Number of CPUs to be used by Nextflow. When this key has an explicit value of `null`, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes",
+							"oneOf": [
+								{
+									"type": "integer",
+									"minimum": 1,
+									"default": 4
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
+						"maxTaskDuration": {
+							"title": "Max task duration",
+							"description": "With this parameter it is possible to override the max task time declared for processes. This is needed for workflows which are not so customizable",
+							"oneOf": [
+								{
+									"type": "string",
+									"pattern": "^[0-9]+.*$"
 								},
 								{
 									"type": "null"

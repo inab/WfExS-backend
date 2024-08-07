@@ -1,6 +1,7 @@
 workflow_id: github:inab/hello-workflows/b0afc5871c6fdbd66576fcc5a3813ea49aca5104/cwl/hello-workflow.cwl
 workflow_config:
   secure: false
+  containerType: docker
 # All the inputs must be URLs or CURIEs from identifiers.org
 params:
   an_input:

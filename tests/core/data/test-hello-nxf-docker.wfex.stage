@@ -1,19 +1,12 @@
 workflow_id: github:inab/hello-workflows/26b45a412bb91e05c230a39fd268e65386c59d48/nextflow
 workflow_config:
   secure: false
+  containerType: docker
 # All the inputs must be URLs or CURIEs from identifiers.org
 params:
   an_input:
-    c-l-a-s-s: ContentWithURIs
-    value: |
-      label,url_1,url_2,anotherlabel
-      GM12878_REP2,github:inab/hello-workflows/b0afc5871c6fdbd66576fcc5a3813ea49aca5104/cwl/hello.yml,github:inab/hello-workflows/227d4b7b0c925b3baf8241fecd3dd29b1d586a41/nextflow/singularity-params.config,reverse
-    tabular:
-      uri-columns:
-        - 1
-        - 2
-      column-sep: ","
-      header-rows: 1
+    c-l-a-s-s: File
+    url: github:inab/hello-workflows/840236984ef4ea967b62b8a2dac1da22f7766b29/nextflow/singularity-params.config
   output_dir:
     c-l-a-s-s: Directory
     # This hint tells that this parameter is the output directory
