@@ -438,6 +438,7 @@ class CWLWorkflowEngine(WorkflowEngine):
                         ],
                         stdout=cwltool_vers_stdout,
                         stderr=cwltool_vers_stderr,
+                        stdin=subprocess.DEVNULL,
                         env=instEnv,
                     ).wait()
                     with open(cwltool_vers_stdout.name, "r") as c_stF:
@@ -493,6 +494,7 @@ STDERR
                             ],
                             stdout=cwltool_venv_stdout,
                             stderr=cwltool_venv_stderr,
+                            stdin=subprocess.DEVNULL,
                             env=instEnv,
                         ).wait()
                         if retval_venv != 0:
@@ -586,6 +588,7 @@ STDERR
                         ],
                         stdout=cwltool_install_stdout,
                         stderr=cwltool_install_stderr,
+                        stdin=subprocess.DEVNULL,
                         cwd=cwltool_install_dir,
                         env=instEnv,
                     ).wait()
@@ -622,6 +625,7 @@ STDERR
                         #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
                         stdout=cwltool_install_stdout,
                         stderr=cwltool_install_stderr,
+                        stdin=subprocess.DEVNULL,
                         cwd=cwltool_install_dir,
                         env=instEnv,
                     ).wait()
@@ -655,6 +659,7 @@ STDERR
                                         #    self.CWL_UTILS_PYTHON_PACKAGE, self.DEFAULT_CWL_UTILS_VERSION,
                                         stdout=cwltool_index_stdout,
                                         stderr=cwltool_index_stderr,
+                                        stdin=subprocess.DEVNULL,
                                         cwd=cwltool_install_dir,
                                         env=instEnv,
                                     ).wait()
@@ -740,6 +745,7 @@ STDERR
                 [f"{cwltool_install_dir}/bin/cwltool", "--version"],
                 stdout=subprocess.PIPE,
                 stderr=cwltool_version_stderr,
+                stdin=subprocess.DEVNULL,
                 cwd=cwltool_install_dir,
             ) as vP:
                 engine_ver: "str" = ""
@@ -787,6 +793,7 @@ STDERR
                 ],
                 stdout=subprocess.PIPE,
                 stderr=cwltool_printdeps_stderr,
+                stdin=subprocess.DEVNULL,
                 cwd=localWf.dir,
             ) as pP:
                 if pP.stdout is not None:
@@ -932,6 +939,7 @@ STDERR
                             ],
                             stdout=packedH,
                             stderr=cwltool_pack_stderr,
+                            stdin=subprocess.DEVNULL,
                             cwd=cwltool_install_dir,
                         ).wait()
 
@@ -1064,6 +1072,7 @@ STDERR
                     ],
                     stdout=packedH,
                     stderr=cwltool_dot_stderr,
+                    stdin=subprocess.DEVNULL,
                     cwd=cwltool_install_dir,
                 ).wait()
 
@@ -1397,6 +1406,7 @@ STDERR
                                 cmd_arr,
                                 stdout=cwl_yaml_stdout,
                                 stderr=cwl_yaml_stderr,
+                                stdin=subprocess.DEVNULL,
                                 cwd=self.workDir,
                                 env=instEnv,
                             ).wait()

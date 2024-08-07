@@ -918,6 +918,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                             [cachedScript, "-version"],
                             stdout=nxf_install_stdout,
                             stderr=nxf_install_stderr,
+                            stdin=subprocess.DEVNULL,
                             cwd=nextflow_install_dir.as_posix(),
                             env=instEnv,
                         ).wait()
@@ -965,6 +966,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     [cachedScript, *commandLine],
                     stdout=nxf_run_stdout,
                     stderr=nxf_run_stderr,
+                    stdin=subprocess.DEVNULL,
                     cwd=nextflow_install_dir if workdir is None else workdir,
                     env=instEnv,
                 ).wait()
@@ -1013,6 +1015,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     checkimage_params,
                     stdout=checkimage_stdout,
                     stderr=checkimage_stderr,
+                    stdin=subprocess.DEVNULL,
                 )
 
                 if retval != 0:
@@ -1039,6 +1042,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         pullimage_params,
                         stdout=pullimage_stdout,
                         stderr=pullimage_stderr,
+                        stdin=subprocess.DEVNULL,
                     )
                     if retval != 0:
                         # Reading the output and error for the report
@@ -1275,7 +1279,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     run_stderr.flush()
 
                     retval = subprocess.call(
-                        validation_params_cmd, stdout=run_stdout, stderr=run_stderr
+                        validation_params_cmd,
+                        stdout=run_stdout,
+                        stderr=run_stderr,
+                        stdin=subprocess.DEVNULL,
                     )
                     if retval != 0:
                         retries -= 1
