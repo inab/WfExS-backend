@@ -37,7 +37,7 @@ import time
 import warnings
 import zipfile
 
-import daemon  # type: ignore[import-untyped]
+import psutil
 from RWFileLock import RWFileLock
 
 from typing import (
@@ -334,6 +334,7 @@ from .utils.contents import (
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import (
     config_validate,
+    get_maximum_file_descriptors,
     is_uri,
 )
 from .utils.zipfile_path import path_relative_to
@@ -382,9 +383,7 @@ class MaterializedExportAction(NamedTuple):
     action: "ExportAction"
     elems: "Sequence[AnyContent]"
     pids: "Sequence[URIWithMetadata]"
-    when: "datetime.datetime" = datetime.datetime.now(
-        tz=datetime.timezone.utc
-    ).astimezone()
+    when: "datetime.datetime" = datetime.datetime.now().astimezone()
 
 
 KT = TypeVar("KT")
@@ -1074,9 +1073,7 @@ class WF:
                         base_keys_dir.mkdir(parents=True, exist_ok=True)
                         key_fns: "MutableSequence[str]" = []
                         manifest = {
-                            "creation": datetime.datetime.now(
-                                tz=datetime.timezone.utc
-                            ).astimezone(),
+                            "creation": datetime.datetime.now().astimezone(),
                             "keys": key_fns,
                         }
                         for i_key, key_fn in enumerate(used_public_key_filenames):
@@ -3733,10 +3730,30 @@ class WF:
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
         assert self.expected_outputs is not None
+        assert self.outputsDir is not None
 
         if self.stagedExecutions is None:
             self.stagedExecutions = []
 
+        # First, the job tries to add itself to the list ASAP
+        job_id = os.getpid()
+        queued = datetime.datetime.fromtimestamp(
+            psutil.Process(job_id).create_time()
+        ).astimezone()
+        initial_staged_exec = StagedExecution(
+            exitVal=cast("ExitVal", -1),
+            augmentedInputs=[],
+            matCheckOutputs=[],
+            outputsDir=self.outputsDir,
+            queued=queued,
+            started=datetime.datetime.min,
+            ended=datetime.datetime.min,
+            status=ExecutionStatus.Queued,
+            job_id=str(job_id),
+        )
+        self.marshallExecute(initial_staged_exec)
+
+        # Now, execute the job in foreground
         for staged_exec in WorkflowEngine.ExecuteWorkflow(
             self.materializedEngine,
             self.materializedParams,
@@ -3765,6 +3782,7 @@ class WF:
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
         assert self.expected_outputs is not None
+        assert self.outputsDir is not None
 
         if self.stagedExecutions is None:
             self.stagedExecutions = []
@@ -3772,20 +3790,58 @@ class WF:
         # And once deployed, let's run the workflow in background!
         job_id = os.fork()
         if job_id == 0:
+            os.setsid()
+            os.closerange(0, get_maximum_file_descriptors())
+
             # This is the child
-            with daemon.DaemonContext(detach_process=False):
-                for staged_exec in WorkflowEngine.ExecuteWorkflow(
-                    self.materializedEngine,
-                    self.materializedParams,
-                    self.materializedEnvironment,
-                    self.expected_outputs,
-                    self.enabled_profiles,
-                ):
-                    # TODO: store only the last update
-                    # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
-                    self.marshallExecute(staged_exec)
+            # First, the child tries to add itself to the list ASAP
+            job_id = os.getpid()
+            queued = datetime.datetime.fromtimestamp(
+                psutil.Process(job_id).create_time()
+            ).astimezone()
+            initial_staged_exec = StagedExecution(
+                exitVal=cast("ExitVal", -1),
+                augmentedInputs=[],
+                matCheckOutputs=[],
+                outputsDir=self.outputsDir,
+                queued=queued,
+                started=datetime.datetime.min,
+                ended=datetime.datetime.min,
+                status=ExecutionStatus.Queued,
+                job_id=str(job_id),
+            )
+            self.marshallExecute(initial_staged_exec)
+
+            # Then, listen to the events
+            # with daemon.DaemonContext(detach_process=False) as dc:
+            for staged_exec in WorkflowEngine.ExecuteWorkflow(
+                self.materializedEngine,
+                self.materializedParams,
+                self.materializedEnvironment,
+                self.expected_outputs,
+                self.enabled_profiles,
+            ):
+                # TODO: store only the last update
+                # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
+                self.marshallExecute(staged_exec)
         elif job_id > 0:
             # This is the parent
+            # As a redundancy, add the child to the list
+            queued = datetime.datetime.fromtimestamp(
+                psutil.Process(job_id).create_time()
+            ).astimezone()
+            initial_staged_exec = StagedExecution(
+                exitVal=cast("ExitVal", -1),
+                augmentedInputs=[],
+                matCheckOutputs=[],
+                outputsDir=self.outputsDir,
+                queued=queued,
+                started=datetime.datetime.min,
+                ended=datetime.datetime.min,
+                status=ExecutionStatus.Queued,
+                job_id=str(job_id),
+            )
+            self.marshallExecute(initial_staged_exec)
             return str(job_id)
 
         raise WFException(
@@ -4587,7 +4643,7 @@ This is an enumeration of the types of collected contents:
         marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
 
         # The file contents must be kept INTACT (or created)!!!
-        emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT)
+        emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT, mode=0o666)
         ewlock = RWFileLock(emF)
         with ewlock.exclusive_blocking_lock(), os.fdopen(
             emF, mode="r+", encoding="utf-8"
@@ -4609,7 +4665,14 @@ This is an enumeration of the types of collected contents:
 
             # Overwrite previous versions of the very same staged execution
             for candidate_stage_pos, candidate_stage in enumerate(staged_executions):
-                if candidate_stage.outputsDir.samefile(staged_exec.outputsDir):
+                if (
+                    candidate_stage.outputsDir == self.outputsDir
+                    and candidate_stage.job_id == staged_exec.job_id
+                ) or (
+                    candidate_stage.outputsDir != self.outputsDir
+                    and staged_exec.outputsDir != self.outputsDir
+                    and candidate_stage.outputsDir == staged_exec.outputsDir
+                ):
                     staged_executions[candidate_stage_pos] = staged_exec
                     break
             else:
@@ -4656,54 +4719,50 @@ This is an enumeration of the types of collected contents:
 
     def unmarshallExecute(
         self, offline: "bool" = True, fail_ok: "bool" = False
-    ) -> "Optional[Union[bool, datetime.datetime]]":
-        if self.executionMarshalled is None:
-            # If stage state is not properly prepared, even do not try
-            retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
-            if not retval:
-                return None
+    ) -> "Tuple[Optional[Union[bool, datetime.datetime]], Sequence[StagedExecution]]":
+        # If stage state is not properly prepared, even do not try
+        retval = self.unmarshallStage(offline=offline, fail_ok=fail_ok)
+        if not retval:
+            return None, []
 
-            assert (
-                self.metaDir is not None
-            ), "The metadata directory should be available"
+        assert self.metaDir is not None, "The metadata directory should be available"
 
-            marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
-            if not marshalled_execution_file.exists():
-                errmsg = f"Marshalled execution file {marshalled_execution_file} does not exists. Execution state was not stored"
-                self.logger.debug(errmsg)
-                self.executionMarshalled = False
-                if fail_ok:
-                    return self.executionMarshalled
-                raise WFException(errmsg)
+        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
+        if not marshalled_execution_file.exists():
+            errmsg = f"Marshalled execution file {marshalled_execution_file} does not exist. Execution state was not stored"
+            self.logger.debug(errmsg)
+            self.executionMarshalled = False
+            if fail_ok:
+                return self.executionMarshalled, []
+            raise WFException(errmsg)
 
-            self.logger.debug(
-                "Parsing marshalled execution state file {}".format(
-                    marshalled_execution_file
-                )
+        self.logger.debug(
+            "Parsing marshalled execution state file {}".format(
+                marshalled_execution_file
             )
+        )
 
-            try:
-                with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
-                    erlock = RWFileLock(meF)
-                    with erlock.shared_blocking_lock():
-                        (
-                            self.stagedExecutions,
-                            creation_timestamp,
-                        ) = self._unmarshallExecuteFH(meF)
-            except Exception as e:
-                errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
-                    marshalled_execution_file, e
-                )
-                self.executionMarshalled = False
-                if fail_ok:
-                    self.logger.error(errmsg)
-                    return self.executionMarshalled
+        try:
+            with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
+                erlock = RWFileLock(meF)
+                with erlock.shared_blocking_lock():
+                    (
+                        self.stagedExecutions,
+                        creation_timestamp,
+                    ) = self._unmarshallExecuteFH(meF)
+                self.executionMarshalled = creation_timestamp
+
+                return self.executionMarshalled, self.stagedExecutions
+        except Exception as e:
+            errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
+                marshalled_execution_file, e
+            )
+            self.executionMarshalled = False
+            if fail_ok:
                 self.logger.exception(errmsg)
-                raise WFException(errmsg) from e
-
-            self.executionMarshalled = creation_timestamp
-
-        return self.executionMarshalled
+                return self.executionMarshalled, []
+            self.logger.exception(errmsg)
+            raise WFException(errmsg) from e
 
     def _unmarshallExecuteFH(
         self, meF: "IO[str]", creation_time: "Optional[float]" = None
@@ -4820,7 +4879,7 @@ This is an enumeration of the types of collected contents:
                 diagram=diagram,
                 logfile=logfiles,
                 profiles=profiles,
-                queued=execution.get("ended", datetime.datetime.min),
+                queued=execution.get("queued", datetime.datetime.min),
                 status=cast(
                     "ExecutionStatus",
                     execution.get("status", ExecutionStatus.Finished),
@@ -4843,7 +4902,7 @@ This is an enumeration of the types of collected contents:
         marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
 
         # The file contents must be kept INTACT (or created)!!!
-        emF = os.open(marshalled_export_file, os.O_RDWR | os.O_CREAT)
+        emF = os.open(marshalled_export_file, os.O_RDWR | os.O_CREAT, mode=0o666)
         ewlock = RWFileLock(emF)
         with ewlock.exclusive_blocking_lock(), os.fdopen(
             emF, mode="r+", encoding="utf-8"

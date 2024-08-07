@@ -25,6 +25,7 @@ import json
 import os
 import pkgutil
 import re
+import resource
 import sys
 
 from typing import (
@@ -341,3 +342,30 @@ def is_uri(the_uri: "str") -> "bool":
         return result.scheme != ""
     except:
         return False
+
+
+# Next method has been borrowed from python-daemon
+# https://pypi.org/project/python-daemon/
+# which is under licence Apache License 2.0
+# https://pagure.io/python-daemon/blob/main/f/daemon/daemon.py#_848
+
+MAXFD = 2048
+
+
+def get_maximum_file_descriptors() -> "int":
+    """Get the maximum number of open file descriptors for this process.
+
+    :return: The number (integer) to use as the maximum number of open
+        files for this process.
+
+    The maximum is the process hard resource limit of maximum number of
+    open file descriptors. If the limit is “infinity”, a default value
+    of ``MAXFD`` is returned.
+    """
+    (__, hard_limit) = resource.getrlimit(resource.RLIMIT_NOFILE)
+
+    result = hard_limit
+    if hard_limit == resource.RLIM_INFINITY:
+        result = MAXFD
+
+    return result
