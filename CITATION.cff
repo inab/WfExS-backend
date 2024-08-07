@@ -18,7 +18,7 @@ cff-version: 1.2.0
 identifiers:
   - description: WfExS-backend release in Zenodo
     type: doi
-    value: "10.5281/zenodo.6567592"
+    value: "10.5281/zenodo.6567591"
 keywords:
   - workflows
   - ro-crate
