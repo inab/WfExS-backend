@@ -32,6 +32,12 @@
     - [3.13.4. Property `WfExS-backend config > tools > nextflow > maxProcesses`](#tools_nextflow_maxProcesses)
       - [3.13.4.1. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 0`](#tools_nextflow_maxProcesses_oneOf_i0)
       - [3.13.4.2. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 1`](#tools_nextflow_maxProcesses_oneOf_i1)
+    - [3.13.5. Property `WfExS-backend config > tools > nextflow > maxCPUs`](#tools_nextflow_maxCPUs)
+      - [3.13.5.1. Property `WfExS-backend config > tools > nextflow > maxCPUs > oneOf > item 0`](#tools_nextflow_maxCPUs_oneOf_i0)
+      - [3.13.5.2. Property `WfExS-backend config > tools > nextflow > maxCPUs > oneOf > item 1`](#tools_nextflow_maxCPUs_oneOf_i1)
+    - [3.13.6. Property `WfExS-backend config > tools > nextflow > maxTaskDuration`](#tools_nextflow_maxTaskDuration)
+      - [3.13.6.1. Property `WfExS-backend config > tools > nextflow > maxTaskDuration > oneOf > item 0`](#tools_nextflow_maxTaskDuration_oneOf_i0)
+      - [3.13.6.2. Property `WfExS-backend config > tools > nextflow > maxTaskDuration > oneOf > item 1`](#tools_nextflow_maxTaskDuration_oneOf_i1)
   - [3.14. Property `WfExS-backend config > tools > cwl`](#tools_cwl)
     - [3.14.1. Property `WfExS-backend config > tools > cwl > version`](#tools_cwl_version)
   - [3.15. Pattern Property `WfExS-backend config > tools > Path to a command`](#tools_pattern1)
@@ -440,12 +446,14 @@ Must be one of:
 | **Required**              | No                                                                        |
 | **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
 
-| Property                                        | Pattern | Type        | Deprecated | Definition | Title/Description               |
-| ----------------------------------------------- | ------- | ----------- | ---------- | ---------- | ------------------------------- |
-| - [dockerImage](#tools_nextflow_dockerImage )   | No      | string      | No         | -          | Image for docker-in-docker mode |
-| - [version](#tools_nextflow_version )           | No      | string      | No         | -          | Nextflow's version              |
-| - [maxRetries](#tools_nextflow_maxRetries )     | No      | integer     | No         | -          | Retries in docker mode          |
-| - [maxProcesses](#tools_nextflow_maxProcesses ) | No      | Combination | No         | -          | Max number of CPUs              |
+| Property                                              | Pattern | Type        | Deprecated | Definition | Title/Description               |
+| ----------------------------------------------------- | ------- | ----------- | ---------- | ---------- | ------------------------------- |
+| - [dockerImage](#tools_nextflow_dockerImage )         | No      | string      | No         | -          | Image for docker-in-docker mode |
+| - [version](#tools_nextflow_version )                 | No      | string      | No         | -          | Nextflow's version              |
+| - [maxRetries](#tools_nextflow_maxRetries )           | No      | integer     | No         | -          | Retries in docker mode          |
+| - [maxProcesses](#tools_nextflow_maxProcesses )       | No      | Combination | No         | -          | (deprecated) Max number of CPUs |
+| - [maxCPUs](#tools_nextflow_maxCPUs )                 | No      | Combination | No         | -          | Max number of CPUs              |
+| - [maxTaskDuration](#tools_nextflow_maxTaskDuration ) | No      | Combination | No         | -          | Max task duration               |
 
 #### <a name="tools_nextflow_dockerImage"></a>3.13.1. Property `WfExS-backend config > tools > nextflow > dockerImage`
 
@@ -491,7 +499,7 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 
 #### <a name="tools_nextflow_maxProcesses"></a>3.13.4. Property `WfExS-backend config > tools > nextflow > maxProcesses`
 
-**Title:** Max number of CPUs
+**Title:** (deprecated) Max number of CPUs
 
 |                           |                                                                           |
 | ------------------------- | ------------------------------------------------------------------------- |
@@ -519,6 +527,77 @@ bug happens sometimes. See https://forums.docker.com/t/any-known-problems-with-s
 | **Minimum**  | &ge; 1 |
 
 ##### <a name="tools_nextflow_maxProcesses_oneOf_i1"></a>3.13.4.2. Property `WfExS-backend config > tools > nextflow > maxProcesses > oneOf > item 1`
+
+|              |        |
+| ------------ | ------ |
+| **Type**     | `null` |
+| **Required** | No     |
+
+#### <a name="tools_nextflow_maxCPUs"></a>3.13.5. Property `WfExS-backend config > tools > nextflow > maxCPUs`
+
+**Title:** Max number of CPUs
+
+|                           |                                                                           |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Type**                  | `combining`                                                               |
+| **Required**              | No                                                                        |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+
+**Description:** Number of CPUs to be used by Nextflow. When this key has an explicit value of `null`, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes
+
+| One of(Option)                             |
+| ------------------------------------------ |
+| [item 0](#tools_nextflow_maxCPUs_oneOf_i0) |
+| [item 1](#tools_nextflow_maxCPUs_oneOf_i1) |
+
+##### <a name="tools_nextflow_maxCPUs_oneOf_i0"></a>3.13.5.1. Property `WfExS-backend config > tools > nextflow > maxCPUs > oneOf > item 0`
+
+|              |           |
+| ------------ | --------- |
+| **Type**     | `integer` |
+| **Required** | No        |
+| **Default**  | `4`       |
+
+| Restrictions |        |
+| ------------ | ------ |
+| **Minimum**  | &ge; 1 |
+
+##### <a name="tools_nextflow_maxCPUs_oneOf_i1"></a>3.13.5.2. Property `WfExS-backend config > tools > nextflow > maxCPUs > oneOf > item 1`
+
+|              |        |
+| ------------ | ------ |
+| **Type**     | `null` |
+| **Required** | No     |
+
+#### <a name="tools_nextflow_maxTaskDuration"></a>3.13.6. Property `WfExS-backend config > tools > nextflow > maxTaskDuration`
+
+**Title:** Max task duration
+
+|                           |                                                                           |
+| ------------------------- | ------------------------------------------------------------------------- |
+| **Type**                  | `combining`                                                               |
+| **Required**              | No                                                                        |
+| **Additional properties** | [[Any type: allowed]](# "Additional Properties of any type are allowed.") |
+
+**Description:** With this parameter it is possible to override the max task time declared for processes. This is needed for workflows which are not so customizable
+
+| One of(Option)                                     |
+| -------------------------------------------------- |
+| [item 0](#tools_nextflow_maxTaskDuration_oneOf_i0) |
+| [item 1](#tools_nextflow_maxTaskDuration_oneOf_i1) |
+
+##### <a name="tools_nextflow_maxTaskDuration_oneOf_i0"></a>3.13.6.1. Property `WfExS-backend config > tools > nextflow > maxTaskDuration > oneOf > item 0`
+
+|              |          |
+| ------------ | -------- |
+| **Type**     | `string` |
+| **Required** | No       |
+
+| Restrictions                      |                                                                             |
+| --------------------------------- | --------------------------------------------------------------------------- |
+| **Must match regular expression** | ```^[0-9]+.*$``` [Test](https://regex101.com/?regex=%5E%5B0-9%5D%2B.%2A%24) |
+
+##### <a name="tools_nextflow_maxTaskDuration_oneOf_i1"></a>3.13.6.2. Property `WfExS-backend config > tools > nextflow > maxTaskDuration > oneOf > item 1`
 
 |              |        |
 | ------------ | ------ |
@@ -619,4 +698,4 @@ must respect the following conditions
 **Description:** Some scheme fetchers could need customizations which depend on local WfExS installation environment. This is the place where to pass that
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2024-07-28 at 02:42:58 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2024-08-07 at 03:30:03 +0000
