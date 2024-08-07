@@ -63,6 +63,7 @@ pgzip==0.3.5
 ply==3.11
 proto-plus==1.24.0
 protobuf==4.25.3
+psutil==6.0.0
 pyasn1==0.6.0
 pyasn1_modules==0.4.0
 pycparser==2.22
@@ -90,6 +91,7 @@ rpds-py==0.18.1
 rsa==4.9
 ruamel.yaml==0.18.6
 ruamel.yaml.clib==0.2.8
+RWFileLock==0.2.2
 s3transfer==0.10.1
 schema-salad==8.5.20240503091721
 six==1.16.0
