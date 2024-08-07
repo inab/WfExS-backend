@@ -282,7 +282,7 @@ def CWLDesc2Content(
             )
         elif foundKind == ContentKind.File:
             matValue = GeneratedContent(
-                local=cwlDesc["path"],
+                local=pathlib.Path(cwlDesc["path"]),
                 signature=cast(
                     "Fingerprint",
                     ComputeDigestFromFile(cwlDesc["path"], repMethod=repMethod),
