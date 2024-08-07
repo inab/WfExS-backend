@@ -4876,11 +4876,12 @@ This is an enumeration of the types of collected contents:
             if job_status in (ExecutionStatus.Queued, ExecutionStatus.Running):
                 try:
                     job_id = int(execution.get("job_id", ""))
-                    queued = datetime.datetime.fromtimestamp(
+                    queued_proc = datetime.datetime.fromtimestamp(
                         psutil.Process(job_id).create_time()
                     ).astimezone()
 
-                    if queued != execution.get("queued", datetime.datetime.min):
+                    queued = execution.get("queued", datetime.datetime.min)
+                    if queued_proc != queued:
                         job_status = ExecutionStatus.Died
                 except (psutil.NoSuchProcess, ValueError, TypeError):
                     job_status = ExecutionStatus.Died

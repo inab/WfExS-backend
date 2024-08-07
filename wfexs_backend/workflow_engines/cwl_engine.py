@@ -1385,6 +1385,7 @@ STDERR
                             started = datetime.datetime.now().astimezone()
                             yield StagedExecution(
                                 status=ExecutionStatus.Running,
+                                job_id=str(os.getpid()),
                                 exitVal=cast("ExitVal", -1),
                                 augmentedInputs=augmentedInputs,
                                 # TODO: store the augmentedEnvironment instead
