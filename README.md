@@ -31,9 +31,37 @@ Additional present and future documentation is hosted at [development-docs](deve
 
 ### Presentations and outreach
 
-Fernández JM, Rodríguez-Navas L and Capella-Gutiérrez S. Secured and annotated execution of workflows with WfExS-backend [version 1; not peer reviewed]. F1000Research 2022, 11:1318 (poster) (https://doi.org/10.7490/f1000research.1119198.1) 
+Paula Iborra, José M. Fernández, Salvador Capella-Gutierrez (2024):  
+[**Onboarding Snakemake: Progress towards WfExS-backend integration**](https://doi.org/10.7490/f1000research.1119725.1).  
+_F1000Research_ **13**(ELIXIR):551 (poster)  
+<https://doi.org/10.7490/f1000research.1119725.1>
 
-Laura Rodríguez-Navas (2021): 
+Eugenio Gonzalo1, Laia Codó, Jose María Fernandez, Stian Soiland-Reyes, Salvador Capella-Gutierrez, Emily Jefferson, Carole Goble, Tim Beck, Phil Quinlan, Tom Giles (2024):  
+[**Five safes workflow RO-Crate and WfExS**. Closing the gap of federated analysis and Trusted Research Enviroments (TREs) in the health data context](https://doi.org/10.7490/f1000research.1119724.1).  
+_F1000Research_ **13**(ELIXIR):550 (poster)  
+<https://doi.org/10.7490/f1000research.1119724.1>
+
+José M. Fernández, Paula Iborra, Sébastien Moretti, Arun Isaac, Paul De Geest, Stian Soiland-Reyes (2024):  
+[**BioHackEU23: FAIR Workflow Execution with WfExS and Workflow Run Crate**](https://doi.org/10.37044/osf.io/7f94w).  
+_BioHackrXiv_  
+<https://doi.org/10.37044/osf.io/7f94w>
+
+Simone Leo, Michael R. Crusoe, Laura Rodríguez-Navas, Raül Sirvent, Alexander Kanitz, Paul De Geest, Rudolf Wittner, Luca Pireddu, Daniel Garijo, José M. Fernández, Iacopo Colonnelli, Matej Gallo, Tazro Ohta, Hirotaka Suetake, Salvador Capella-Gutierrez, Renske de Wit, Bruno de Paula Kinoshita, Stian Soiland-Reyes (2024):  
+[**Recording provenance of workflow runs with RO-Crate**](https://doi.org/10.48550/arXiv.2312.07852).  
+_arXiv_:2312.07852  
+<https://doi.org/10.48550/arXiv.2312.07852>
+
+José M. Fernández1, Laura Rodriguez-Navas, Salvador Capella-Gutiérrez (2023):  
+[**WfExS-backend in the WRROC world**?](https://doi.org/10.7490/f1000research.1119457.1)  
+_F1000Research_ **12**(ELIXIR):616 (poster)
+<https://doi.org/10.7490/f1000research.1119457.1>
+
+Fernández JM, Rodríguez-Navas L and Capella-Gutiérrez S.  
+[**Secured and annotated execution of workflows with WfExS-backend**](https://doi.org/10.7490/f1000research.1119198.1) [version 1; not peer reviewed].  
+_F1000Research_ 2022, 11:1318 (poster)  
+<https://doi.org/10.7490/f1000research.1119198.1>
+
+Laura Rodríguez-Navas (2021):  
 [**WfExS: a software component to enable the use of RO-Crate in the EOSC-Life collaboratory**](https://osf.io/tb5ku/).  
 _FAIR Digital Object Forum_, [CWFR & FDO SEM meeting](https://osf.io/v8xjz/), 2021-07-02
 [[video recording](https://osf.io/wna42/)], [[slides](https://osf.io/tb5ku/)]
