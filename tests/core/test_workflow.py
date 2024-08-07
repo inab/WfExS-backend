@@ -22,6 +22,7 @@ import inspect
 import logging
 import os
 import pathlib
+import time
 
 from typing import (
     cast,
@@ -107,3 +108,96 @@ def test_workflow_offline_exec(
             raise AssertionError(f"Method {inspect.currentframe().f_code.co_name} should have failed with stage file {stage_file} and context file {context_file}")  # type: ignore[union-attr]
 
     return wfInstance
+
+
+PARALLEL_WORKFLOW_TESTBED = pytest.mark.parametrize(
+    ["stage_file", "context_file", "should_fail"],
+    [
+        ("test-sleephello-cwl-singularity.wfex.stage", None, None),
+    ],
+)
+
+NUM_PARALLEL = 4
+
+
+@PARALLEL_WORKFLOW_TESTBED
+def test_workflow_multiple_executions(
+    tmppath: "pathlib.Path",
+    stage_file: "str",
+    context_file: "Optional[str]",
+    should_fail: "Optional[Sequence[str]]",
+) -> "None":
+    wfInstance = test_workflow_stage(tmppath, stage_file, context_file, should_fail)
+
+    try:
+        for numstep in range(NUM_PARALLEL):
+            staged_exec = wfInstance.executeWorkflow(offline=True)
+
+            assert staged_exec.status == ExecutionStatus.Finished
+            assert staged_exec.exitVal == 0
+
+        creation_time, executions = wfInstance.unmarshallExecute()
+        assert (
+            len(executions) == NUM_PARALLEL
+        ), f"Inconsistent number of registered executions (got {len(executions)}, expected {NUM_PARALLEL})"
+    except:
+        if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
+            raise
+    else:
+        if should_fail is not None and inspect.currentframe().f_code.co_name in should_fail:  # type: ignore[union-attr]
+            raise AssertionError(f"Method {inspect.currentframe().f_code.co_name} should have failed with stage file {stage_file} and context file {context_file}")  # type: ignore[union-attr]
+
+
+@PARALLEL_WORKFLOW_TESTBED
+def test_workflow_parallel_executions(
+    tmppath: "pathlib.Path",
+    stage_file: "str",
+    context_file: "Optional[str]",
+    should_fail: "Optional[Sequence[str]]",
+) -> "None":
+    wfInstance = test_workflow_stage(tmppath, stage_file, context_file, should_fail)
+
+    try:
+        job_ids = []
+        for numstep in range(NUM_PARALLEL):
+            job_id = wfInstance.queueExecution(offline=True)
+            job_ids.append(job_id)
+
+        # Wait for a second
+        time.sleep(1)
+        creation_time, executions = wfInstance.unmarshallExecute(offline=True)
+        assert (
+            len(list(filter(lambda ex: ex.job_id in job_ids, executions)))
+            == NUM_PARALLEL
+        ), f"Some jobs are missing (recorded {job_ids})"
+        assert (
+            len(executions) == NUM_PARALLEL
+        ), f"Inconsistent initial number of registered executions (got {len(executions)}, expected {NUM_PARALLEL})"
+        # Wait for 10 seconds
+        time.sleep(10)
+        creation_time, executions = wfInstance.unmarshallExecute(offline=True)
+        assert (
+            len(
+                list(
+                    filter(
+                        lambda ex: ex.status != ExecutionStatus.Died
+                        and (
+                            ex.status
+                            not in (ExecutionStatus.Queued, ExecutionStatus.Running)
+                            or ex.job_id in job_ids
+                        ),
+                        executions,
+                    )
+                )
+            )
+            == NUM_PARALLEL
+        ), f"Some jobs are missing (recorded {job_ids})"
+        assert (
+            len(executions) == NUM_PARALLEL
+        ), f"Inconsistent initial number of registered executions (got {len(executions)}, expected {NUM_PARALLEL})"
+    except:
+        if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
+            raise
+    else:
+        if should_fail is not None and inspect.currentframe().f_code.co_name in should_fail:  # type: ignore[union-attr]
+            raise AssertionError(f"Method {inspect.currentframe().f_code.co_name} should have failed with stage file {stage_file} and context file {context_file}")  # type: ignore[union-attr]

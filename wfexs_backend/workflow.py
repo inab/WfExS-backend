@@ -4867,6 +4867,24 @@ This is an enumeration of the types of collected contents:
             if profiles is None:
                 profiles = self.enabled_profiles
 
+            job_status = cast(
+                "ExecutionStatus",
+                execution.get("status", ExecutionStatus.Finished),
+            )
+
+            # Let's check how "alive" are the processes
+            if job_status in (ExecutionStatus.Queued, ExecutionStatus.Running):
+                try:
+                    job_id = int(execution.get("job_id", ""))
+                    queued = datetime.datetime.fromtimestamp(
+                        psutil.Process(job_id).create_time()
+                    ).astimezone()
+
+                    if queued != execution.get("queued", datetime.datetime.min):
+                        job_status = ExecutionStatus.Died
+                except (psutil.NoSuchProcess, ValueError, TypeError):
+                    job_status = ExecutionStatus.Died
+
             stagedExec = StagedExecution(
                 exitVal=execution["exitVal"],
                 augmentedInputs=execution["augmentedInputs"],
@@ -4880,10 +4898,7 @@ This is an enumeration of the types of collected contents:
                 logfile=logfiles,
                 profiles=profiles,
                 queued=execution.get("queued", datetime.datetime.min),
-                status=cast(
-                    "ExecutionStatus",
-                    execution.get("status", ExecutionStatus.Finished),
-                ),
+                status=job_status,
                 job_id=execution.get("job_id"),
             )
             staged_executions.append(stagedExec)

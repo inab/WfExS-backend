@@ -1,0 +1,15 @@
+workflow_id: github:inab/hello-workflows/af6f6c3946072994761bd435e9f36b46b9a9f2e9/cwl/sleephello-workflow.cwl
+workflow_config:
+  secure: false
+  containerType: singularity
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  an_input:
+    c-l-a-s-s: File
+    url: github:inab/hello-workflows/af6f6c3946072994761bd435e9f36b46b9a9f2e9/cwl/sleephello.yml
+  sleep_time: 10
+environment:
+  SECRET_VARIABLE: "The secret content"
+outputs:
+  sleephello_output:
+    c-l-a-s-s: File
