@@ -1,6 +1,6 @@
 
 ⚙️ Executing WfExS
-===============
+=================
 
 As explained in the section above, to run a workflow with WfExS, you'll need at least two, 
 and possibly three, configuration input files. 
