@@ -1,0 +1,3 @@
+sphinx
+readthedocs-sphinx-ext
+-r requirements.txt

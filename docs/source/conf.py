@@ -79,13 +79,15 @@ html_favicon = "images/WfExS-logo-final_paths.svg"
 
 html_theme_options = {
     "logo": {
+        # "text": f"{project} {version} {os.environ.get('READTHEDOCS_GIT_COMMIT_HASH', '')}",
         "text": f"{project} {version}",
     },
-    "repository_url": "https://github.com/inab/WfExS-backend",
-    "repository_branch": "master",
-    "path_to_docs": "docs",
+    "repository_url": os.environ.get("READTHEDOCS_GIT_CLONE_URL", "https://github.com/inab/WfExS-backend"),
+    "repository_branch": os.environ.get("READTHEDOCS_GIT_IDENTIFIER", "readthedocs_merge"),
+    "path_to_docs": "docs/source",
     "use_repository_button": True,
     "use_issues_button": True,
+    "use_edit_page_button": True,
 }
 
 
