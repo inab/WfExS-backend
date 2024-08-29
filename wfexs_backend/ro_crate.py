@@ -2721,6 +2721,7 @@ you can find here an almost complete list of the possible ones:
                     self.logger.error(f"'{' '.join(dot_cmd)}' stderr: {d_err_v}")
 
             # Associating the diagram to the main workflow
+            # https://about.workflowhub.eu/Workflow-RO-Crate/#main-workflow-diagram
             self.wf_file.append_to("image", the_diagram, compact=True)
 
         # Processing the log files
