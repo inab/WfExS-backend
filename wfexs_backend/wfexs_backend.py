@@ -1916,6 +1916,8 @@ class WfExSBackend:
                 # Setting a custom symbol
                 theEnv["PROMPT_COMMAND"] = f"echo \"(WfExS '{nickname}')\""
                 theEnv["PROMPT_DIRTRIM"] = "2"
+                # The default (for sh)
+                theEnv["PS1"] = f"(WfExS '{nickname}') {instance_id} "
 
                 cp = subprocess.run(
                     command,
