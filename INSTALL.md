@@ -26,6 +26,10 @@ a local copy of the recipe, and next command line from the project root will hel
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
 WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+
+# Alternatively, you can use local copy
+WFEXS_VER=$(git rev-parse HEAD)
+
 mkdir WfExS_docker_build
 cd WfExS_docker_build
 curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -58,6 +62,10 @@ a local copy of the recipe, and next command line from the project root will hel
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
 WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+
+# Alternatively, you can use local copy
+WFEXS_VER=$(git rev-parse HEAD)
+
 mkdir WfExS_podman_build
 cd WfExS_podman_build
 curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -89,6 +97,10 @@ The precondition is having either Apptainer or Singularity properly setup. There
   ```bash
   # WFEXS_VER can be either a branch, a tag or a commit hash
   WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+  
+  # Alternatively, you can use local copy
+  WFEXS_VER=$(git rev-parse HEAD)
+  
   singularity build \
   --build-arg wfexs_checkout="${WFEXS_VER}" \
   wfexs-backend-${WFEXS_VER}.sif container_recipes/Singularity.def
