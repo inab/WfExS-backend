@@ -1056,6 +1056,17 @@ class WF:
                         raise WFException(errmsg) from e
                     was_setup = False
                 else:
+                    # IMPORTANT: There can be a race condition in some containerised
+                    # scenarios where the FUSE mount process goes to background, but
+                    # mounting itself has not finished. This check helps
+                    # both to detect and to avoid that corner case.
+                    if not os.path.ismount(uniqueWorkDir):
+                        errmsg = f"Corner case: cannot keep mounted FUSE mount {uniqueWorkDir} with {encfs_cmd}"
+                        self.logger.exception(errmsg)
+                        if not fail_ok:
+                            raise WFException(errmsg)
+                        was_setup = False
+
                     was_setup = True
                     # and start the thread which keeps the mount working
                     self.encfsCond = threading.Condition()
