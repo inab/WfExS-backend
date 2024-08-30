@@ -1378,12 +1378,23 @@ def main() -> None:
                 file=sys.stderr,
             )
 
+    # A filename is needed later, in order to initialize installation keys
+    if not localConfigFilename:
+        config_directory = None
+        config_relname = os.path.basename(defaultLocalConfigFilename)
+    else:
+        # Hints for the the default path for the Crypt4GH keys
+        config_directory = localConfigFilename.parent
+        config_relname = localConfigFilename.name
+
     if args.cacheDir:
         local_config["cacheDir"] = args.cacheDir
 
     # In any case, assuring the cache directory does exist
     cacheDir = local_config.get("cacheDir")
     if cacheDir:
+        if not os.path.isabs(cacheDir) and config_directory is not None:
+            cacheDir = os.path.normpath(os.path.join(config_directory, cacheDir))
         os.makedirs(cacheDir, exist_ok=True)
     else:
         cacheDir = tempfile.mkdtemp(prefix="wfexs", suffix="tmpcache")
@@ -1394,15 +1405,6 @@ def main() -> None:
             f"[WARNING] Cache directory not defined. Created a temporary one at {cacheDir}",
             file=sys.stderr,
         )
-
-    # A filename is needed later, in order to initialize installation keys
-    if not localConfigFilename:
-        config_directory = None
-        config_relname = os.path.basename(defaultLocalConfigFilename)
-    else:
-        # Hints for the the default path for the Crypt4GH keys
-        config_directory = localConfigFilename.parent
-        config_relname = localConfigFilename.name
 
     # Initialize (and create config file)
     if command in (
