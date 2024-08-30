@@ -332,6 +332,15 @@ def genParserSub(
                 help="Max reproducibility level to be tried",
             )
 
+        if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
+            ap_.add_argument(
+                "--paranoid",
+                dest="secure",
+                action="store_true",
+                default=False,
+                help="Force secured working directory",
+            )
+
     if preStageParams or exportParams or command == WfExS_Commands.ReStage:
         ap_.add_argument(
             "-Z",
@@ -1539,6 +1548,7 @@ def main() -> None:
             private_key_filename=args.private_key_file,
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
+            paranoidMode=args.secure,
         )
     elif command == WfExS_Commands.Import:
         wfInstance = wfBackend.fromPreviousROCrate(
