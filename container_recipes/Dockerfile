@@ -1,5 +1,5 @@
 FROM	gcc:13 AS entr_build
-ARG	suid_entrypoint_checkout=adf2da44acf4a5feec10b8c73660e8a9b6a4a03b
+ARG	suid_entrypoint_checkout=47ed3e62e9ba3987cbd1f7c20286d5b94591afbf
 WORKDIR	/
 # hadolint ignore=DL3003
 RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/suid_entrypoint.git && \
@@ -8,7 +8,7 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/su
 	gcc -static -o suid_entrypoint suid_entrypoint.c
 
 # The default images of python are based on debian
-FROM	python:3.12
+FROM	python:3.12 AS podman_build
 # These arguments help customizing what it is included in the generated image
 ARG	wfexs_checkout=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
 ARG	apptainer_version=1.3.3
@@ -25,9 +25,7 @@ ARG	GOCRYPTFS_VER=v2.4.0
 ARG	STATIC_BASH_VER=5.1.004-1.2.2
 # static busybox version
 ARG	BUSYBOX_VER=1.35.0
-COPY	--from=entr_build /suid_entrypoint/suid_entrypoint /suid_entrypoint
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
-RUN	chmod u+s /suid_entrypoint
 # Install apptainer
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	wget -nv \
@@ -76,5 +74,9 @@ RUN	JDK_MAJOR_VER="${JDK_MAJOR_VER}" \
 	STATIC_BASH_VER="${STATIC_BASH_VER}" \
 	BUSYBOX_VER="${BUSYBOX_VER}" \
 	bash /full-installer.bash
+CMD	["/bin/bash"]
+
+FROM podman_build AS docker_build
+COPY	--from=entr_build /suid_entrypoint/suid_entrypoint /suid_entrypoint
+RUN	chmod u+s /suid_entrypoint
 ENTRYPOINT [ "/suid_entrypoint" ]
-CMD	["bash"]

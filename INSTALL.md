@@ -15,6 +15,10 @@ just using next bash pattern:
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
 WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+
+# Alternatively, you can use local copy
+WFEXS_VER=$(git rev-parse HEAD)
+
 docker build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
 https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -51,8 +55,13 @@ just using next bash pattern:
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
 WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+
+# Alternatively, you can use local copy
+WFEXS_VER=$(git rev-parse HEAD)
+
 podman build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
+--target podman_build \
 https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
 ```
 
@@ -72,6 +81,7 @@ curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/contai
 
 podman build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
+--target podman_build \
 Dockerfile
 ```
 
