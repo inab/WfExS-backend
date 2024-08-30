@@ -60,6 +60,7 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-bac
 	git sparse-checkout set constraints-${PYVER}.txt container_recipes/basic-installer.bash container_recipes/full-installer.bash && \
 	git checkout "${wfexs_checkout}" && \
 	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-${PYVER}.txt && \
+	python -m compileall "$(python -c 'import sys; print(sys.prefix)')" && \
 	mv container_recipes/* / && \
 	cd .. && \
 	rm -rf WfExS-backend
