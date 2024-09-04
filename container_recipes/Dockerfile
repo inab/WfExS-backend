@@ -1,5 +1,5 @@
 FROM	gcc:13 AS entr_build
-ARG	suid_entrypoint_checkout=47ed3e62e9ba3987cbd1f7c20286d5b94591afbf
+ARG	suid_entrypoint_checkout=b47842ece910303b96bd708e73a53a95dfa3d8bc
 WORKDIR	/
 # hadolint ignore=DL3003
 RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/suid_entrypoint.git && \
