@@ -4,6 +4,8 @@
 
 For this approach we have been using both `-e` and `-c` parameters from Singularity/Apptainer. It is also possible to use `-u`.
 
+### Steps
+
 1. Build the SIF image. Let's assume the file is `wfexs-backend-latest.sif`.
 
 2. First, create and populate a side caches directory:
@@ -171,10 +173,10 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
 2. First, create and populate a side caches directory:
 
    ```bash
-   mkdir -p DOCKER_dirs/side_caches
+   mkdir -p SING_in_DOCKER_dirs/side_caches
    docker run --rm -ti \
      -u $(id -u):$(id -g) \
-     -v ./DOCKER_dirs/side_caches:/.cache \
+     -v ./SING_in_DOCKER_dirs/side_caches:/.cache \
      inab/wfexs-backend:latest \
      WfExS-backend populate-side-caches
    ```
@@ -183,16 +185,16 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
    working directories. Write down the absolute path of the latter.
    
    ```bash
-   mkdir -p DOCKER_dirs/wfexs-backend-container-cache
-   mkdir -p DOCKER_dirs/wfexs-backend-container-WORKDIR
-   readlink -f DOCKER_dirs/wfexs-backend-container-WORKDIR
+   mkdir -p SING_in_DOCKER_dirs/wfexs-backend-container-cache
+   mkdir -p SING_in_DOCKER_dirs/wfexs-backend-container-WORKDIR
+   readlink -f SING_in_DOCKER_dirs/wfexs-backend-container-WORKDIR
    ```
    
-   (let's suppose it is `/home/user/DOCKER_dirs/wfexs-backend-WORKDIR`).
+   (let's suppose it is `/home/${USER}/SING_in_DOCKER_dirs/wfexs-backend-WORKDIR`).
 
 4. Create a configuration file which contains the relative or absolute paths
    to both the cache and working directories. For instance, let's suppose it
-   is available at `/home/user/PODMAN_dirs/local_container_wfexs.yaml` with next content:
+   is available at `/home/${USER}/SING_in_DOCKER_dirs/local_container_wfexs.yaml` with next content:
    
    ```yaml
    cacheDir: wfexs-backend-container-cache
@@ -213,8 +215,8 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
    ```bash
    docker run --rm -ti \
      -u $(id -u):$(id -g) \
-     -v ./DOCKER_dirs/side_caches:/.cache \
-     -v ./DOCKER_dirs/:/WfExS-instance-dirs/:rw \
+     -v ./SING_in_DOCKER_dirs/side_caches:/.cache \
+     -v ./SING_in_DOCKER_dirs/:/WfExS-instance-dirs/:rw \
      inab/wfexs-backend:latest \
      WfExS-backend -L /WfExS-instance-dirs/local_container_wfexs.yaml init
    ```
@@ -226,8 +228,8 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      -u $(id -u):$(id -g) \
      --cap-add SYS_ADMIN  \
      --device /dev/fuse \
-     -v ./DOCKER_dirs/side_caches:/root/.cache:ro \
-     -v ./DOCKER_dirs/:/WfExS-instance-dirs/:rw \
+     -v ./SING_in_DOCKER_dirs/side_caches:/.cache:ro \
+     -v ./SING_in_DOCKER_dirs/:/WfExS-instance-dirs/:rw \
      -v ./workflow_examples/:/workflow_examples/:ro \
      inab/wfexs-backend:latest \
      WfExS-backend -L /WfExS-instance-dirs/local_container_wfexs.yaml \
@@ -238,11 +240,11 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
    docker run --rm -ti \
      --cap-add SYS_ADMIN  \
      --device /dev/fuse \
-     -v ./DOCKER_dirs/side_caches:/root/.cache:ro \
-     -v ./DOCKER_dirs/:/root/WfExS-instance-dirs/:rw \
-     -v ./workflow_examples/:/root/workflow_examples/:ro \
-     localhost/inab/wfexs-backend:latest \
-     WfExS-backend -L /root/WfExS-instance-dirs/local_container_wfexs.yaml \
+     -v ./SING_in_DOCKER_dirs/side_caches:/.cache:ro \
+     -v ./SING_in_DOCKER_dirs/:/WfExS-instance-dirs/:rw \
+     -v ./workflow_examples/:/workflow_examples/:ro \
+     inab/wfexs-backend:latest \
+     WfExS-backend -L /WfExS-instance-dirs/local_container_wfexs.yaml \
        staged-workdir offline-exec 'my funny jobname'
    ```
 
@@ -254,12 +256,110 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
 
 (Tested on 2024-08-31) It fails just materializing, due nesting limitations of user namespaces (used by Podman).
 
+## Podman within Docker
+
+(Tested on 2024-09-09) It fails running the workflow due issues with crun. First issue arose next crun error:
+
+```
+crun: create keyring `e94eae775d1a0e71b067f98cd569d309a2fcf36c6afd505d0868a32d47629661`: Operation not permitted: OCI permission denied
+```
+
+which was skipped thanks to commit 9d935b20ba5d75d8d62488941c9c4a3c2c0c101d . But next issue cannot be skipped:
+
+```
+OCI runtime error: crun: open /proc/sys/net/ipv4/ping_group_range: Read-only file system
+```
+
+### Steps
+
+1. Build the docker image following the instructions. Let's assume the tag is `inab/wfexs-backend:latest`.
+
+2. First, create and populate a side caches directory:
+
+   ```bash
+   mkdir -p PODMAN_in_DOCKER_dirs/side_caches
+   docker run --rm -ti \
+     -u $(id -u):$(id -g) \
+     -v ./PODMAN_in_DOCKER_dirs/side_caches:/.cache \
+     inab/wfexs-backend:latest \
+     WfExS-backend populate-side-caches
+   ```
+
+3. Create two directories, one for WfExS caches, and another one for the
+   working directories. Write down the absolute path of the latter.
+   
+   ```bash
+   mkdir -p PODMAN_in_DOCKER_dirs/wfexs-backend-container-cache
+   mkdir -p PODMAN_in_DOCKER_dirs/wfexs-backend-container-WORKDIR
+   readlink -f PODMAN_in_DOCKER_dirs/wfexs-backend-container-WORKDIR
+   ```
+   
+   (let's suppose it is `/home/${USER}/PODMAN_in_DOCKER_dirs/wfexs-backend-WORKDIR`).
+
+4. Create a configuration file which contains the relative or absolute paths
+   to both the cache and working directories. For instance, let's suppose it
+   is available at `/home/${USER}/PODMAN_in_DOCKER_dirs/local_container_wfexs.yaml` with next content:
+   
+   ```yaml
+   cacheDir: wfexs-backend-container-cache
+   tools:
+     dockerCommand: docker
+     encrypted_fs:
+       type: gocryptfs
+     engineMode: local
+     gitCommand: git
+     javaCommand: java
+     singularityCommand: singularity
+     staticBashCommand: bash-linux-x86_64
+   workDir: wfexs-backend-container-WORKDIR
+   ```
+
+5. Initialize the pair of keys:
+
+   ```bash
+   docker run --rm -ti \
+     -u $(id -u):$(id -g) \
+     -v ./PODMAN_in_DOCKER_dirs/side_caches:/.cache \
+     -v ./PODMAN_in_DOCKER_dirs/:/WfExS-instance-dirs/:rw \
+     inab/wfexs-backend:latest \
+     WfExS-backend -L /WfExS-instance-dirs/local_container_wfexs.yaml init
+   ```
+
+6. Use it!
+
+   ```bash
+   docker run --rm -ti \
+     -u $(id -u):$(id -g) \
+     --cap-add SYS_ADMIN  \
+     --device /dev/fuse \
+     -v ./PODMAN_in_DOCKER_dirs/side_caches:/.cache:ro \
+     -v ./PODMAN_in_DOCKER_dirs/:/WfExS-instance-dirs/:rw \
+     -v ./workflow_examples/:/workflow_examples/:ro \
+     inab/wfexs-backend:latest \
+     WfExS-backend -L /WfExS-instance-dirs/local_container_wfexs.yaml \
+       stage -W /workflow_examples/hello/hellow_cwl_podman.wfex.stage
+   ```
+
+   ```bash
+   docker run --rm -ti \
+     --cap-add SYS_ADMIN  \
+     --device /dev/fuse \
+     -v ./PODMAN_in_DOCKER_dirs/side_caches:/.cache:ro \
+     -v ./PODMAN_in_DOCKER_dirs/:/WfExS-instance-dirs/:rw \
+     -v ./workflow_examples/:/workflow_examples/:ro \
+     inab/wfexs-backend:latest \
+     WfExS-backend -L /WfExS-instance-dirs/local_container_wfexs.yaml \
+       staged-workdir offline-exec 'my funny jobname'
+   ```
+
 ## Docker within Singularity/Apptainer
 
 For this approach there must be a 1:1 volume mapping for the parent working directory (wfexs-backend-container-WORKDIR).
 Otherwise the executions fail.
 
 For this approach we have been using both `-e` and `-c` parameters from Singularity/Apptainer.
+
+### Steps
 
 1. Build the SIF image. Let's assume the file is `wfexs-backend-latest.sif`.
 
@@ -344,10 +444,114 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
        staged-workdir offline-exec 'my funny jobname'
    ```
 
+## Docker within Podman (does not work with encrypted workdirs feature)
+
+For this approach there must be a 1:1 volume mapping for the parent working directory (wfexs-backend-container-WORKDIR).
+Otherwise the executions fail.
+
+Also, either next command
+
+```bash
+sudo setfacl -m u:$(id -u):rw -- /run/docker.sock
+```
+
+or next command are needed
+
+```bash
+sudo setfacl -m g:$(id -g):rw -- /run/docker.sock
+```
+
+to avoid next issue with almost any docker command within podman instance:
+
+```
+permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Head "http://%2Fvar%2Frun%2Fdocker.sock/_ping": dial unix /var/run/docker.sock: connect: permission denied
+```
+
+### Steps
+
+1. Build the docker image. Let's assume the tag is `inab/wfexs-backend:latest`.
+
+2. First, create and populate a side caches directory:
+
+   ```bash
+   mkdir -p DOCKER_in_PODMAN_dirs/side_caches
+   podman run --rm -ti \
+     -v ./DOCKER_in_PODMAN_dirs/side_caches:/root/.cache \
+     localhost/inab/wfexs-backend:latest \
+     WfExS-backend populate-side-caches
+   ```
+
+3. Create two directories, one for WfExS caches, and another one for the
+   working directories. Write down the absolute path of the latter.
+   
+   ```bash
+   mkdir -p DOCKER_in_PODMAN_dirs/wfexs-backend-container-cache
+   mkdir -p DOCKER_in_PODMAN_dirs/wfexs-backend-container-WORKDIR
+   readlink -f DOCKER_in_PODMAN_dirs/wfexs-backend-container-WORKDIR
+   ```
+   
+   (let's suppose it is `/home/${USER}/DOCKER_in_PODMAN_dirs/wfexs-backend-WORKDIR`).
+
+4. Create a configuration file which contains the relative or absolute paths
+   to both the cache and working directories. For instance, let's suppose it
+   is available at `/home/${USER}/DOCKER_in_PODMAN_dirs/local_container_wfexs.yaml` with next content:
+   
+   ```yaml
+   cacheDir: wfexs-backend-container-cache
+   tools:
+     dockerCommand: docker
+     encrypted_fs:
+       type: gocryptfs
+     engineMode: local
+     gitCommand: git
+     javaCommand: java
+     singularityCommand: singularity
+     staticBashCommand: bash-linux-x86_64
+   workDir: wfexs-backend-container-WORKDIR
+   ```
+
+5. Initialize the pair of keys:
+
+   ```bash
+   podman run --rm -ti \
+     -v ./DOCKER_in_PODMAN_dirs/side_caches:/root/.cache \
+     -v /home/${USER}/DOCKER_in_PODMAN_dirs/:/home/${USER}/DOCKER_in_PODMAN_dirs/:rw \
+     localhost/inab/wfexs-backend:latest \
+     WfExS-backend -L /home/${USER}/DOCKER_in_PODMAN_dirs/local_container_wfexs.yaml init
+   ```
+
+6. Use it!
+
+   ```bash
+   podman run --rm -ti \
+     --cap-add SYS_ADMIN  \
+     --device=/dev/fuse \
+     -v /run/docker.sock:/run/docker.sock:rw,rprivate \
+     -v ./DOCKER_in_PODMAN_dirs/side_caches/:/root/.cache/:ro \
+     -v /home/${USER}/DOCKER_in_PODMAN_dirs/:/home/${USER}/DOCKER_in_PODMAN_dirs/:rw \
+     -v ./workflow_examples/:/workflow_examples/:ro \
+     localhost/inab/wfexs-backend:latest \
+     WfExS-backend -L /home/${USER}/DOCKER_in_PODMAN_dirs/local_container_wfexs.yaml \
+       stage -W /workflow_examples/hello/hellow_cwl_docker.wfex.stage
+   ```
+   ```bash
+   podman run --rm -ti \
+     --cap-add SYS_ADMIN  \
+     --device=/dev/fuse \
+     -v /run/docker.sock:/run/docker.sock:rw,rprivate \
+     -v ./DOCKER_in_PODMAN_dirs/side_caches/:/root/.cache/:ro \
+     -v /home/${USER}/DOCKER_in_PODMAN_dirs/:/home/${USER}/DOCKER_in_PODMAN_dirs/:rw \
+     localhost/inab/wfexs-backend:latest \
+     WfExS-backend -L /home/${USER}/DOCKER_in_PODMAN_dirs/local_container_wfexs.yaml \
+       staged-workdir offline-exec 'my funny jobname'
+   ```
+
 ## Docker besides Docker (does not work with encrypted workdirs feature)
 
 For this approach there must be a 1:1 volume mapping for the parent working directory (wfexs-backend-container-WORKDIR).
 Otherwise the executions fail.
+
+### Steps
 
 1. Build the docker image. Let's assume the tag is `inab/wfexs-backend:latest`.
 
