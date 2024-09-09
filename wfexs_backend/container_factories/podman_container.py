@@ -142,7 +142,10 @@ class PodmanContainerFactory(AbstractDockerContainerFactory):
 
     @property
     def architecture(self) -> "Tuple[ContainerOperatingSystem, ProcessorArchitecture]":
-        v_retval, payload, v_stderr = self._version()
+        matEnv = dict(os.environ)
+        matEnv.update(self.environment)
+
+        v_retval, payload, v_stderr = self._version(matEnv)
 
         if v_retval != 0:
             errstr = """Could not get podman version. Retval {}
