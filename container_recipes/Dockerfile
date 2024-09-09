@@ -10,7 +10,7 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/su
 # The default images of python are based on debian
 FROM	python:3.12 AS podman_build
 # These arguments help customizing what it is included in the generated image
-ARG	wfexs_checkout=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+ARG	wfexs_checkout=0910fe6eec015c7a112f129f0adb4a998ef27a8c
 ARG	apptainer_version=1.3.3
 # JDK version parameters
 ARG	JDK_MAJOR_VER=11
@@ -55,11 +55,15 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-bac
 	cd WfExS-backend && \
 	git sparse-checkout init --cone && \
 	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))') && \
-	git sparse-checkout set constraints-${PYVER}.txt container_recipes/basic-installer.bash container_recipes/full-installer.bash && \
+	git sparse-checkout set constraints-${PYVER}.txt \
+	  podman_containers_nokeyring.conf \
+	  container_recipes/basic-installer.bash \
+	  container_recipes/full-installer.bash && \
 	git checkout "${wfexs_checkout}" && \
 	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-${PYVER}.txt && \
 	python -m compileall "$(python -c 'import sys; print(sys.prefix)')" && \
 	mv container_recipes/* / && \
+	mv /podman_containers_nokeyring.conf /etc/containers/containers.conf && \
 	cd .. && \
 	rm -rf WfExS-backend
 # Transfer other third party installation script
