@@ -1577,7 +1577,7 @@ you can find here an almost complete list of the possible ones:
                                 ),
                                 the_signature=the_signature,
                                 the_licences=itemInURILicences,
-                                do_attach=do_attach,
+                                do_attach=do_attach and in_item.disclosable,
                             )
 
                             # An extrapolated input, which needs special handling
@@ -1594,7 +1594,7 @@ you can find here an almost complete list of the possible ones:
                                             self.work_dir,
                                         ),
                                     ),
-                                    do_attach=True,
+                                    do_attach=in_item.disclosable,
                                 )
                                 crate_extrapolated_file[
                                     "description"
@@ -1652,7 +1652,7 @@ you can find here an almost complete list of the possible ones:
                                     ).as_posix()
                                     + "/",
                                 ),
-                                do_attach=do_attach,
+                                do_attach=do_attach and in_item.disclosable,
                             )
                             # crate_dataset = self.crate.add_dataset_ext(
                             #    source=itemInURISource,
@@ -1808,14 +1808,14 @@ you can find here an almost complete list of the possible ones:
                                     ),
                                     the_signature=the_sec_signature,
                                     the_licences=secInputURILicences,
-                                    do_attach=do_attach,
+                                    do_attach=do_attach and in_item.disclosable,
                                 )
 
                             elif os.path.isdir(secInputLocalSource):
                                 sec_crate_elem, _ = self._add_directory_as_dataset(
                                     secInputLocalSource,
                                     secInputURISource,
-                                    do_attach=do_attach,
+                                    do_attach=do_attach and in_item.disclosable,
                                 )
                                 # crate_dataset = self.crate.add_dataset_ext(
                                 #    source=secInputURISource,

@@ -189,6 +189,9 @@ if TYPE_CHECKING:
             "preferred-name": Union[Literal[False], str],
             "relative-dir": Union[Literal[False], str],
             "security-context": str,
+            "disclosable": bool,
+            "cacheable": bool,
+            "clonable": bool,
             "globExplode": str,
             "autoFill": bool,
             "autoPrefix": bool,
@@ -3076,6 +3079,7 @@ class WF:
                             "uriColumns": t_uri_cols,
                         },
                     ),
+                    disclosable=inputs.get("disclosable", True),
                 )
             )
 
@@ -3212,6 +3216,10 @@ class WF:
                                         name=linearKey,
                                         values=[autoFilledDir],
                                         autoFilled=True,
+                                        # What it is autofilled is probably
+                                        # an output, so it should not be
+                                        # automatically disclosable
+                                        disclosable=False,
                                     )
                                 )
                                 continue
@@ -3247,6 +3255,10 @@ class WF:
                                     # TODO: do it in a more elegant way
                                     values=[autoFilledFile.as_posix()],
                                     autoFilled=True,
+                                    # What it is autofilled is probably
+                                    # an output, so it should not be
+                                    # automatically disclosable
+                                    disclosable=False,
                                 )
                             )
                             continue
@@ -3432,6 +3444,7 @@ class WF:
                                     name=linearKey,
                                     values=remote_pairs,
                                     secondaryInputs=secondary_remote_pairs,
+                                    disclosable=inputs.get("disclosable", True),
                                 )
                             )
                         else:
@@ -3464,6 +3477,7 @@ class WF:
                                             kind=contentKind,
                                         )
                                     ],
+                                    disclosable=inputs.get("disclosable", True),
                                 )
                             )
 
@@ -3494,6 +3508,7 @@ class WF:
                             MaterializedInput(
                                 name=linearKey,
                                 values=input_val,
+                                disclosable=inputs.get("disclosable", True),
                             )
                         )
                     else:
@@ -3523,6 +3538,7 @@ class WF:
                     MaterializedInput(
                         name=linearKey,
                         values=inputs,
+                        disclosable=inputs.get("disclosable", True),
                     )
                 )
 
@@ -5084,6 +5100,10 @@ This is an enumeration of the types of collected contents:
                         raise KeyError(
                             f"Param {item.name} to be exported does not exist"
                         )
+                    if not materializedParam.disclosable:
+                        raise PermissionError(
+                            f"Param {item.name} contents have export restrictions"
+                        )
                     retval.extend(
                         cast(
                             "Iterable[MaterializedContent]",
@@ -5135,6 +5155,10 @@ This is an enumeration of the types of collected contents:
                     if materializedEnvVar is None:
                         raise KeyError(
                             f"Environment variable {item.name} to be exported does not exist"
+                        )
+                    if not materializedEnvVar.disclosable:
+                        raise PermissionError(
+                            f"Environment variable {item.name} contents have export restrictions"
                         )
                     retval.extend(
                         cast(

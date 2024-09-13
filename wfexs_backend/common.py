@@ -449,6 +449,7 @@ class MaterializedInput(NamedTuple):
     autoFilled: "bool" = False
     implicit: "bool" = False
     contentWithURIs: "Optional[ContentWithURIsDesc]" = None
+    disclosable: "bool" = True
 
 
 if TYPE_CHECKING:
