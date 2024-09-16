@@ -683,10 +683,10 @@ def processCacheCommand(
             print(f"\t- {metaUri.uri} {validated}")
     #    pass
     elif args.cache_command == WfExS_Cache_Commands.Fetch:
-        if len(args.cache_command_args) == 1 or len(args.cache_command_args) == 3:
+        if len(args.cache_command_args) >= 1 and len(args.cache_command_args) <= 4:
             uri_to_fetch = args.cache_command_args[0]
             vault = SecurityContextVault()
-            if len(args.cache_command_args) == 3:
+            if len(args.cache_command_args) >= 3:
                 secContextFilename = args.cache_command_args[1]
                 secContextName = args.cache_command_args[2]
 
@@ -715,6 +715,13 @@ def processCacheCommand(
                         )
                         retval = 1
 
+            if len(args.cache_command_args) in (2, 4):
+                default_clonable = args.cache_command_args[-1] != "false"
+            else:
+                # If we are fetching anything by hand, most probably
+                # we do not mind it cloned in the working directories.
+                default_clonable = True
+
             if retval == 0:
                 cached_content = wfBackend.cacheFetch(
                     uri_to_fetch,
@@ -722,13 +729,14 @@ def processCacheCommand(
                     offline=False,
                     vault=vault,
                     sec_context_name=secContextName,
+                    default_clonable=default_clonable,
                 )
                 print(
-                    f"{cached_content.kind}\t{cached_content.path}\t{cached_content.licences}\t{cached_content.metadata_array}"
+                    f"{cached_content.kind}\t{cached_content.path}\t{cached_content.licences}\t{cached_content.metadata_array}\t{cached_content.clonable}"
                 )
         else:
             print(
-                f"ERROR: subcommand {args.cache_command} takes either one or three positional parameters: the URI to be fetched, the path to a security context file and the security context to be used for the fetch operation",
+                f"ERROR: subcommand {args.cache_command} takes either one or three positional parameters: the URI to be fetched, the path to a security context file and the security context to be used for the fetch operation. An optional last parameter tells whether the fetched content should be allowed to be cloned in working directories",
                 file=sys.stderr,
             )
             retval = 1
