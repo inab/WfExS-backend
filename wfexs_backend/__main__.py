@@ -577,8 +577,14 @@ def processCacheCommand(
                         the_path = "(not recorded)"
                         the_type = "???"
 
+                    if "clonable" in entryI[1]:
+                        clonable = entryI[1]["clonable"]
+                    else:
+                        clonable = True
+                    the_clonable = "yes" if clonable else "no"
+
                     print(
-                        f"({entryI[1]['stamp']}) {entryI[0].uri} => {the_type} {the_path}"
+                        f"({entryI[1]['stamp']}) {entryI[0].uri} => {the_type} {the_path} (clonable: {the_clonable})"
                     )
                 else:
                     json.dump(
@@ -615,8 +621,14 @@ def processCacheCommand(
                         the_path = "(not recorded)"
                         the_type = "???"
 
+                    if "clonable" in entryD[1]:
+                        clonable = entryD[1]["clonable"]
+                    else:
+                        clonable = True
+                    the_clonable = "yes" if clonable else "no"
+
                     print(
-                        f"({entryD[1]['stamp']}) {entryD[0].uri} => {the_type} {the_path}"
+                        f"({entryD[1]['stamp']}) {entryD[0].uri} => {the_type} {the_path} (clonable: {the_clonable})"
                     )
                 else:
                     print(entryD[0])
@@ -637,18 +649,27 @@ def processCacheCommand(
             )
         )
     elif args.cache_command == WfExS_Cache_Commands.Inject:
-        if len(args.cache_command_args) == 2:
+        if len(args.cache_command_args) in (2, 3):
             injected_uri = args.cache_command_args[0]
             finalCachedFilename = args.cache_command_args[1]
+            if len(args.cache_command_args) == 3:
+                clonable = args.cache_command_args[2] != "false"
+            else:
+                # If we have injected anything by hand, most probably
+                # we do not want it cloned in the working directories.
+                clonable = False
             # # First, remove old occurrence
             # cH.remove(cPath, injected_uri)
             # Then, inject new occurrence
             cH.inject(
-                injected_uri, destdir=cPath, finalCachedFilename=finalCachedFilename
+                injected_uri,
+                destdir=cPath,
+                finalCachedFilename=finalCachedFilename,
+                clonable=clonable,
             )
         else:
             print(
-                f"ERROR: subcommand {args.cache_command} takes two positional parameters: the URI to be injected, and the path to the local content to be associated to that URI",
+                f"ERROR: subcommand {args.cache_command} takes two required positional parameters: the URI to be injected, and the path to the local content to be associated to that URI. A third optional parameter, which is either 'true' or 'false', tells whether it is allowed to clone the injected content into the working directories.",
                 file=sys.stderr,
             )
             retval = 1
