@@ -431,6 +431,106 @@ def link_or_copy_pathlib(
                 )
 
 
+def link_or_symlink_pathlib(
+    src: "pathlib.Path",
+    dest: "pathlib.Path",
+    force_symlink: "bool" = False,
+) -> None:
+    assert (
+        src.exists()
+    ), f"File {src.as_posix()} must exist to be linked or copied {src.exists()} {src.is_symlink()}"
+
+    if isinstance(src, ZipfilePath):
+        raise Exception(f"Unable to symlink {src}, as it is within a ZIP archive")
+
+    # We should not deal with symlinks
+    src = src.resolve()
+    dest = dest.resolve()
+    # Avoid losing everything by overwriting itself
+    dest_exists = dest.exists()
+    if dest_exists and src.samefile(dest):
+        return
+
+    # First, check whether inputs and content
+    # are in the same filesystem
+    # as of https://unix.stackexchange.com/a/44250
+    dest_or_ancestor_exists = dest_exists
+    dest_or_ancestor = dest
+    while not dest_or_ancestor_exists:
+        dest_or_ancestor = dest_or_ancestor.parent
+        dest_or_ancestor_exists = dest_or_ancestor.exists()
+    dest_st_dev = dest_or_ancestor.lstat().st_dev
+
+    # It could be a subtree of not existing directories
+    if not dest_exists:
+        dest_parent = dest.parent
+        if not dest_parent.is_dir():
+            dest_parent.mkdir(parents=True)
+
+    # Now, link or symlink
+    link_condition = False
+    try:
+        link_condition = (
+            not isinstance(src, ZipfilePath)
+            and src.lstat().st_dev == dest_st_dev
+            and not force_symlink
+        )
+    except:
+        pass
+
+    if link_condition:
+        try:
+            if src.is_file():
+                if dest_exists:
+                    dest.unlink()
+                # link_to appeared in Python 3.8
+                # hardlink_to appeared in Python 3.10
+                # dest.hardlink_to(src)
+                os.link(src, dest)
+            else:
+                # Recursively hardlinking
+                # as of https://stackoverflow.com/a/10778930
+                if dest_exists:
+                    shutil.rmtree(dest)
+
+                # TODO: study passing link_or_copy as copy_function
+                shutil.copytree(src, dest, copy_function=link_or_copy)  # type: ignore[arg-type]
+        except OSError as ose:
+            # Even when we are detecting whether it is the same
+            # device, it can happen both paths are in different
+            # bind mounts, which forbid hard links
+            if ose.errno != 18:
+                if ose.errno == 1 and src.is_file():
+                    try:
+                        with src.open(mode="rb") as dummy:
+                            readable = dummy.readable()
+                    except OSError as dummy_err:
+                        readable = False
+                else:
+                    # Too difficult to guess
+                    readable = False
+            else:
+                readable = True
+
+            if not readable:
+                raise ose
+
+            force_symlink = True
+    else:
+        # Be sure to enable to symlink, to avoid a no-op
+        force_symlink = True
+
+    if force_symlink:
+        # Symlinking the content
+        if dest_exists:
+            if dest.is_file():
+                dest.unlink()
+            else:
+                shutil.rmtree(dest)
+
+        dest.symlink_to(src)
+
+
 def real_unlink_if_exists(the_path: "PathLikePath", fail_ok: "bool" = False) -> "None":
     if os.path.lexists(the_path):
         try:
