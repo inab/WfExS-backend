@@ -1731,7 +1731,13 @@ STDERR
                     # Time to update an existing materialized input
                     theValues = val if isinstance(val, list) else [val]
                     augmentedInput = MaterializedInput(
-                        name=augmentedInput.name, values=theValues, autoFilled=True
+                        name=augmentedInput.name,
+                        values=theValues,
+                        autoFilled=True,
+                        # What it is autofilled is probably
+                        # an output, so it should not be
+                        # automatically disclosable
+                        disclosable=False,
                     )
 
                 augmentedInputs.append(augmentedInput)

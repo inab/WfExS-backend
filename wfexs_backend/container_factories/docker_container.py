@@ -125,7 +125,10 @@ class DockerContainerFactory(AbstractDockerContainerFactory):
 
     @property
     def architecture(self) -> "Tuple[ContainerOperatingSystem, ProcessorArchitecture]":
-        v_retval, payload, v_stderr = self._version()
+        matEnv = dict(os.environ)
+        matEnv.update(self.environment)
+
+        v_retval, payload, v_stderr = self._version(matEnv)
 
         if v_retval != 0:
             errstr = """Could not get docker version. Retval {}
@@ -613,11 +616,14 @@ STDERR
             raise ContainerFactoryException(errmsg) from e
 
         # Let's load then
-        do_redeploy = manifestsImageSignature != self._gen_trimmed_manifests_signature(
+        ins_trimmed_manifests_signature = self._gen_trimmed_manifests_signature(
             ins_manifests
         )
+        do_redeploy = manifestsImageSignature != ins_trimmed_manifests_signature
         if do_redeploy:
-            self.logger.debug(f"Redeploying {dockerTag}")
+            self.logger.debug(
+                f"Redeploying {dockerTag} {manifestsImageSignature} != {ins_trimmed_manifests_signature}"
+            )
             # Should we load the image?
             d_retval, d_out_v, d_err_v = self._load(containerPath, dockerTag, matEnv)
 

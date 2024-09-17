@@ -103,6 +103,7 @@ if TYPE_CHECKING:
         licences: Tuple[URIType, ...]
         attributions: Sequence[Mapping[str, Any]]
         fingerprint: Fingerprint
+        clonable: bool
 
 
 from .common import (
@@ -145,6 +146,7 @@ class CachedContent(NamedTuple):
     metadata_array: "Sequence[URIWithMetadata]"
     licences: "Tuple[URIType, ...]"
     fingerprint: "Optional[Fingerprint]" = None
+    clonable: "bool" = True
 
 
 class CacheHandlerException(AbstractWfExSException):
@@ -567,6 +569,7 @@ class SchemeHandlerCacheHandler:
         finalCachedFilename: "Optional[pathlib.Path]" = None,
         tempCachedFilename: "Optional[pathlib.Path]" = None,
         inputKind: "Optional[ContentKind]" = None,
+        clonable: "bool" = True,
     ) -> "Tuple[Optional[pathlib.Path], Optional[Fingerprint]]":
         if destdir is None:
             destdir = self.cacheDir
@@ -582,6 +585,7 @@ class SchemeHandlerCacheHandler:
             finalCachedFilename=finalCachedFilename,
             tempCachedFilename=tempCachedFilename,
             inputKind=inputKind,
+            clonable=clonable,
         )
         assert newFinalCachedFilename is not None
 
@@ -618,6 +622,7 @@ class SchemeHandlerCacheHandler:
         finalCachedFilename: "Optional[pathlib.Path]" = None,
         tempCachedFilename: "Optional[pathlib.Path]" = None,
         inputKind: "Optional[Union[ContentKind, AnyURI, Sequence[AnyURI]]]" = None,
+        clonable: "bool" = True,
     ) -> "Tuple[Optional[pathlib.Path], Optional[Fingerprint]]":
         """
         This method has been created to be able to inject a cached metadata entry
@@ -724,6 +729,7 @@ class SchemeHandlerCacheHandler:
                     "relative": os.path.relpath(finalCachedFilename, hashDir),
                     "absolute": finalCachedFilename.as_posix(),
                 }
+                metaStructure["clonable"] = clonable
             else:
                 metaStructure["resolves_to"] = inputKind
 
@@ -840,6 +846,7 @@ class SchemeHandlerCacheHandler:
         registerInCache: "bool" = True,
         vault: "Optional[SecurityContextVault]" = None,
         sec_context_name: "Optional[str]" = None,
+        default_clonable: "bool" = True,
     ) -> "CachedContent":
         if destdir is None:
             destdir = self.cacheDir
@@ -902,6 +909,7 @@ class SchemeHandlerCacheHandler:
         relFinalCachedFilename: "Optional[RelPath]"
         finalCachedFilename: "Optional[pathlib.Path]"
         final_fingerprint: "Optional[Fingerprint]"
+        clonable: "bool" = default_clonable
         while not isinstance(inputKind, ContentKind):
             # These elements are alternative URIs. Any of them should
             # provide the very same content
@@ -1064,6 +1072,7 @@ class SchemeHandlerCacheHandler:
                 licences.extend(the_licences)
                 if "fingerprint" in metaStructure:
                     final_fingerprint = metaStructure["fingerprint"]
+                clonable = metaStructure.get("clonable", True)
             elif offline:
                 # As this is a handler for online resources, comply with offline mode
                 raise CacheOfflineException(
@@ -1133,6 +1142,7 @@ class SchemeHandlerCacheHandler:
                                 fetched_metadata_array=pfr.metadata_array,
                                 tempCachedFilename=tempCachedFilename,
                                 inputKind=inputKind,
+                                clonable=clonable,
                             )
                             final_fingerprint = fingerprint
 
@@ -1215,4 +1225,5 @@ class SchemeHandlerCacheHandler:
             metadata_array=metadata_array,
             licences=tuple(licences),
             fingerprint=final_fingerprint,
+            clonable=clonable,
         )

@@ -166,6 +166,7 @@ def _mountGoCryptFS(
                 gocryptfs_cmd.as_posix(),
                 "-i",
                 str(gocryptfs_idleMinutes) + "m",
+                "-nosyslog",
             ]
 
             if allowOther:
@@ -178,10 +179,10 @@ def _mountGoCryptFS(
             gocryptfsCommand = gocryptfsMount
 
             efs = subprocess.Popen(
-                gocryptfsMount,
+                gocryptfsCommand,
                 stdin=subprocess.PIPE,
                 stdout=gocryptfs_init_stdout,
-                stderr=gocryptfs_init_stdout,
+                stderr=gocryptfs_init_stderr,
                 cwd=uniqueRawWorkDir,
             )
             efs.communicate(input=clearPass.encode("utf-8"))

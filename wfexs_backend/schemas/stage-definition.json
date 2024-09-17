@@ -241,6 +241,21 @@
 					"type": "string",
 					"minLength": 1
 				},
+				"disclosable": {
+					"description": "Whether this input contents can be included in RO-Crates or exported",
+					"type": "boolean",
+					"default": true
+				},
+				"cacheable": {
+					"description": "Whether a copy of this input contents can be kept locally outside the working directory",
+					"type": "boolean",
+					"default": true
+				},
+				"clonable": {
+					"description": "Whether a copy of this input contents can be kept locally inside the working directory",
+					"type": "boolean",
+					"default": true
+				},
 				"globExplode": {
 					"description": "When this is set, and the class is directory, it helps filtering in what it should be included",
 					"type": "string"
@@ -421,7 +436,9 @@
 								"security-context",
 								"globExplode",
 								"autoFill",
-								"autoPrefix"
+								"autoPrefix",
+								"cacheable",
+								"clonable"
 							]
 						}
 					}

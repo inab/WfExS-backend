@@ -1916,6 +1916,8 @@ class WfExSBackend:
                 # Setting a custom symbol
                 theEnv["PROMPT_COMMAND"] = f"echo \"(WfExS '{nickname}')\""
                 theEnv["PROMPT_DIRTRIM"] = "2"
+                # The default (for sh)
+                theEnv["PS1"] = f"(WfExS '{nickname}') {instance_id} "
 
                 cp = subprocess.run(
                     command,
@@ -1944,6 +1946,7 @@ class WfExSBackend:
         registerInCache: "bool" = True,
         vault: "Optional[SecurityContextVault]" = None,
         sec_context_name: "Optional[str]" = None,
+        default_clonable: "bool" = True,
     ) -> "CachedContent":
         """
         This is a pass-through method to the cache handler, which translates from symbolic types of cache to their corresponding directories
@@ -1967,6 +1970,7 @@ class WfExSBackend:
                 registerInCache=registerInCache,
                 vault=vault,
                 sec_context_name=sec_context_name,
+                default_clonable=default_clonable,
             )
         else:
             workflow_dir, repo, _, effective_checkout = self.cacheWorkflow(
@@ -2779,6 +2783,7 @@ class WfExSBackend:
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         keep_cache_licence: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "MaterializedContent":
         """
         Download remote file or directory / dataset.
@@ -2844,6 +2849,7 @@ class WfExSBackend:
             ignoreCache=ignoreCache,
             registerInCache=registerInCache,
             vault=vault,
+            default_clonable=default_clonable,
         )
         # TODO: Properly test alternatives
         downloaded_uri = firstURI.uri
@@ -2896,6 +2902,8 @@ class WfExSBackend:
             kind=cached_content.kind,
             metadata_array=cached_content.metadata_array,
             fingerprint=cached_content.fingerprint,
+            # We are returning with the most restrictive setting
+            clonable=cached_content.clonable and default_clonable,
         )
 
     _LicenceMatcher: "ClassVar[Optional[LicenceMatcher]]" = None

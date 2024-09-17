@@ -42,6 +42,7 @@ from .common import (
 if TYPE_CHECKING:
     from typing import (
         Callable,
+        Optional,
         Sequence,
         Tuple,
         Type,
@@ -332,6 +333,15 @@ def genParserSub(
                 help="Max reproducibility level to be tried",
             )
 
+        if command in (WfExS_Commands.Stage, WfExS_Commands.Execute):
+            ap_.add_argument(
+                "--paranoid",
+                dest="secure",
+                action="store_true",
+                default=False,
+                help="Force secured working directory",
+            )
+
     if preStageParams or exportParams or command == WfExS_Commands.ReStage:
         ap_.add_argument(
             "-Z",
@@ -568,8 +578,14 @@ def processCacheCommand(
                         the_path = "(not recorded)"
                         the_type = "???"
 
+                    if "clonable" in entryI[1]:
+                        clonable = entryI[1]["clonable"]
+                    else:
+                        clonable = True
+                    the_clonable = "yes" if clonable else "no"
+
                     print(
-                        f"({entryI[1]['stamp']}) {entryI[0].uri} => {the_type} {the_path}"
+                        f"({entryI[1]['stamp']}) {entryI[0].uri} => {the_type} {the_path} (clonable: {the_clonable})"
                     )
                 else:
                     json.dump(
@@ -606,8 +622,14 @@ def processCacheCommand(
                         the_path = "(not recorded)"
                         the_type = "???"
 
+                    if "clonable" in entryD[1]:
+                        clonable = entryD[1]["clonable"]
+                    else:
+                        clonable = True
+                    the_clonable = "yes" if clonable else "no"
+
                     print(
-                        f"({entryD[1]['stamp']}) {entryD[0].uri} => {the_type} {the_path}"
+                        f"({entryD[1]['stamp']}) {entryD[0].uri} => {the_type} {the_path} (clonable: {the_clonable})"
                     )
                 else:
                     print(entryD[0])
@@ -628,18 +650,27 @@ def processCacheCommand(
             )
         )
     elif args.cache_command == WfExS_Cache_Commands.Inject:
-        if len(args.cache_command_args) == 2:
-            injected_uri = args.cache_command_args[0]
-            finalCachedFilename = args.cache_command_args[1]
+        if len(args.cache_command_args) in (2, 3):
+            injected_uri: "str" = args.cache_command_args[0]
+            finalCachedFilename: "str" = args.cache_command_args[1]
+            if len(args.cache_command_args) == 3:
+                clonable = args.cache_command_args[2] != "false"
+            else:
+                # If we have injected anything by hand, most probably
+                # we do not want it cloned in the working directories.
+                clonable = False
             # # First, remove old occurrence
             # cH.remove(cPath, injected_uri)
             # Then, inject new occurrence
             cH.inject(
-                injected_uri, destdir=cPath, finalCachedFilename=finalCachedFilename
+                cast("URIType", injected_uri),
+                destdir=cPath,
+                finalCachedFilename=pathlib.Path(finalCachedFilename),
+                clonable=clonable,
             )
         else:
             print(
-                f"ERROR: subcommand {args.cache_command} takes two positional parameters: the URI to be injected, and the path to the local content to be associated to that URI",
+                f"ERROR: subcommand {args.cache_command} takes two required positional parameters: the URI to be injected, and the path to the local content to be associated to that URI. A third optional parameter, which is either 'true' or 'false', tells whether it is allowed to clone the injected content into the working directories.",
                 file=sys.stderr,
             )
             retval = 1
@@ -653,16 +684,19 @@ def processCacheCommand(
             print(f"\t- {metaUri.uri} {validated}")
     #    pass
     elif args.cache_command == WfExS_Cache_Commands.Fetch:
-        if len(args.cache_command_args) == 1 or len(args.cache_command_args) == 3:
-            uri_to_fetch = args.cache_command_args[0]
+        if len(args.cache_command_args) >= 1 and len(args.cache_command_args) <= 4:
+            uri_to_fetch: "str" = args.cache_command_args[0]
             vault = SecurityContextVault()
-            if len(args.cache_command_args) == 3:
-                secContextFilename = args.cache_command_args[1]
+            secContextName: "Optional[str]"
+            if len(args.cache_command_args) >= 3:
+                secContextFilename: "str" = args.cache_command_args[1]
                 secContextName = args.cache_command_args[2]
 
                 if os.path.exists(secContextFilename):
                     try:
-                        vault = SecurityContextVault(secContextFilename)
+                        vault = SecurityContextVault.FromFile(
+                            pathlib.Path(secContextFilename)
+                        )
                     except:
                         logging.exception(
                             f"ERROR: security context file {secContextFilename} is corrupted"
@@ -684,21 +718,31 @@ def processCacheCommand(
                             file=sys.stderr,
                         )
                         retval = 1
+            else:
+                secContextName = None
+
+            if len(args.cache_command_args) in (2, 4):
+                default_clonable = args.cache_command_args[-1] != "false"
+            else:
+                # If we are fetching anything by hand, most probably
+                # we do not mind it cloned in the working directories.
+                default_clonable = True
 
             if retval == 0:
                 cached_content = wfBackend.cacheFetch(
-                    uri_to_fetch,
+                    cast("URIType", uri_to_fetch),
                     args.cache_type,
                     offline=False,
                     vault=vault,
                     sec_context_name=secContextName,
+                    default_clonable=default_clonable,
                 )
                 print(
-                    f"{cached_content.kind}\t{cached_content.path}\t{cached_content.licences}\t{cached_content.metadata_array}"
+                    f"{cached_content.kind}\t{cached_content.path}\t{cached_content.licences}\t{cached_content.metadata_array}\t{cached_content.clonable}"
                 )
         else:
             print(
-                f"ERROR: subcommand {args.cache_command} takes either one or three positional parameters: the URI to be fetched, the path to a security context file and the security context to be used for the fetch operation",
+                f"ERROR: subcommand {args.cache_command} takes either one or three positional parameters: the URI to be fetched, the path to a security context file and the security context to be used for the fetch operation. An optional last parameter tells whether the fetched content should be allowed to be cloned in working directories",
                 file=sys.stderr,
             )
             retval = 1
@@ -1369,12 +1413,23 @@ def main() -> None:
                 file=sys.stderr,
             )
 
+    # A filename is needed later, in order to initialize installation keys
+    if not localConfigFilename:
+        config_directory = None
+        config_relname = os.path.basename(defaultLocalConfigFilename)
+    else:
+        # Hints for the the default path for the Crypt4GH keys
+        config_directory = localConfigFilename.parent
+        config_relname = localConfigFilename.name
+
     if args.cacheDir:
         local_config["cacheDir"] = args.cacheDir
 
     # In any case, assuring the cache directory does exist
     cacheDir = local_config.get("cacheDir")
     if cacheDir:
+        if not os.path.isabs(cacheDir) and config_directory is not None:
+            cacheDir = os.path.normpath(os.path.join(config_directory, cacheDir))
         os.makedirs(cacheDir, exist_ok=True)
     else:
         cacheDir = tempfile.mkdtemp(prefix="wfexs", suffix="tmpcache")
@@ -1385,15 +1440,6 @@ def main() -> None:
             f"[WARNING] Cache directory not defined. Created a temporary one at {cacheDir}",
             file=sys.stderr,
         )
-
-    # A filename is needed later, in order to initialize installation keys
-    if not localConfigFilename:
-        config_directory = None
-        config_relname = os.path.basename(defaultLocalConfigFilename)
-    else:
-        # Hints for the the default path for the Crypt4GH keys
-        config_directory = localConfigFilename.parent
-        config_relname = localConfigFilename.name
 
     # Initialize (and create config file)
     if command in (
@@ -1539,6 +1585,7 @@ def main() -> None:
             private_key_filename=args.private_key_file,
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
+            paranoidMode=args.secure,
         )
     elif command == WfExS_Commands.Import:
         wfInstance = wfBackend.fromPreviousROCrate(

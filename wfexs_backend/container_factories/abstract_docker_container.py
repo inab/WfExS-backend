@@ -305,12 +305,14 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
         with package.open(
             archivefile.as_posix(), mode="rb"
-        ) as d_in, tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
-            self.logger.debug(f"loading {self.variant_name()} container {dockerTag}")
+        ) as d_in, tempfile.NamedTemporaryFile() as d_int, tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
+            shutil.copyfileobj(d_in, d_int)
+            self.logger.debug(
+                f"loading {self.variant_name()} container {dockerTag} from {archivefile.as_posix()} {d_int.name}"
+            )
             with subprocess.Popen(
-                [self.runtime_cmd, "load"],
+                [self.runtime_cmd, "load", "-i", d_int.name],
                 env=matEnv,
-                stdin=d_in,
                 stdout=d_out,
                 stderr=d_err,
             ) as sp:
@@ -367,11 +369,13 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
     def _version(
         self,
+        matEnv: "Mapping[str, str]",
     ) -> "Tuple[ExitVal, str, str]":
         with tempfile.NamedTemporaryFile() as d_out, tempfile.NamedTemporaryFile() as d_err:
             self.logger.debug(f"querying {self.variant_name()} version and details")
             d_retval = subprocess.Popen(
                 [self.runtime_cmd, "version", "--format", "{{json .}}"],
+                env=matEnv,
                 stdout=d_out,
                 stderr=d_err,
             ).wait()

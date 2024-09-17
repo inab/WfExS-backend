@@ -366,6 +366,9 @@ class MaterializedContent(NamedTuple):
       of the execution environment
     fingerprint: If it is available, propagate the computed fingerprint
       from the cache.
+    clonable: If it is true, copies of this materialized content can be
+      performed. Otherwise, content should remain in the original place
+      represented by "local".
     """
 
     local: "PathlibLike"
@@ -375,6 +378,7 @@ class MaterializedContent(NamedTuple):
     metadata_array: "Optional[Sequence[URIWithMetadata]]" = None
     extrapolated_local: "Optional[PathlibLike]" = None
     fingerprint: "Optional[Fingerprint]" = None
+    clonable: "bool" = True
 
     @classmethod
     def _mapping_fixes(
@@ -449,6 +453,7 @@ class MaterializedInput(NamedTuple):
     autoFilled: "bool" = False
     implicit: "bool" = False
     contentWithURIs: "Optional[ContentWithURIsDesc]" = None
+    disclosable: "bool" = True
 
 
 if TYPE_CHECKING:
