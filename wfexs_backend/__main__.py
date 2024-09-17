@@ -42,6 +42,7 @@ from .common import (
 if TYPE_CHECKING:
     from typing import (
         Callable,
+        Optional,
         Sequence,
         Tuple,
         Type,
@@ -650,8 +651,8 @@ def processCacheCommand(
         )
     elif args.cache_command == WfExS_Cache_Commands.Inject:
         if len(args.cache_command_args) in (2, 3):
-            injected_uri = args.cache_command_args[0]
-            finalCachedFilename = args.cache_command_args[1]
+            injected_uri: "str" = args.cache_command_args[0]
+            finalCachedFilename: "str" = args.cache_command_args[1]
             if len(args.cache_command_args) == 3:
                 clonable = args.cache_command_args[2] != "false"
             else:
@@ -662,9 +663,9 @@ def processCacheCommand(
             # cH.remove(cPath, injected_uri)
             # Then, inject new occurrence
             cH.inject(
-                injected_uri,
+                cast("URIType", injected_uri),
                 destdir=cPath,
-                finalCachedFilename=finalCachedFilename,
+                finalCachedFilename=pathlib.Path(finalCachedFilename),
                 clonable=clonable,
             )
         else:
@@ -684,15 +685,18 @@ def processCacheCommand(
     #    pass
     elif args.cache_command == WfExS_Cache_Commands.Fetch:
         if len(args.cache_command_args) >= 1 and len(args.cache_command_args) <= 4:
-            uri_to_fetch = args.cache_command_args[0]
+            uri_to_fetch: "str" = args.cache_command_args[0]
             vault = SecurityContextVault()
+            secContextName: "Optional[str]"
             if len(args.cache_command_args) >= 3:
-                secContextFilename = args.cache_command_args[1]
+                secContextFilename: "str" = args.cache_command_args[1]
                 secContextName = args.cache_command_args[2]
 
                 if os.path.exists(secContextFilename):
                     try:
-                        vault = SecurityContextVault(secContextFilename)
+                        vault = SecurityContextVault.FromFile(
+                            pathlib.Path(secContextFilename)
+                        )
                     except:
                         logging.exception(
                             f"ERROR: security context file {secContextFilename} is corrupted"
@@ -714,6 +718,8 @@ def processCacheCommand(
                             file=sys.stderr,
                         )
                         retval = 1
+            else:
+                secContextName = None
 
             if len(args.cache_command_args) in (2, 4):
                 default_clonable = args.cache_command_args[-1] != "false"
@@ -724,7 +730,7 @@ def processCacheCommand(
 
             if retval == 0:
                 cached_content = wfBackend.cacheFetch(
-                    uri_to_fetch,
+                    cast("URIType", uri_to_fetch),
                     args.cache_type,
                     offline=False,
                     vault=vault,
