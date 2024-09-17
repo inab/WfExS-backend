@@ -616,11 +616,14 @@ STDERR
             raise ContainerFactoryException(errmsg) from e
 
         # Let's load then
-        do_redeploy = manifestsImageSignature != self._gen_trimmed_manifests_signature(
+        ins_trimmed_manifests_signature = self._gen_trimmed_manifests_signature(
             ins_manifests
         )
+        do_redeploy = manifestsImageSignature != ins_trimmed_manifests_signature
         if do_redeploy:
-            self.logger.debug(f"Redeploying {dockerTag}")
+            self.logger.debug(
+                f"Redeploying {dockerTag} {manifestsImageSignature} != {ins_trimmed_manifests_signature}"
+            )
             # Should we load the image?
             d_retval, d_out_v, d_err_v = self._load(containerPath, dockerTag, matEnv)
 
