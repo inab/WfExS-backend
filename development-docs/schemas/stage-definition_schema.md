@@ -129,9 +129,12 @@
       - [9.1.5.14. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > preferred-name`](#params_pattern1_pattern1_i4_preferred-name)
       - [9.1.5.15. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > relative-dir`](#params_pattern1_pattern1_i4_relative-dir)
       - [9.1.5.16. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > security-context`](#params_pattern1_pattern1_i4_security-context)
-      - [9.1.5.17. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > globExplode`](#params_pattern1_pattern1_i4_globExplode)
-      - [9.1.5.18. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoFill`](#params_pattern1_pattern1_i4_autoFill)
-      - [9.1.5.19. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoPrefix`](#params_pattern1_pattern1_i4_autoPrefix)
+      - [9.1.5.17. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > disclosable`](#params_pattern1_pattern1_i4_disclosable)
+      - [9.1.5.18. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > cacheable`](#params_pattern1_pattern1_i4_cacheable)
+      - [9.1.5.19. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > clonable`](#params_pattern1_pattern1_i4_clonable)
+      - [9.1.5.20. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > globExplode`](#params_pattern1_pattern1_i4_globExplode)
+      - [9.1.5.21. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoFill`](#params_pattern1_pattern1_i4_autoFill)
+      - [9.1.5.22. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoPrefix`](#params_pattern1_pattern1_i4_autoPrefix)
     - [9.1.6. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > Params`](#params_pattern1_pattern1_i5)
 - [10. Property `WfExS-backend stage definition > profile`](#profile)
   - [10.1. Property `WfExS-backend stage definition > profile > oneOf > item 0`](#profile_oneOf_i0)
@@ -719,6 +722,9 @@ must respect the following conditions
 | - [preferred-name](#params_pattern1_pattern1_i4_preferred-name )     | No      | boolean or string | No         | -                                                | Preferred base name / relative path for this input, instead of the derived one from the URL                                                                                                                                                             |
 | - [relative-dir](#params_pattern1_pattern1_i4_relative-dir )         | No      | boolean or string | No         | -                                                | Put contents fetched for this input in this relative directory. This option does not affect preferred-name                                                                                                                                              |
 | - [security-context](#params_pattern1_pattern1_i4_security-context ) | No      | string            | No         | -                                                | Use an explicitly named security context                                                                                                                                                                                                                |
+| - [disclosable](#params_pattern1_pattern1_i4_disclosable )           | No      | boolean           | No         | -                                                | Whether this input contents can be included in RO-Crates or exported                                                                                                                                                                                    |
+| - [cacheable](#params_pattern1_pattern1_i4_cacheable )               | No      | boolean           | No         | -                                                | Whether a copy of this input contents can be kept locally outside the working directory                                                                                                                                                                 |
+| - [clonable](#params_pattern1_pattern1_i4_clonable )                 | No      | boolean           | No         | -                                                | Whether a copy of this input contents can be kept locally inside the working directory                                                                                                                                                                  |
 | - [globExplode](#params_pattern1_pattern1_i4_globExplode )           | No      | string            | No         | -                                                | When this is set, and the class is directory, it helps filtering in what it should be included                                                                                                                                                          |
 | - [autoFill](#params_pattern1_pattern1_i4_autoFill )                 | No      | boolean           | No         | -                                                | When this key is true, the directory or file is considered an output one                                                                                                                                                                                |
 | - [autoPrefix](#params_pattern1_pattern1_i4_autoPrefix )             | No      | boolean           | No         | -                                                | When autoFill is true and this parameter is false, this directory is mapped to the parent output one for this execution. When both autoFill and this parameter are true, an output file or directory name is assigned, based on its complete param name |
@@ -957,6 +963,8 @@ must respect the following conditions
 * globExplode
 * autoFill
 * autoPrefix
+* cacheable
+* clonable
 
 ###### <a name="autogenerated_heading_27"></a>9.1.5.7.1.2. The following properties are required
 * value
@@ -1593,7 +1601,37 @@ Must be one of:
 | -------------- | - |
 | **Min length** | 1 |
 
-##### <a name="params_pattern1_pattern1_i4_globExplode"></a>9.1.5.17. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > globExplode`
+##### <a name="params_pattern1_pattern1_i4_disclosable"></a>9.1.5.17. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > disclosable`
+
+|              |           |
+| ------------ | --------- |
+| **Type**     | `boolean` |
+| **Required** | No        |
+| **Default**  | `true`    |
+
+**Description:** Whether this input contents can be included in RO-Crates or exported
+
+##### <a name="params_pattern1_pattern1_i4_cacheable"></a>9.1.5.18. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > cacheable`
+
+|              |           |
+| ------------ | --------- |
+| **Type**     | `boolean` |
+| **Required** | No        |
+| **Default**  | `true`    |
+
+**Description:** Whether a copy of this input contents can be kept locally outside the working directory
+
+##### <a name="params_pattern1_pattern1_i4_clonable"></a>9.1.5.19. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > clonable`
+
+|              |           |
+| ------------ | --------- |
+| **Type**     | `boolean` |
+| **Required** | No        |
+| **Default**  | `true`    |
+
+**Description:** Whether a copy of this input contents can be kept locally inside the working directory
+
+##### <a name="params_pattern1_pattern1_i4_globExplode"></a>9.1.5.20. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > globExplode`
 
 |              |          |
 | ------------ | -------- |
@@ -1602,7 +1640,7 @@ Must be one of:
 
 **Description:** When this is set, and the class is directory, it helps filtering in what it should be included
 
-##### <a name="params_pattern1_pattern1_i4_autoFill"></a>9.1.5.18. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoFill`
+##### <a name="params_pattern1_pattern1_i4_autoFill"></a>9.1.5.21. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoFill`
 
 |              |           |
 | ------------ | --------- |
@@ -1612,7 +1650,7 @@ Must be one of:
 
 **Description:** When this key is true, the directory or file is considered an output one
 
-##### <a name="params_pattern1_pattern1_i4_autoPrefix"></a>9.1.5.19. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoPrefix`
+##### <a name="params_pattern1_pattern1_i4_autoPrefix"></a>9.1.5.22. Property `WfExS-backend stage definition > params > ^(?!c-l-a-s-s)[^:;]+$ > oneOf > item 4 > autoPrefix`
 
 |              |           |
 | ------------ | --------- |
@@ -1928,4 +1966,4 @@ Must be one of:
 | **Tuple validation** | N/A                |
 
 ----------------------------------------------------------------------------------------------------------------------------
-Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2024-08-07 at 03:30:03 +0000
+Generated using [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans) on 2024-09-17 at 12:33:29 +0000
