@@ -333,6 +333,7 @@ from .utils.contents import (
     bin2dataurl,
     link_or_copy,
     link_or_copy_pathlib,
+    link_or_symlink_pathlib,
 )
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import (
@@ -2390,6 +2391,7 @@ class WF:
         hardenPrettyLocal: "bool" = False,
         prettyRelname: "Optional[RelPath]" = None,
         ignoreCache: "bool" = False,
+        cloneToStore: "bool" = True,
     ) -> "Sequence[MaterializedContent]":
         # Embedding the context
         alt_remote_file, alt_is_plain = self._buildLicensedURI(
@@ -2402,9 +2404,10 @@ class WF:
             dest=storeDir,
             offline=offline,
             vault=self.vault,
-            ignoreCache=ignoreCache or not cacheable,
+            ignoreCache=ignoreCache,
             registerInCache=cacheable,
             keep_cache_licence=alt_is_plain,
+            default_clonable=cloneToStore,
         )
 
         # Now, time to create the link
@@ -2441,8 +2444,13 @@ class WF:
             prettyLocal = inputDestDir / (prefix + prettyRelname)
 
         if not prettyLocal.exists():
-            # We are either hardlinking or copying here
-            link_or_copy_pathlib(matContent.local, prettyLocal)
+            # Are we allowed to make a copy of the input in the working directory?
+            if matContent.clonable:
+                # We are either hardlinking or copying here
+                link_or_copy_pathlib(matContent.local, prettyLocal)
+            else:
+                # We are either hardlinking or symlinking here
+                link_or_symlink_pathlib(matContent.local, prettyLocal)
 
         remote_pairs = []
         if globExplode is not None:
@@ -2815,6 +2823,7 @@ class WF:
         lastInput: "int" = 0,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
+        cloneToStore: "bool" = True,
     ) -> "Tuple[Sequence[MaterializedInput], int, Sequence[str]]":
         # Current code for ContentWithURIs is only implemented for
         # tabular contents
@@ -2856,12 +2865,19 @@ class WF:
         # We are sending the context name thinking in the future,
         # as it could contain potential hints for authenticated access
         contextName = inputs.get("security-context")
-        cacheable = not self.paranoidMode if inputs.get("cache", True) else False
+        # This is only for the paranoid mode
+        cacheable = inputs.get("cacheable", True)
+        if self.paranoidMode:
+            ignoreCache = False
+
+        if not cacheable and not cloneToStore:
+            self.logger.warning(
+                "Current staging scenario can lead to unexpected errors in case of cache miss, as neither caching nor cloning are allowed"
+            )
+
         if remote_files is not None:
-            this_cacheable = cacheable
             this_ignoreCache = ignoreCache
         else:
-            this_cacheable = False
             this_ignoreCache = True
 
         preferred_name_conf = cast("Optional[RelPath]", inputs.get("preferred-name"))
@@ -2889,7 +2905,7 @@ class WF:
                     extrapolatedInputDestDir / relative_dir
                 ).resolve()
 
-        # The storage dir depends on whether it can be cached or not
+        # The storage dir depends on whether it can be cloned or not
         storeDir: "Union[CacheType, pathlib.Path]" = (
             CacheType.Input if cacheable else workflowInputs_destdir
         )
@@ -2926,12 +2942,13 @@ class WF:
                     contextName,
                     offline,
                     storeDir,
-                    cacheable,
-                    inputDestDir,
+                    cacheable=cacheable,
+                    inputDestDir=inputDestDir,
                     globExplode=None,
                     prefix=str(lastInput) + "_",
                     prettyRelname=pretty_relname,
                     ignoreCache=this_ignoreCache,
+                    cloneToStore=cloneToStore,
                 )
             except:
                 self.logger.exception(
@@ -2985,7 +3002,8 @@ class WF:
                             inputDestDir,
                             globExplode=None,
                             prefix=str(lastInput) + "_",
-                            ignoreCache=ignoreCache,
+                            ignoreCache=this_ignoreCache,
+                            cloneToStore=cloneToStore,
                         )
                     except:
                         self.logger.exception(
@@ -3165,6 +3183,7 @@ class WF:
             if isinstance(inputs, dict):
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
+                    clonable = inputs.get("clonable", True)
                     if inputClass in (
                         ContentKind.File.name,
                         ContentKind.Directory.name,
@@ -3279,12 +3298,10 @@ class WF:
                                 contextName = inputs.get("security-context")
 
                                 secondary_remote_files = inputs.get("secondary-urls")
-                                cacheable = (
-                                    not self.paranoidMode
-                                    if inputs.get("cache", True)
-                                    else False
+                                cacheable = inputs.get("cacheable", True)
+                                this_ignoreCache = (
+                                    False if self.paranoidMode else ignoreCache
                                 )
-                                this_ignoreCache = ignoreCache
                             else:
                                 contextName = None
                                 secondary_remote_files = None
@@ -3382,6 +3399,7 @@ class WF:
                                             prefix=str(lastInput) + "_",
                                             prettyRelname=pretty_relname,
                                             ignoreCache=this_ignoreCache,
+                                            cloneToStore=clonable,
                                         )
                                         remote_pairs.extend(t_remote_pairs)
                                     except:
@@ -3425,7 +3443,8 @@ class WF:
                                                     inputDestDir,
                                                     globExplode,
                                                     prefix=str(lastInput) + "_",
-                                                    ignoreCache=ignoreCache,
+                                                    ignoreCache=this_ignoreCache,
+                                                    cloneToStore=clonable,
                                                 )
                                             )
                                             secondary_remote_pairs.extend(
@@ -3493,7 +3512,8 @@ class WF:
                             workflowExtrapolatedInputs_destdir,
                             lastInput=lastInput,
                             offline=offline,
-                            ignoreCache=ignoreCache,
+                            ignoreCache=this_ignoreCache,
+                            cloneToStore=clonable,
                         )
                         theInputs.extend(theNewInputs)
                         the_failed_uris.extend(new_failed_uris)
@@ -3538,7 +3558,7 @@ class WF:
                     MaterializedInput(
                         name=linearKey,
                         values=inputs,
-                        disclosable=inputs.get("disclosable", True),
+                        disclosable=True,
                     )
                 )
 
