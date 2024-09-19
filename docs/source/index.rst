@@ -35,4 +35,5 @@ Mainly, WfExS is used to import and execute workflows.
       available_features
       command-line
       cli
+      schemadocs/index.md
       apidocs/index

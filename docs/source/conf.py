@@ -1,6 +1,7 @@
 # Configuration file for the Sphinx documentation builder.
 
 import os
+import shutil
 import sys
 sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), '../..')))
 
@@ -12,6 +13,62 @@ sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(__file__), '../
 # -- Project information
 
 import wfexs_backend
+
+from wfexs_backend.utils.misc import SCHEMAS_REL_DIR as WFEXS_SCHEMAS_REL_DIR
+
+from json_schema_for_humans.generate import generate_from_filename
+from json_schema_for_humans.generation_configuration import GenerationConfiguration
+
+def generate_json_schema_docs(destdir: "str"):
+    project_source_dir = os.path.dirname(os.path.realpath(__file__))
+    if not os.path.isabs(destdir):
+        destdir = os.path.join(project_source_dir, destdir)
+
+    if os.path.exists(destdir):
+        shutil.rmtree(destdir)
+    os.makedirs(destdir, exist_ok=True)
+
+    wfexs_schemas_path = os.path.join(os.path.dirname(wfexs_backend.__file__), WFEXS_SCHEMAS_REL_DIR)
+
+    custom_template_path = os.path.join(os.path.dirname(project_source_dir), "jsfh_templates", "md", "base.md")
+
+    config = GenerationConfiguration(
+        # template_name="md",
+        custom_template_path=custom_template_path,
+        examples_as_yaml=True,
+        description_is_markdown=True,
+        collapse_long_descriptions=False,
+    )
+
+    docschemas = []
+    with os.scandir(wfexs_schemas_path) as wfit:
+        for entry in wfit:
+            if not entry.name.startswith(".") and entry.is_file():
+                docschema = entry.name + ".md"
+                docschemas.append(docschema)
+                destfiledoc = os.path.join(destdir, docschema)
+                generate_from_filename(entry.path, destfiledoc, config=config)
+
+    with open(os.path.join(destdir, "index.md"), mode="w", encoding="utf-8") as idH:
+        linedocschemas = '\n'.join(docschemas)
+        idH.write(f"""\
+# JSON Schema Reference
+
+
+This page contains auto-generated JSON Schema reference documentation [^f1].
+
+```{{toctree}}
+:titlesonly:
+
+{linedocschemas}
+```
+
+[^f1]: Created with [json-schema-for-humans](https://github.com/coveooss/json-schema-for-humans)
+""")
+
+jsfh_output_dir = "schemadocs"
+
+generate_json_schema_docs(jsfh_output_dir)
 
 project = 'WfExS-backend'
 copyright = wfexs_backend.__copyright__
