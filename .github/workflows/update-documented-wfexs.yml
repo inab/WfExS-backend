@@ -1,0 +1,35 @@
+name: Create a pull request against readthedocs_merge branch updating the tag being pulled
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      # Push events to every tag not containing /
+      # based on https://stackoverflow.com/a/61892639
+      - '[1-9]*'
+
+jobs:
+  update_wfexs_requirement_at_readthedocs_merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Documentation branch checkout
+        uses: actions/checkout@v4
+        with:
+          ref: readthedocs_merge
+      - name: Write requirement
+        run: |
+          echo "wfexs_backend @ git+${{ github.server_url }}/${{ github.repository }}.git@${{ github.ref_name }}" > docs/source/requirement-wfexs.txt
+      - name: Create Pull Request
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          title: Updated WfExS-backend version being documented to ${{ github.ref_name }}
+          add-paths: |
+            docs/source/requirement-wfexs.txt
+          branch: create-pull-request/patch-documented-wfexs-version
+          delete-branch: true
+          commit-message: "[create-pull-request] Automatically commit updated contents (changed referred WfExS version to ${{ github.ref_name }})"
+      - name: Check outputs
+        if: ${{ steps.cpr.outputs.pull-request-number }}
+        run: |
+          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
+          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"

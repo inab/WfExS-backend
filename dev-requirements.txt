@@ -13,7 +13,8 @@ flake8 < 6.0.0 ; python_version < '3.8'
 flake8 >= 6.0.0 ; python_version >= '3.8'
 mccabe >= 0.7.0
 mypy >= 1.1.1
-json-schema-for-humans >= 0.45.1
+# This one is now managed by the ReadTheDocs documentation
+# json-schema-for-humans >= 0.45.1
 pre-commit >= 2.17.0
 # This is the last version of black supporting Python 3.7
 black == 23.3.0
