@@ -18,7 +18,6 @@
 
 from __future__ import absolute_import
 
-from functools import partial
 import abc
 import collections.abc
 import copy
@@ -36,6 +35,7 @@ if TYPE_CHECKING:
         Callable,
         Iterable,
         Mapping,
+        MutableMapping,
         Optional,
     )
 
@@ -51,30 +51,29 @@ def marshall_namedtuple(obj: "Any", workdir: "Optional[pathlib.Path]" = None) ->
     """
 
     # recurse_orig = lambda x: map(marshall_namedtuple, x)
-    obj_is = partial(isinstance, obj)
     if hasattr(obj, "_marshall"):
         return marshall_namedtuple(obj._marshall(), workdir=workdir)
-    elif obj_is(enum.Enum):  # Enum
+    elif isinstance(obj, enum.Enum):  # Enum
         return {
             "_enum": obj.__class__.__name__,
             "value": obj.value,
         }
-    elif obj_is(pathlib.Path):
+    elif isinstance(obj, pathlib.Path):
         # Store the relative path, not the instance
         # Path.is_relative_to was introduced in Python 3.9
-        is_relative_path = False
         if workdir is not None:
             # Path.is_relative_to was introduced in Python 3.9
             # is_relative_path = obj.is_relative_to(workdir)
             is_relative_path = obj == workdir or workdir in obj.parents
-        return (
-            obj.relative_to(workdir).as_posix() if is_relative_path else obj.as_posix()
-        )
-    elif obj_is(tuple) and hasattr(obj, "_fields"):  # namedtuple
+
+            if is_relative_path:
+                return obj.relative_to(workdir).as_posix()
+        return obj.as_posix()
+    elif isinstance(obj, tuple) and hasattr(obj, "_fields"):  # namedtuple
         fields = zip(obj._fields, _recurse_m(obj, workdir))
         class_name = obj.__class__.__name__
         return dict(fields, **{"_type": class_name})
-    elif obj_is(object) and hasattr(obj, "__dataclass_fields__"):  # dataclass
+    elif isinstance(obj, object) and hasattr(obj, "__dataclass_fields__"):  # dataclass
         fields_m = map(
             lambda field: (
                 field,
@@ -84,13 +83,13 @@ def marshall_namedtuple(obj: "Any", workdir: "Optional[pathlib.Path]" = None) ->
         )
         class_name = obj.__class__.__name__
         return dict(fields_m, **{"_type": class_name})
-    elif obj_is((collections.abc.Mapping, dict)):
-        return type(obj)(zip(obj.keys(), _recurse_m(obj.values(), workdir)))
-    elif obj_is(collections.abc.Iterable) and not obj_is(str):
-        return type(obj)(_recurse_m(obj, workdir))
-    elif obj_is(abc.ABC):
+    elif isinstance(obj, (collections.abc.Mapping, dict)):
+        return type(obj)(zip(obj.keys(), _recurse_m(obj.values(), workdir)))  # type: ignore[call-arg]
+    elif isinstance(obj, collections.abc.Iterable) and not isinstance(obj, str):
+        return type(obj)(_recurse_m(obj, workdir))  # type: ignore[call-arg]
+    elif isinstance(obj, abc.ABC):
         return {"_instance_of": obj.__class__.__name__}
-    elif obj_is(abc.ABCMeta):
+    elif isinstance(obj, abc.ABCMeta):
         return {"_class": obj.__name__}
     else:
         return obj
@@ -120,8 +119,7 @@ def unmarshall_namedtuple(
 
     # recurse_orig = lambda x, myglobals: map(lambda l: unmarshall_namedtuple(l, myglobals, workdir), x)
     objres = obj
-    obj_is = partial(isinstance, obj)
-    if obj_is((collections.abc.Mapping, dict)):
+    if isinstance(obj, (collections.abc.Mapping, dict)):
         if "_enum" in obj:  # originally an enum
             try:
                 clazz = myglobals[obj["_enum"]]
@@ -151,7 +149,7 @@ def unmarshall_namedtuple(
             return clazz
 
         if "_type" in obj:  # originally namedtuple
-            objn = obj.copy()
+            objn = cast("MutableMapping[str, Any]", copy.copy(obj))
             theTypeName = objn.pop("_type")
             try:
                 clazz = myglobals[theTypeName]
@@ -161,7 +159,7 @@ def unmarshall_namedtuple(
                 )
                 raise
         else:
-            objn = obj
+            objn = obj  # type: ignore[assignment]
             clazz = type(obj)
             # theTypeName = clazz.__name__
 
@@ -188,7 +186,7 @@ def unmarshall_namedtuple(
         m_fixes_m = getattr(clazz, "_mapping_fixes", None)
         if callable(m_fixes_m):
             c_objn = cast(
-                "Callable[[Mapping[str, Any], Optional[pathlib.Path]], Mapping[str, Any]]",
+                "Callable[[MutableMapping[str, Any], Optional[pathlib.Path]], MutableMapping[str, Any]]",
                 m_fixes_m,
             )(c_objn, workdir)
 
@@ -196,11 +194,11 @@ def unmarshall_namedtuple(
         fixes_m = getattr(clazz, "_key_fixes", None)
         if callable(fixes_m):
             fixes = cast("Callable[[], Mapping[str, str]]", fixes_m)()
-            c_objn_keys = map(
-                lambda c_objn_key: fixes.get(c_objn_key, c_objn_key), c_objn.keys()
+            c_objn_keys = list(
+                map(lambda c_objn_key: fixes.get(c_objn_key, c_objn_key), c_objn.keys())
             )
         else:
-            c_objn_keys = c_objn.keys()
+            c_objn_keys = list(c_objn.keys())
 
         fields_list = list(
             zip(c_objn_keys, _recurse_u(c_objn.values(), myglobals, workdir))
@@ -224,9 +222,9 @@ def unmarshall_namedtuple(
             except:
                 logger.exception(f"Unmarshalling Error instantiating {clazz.__name__}")
                 raise
-    elif obj_is(collections.abc.Iterable) and not obj_is(str):
+    elif isinstance(obj, collections.abc.Iterable) and not isinstance(obj, str):
         # print(type(obj))
-        return type(obj)(_recurse_u(obj, myglobals, workdir))
+        return type(obj)(_recurse_u(obj, myglobals, workdir))  # type: ignore[call-arg]
 
     if isinstance(objres, object):
         if hasattr(objres, "_value_defaults_fixes") and callable(
