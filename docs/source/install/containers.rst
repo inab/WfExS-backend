@@ -30,6 +30,7 @@ If the Docker client does not support URLs, you need a local copy of the Dockerf
 From the project root, use the following commands:
 
 .. code-block:: bash
+
    # WFEXS_VER can be either a branch, a tag or a commit hash
    WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
    mkdir WfExS_docker_build
