@@ -2232,6 +2232,8 @@ class WF:
         injectable_workflow: "Optional[LocalWorkflow]" = None,
         injectable_containers: "Sequence[Container]" = [],
         injectable_operational_containers: "Sequence[Container]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = [],
+        context_environment: "Sequence[MaterializedInput]" = [],
     ) -> None:
         if self.materializedEngine is None:
             # Only inject on first try
@@ -2270,6 +2272,8 @@ class WF:
                 injectable_containers=injectable_containers,
                 injectable_operational_containers=injectable_operational_containers,
                 profiles=self.enabled_profiles,
+                context_inputs=context_inputs,
+                context_environment=context_environment,
             )
 
     def materializeInputs(
@@ -3570,6 +3574,30 @@ class WF:
         """
         This method is here to simplify the understanding of the needed steps
         """
+
+        # Inputs are materialized before materializing the workflow itself
+        # because some workflow systems could need them in order to describe
+        # some its internal details.
+        assert self.formatted_params is not None
+        self.materializedParams = self.materializeInputs(
+            self.formatted_params,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_inputs=self.cached_inputs
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
+        )
+
+        assert self.formatted_environment is not None
+        self.materializedEnvironment = self.materializeInputs(
+            self.formatted_environment,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_inputs=self.cached_environment
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
+        )
+
         # This method is called from within setupEngine
         # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
         # This method is called from within materializeWorkflowAndContainers
@@ -3589,26 +3617,8 @@ class WF:
             injectable_operational_containers=self.preferred_operational_containers
             if self.reproducibility_level >= ReproducibilityLevel.Metadata
             else [],
-        )
-
-        assert self.formatted_params is not None
-        self.materializedParams = self.materializeInputs(
-            self.formatted_params,
-            offline=offline,
-            ignoreCache=ignoreCache,
-            injectable_inputs=self.cached_inputs
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else None,
-        )
-
-        assert self.formatted_environment is not None
-        self.materializedEnvironment = self.materializeInputs(
-            self.formatted_environment,
-            offline=offline,
-            ignoreCache=ignoreCache,
-            injectable_inputs=self.cached_environment
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else None,
+            context_inputs=self.materializedParams,
+            context_environment=self.materializedEnvironment,
         )
 
         self.marshallStage()

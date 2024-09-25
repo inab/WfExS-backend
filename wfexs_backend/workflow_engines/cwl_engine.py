@@ -865,6 +865,8 @@ STDERR
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
+        context_inputs: "Sequence[MaterializedInput]" = [],
+        context_environment: "Sequence[MaterializedInput]" = [],
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. In the case

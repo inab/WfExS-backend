@@ -365,6 +365,8 @@ class AbstractWorkflowEngineType(abc.ABC):
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
+        context_inputs: "Sequence[MaterializedInput]" = [],
+        context_environment: "Sequence[MaterializedInput]" = [],
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns a
@@ -842,6 +844,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
+        context_inputs: "Sequence[MaterializedInput]" = [],
+        context_environment: "Sequence[MaterializedInput]" = [],
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
@@ -975,12 +979,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         injectable_containers: "Sequence[Container]" = [],
         injectable_operational_containers: "Sequence[Container]" = [],
         profiles: "Optional[Sequence[str]]" = None,
+        context_inputs: "Sequence[MaterializedInput]" = [],
+        context_environment: "Sequence[MaterializedInput]" = [],
     ) -> "Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr, ContainerOperatingSystem, ProcessorArchitecture]":
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
             matWfEng,
             consolidatedWorkflowDir,
             offline=offline,
             profiles=profiles,
+            context_inputs=context_inputs,
+            context_environment=context_environment,
         )
 
         (
