@@ -1,0 +1,24 @@
+workflow_id: github:inab/hello-workflows/ae072eda1efab08af0275b5e962d9b3ce9a1ade1/nextflow-dsl2
+workflow_config:
+  secure: false
+  containerType: singularity
+  profile:
+  - singularity
+  nextflow:
+    version: 24.04.4
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  an_input:
+    c-l-a-s-s: File
+    url: github:inab/hello-workflows/ae072eda1efab08af0275b5e962d9b3ce9a1ade1/nextflow/singularity-params.config
+  output_dir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: true
+environment:
+  SECRET_VARIABLE: "The secret content"
+outputs:
+  hello_output:
+    c-l-a-s-s: File
+    glob: "output_dir/*"
