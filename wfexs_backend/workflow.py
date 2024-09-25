@@ -3505,6 +3505,7 @@ class WF:
                             )
 
                     elif inputClass == ContentKind.ContentWithURIs.name:
+                        this_ignoreCache = False if self.paranoidMode else ignoreCache
                         (
                             theNewInputs,
                             lastInput,
