@@ -20,7 +20,7 @@ bash command pattern:
 .. code-block:: bash
 
    # WFEXS_VER can be either a branch, a tag or a commit hash
-   WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+   WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
    docker build -t inab/wfexs-backend:${WFEXS_VER} \
    --build-arg wfexs_checkout="${WFEXS_VER}" \
    https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -32,7 +32,7 @@ From the project root, use the following commands:
 .. code-block:: bash
 
    # WFEXS_VER can be either a branch, a tag or a commit hash
-   WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+   WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
    mkdir WfExS_docker_build
    cd WfExS_docker_build
    curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -54,7 +54,7 @@ You can build the Podman image for a specific version (release, tag, branch, or 
 .. code-block:: bash
 
    # WFEXS_VER can be either a branch, a tag or a commit hash
-   WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+   WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
    podman build -t inab/wfexs-backend:${WFEXS_VER} \
    --build-arg wfexs_checkout="${WFEXS_VER}" \
    https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -66,7 +66,7 @@ From the project root, use the following commands:
 .. code-block:: bash
 
    # WFEXS_VER can be either a branch, a tag or a commit hash
-   WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+   WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
    mkdir WfExS_podman_build
    cd WfExS_podman_build
    curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Dockerfile
@@ -92,7 +92,7 @@ There are three different methods to create a SIF (Singularity Image Format) ima
    .. code-block:: bash
 
       # WFEXS_VER can be either a branch, a tag or a commit hash
-      WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+      WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
       mkdir WfExS_SIF_build
       cd WfExS_SIF_build
       curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Singularity.def
@@ -103,7 +103,7 @@ There are three different methods to create a SIF (Singularity Image Format) ima
    .. code-block:: bash
 
       # WFEXS_VER can be either a branch, a tag or a commit hash
-      WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+      WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
       singularity build \
       --build-arg wfexs_checkout="${WFEXS_VER}" \
       wfexs-backend-${WFEXS_VER}.sif container_recipes/Singularity.def
@@ -115,7 +115,7 @@ There are three different methods to create a SIF (Singularity Image Format) ima
    .. code-block:: bash
 
       # Remember to use the correct tag!!!
-      WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+      WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
       singularity build wfexs-${WFEXS_VER}.sif docker-daemon://inab/wfexs-backend:${WFEXS_VER}
 
 3. **Building from a saved Docker or Podman image**
@@ -128,7 +128,7 @@ There are three different methods to create a SIF (Singularity Image Format) ima
       cd WfExS_SIF_build
       
       # Remember to use the correct tag!!!
-      WFEXS_VER=574fe343c0b59eecd95afbc67894456359ebe649
+      WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
 
       # Use the following command if you built the local image with Podman
       podman save -o wfexs-backend-${WFEXS_VER}.tar inab/wfexs-backend:${WFEXS_VER}
