@@ -35,7 +35,7 @@ an empty directory:
 .. code-block:: bash
 
    mkdir ${CONFIG_DIR}
-   python WfExS-backend.py -L ${CONFIG_DIR}/local_config_${USER}.yaml init --cache-dir ....
+   python WfExS-backend.py -L ${CONFIG_DIR}/local_config_${USER}.yaml --cache-dir ${CACHE_DIR} init
    
 .. list-table::
 
