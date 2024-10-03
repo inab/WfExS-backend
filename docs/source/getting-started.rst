@@ -32,7 +32,7 @@ software to get it running.
 System requirements
 -------------------
 
-WfExS-backend has been developed mainly tested on Linux system, with amd64 processor architecture.
+WfExS-backend has been developed and mainly tested on Linux system, with amd64 processor architecture.
 
 There has been some point tests of using WfExS-backend in arm64 architecture.
 
@@ -48,6 +48,49 @@ WfExS developers have received reports of its usage on the following systems:
    If you have problems installing it on a different system or
    processor architecture please open an `issue <https://github.com/inab/WfExS-backend/issues>`_
    describing the whole scenario.
+
+Core dependencies
+-----------------
+
+WfExS-backend 1.0 source code and its dependencies should be compatible with
+Python 3.7 and later, including Python 3.12.
+
+* In order to install the dependencies you need `pip` and `venv` Python modules, and the essential build dependencies.
+	- `pip` is available in many Linux distributions (Ubuntu packages `python3-pip`, CentOS EPEL package `python-pip`), and also as [pip](https://pip.pypa.io/en/stable/) Python package.
+	- `venv` is also available in many Linux distributions (Ubuntu package `python3-venv`). In some of them is integrated into the Python 3.5 (or later) installation.
+	- Essential build dependencies (gcc, make, ...) are provided in Ubuntu with `build-essential` package.
+
+* The creation of a virtual environment where to install WfExS backend dependencies can be done running:
+  
+.. code-block:: bash
+
+   container_recipes/basic-installer.bash
+
+* If you upgrade your Python installation (from version 3.8 to 3.9 or later, for instance), or you move the environment folder or any of its ancestors to a different location after following these instructions, you may need to remove and reinstall the virtual environment.
+
+Additional Software Dependencies
+--------------------------------
+
+There are additional software dependencies beyond core ones. Depending on the local setup, some other external tools or container technologies are needed in several stages of the code. Please, install them, using either native packages (for instance, from your Linux distribution) or by hand and later set their path in the local configuration file you are using:
+
+
+  * `git <https://git-scm.com/>`_ is used to fetch workflows from git repositories.
+  
+  * `libmagic.so` dynamic library from `file` package is needed by `python-magic <https://pypi.org/project/python-magic/>`_ package.
+  
+  * `dot` command (from `GraphViz <https://graphviz.org>`_) is needed to generate a graphical representation of workflows on Workflow Run RO-Crate generation.
+  
+  * `gocryptfs <https://nuetzlich.net/gocryptfs/>_ can be used for the feature of secure intermediate results. It has been tested since version v2.0-beta2 (`releases <https://github.com/rfjakob/gocryptfs/releases>`_ provide static binaries).
+
+  * `java <https://openjdk.java.net/>`_: Needed to run Nextflow. Supported Java versions go from version 8 to any version below 15 (most of the Nextflow deployments do not support version 15 and above). Both OpenJDK and Sun/Oracle implementations should work.
+  
+  * `singularity <https://sylabs.io/singularity/>`_ or `apptainer <https://apptainer.org>`_: when local installation is set up to use singularity, version 3.5 or later is needed. Singularity and Apptainer themselves depend on `mksquashfs`, which is available in Ubuntu through `squashfs-tools` package.
+  
+  * `encfs <https://vgough.github.io/encfs/>`_ can be used for the feature of secure intermediate results. It has been tested with version 1.9.2 and 1.9.5 (`releases <https://github.com/vgough/encfs/releases>`_ have to be compiled or installed from your distro).
+
+  * `docker <https://www.docker.com/>`_: when local installation is set up to use docker. Not all the combinations of workflow execution engines and secure or paranoid setups support it.
+  
+  * `podman <https://podman.io/>`_: when local installation is set up to use podman. Not all the combinations of workflow execution engines and secure or paranoid setups support it.
 
 
 .. toctree::
