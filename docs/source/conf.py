@@ -92,6 +92,7 @@ extensions = [
     'myst_parser',
     'sphinxcontrib.asciinema',
     'sphinx_design',
+    'sphinxcontrib.bibtex',
 ]
 
 autodoc2_packages = [
@@ -112,6 +113,8 @@ autodoc2_hidden_regexes = [
     r".*\.VT$",
     r".*\.SCHEME_HANDLERS$",
 ]
+
+bibtex_bibfiles = ['outreach.bib']
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),

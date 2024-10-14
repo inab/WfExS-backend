@@ -8,4 +8,5 @@ sphinxcontrib.asciinema
 sphinx-book-theme
 sphinx_design
 json-schema-for-humans~=1.0.2
+sphinxcontrib-bibtex
 -r requirement-wfexs.txt

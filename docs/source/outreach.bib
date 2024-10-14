@@ -1,0 +1,196 @@
+
+@misc{fernandez_wfexs-backend_2024,
+	title = {{WfExS}-backend},
+	url = {https://zenodo.org/records/13821549},
+	abstract = {This is the first release candidate release, and the first one having an official docker image, available at https://github.com/inab/WfExS-backend/pkgs/container/wfexs-backend .
+
+What's Changed
+
+
+
+Docker and Singularity container recipes are considered mature enough.
+
+Added GitHub CI workflow to automatically generate a docker image on each new tag.
+
+Added instructions about how to used WfExS-backend in different containerized scenarios (see https://github.com/inab/WfExS-backend/blob/1.0.0rc0/WFEXS-in-CONTAINERS.md).
+
+Added "disclosable", "cacheable" and "clonable" flags to parameters from the stage definition. These definitions should tell the orchestrator whether the datasets associated to those input parameters contents can be transferred to generated RO-Crates or exported, whether a copy can be kept in the common cache, or whether a copy can be placed in the working directory.
+
+Now it is allowed to label a dataset cache entry as "clonable" or non "clonable", so it restricts the copies of its contents.
+
+More publications/posters for the README by @stain in https://github.com/inab/WfExS-backend/pull/112
+
+Several documentation and small fixes.
+
+
+Full Changelog: https://github.com/inab/WfExS-backend/compare/1.0.0b0...1.0.0rc0},
+	urldate = {2024-10-14},
+	publisher = {Zenodo},
+	author = {Fernández, José María and Rodríguez-Navas, Laura and Muñoz-Cívico, Adrián and Iborra, Paula and Lea, Daniel},
+	month = sep,
+	year = {2024},
+	doi = {10.5281/zenodo.13821549},
+	keywords = {ro-crate, workflows},
+	file = {Snapshot:/home/jmfernandez/docs/Zotero/storage/DHTGK6MA/13821549.html:text/html},
+}
+
+@article{iborra_onboarding_2024,
+	title = {Onboarding snakemake: {Progress} towards {WfExS}-backend integration},
+	volume = {13},
+	shorttitle = {Onboarding snakemake},
+	url = {https://f1000research.com/posters/13-551},
+	doi = {10.7490/f1000research.1119725.1},
+	abstract = {Read this work by Iborra P, at F1000Research.},
+	urldate = {2024-10-14},
+	journal = {F1000Research},
+	author = {Iborra, Paula and Fernández, José M. and Capella-Gutierrez, Salvador},
+	month = may,
+	year = {2024},
+	file = {PDF:/home/jmfernandez/docs/Zotero/storage/F6GHEY8L/Iborra et al. - 2024 - Onboarding snakemake Progress towards WfExS-backend integration.pdf:application/pdf;Snapshot:/home/jmfernandez/docs/Zotero/storage/G2ZTSVR5/13-551.html:text/html},
+}
+
+@article{gonzalo_five_2024,
+	title = {Five safes workflow {RO}-{Crate} and {WfExS}. {Closing} the gap of federated analysis and {Trusted} {Research} {Enviroments} ({TREs}) in the health data context},
+	volume = {13},
+	url = {https://f1000research.com/posters/13-550},
+	doi = {10.7490/f1000research.1119724.1},
+	abstract = {Read this work by Gonzalo E, at F1000Research.},
+	urldate = {2024-10-14},
+	journal = {F1000Research},
+	author = {Gonzalo, Eugenio and Codó, Laia and Fernandez, Jose María and Soiland-Reyes, Stian and Capella-Gutierrez, Salvador and Jefferson, Emily and Goble, Carole and Beck, Tim and Quinlan, Phil and Giles, Tom},
+	month = may,
+	year = {2024},
+	file = {PDF:/home/jmfernandez/docs/Zotero/storage/WVSX7CCH/Gonzalo et al. - 2024 - Five safes workflow RO-Crate and WfExS. Closing the gap of federated analysis and Trusted Research E.pdf:application/pdf;Snapshot:/home/jmfernandez/docs/Zotero/storage/M2SC66D6/13-550.html:text/html},
+}
+
+@misc{gonzalez_biohackeu23_2024,
+	title = {{BioHackEU23}: {FAIR} {Workflow} {Execution} with {WfExS} and {Workflow} {Run} {Crate}},
+	shorttitle = {{BioHackEU23}},
+	url = {https://osf.io/7f94w},
+	doi = {10.37044/osf.io/7f94w},
+	abstract = {FAIR Computational Workflows argues that workflows should be FAIR scholarly community research objects in their own right as a kind of FAIR Research Software. In this project we go one step further, and argue that workflow executions should also be published with sufficient traces and structured metadata. 
+
+Workflow Run RO-Crate is a set of profiles of RO-Crate that capture workflow provenance in a lightweight FAIR data package based on existing standards, in order to support traceability, reproducibility and interoperable description of diverse computational analysis. This use of RO-Crate allows the contextualization of a computational workflow and its execution, e.g. relating to people, organisations, projects, funding, data sources and wider research questions and studies.
+
+We have implemented the profile in multiple workflow systems, including Galaxy, COMPSs, StreamFlow, WfExS, Sapporo and Autosubmit. The command line tool runcrate can convert from the precursor CWLProv and display or validate crates according to the profiles. The crates are compatible with ELIXIR's WorkflowHub and support increasing levels of details, including documenting ad-hoc scripts without a workflow engine.
+
+WfExS is a workflow orchestrator designed for reproducible and secure workflow executions in isolated environments (like HPC). Every input, workflow and container being used in an execution must have either a public or permanent identifier, or at least a resolvable URI, so the execution scenario can be materialised. The execution scenario before and/or after the execution can be saved to RO-Crate.
+
+Here we bring together FAIR Computational Execution practitioners to mature and generalise this approach using Workflow Run Crate.},
+	language = {en-us},
+	urldate = {2024-10-14},
+	publisher = {OSF},
+	author = {González, José María Fernández and Iborra, Paula and Moretti, Sebastien and Isaac, Arun and Geest, Paul De and Soiland-Reyes, Stian},
+	month = mar,
+	year = {2024},
+	keywords = {ecosystem, FAIR, reproducibility, RO-Crate, workflows, WRROC},
+	file = {Submitted Version:/home/jmfernandez/docs/Zotero/storage/D64FUCPA/González et al. - 2024 - BioHackEU23 FAIR Workflow Execution with WfExS and Workflow Run Crate.pdf:application/pdf},
+}
+
+@article{leo_recording_2024,
+	title = {Recording provenance of workflow runs with {RO}-{Crate}},
+	volume = {19},
+	issn = {1932-6203},
+	url = {https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0309210},
+	doi = {10.1371/journal.pone.0309210},
+	abstract = {Recording the provenance of scientific computation results is key to the support of traceability, reproducibility and quality assessment of data products. Several data models have been explored to address this need, providing representations of workflow plans and their executions as well as means of packaging the resulting information for archiving and sharing. However, existing approaches tend to lack interoperable adoption across workflow management systems. In this work we present Workflow Run RO-Crate, an extension of RO-Crate (Research Object Crate) and Schema.org to capture the provenance of the execution of computational workflows at different levels of granularity and bundle together all their associated objects (inputs, outputs, code, etc.). The model is supported by a diverse, open community that runs regular meetings, discussing development, maintenance and adoption aspects. Workflow Run RO-Crate is already implemented by several workflow management systems, allowing interoperable comparisons between workflow runs from heterogeneous systems. We describe the model, its alignment to standards such as W3C PROV, and its implementation in six workflow systems. Finally, we illustrate the application of Workflow Run RO-Crate in two use cases of machine learning in the digital image analysis domain.},
+	language = {en},
+	number = {9},
+	urldate = {2024-10-14},
+	journal = {PLOS ONE},
+	author = {Leo, Simone and Crusoe, Michael R. and Rodríguez-Navas, Laura and Sirvent, Raül and Kanitz, Alexander and Geest, Paul De and Wittner, Rudolf and Pireddu, Luca and Garijo, Daniel and Fernández, José M. and Colonnelli, Iacopo and Gallo, Matej and Ohta, Tazro and Suetake, Hirotaka and Capella-Gutierrez, Salvador and Wit, Renske de and Kinoshita, Bruno P. and Soiland-Reyes, Stian},
+	month = sep,
+	year = {2024},
+	note = {Publisher: Public Library of Science},
+	keywords = {Archives, Computer software, Galaxies, Language, Metadata, Reproducibility, Software tools, Web-based applications},
+	pages = {e0309210},
+	file = {Full Text PDF:/home/jmfernandez/docs/Zotero/storage/69TJPV6R/Leo et al. - 2024 - Recording provenance of workflow runs with RO-Crate.pdf:application/pdf},
+}
+
+@article{fernandez_wfexs-backend_2023,
+	title = {{WfExS}-backend in the {WRROC} world?},
+	volume = {12},
+	shorttitle = {{\textless}p{\textgreater}{WfExS}-backend in the {WRROC} world?},
+	url = {https://f1000research.com/posters/12-616},
+	doi = {10.7490/f1000research.1119457.1},
+	abstract = {Read this work by Fernández JM, at F1000Research.},
+	urldate = {2024-10-14},
+	journal = {F1000Research},
+	author = {Fernández, José M. and Rodriguez-Navas, Laura and Capella-Gutiérrez, Salvador},
+	month = jun,
+	year = {2023},
+	file = {PDF:/home/jmfernandez/docs/Zotero/storage/ACPZM7QL/Fernández et al. - 2023 - WfExS-backend in the WRROC world.pdf:application/pdf;Snapshot:/home/jmfernandez/docs/Zotero/storage/DWTU5EG7/12-616.html:text/html},
+}
+
+@misc{leo_recording_2024-1,
+	title = {Recording provenance of workflow runs with {RO}-{Crate}},
+	url = {http://arxiv.org/abs/2312.07852},
+	doi = {10.48550/arXiv.2312.07852},
+	abstract = {Recording the provenance of scientific computation results is key to the support of traceability, reproducibility and quality assessment of data products. Several data models have been explored to address this need, providing representations of workflow plans and their executions as well as means of packaging the resulting information for archiving and sharing. However, existing approaches tend to lack interoperable adoption across workflow management systems. In this work we present Workflow Run RO-Crate, an extension of RO-Crate (Research Object Crate) and Schema.org to capture the provenance of the execution of computational workflows at different levels of granularity and bundle together all their associated objects (inputs, outputs, code, etc.). The model is supported by a diverse, open community that runs regular meetings, discussing development, maintenance and adoption aspects. Workflow Run RO-Crate is already implemented by several workflow management systems, allowing interoperable comparisons between workflow runs from heterogeneous systems. We describe the model, its alignment to standards such as W3C PROV, and its implementation in six workflow systems. Finally, we illustrate the application of Workflow Run RO-Crate in two use cases of machine learning in the digital image analysis domain. A corresponding RO-Crate for this article is at https://w3id.org/ro/doi/10.5281/zenodo.10368989},
+	urldate = {2024-10-14},
+	publisher = {arXiv},
+	author = {Leo, Simone and Crusoe, Michael R. and Rodríguez-Navas, Laura and Sirvent, Raül and Kanitz, Alexander and Geest, Paul De and Wittner, Rudolf and Pireddu, Luca and Garijo, Daniel and Fernández, José M. and Colonnelli, Iacopo and Gallo, Matej and Ohta, Tazro and Suetake, Hirotaka and Capella-Gutierrez, Salvador and Wit, Renske de and Kinoshita, Bruno P. and Soiland-Reyes, Stian},
+	month = jul,
+	year = {2024},
+	note = {arXiv:2312.07852},
+	keywords = {Computer Science - Digital Libraries},
+	file = {Preprint PDF:/home/jmfernandez/docs/Zotero/storage/SVZ745J4/Leo et al. - 2024 - Recording provenance of workflow runs with RO-Crate.pdf:application/pdf;Snapshot:/home/jmfernandez/docs/Zotero/storage/VJJFDSDT/2312.html:text/html},
+}
+
+@misc{rodriguez-navas_wfexs_2021,
+	address = {CWFR \& SEM Working Meeting on RO-Crate},
+	title = {{WfExS}: a software  component to enable the  use of {RO}-{Crate} in the  {EOSC}-{Life} collaboratory},
+	url = {https://osf.io/tb5ku},
+	abstract = {Presented by OSF},
+	language = {en-us},
+	urldate = {2024-10-14},
+	author = {Rodríguez-Navas, Laura},
+	month = jul,
+	year = {2021},
+	note = {Publisher: Open Science Framework},
+	file = {PDF:/home/jmfernandez/docs/Zotero/storage/3PWCWPN4/Rodríguez-Navas - 2021 - WfExS a software  component to enable the  use of RO-Crate in the  EOSC-Life collaboratory.pdf:application/pdf;Snapshot:/home/jmfernandez/docs/Zotero/storage/PR35A646/tb5ku.html:text/html},
+}
+
+@misc{bietrix_eosc-life_2021,
+	title = {{EOSC}-{Life} {Methodology} framework to enhance reproducibility within {EOSC}-{Life}},
+	url = {https://zenodo.org/records/4705078},
+	doi = {10.5281/zenodo.4705078},
+	abstract = {The original scope of task 8.3 is to develop metrics to assess the impact on reproducibility of the availability of life-science open data and workflows in the cloud.
+
+
+A great part of the activities within EOSC-Life is actually related to reproducibility and provides in several ways tools that will have an impact. Therefore, we decided that it would be more informative to describe such activities and to explain why and how they will have an impact on reproducibility in life sciences, instead of providing abstract metrics for such an impact. For these reasons, we changed the title of the deliverable, from “framework to assess ...” to “framework to enhance reproducibility”.
+
+
+First of all, we reasoned on what can be the contribution of open science to improve the reproducibility of research. Publicly sharing data, protocols, tools and computational workflows makes it possible to compare or combine the data and outcomes from different studies within a discipline as well as integrate data across scientific domains. It allows conclusions to be validated and possibly corrected as well as being reinforced by meta-analyses. Replication data and test/training data can also be used in many applications to contribute to reproducible research. Moreover, new hypotheses, different from the original aims of the study, can be explored. Data sets can be re-used to develop and test new methods, to conduct scientific and technical benchmarking activities and to support training activities. Therefore, in addition to generating more value from research investments, data sharing has the potential to increase confidence in research outcomes and increase knowledge dissemination. These benefits of open sharing have long been recognized in some fields such as bioinformatics, which has a long history of publicly sharing data with, for example, public repositories for nucleotide sequences going back 30 years and the Protein Data Bank (PDB), a repository of information about the 3D structures of proteins, nucleic acids and complex assemblies, that celebrates its 50th birthday this year.
+
+
+In this notion, any improvement in sharing of data, tools and workflows among scientists and across disciplines, that is the aim of EOSC-Life and the wider EOSC, will contribute to reproducible science. In addition to this general scope, several specific actions to frame transparency in the reporting of experimental protocols, data and analytical workflows warrant the reproducibility of each single object (experimental results, data or workflows) that is made available on the cloud.
+
+
+We will describe here the initiatives in EOSC-Life to implement existing tools for reproducibility as well as to develop new tools for its enhancement. As the final goal of EOSC-Life is to make data resources available to the wider community of life scientists, although necessarily technical in several points, this document aims at a general readership, including experimental in addition to data scientists.},
+	urldate = {2024-10-14},
+	author = {Bietrix, Florence and Carazo, José Maria and Capella-Gutierrez, Salvador and Coppens, Frederik and Chiusano, Maria Luisa and David, Romain and Fernandez, Jose Maria and Fratelli, Maddalena and Heriche, Jean-Karim and Goble, Carole and Gribbon, Philip and Holub, Petr and P. Joosten, Robbie and Leo, Simone and Owen, Stuart and Parkinson, Helen and Pieruschka, Roland and Pireddu, Luca and Porcu, Luca and Raess, Michael and Rodriguez- Navas, Laura and Scherer, Andreas and Soiland-Reyes, Stian and Tang, Jing},
+	month = apr,
+	year = {2021},
+	note = {Publisher: Zenodo},
+	keywords = {Data sharing, Data sharing tools, Open science, Reproducibility},
+	file = {Full Text PDF:/home/jmfernandez/docs/Zotero/storage/RGYCSA9N/Bietrix et al. - 2021 - EOSC-Life Methodology framework to enhance reproducibility within EOSC-Life.pdf:application/pdf},
+}
+
+@misc{capella_populating_2021,
+	title = {Populating {EOSC}-{Life}: {Success} stories from the {Demonstrators}},
+	url = {https://www.eosc-life.eu/d7/},
+	author = {Capella, Salvador and Rambla, Jordi and Beltrán, Sergi},
+	month = jan,
+	year = {2021},
+	file = {PDF:/home/jmfernandez/docs/Zotero/storage/DFNWJED9/Capella et al. - 2021 - Populating EOSC-Life Success stories from the Demonstrators.pdf:application/pdf},
+}
+
+@misc{rodriguez-_navas_wfexs_2021,
+	title = {{WfExS}: a software component to enable the use of {RO}-{Crate} in the {EOSC}-{Life} collaboratory},
+	url = {https://repository.eoscsecretariat.eu/index.php/s/ERebmpJcyjFRqcx/download?path=%2F17%20June%2F1400%20-%20Technical%20challenges%20on%20EOSC%2FBreakout%203%20-%20Interoperability%20challenges%20for%20thematic%20communities&files=05%20-%20Laura%20Rodr%C3%ADguez-Navas%20-%20WfExS.pdf&downloadStartSecret=zwwx23xrow},
+	author = {Rodriguez- Navas, Laura},
+	month = jun,
+	year = {2021},
+	file = {PDF:/home/jmfernandez/docs/Zotero/storage/4TU2E2DD/Rodriguez- Navas - 2021 - WfExS a software component to enable the use of RO-Crate in the EOSC-Life collaboratory.pdf:application/pdf},
+}
