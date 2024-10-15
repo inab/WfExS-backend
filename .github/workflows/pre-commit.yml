@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.7", "3.8", "3.9", "3.10", "3.11", "3.12" ]
+        python-version: [ "3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13" ]
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
@@ -33,16 +33,15 @@ jobs:
         with:
           files: requirements.txt
 
-      - name: 'Install requirements (standard)'
-        if: ${{ matrix.python-version != '3.6' && steps.changed-requirements-txt.outputs.any_changed == 'true' }}
+      - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
+        if: ${{ matrix.python-version != '3.6' }}
         run: |
           pip install --upgrade pip wheel
-          pip install -r requirements.txt
-      - name: 'Install requirements (constraints)'
-        if: ${{ matrix.python-version != '3.6' && steps.changed-requirements-txt.outputs.any_changed != 'true' }}
-        run: |
-          pip install --upgrade pip wheel
-          pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
+          if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
+            pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
+          else
+            pip install -r requirements.txt
+          fi
       #- name: 'Install requirements  (custom Python ${{ matrix.python-version }})'
       #  if: ${{ matrix.python-version == '3.6' }}
       #  run: |
