@@ -40,6 +40,8 @@ Visit the [Zenodo record](https://doi.org/10.5281/zenodo.6567591) for the latest
 
 ### Presentations and outreach
 
+Additional present and future list of references is hosted at [WfExS-backend ReadTheDocs outreach](https://wfexs-backend.readthedocs.io/en/latest/outreach.html).
+
 Paula Iborra, José M. Fernández, Salvador Capella-Gutierrez (2024):  
 [**Onboarding Snakemake: Progress towards WfExS-backend integration**](https://doi.org/10.7490/f1000research.1119725.1).  
 _F1000Research_ **13**(ELIXIR):551 (poster)  
