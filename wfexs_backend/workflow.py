@@ -2016,6 +2016,7 @@ class WF:
                     offline=offline,
                     meta_dir=self.metaDir,
                 )
+                self.logger.error(repo)
 
             self.remote_repo = repo
             # These are kept for compatibility
@@ -2078,15 +2079,15 @@ class WF:
         )
         self.logger.info(
             "materialized workflow repository (checkout {}): {}".format(
-                self.repoEffectiveCheckout, self.workflowDir
+                self.repoEffectiveCheckout, localWorkflow.dir
             )
         )
 
-        if self.repoRelPath is not None:
-            if not (self.workflowDir / self.repoRelPath).exists():
+        if localWorkflow.relPath is not None:
+            if not (localWorkflow.dir / localWorkflow.relPath).exists():
                 raise WFException(
                     "Relative path {} cannot be found in materialized workflow repository {}".format(
-                        self.repoRelPath, self.workflowDir
+                        localWorkflow.relPath, localWorkflow.dir
                     )
                 )
         # A valid engine must be identified from the fetched content
@@ -2126,6 +2127,7 @@ class WF:
             self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)
             engine = self.wfexs.instantiateEngine(self.engineDesc, self.staged_setup)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
+            self.logger.error(localWorkflow)
             if engineVer is None:
                 raise WFException(
                     "Engine {} did not recognize a workflow at {}".format(
