@@ -372,11 +372,13 @@ class ZipfilePath(pathlib.Path):
     def _next(self, at: "str") -> "ZipfilePath":
         return self.__class__(self._root, at)
 
-    def is_dir(self) -> "bool":
+    def is_dir(self, *, follow_symlinks: bool = False) -> "bool":
         return not self._at or self._at.endswith("/")
 
-    def is_file(self) -> "bool":
-        return self.exists() and not self.is_dir()
+    def is_file(self, *, follow_symlinks: bool = False) -> "bool":
+        return self.exists(follow_symlinks=follow_symlinks) and not self.is_dir(
+            follow_symlinks=follow_symlinks
+        )
 
     def exists(self, *, follow_symlinks: bool = False) -> "bool":
         return self._at in self._root._name_set()
