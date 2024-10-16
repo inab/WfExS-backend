@@ -1345,6 +1345,19 @@ class WfExSBackend:
     def enableDefaultParanoidMode(self) -> None:
         self.defaultParanoidMode = True
 
+    def tryWorkflowURI(
+        self,
+        workflow_uri: "str",
+        securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
+        nickname_prefix: "Optional[str]" = None,
+    ) -> "WF":
+        return WF.TryWorkflowURI(
+            self,
+            workflow_uri,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+        )
+
     def fromFiles(
         self,
         workflowMetaFilename: "pathlib.Path",
@@ -2122,10 +2135,12 @@ class WfExSBackend:
                         web_url=guessedRepo.web_url,
                     )
             else:
+                repoRelPath: "Optional[str]" = None
                 (
                     i_workflow,
                     cached_putative_path,
                     metadata_array,
+                    repoRelPath,
                 ) = self.getWorkflowBundleFromURI(
                     cast("URIType", workflow_id),
                     offline=offline,
@@ -2134,17 +2149,17 @@ class WfExSBackend:
 
                 if i_workflow is None:
                     repoDir = cached_putative_path
-                    repoRelPath: "Optional[str]" = None
-                    if repoDir.is_dir():
-                        if len(parsedRepoURL.fragment) > 0:
-                            frag_qs = urllib.parse.parse_qs(parsedRepoURL.fragment)
-                            subDirArr = frag_qs.get("subdirectory", [])
-                            if len(subDirArr) > 0:
-                                repoRelPath = subDirArr[0]
-                    elif len(metadata_array) > 0:
-                        # Let's try getting a pretty filename
-                        # when the workflow is a single file
-                        repoRelPath = metadata_array[0].preferredName
+                    if not repoRelPath:
+                        if repoDir.is_dir():
+                            if len(parsedRepoURL.fragment) > 0:
+                                frag_qs = urllib.parse.parse_qs(parsedRepoURL.fragment)
+                                subDirArr = frag_qs.get("subdirectory", [])
+                                if len(subDirArr) > 0:
+                                    repoRelPath = subDirArr[0]
+                        elif len(metadata_array) > 0:
+                            # Let's try getting a pretty filename
+                            # when the workflow is a single file
+                            repoRelPath = metadata_array[0].preferredName
 
                     # It can be either a relative path to a directory or to a file
                     # It could be even empty!
@@ -2418,6 +2433,7 @@ class WfExSBackend:
                 i_workflow,
                 self.cacheROCrateFilename,
                 metadata_array,
+                _,
             ) = self.getWorkflowBundleFromURI(
                 roCrateURL,
                 expectedEngineDesc=self.RECOGNIZED_TRS_DESCRIPTORS[
@@ -2607,7 +2623,7 @@ class WfExSBackend:
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
-    ) -> "Tuple[Optional[IdentifiedWorkflow], pathlib.Path, Sequence[URIWithMetadata]]":
+    ) -> "Tuple[Optional[IdentifiedWorkflow], pathlib.Path, Sequence[URIWithMetadata], Optional[RelPath]]":
         try:
             cached_content = self.cacheFetch(
                 remote_url,
@@ -2649,16 +2665,21 @@ class WfExSBackend:
                     roCrateFile,
                 )
 
+            identified_workflow = self.getWorkflowRepoFromROCrateFile(
+                roCrateFile, expectedEngineDesc
+            )
             return (
-                self.getWorkflowRepoFromROCrateFile(roCrateFile, expectedEngineDesc),
+                identified_workflow,
                 roCrateFile,
                 cached_content.metadata_array,
+                identified_workflow.remote_repo.rel_path,
             )
         else:
             return (
                 None,
                 cached_content.path,
                 cached_content.metadata_array,
+                None,
             )
 
     def getWorkflowRepoFromROCrateFile(

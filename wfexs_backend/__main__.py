@@ -133,6 +133,10 @@ class WfExS_Commands(StrDocEnum):
         "re-stage",
         "Prepare a new staging (working) directory for workflow execution, repeating the fetch of dependencies and contents",
     )
+    TryStage = (
+        "try-stage",
+        "Prepare a workflow in a new staging (working) directory for workflow execution, fetching dependencies but no input",
+    )
     MountWorkDir = (
         "mount-workdir",
         "Mount the encrypted staging directory on secure staging scenarios",
@@ -342,7 +346,20 @@ def genParserSub(
                 help="Force secured working directory",
             )
 
-    if preStageParams or exportParams or command == WfExS_Commands.ReStage:
+    if command == WfExS_Commands.TryStage:
+        ap_.add_argument(
+            "--workflow-uri",
+            dest="workflowURI",
+            required=True,
+            type=str,
+            help="URI of the workflow to be tried",
+        )
+
+    if (
+        preStageParams
+        or exportParams
+        or command in (WfExS_Commands.ReStage, WfExS_Commands.TryStage)
+    ):
         ap_.add_argument(
             "-Z",
             "--creds-config",
@@ -362,7 +379,7 @@ def genParserSub(
 
     if (
         preStageParams and command not in (WfExS_Commands.ConfigValidate,)
-    ) or command == WfExS_Commands.ReStage:
+    ) or command in (WfExS_Commands.ReStage, WfExS_Commands.TryStage):
         ap_.add_argument(
             "-n",
             "--nickname-prefix",
@@ -1306,6 +1323,7 @@ def _get_wfexs_argparse_internal(
     ap_ll = genParserSub(sp, WfExS_Commands.ListLicences)
     ap_cv = genParserSub(sp, WfExS_Commands.ConfigValidate, preStageParams=True)
 
+    ap_try = genParserSub(sp, WfExS_Commands.TryStage)
     ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)
 
     ap_r_s = genParserSub(
@@ -1568,7 +1586,10 @@ def main() -> None:
                 file=sys.stderr,
             )
             sys.exit(1)
-    elif command != WfExS_Commands.Import and not args.workflowConfigFilename:
+    elif (
+        command not in (WfExS_Commands.Import, WfExS_Commands.TryStage)
+        and not args.workflowConfigFilename
+    ):
         print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
         sys.exit(1)
     elif command == WfExS_Commands.ConfigValidate:
@@ -1586,6 +1607,12 @@ def main() -> None:
             private_key_passphrase=private_key_passphrase,
             orcids=op_orcids,
             paranoidMode=args.secure,
+        )
+    elif command == WfExS_Commands.TryStage:
+        wfInstance = wfBackend.tryWorkflowURI(
+            args.workflowURI,
+            args.securityContextsConfigFilename,
+            nickname_prefix=args.nickname_prefix,
         )
     elif command == WfExS_Commands.Import:
         wfInstance = wfBackend.fromPreviousROCrate(
@@ -1678,6 +1705,26 @@ def main() -> None:
                 or not isinstance(wfInstance.stageMarshalled, datetime.datetime)
                 else 0
             )
+    elif command == WfExS_Commands.TryStage:
+        print(
+            "\t  Instance {} (nickname '{}') (to be inspected later)".format(
+                wfSetup.instance_id, wfSetup.nickname
+            )
+        )
+        stagedSetup = wfInstance.tryStageWorkflow()
+        print(
+            "\t- Instance {} (nickname '{}') is {} ready".format(
+                wfSetup.instance_id,
+                wfSetup.nickname,
+                "NOT" if stagedSetup.is_damaged else "now",
+            )
+        )
+        sys.exit(
+            1
+            if stagedSetup.is_damaged
+            or not isinstance(wfInstance.stageMarshalled, datetime.datetime)
+            else 0
+        )
 
     # Depending on the parameters, it might not exist
     if getattr(args, "doMaterializedROCrate", None):
