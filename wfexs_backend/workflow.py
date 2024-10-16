@@ -2016,7 +2016,6 @@ class WF:
                     offline=offline,
                     meta_dir=self.metaDir,
                 )
-                self.logger.error(repo)
 
             self.remote_repo = repo
             # These are kept for compatibility
@@ -2127,7 +2126,6 @@ class WF:
             self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)
             engine = self.wfexs.instantiateEngine(self.engineDesc, self.staged_setup)
             engineVer, candidateLocalWorkflow = engine.identifyWorkflow(localWorkflow)
-            self.logger.error(localWorkflow)
             if engineVer is None:
                 raise WFException(
                     "Engine {} did not recognize a workflow at {}".format(
