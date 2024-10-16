@@ -398,10 +398,23 @@ WHERE   {
         STRSTARTS(str(?rocrateprofile), str(rocrate:))
     ) .
     OPTIONAL {
-        ?rocratejson dcterms:conformsTo ?wfcrateprofile .
-        FILTER (
-            ?wfcrateprofile = wfhprofile: || STRSTARTS(str(?wfcrateprofile), str(wfcrate:))
-        ) .
+        {
+            FILTER NOT EXISTS {
+                ?rocratejson dcterms:conformsTo ?somewfcrateprofile .
+                FILTER (
+                    ?somewfcrateprofile = wfhprofile: || STRSTARTS(str(?somewfcrateprofile), str(wfcrate:))
+                ) .
+            }
+            ?rootdataset dcterms:conformsTo ?wfcrateprofile .
+            FILTER (
+                ?wfcrateprofile = wfhprofile: || STRSTARTS(str(?wfcrateprofile), str(wfcrate:))
+            ) .
+        } UNION {
+            ?rocratejson dcterms:conformsTo ?wfcrateprofile .
+            FILTER (
+                ?wfcrateprofile = wfhprofile: || STRSTARTS(str(?wfcrateprofile), str(wfcrate:))
+            ) .
+        }
         OPTIONAL  {
             ?rootdataset
                 s:mainEntity ?mainentity .

@@ -110,6 +110,7 @@ if TYPE_CHECKING:
         AnyPath,
         EngineVersion,
         ExitVal,
+        GlobPattern,
         LicenceDescription,
         MaterializedOutput,
         RelPath,
@@ -2232,6 +2233,8 @@ class WF:
         injectable_workflow: "Optional[LocalWorkflow]" = None,
         injectable_containers: "Sequence[Container]" = [],
         injectable_operational_containers: "Sequence[Container]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = [],
+        context_environment: "Sequence[MaterializedInput]" = [],
     ) -> None:
         if self.materializedEngine is None:
             # Only inject on first try
@@ -2270,6 +2273,8 @@ class WF:
                 injectable_containers=injectable_containers,
                 injectable_operational_containers=injectable_operational_containers,
                 profiles=self.enabled_profiles,
+                context_inputs=context_inputs,
+                context_environment=context_environment,
             )
 
     def materializeInputs(
@@ -3107,7 +3112,7 @@ class WF:
         self,
         injectable_content: "Sequence[MaterializedContent]",
         dest_path: "pathlib.Path",
-        pretty_relname: "str",
+        pretty_relname: "Optional[str]",
         last_input: "int" = 1,
     ) -> "Tuple[MutableSequence[MaterializedContent], int]":
         injected_content: "MutableSequence[MaterializedContent]" = []
@@ -3116,7 +3121,7 @@ class WF:
             pretty_filename = injectable.prettyFilename
             pretty_rel = pathlib.Path(pretty_filename)
             dest_content = dest_path / pretty_rel
-            if dest_content.exists():
+            if dest_content.exists() and pretty_relname is not None:
                 dest_content = dest_path / pretty_relname
 
             # Stay here while collisions happen
@@ -3176,10 +3181,12 @@ class WF:
 
         the_failed_uris: "MutableSequence[str]" = []
 
-        paramsIter = params.items() if isinstance(params, dict) else enumerate(params)
+        paramsIter: "Iterable[Tuple[Union[str, int], Any]]" = (
+            params.items() if isinstance(params, dict) else enumerate(params)
+        )
         for key, inputs in paramsIter:
             # We are here for the
-            linearKey = prefix + key
+            linearKey = cast("SymbolicParamName", prefix + str(key))
             if isinstance(inputs, dict):
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
@@ -3194,7 +3201,9 @@ class WF:
                         path_tokens = linearKey.split(".")
                         # Filling in the defaults
                         assert len(path_tokens) >= 1
-                        pretty_relname = path_tokens[-1]
+                        pretty_relname: "Optional[RelPath]" = cast(
+                            "RelPath", path_tokens[-1]
+                        )
                         if len(path_tokens) > 1:
                             relative_dir = os.path.join(*path_tokens[0:-1])
                         else:
@@ -3310,7 +3319,7 @@ class WF:
 
                             preferred_name_conf = inputs.get("preferred-name")
                             if isinstance(preferred_name_conf, str):
-                                pretty_relname = preferred_name_conf
+                                pretty_relname = cast("RelPath", preferred_name_conf)
                             elif not preferred_name_conf:
                                 # Remove the pre-computed relative dir
                                 pretty_relname = None
@@ -3501,6 +3510,7 @@ class WF:
                             )
 
                     elif inputClass == ContentKind.ContentWithURIs.name:
+                        this_ignoreCache = False if self.paranoidMode else ignoreCache
                         (
                             theNewInputs,
                             lastInput,
@@ -3570,27 +3580,10 @@ class WF:
         """
         This method is here to simplify the understanding of the needed steps
         """
-        # This method is called from within setupEngine
-        # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
-        # This method is called from within materializeWorkflowAndContainers
-        # self.setupEngine(offline=offline)
-        self.materializeWorkflowAndContainers(
-            offline=offline,
-            ignoreCache=ignoreCache,
-            injectable_repo=self.cached_repo
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else None,
-            injectable_workflow=self.cached_workflow
-            if self.reproducibility_level >= ReproducibilityLevel.Full
-            else None,
-            injectable_containers=self.preferred_containers
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else [],
-            injectable_operational_containers=self.preferred_operational_containers
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else [],
-        )
 
+        # Inputs are materialized before materializing the workflow itself
+        # because some workflow systems could need them in order to describe
+        # some its internal details.
         assert self.formatted_params is not None
         self.materializedParams = self.materializeInputs(
             self.formatted_params,
@@ -3611,6 +3604,29 @@ class WF:
             else None,
         )
 
+        # This method is called from within setupEngine
+        # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
+        # This method is called from within materializeWorkflowAndContainers
+        # self.setupEngine(offline=offline)
+        self.materializeWorkflowAndContainers(
+            offline=offline,
+            ignoreCache=ignoreCache,
+            injectable_repo=self.cached_repo
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else None,
+            injectable_workflow=self.cached_workflow
+            if self.reproducibility_level >= ReproducibilityLevel.Full
+            else None,
+            injectable_containers=self.preferred_containers
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else [],
+            injectable_operational_containers=self.preferred_operational_containers
+            if self.reproducibility_level >= ReproducibilityLevel.Metadata
+            else [],
+            context_inputs=self.materializedParams,
+            context_environment=self.materializedEnvironment,
+        )
+
         self.marshallStage()
 
         return self.getStagedSetup()
@@ -3623,7 +3639,7 @@ class WF:
         return bagit.make_bag(self.workDir.as_posix())
 
     DefaultCardinality = "1"
-    CardinalityMapping = {
+    CardinalityMapping: "Mapping[str, Tuple[int, int]]" = {
         "1": (1, 1),
         "?": (0, 1),
         "*": (0, sys.maxsize),
@@ -3645,7 +3661,7 @@ class WF:
         expectedOutputs = []
         known_outputs: "Set[str]" = set()
 
-        outputs_to_process = []
+        outputs_to_process: "MutableSequence[Tuple[str, Sch_Output]]" = []
         for output_to_inject in outputs_to_inject:
             fill_from = output_to_inject.get("fillFrom")
             assert isinstance(fill_from, str)
@@ -3654,15 +3670,17 @@ class WF:
                 outputs_to_process.append((fill_from, output_to_inject))
 
         # TODO: implement parsing of outputs
-        outputsIter = (
-            outputs.items() if isinstance(outputs, dict) else enumerate(outputs)
+        outputsIter = cast(
+            "Iterable[Tuple[Union[str, int], Sch_Output]]",
+            outputs.items() if isinstance(outputs, dict) else enumerate(outputs),
         )
 
         for outputKey, outputDesc in outputsIter:
             # Skip already injected
-            if str(outputKey) not in known_outputs:
-                known_outputs.add(outputKey)
-                outputs_to_process.append((str(outputKey), outputDesc))
+            outputKeyStr = str(outputKey)
+            if outputKeyStr not in known_outputs:
+                known_outputs.add(outputKeyStr)
+                outputs_to_process.append((outputKeyStr, outputDesc))
 
         for output_name, outputDesc in outputs_to_process:
             # The glob pattern
@@ -3685,21 +3703,26 @@ class WF:
                         cardinality = (cardS, cardS)
                 elif isinstance(cardS, list):
                     cardinality = (int(cardS[0]), int(cardS[1]))
-                else:
+                elif isinstance(cardS, str):
                     cardinality = self.CardinalityMapping.get(cardS)
+                else:
+                    raise WFException("Unimplemented corner case")
 
             if cardinality is None:
                 cardinality = self.CardinalityMapping[self.DefaultCardinality]
 
+            outputDescClass = outputDesc.get("c-l-a-s-s")
             eOutput = ExpectedOutput(
                 name=cast("SymbolicOutputName", output_name),
-                kind=self.OutputClassMapping.get(
-                    outputDesc.get("c-l-a-s-s"), ContentKind.File
+                kind=ContentKind.File
+                if outputDescClass is None
+                else self.OutputClassMapping.get(outputDescClass, ContentKind.File),
+                preferredFilename=cast(
+                    "Optional[RelPath]", outputDesc.get("preferredName")
                 ),
-                preferredFilename=outputDesc.get("preferredName"),
                 cardinality=cardinality,
-                fillFrom=fillFrom,
-                glob=patS,
+                fillFrom=cast("Optional[SymbolicParamName]", fillFrom),
+                glob=cast("Optional[GlobPattern]", patS),
                 syntheticOutput=outputDesc.get(
                     "syntheticOutput", default_synthetic_output
                 ),

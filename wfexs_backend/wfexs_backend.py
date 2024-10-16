@@ -2080,7 +2080,7 @@ class WfExSBackend:
                         f"Ill-formed TRS CURIE {putative_repo_url}. It should be in the format of {TRS_SCHEME_PREFIX}://id/version or {TRS_SCHEME_PREFIX}://prefix-with-slashes/id/version"
                     )
                 trs_steps = cast("MutableSequence[str]", path_steps[0:-2])
-                trs_steps.extend(["ga4gh", "trs", "v2", "tools"])
+                trs_steps.extend(["ga4gh", "trs", "v2", ""])
                 trs_endpoint = urllib.parse.urlunparse(
                     urllib.parse.ParseResult(
                         scheme="https",
@@ -2227,6 +2227,9 @@ class WfExSBackend:
         else:
             workflow_id_str = workflow_id
 
+        # The base URL must end with a slash
+        if trs_endpoint[-1] != "/":
+            trs_endpoint += "/"
         # Now, time to check whether it is a TRSv2
         trs_endpoint_v2_meta_url = cast("URIType", trs_endpoint + "service-info")
         trs_endpoint_v2_beta2_meta_url = cast("URIType", trs_endpoint + "metadata")
