@@ -351,9 +351,7 @@ class AbstractDockerContainerFactory(ContainerFactory):
                 stderr=d_err,
             ) as sp:
                 if sp.stdout is not None:
-                    shutil.copyfileobj(
-                        cast("IO[str]", sp.stdout), d_out, length=1024 * 1024
-                    )
+                    shutil.copyfileobj(sp.stdout, d_out, length=1024 * 1024)  # type: ignore[misc]
                 d_retval = sp.wait()
 
             self.logger.debug(
