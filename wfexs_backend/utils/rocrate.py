@@ -2491,6 +2491,24 @@ WHERE   {
         if langrow.workflow_alternate_name is not None:
             repo_relpath = str(langrow.workflow_alternate_name)
 
+        # A fallback
+        if repo_relpath is None:
+            self.logger.warning(
+                f"Deriving relative path of workflow entry point from entry point location in RO-Crate metadata"
+            )
+            main_entity_uri = str(main_entity)
+            main_entity_parsed_uri = urllib.parse.urlparse(main_entity_uri)
+            use_main_entity = (
+                main_entity_parsed_uri.scheme == self.RELATIVE_ROCRATE_SCHEME
+            )
+
+            if use_main_entity:
+                entity_path = urllib.parse.unquote(main_entity_parsed_uri.path)
+                if entity_path.startswith("/"):
+                    entity_path = entity_path[1:]
+
+                repo_relpath = entity_path
+
         repo_web_url: "Optional[str]" = None
         if langrow.workflow_url is not None:
             repo_web_url = str(langrow.workflow_url)

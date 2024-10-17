@@ -1330,6 +1330,32 @@ class WF:
         )
 
     @classmethod
+    def TryWorkflowURI(
+        cls,
+        wfexs: "WfExSBackend",
+        workflow_uri: "str",
+        securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
+        nickname_prefix: "Optional[str]" = None,
+    ) -> "WF":
+        """
+        This class method creates a new staged working directory
+        """
+
+        workflow_meta = {
+            "workflow_id": workflow_uri,
+            "workflow_config": {"secure": False},
+            "params": {},
+        }
+
+        return cls.FromStagedRecipe(
+            wfexs,
+            workflow_meta,
+            securityContextsConfigFilename=securityContextsConfigFilename,
+            nickname_prefix=nickname_prefix,
+            reproducibility_level=ReproducibilityLevel.Minimal,
+        )
+
+    @classmethod
     def FromFiles(
         cls,
         wfexs: "WfExSBackend",
@@ -2052,15 +2078,15 @@ class WF:
         )
         self.logger.info(
             "materialized workflow repository (checkout {}): {}".format(
-                self.repoEffectiveCheckout, self.workflowDir
+                self.repoEffectiveCheckout, localWorkflow.dir
             )
         )
 
-        if self.repoRelPath is not None:
-            if not (self.workflowDir / self.repoRelPath).exists():
+        if localWorkflow.relPath is not None:
+            if not (localWorkflow.dir / localWorkflow.relPath).exists():
                 raise WFException(
                     "Relative path {} cannot be found in materialized workflow repository {}".format(
-                        self.repoRelPath, self.workflowDir
+                        localWorkflow.relPath, localWorkflow.dir
                     )
                 )
         # A valid engine must be identified from the fetched content
@@ -3573,6 +3599,33 @@ class WF:
                 )
 
         return theInputs, lastInput, the_failed_uris
+
+    def tryStageWorkflow(
+        self, offline: "bool" = False, ignoreCache: "bool" = False
+    ) -> "StagedSetup":
+        """
+        This method is here to try materializing and identifying a workflow
+        """
+
+        # Inputs should be materialized before materializing the workflow itself
+        # because some workflow systems could need them in order to describe
+        # some its internal details.
+        #
+        # But as we are trying to materialize a bare workflow, no input
+        # is going to be provided
+
+        # This method is called from within setupEngine
+        # self.fetchWorkflow(self.id, self.version_id, self.trs_endpoint, self.descriptor_type)
+        # This method is called from within materializeWorkflowAndContainers
+        # self.setupEngine(offline=offline)
+        self.materializeWorkflowAndContainers(
+            offline=offline,
+            ignoreCache=ignoreCache,
+        )
+
+        self.marshallStage()
+
+        return self.getStagedSetup()
 
     def stageWorkDir(
         self, offline: "bool" = False, ignoreCache: "bool" = False
