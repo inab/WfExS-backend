@@ -369,3 +369,14 @@ def get_maximum_file_descriptors() -> "int":
         result = MAXFD
 
     return result
+
+
+def urlresolv(url: "str") -> "str":
+    if url.endswith("/"):
+        wident = "."
+    else:
+        rslash_idx = url.rfind("/")
+        if rslash_idx == -1:
+            return url
+        wident = url[rslash_idx + 1 :]
+    return urllib.parse.urljoin(url, wident)
