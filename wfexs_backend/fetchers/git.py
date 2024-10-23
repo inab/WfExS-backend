@@ -746,14 +746,17 @@ class GitFetcher(AbstractRepoFetcher):
             with tempfile.NamedTemporaryFile() as git_stdout, tempfile.NamedTemporaryFile() as git_stderr:
                 # First, (bare) clone
                 retval = 0
+                failed_command = []
                 if gitclone_params is not None:
                     self.logger.debug(f'Running "{" ".join(gitclone_params)}"')
+                    failed_command = gitclone_params
                     retval = subprocess.call(
                         gitclone_params, stdout=git_stdout, stderr=git_stderr
                     )
                 # Then, checkout (which can be optional)
                 if retval == 0 and (gitcheckout_params is not None):
                     self.logger.debug(f'Running "{" ".join(gitcheckout_params)}"')
+                    failed_command = gitcheckout_params
                     retval = subprocess.Popen(
                         gitcheckout_params,
                         stdout=git_stdout,
@@ -772,6 +775,7 @@ class GitFetcher(AbstractRepoFetcher):
                     ]
 
                     self.logger.debug(f'Running "{" ".join(gitsubmodule_params)}"')
+                    failed_command = gitsubmodule_params
                     retval = subprocess.Popen(
                         gitsubmodule_params,
                         stdout=git_stdout,
@@ -787,9 +791,21 @@ class GitFetcher(AbstractRepoFetcher):
                     with open(git_stderr.name, "r") as c_stF:
                         git_stderr_v = c_stF.read()
 
-                    errstr = "ERROR: Unable to pull '{}' (tag '{}'). Retval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                        repoURL, repoTag, retval, git_stdout_v, git_stderr_v
+                    errstr = "ERROR: Unable to pull '{}' (tag '{}').\nFailed command: {}\nRetval {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                        repoURL,
+                        repoTag,
+                        " ".join(failed_command),
+                        retval,
+                        git_stdout_v,
+                        git_stderr_v,
                     )
+
+                    if repo_tag_destpath.exists():
+                        self.logger.warning(
+                            f"Failed git command, removing incomplete path {repo_tag_destpath.as_posix()}"
+                        )
+                        shutil.rmtree(repo_tag_destpath, ignore_errors=True)
+
                     raise FetcherException(errstr)
 
         # Last, we have to obtain the effective checkout
