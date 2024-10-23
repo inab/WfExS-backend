@@ -132,6 +132,7 @@ from .fetchers import (
     AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
+    FetcherException,
     RemoteRepo,
     RepoType,
 )
@@ -2083,7 +2084,7 @@ class WfExSBackend:
         repoDir: "Optional[pathlib.Path]" = None
         putative: "bool" = False
         cached_putative_path: "Optional[pathlib.Path]" = None
-        if parsedRepoURL.scheme in ("", TRS_SCHEME_PREFIX):
+        if parsedRepoURL.scheme in ("", TRS_SCHEME_PREFIX, INTERNAL_TRS_SCHEME_PREFIX):
             # Extracting the TRS endpoint details from the parsedRepoURL
             if parsedRepoURL.scheme == TRS_SCHEME_PREFIX:
                 # Duplication of code borrowed from trs_files.py
@@ -2107,6 +2108,113 @@ class WfExSBackend:
 
                 workflow_id = urllib.parse.unquote(path_steps[-2])
                 version_id = urllib.parse.unquote(path_steps[-1])
+            elif parsedRepoURL.scheme == INTERNAL_TRS_SCHEME_PREFIX:
+                # Time to try guessing everything
+                try:
+                    internal_trs_cached_content = self.cacheHandler.fetch(
+                        cast("URIType", parsedRepoURL.path),
+                        destdir=meta_dir,
+                        offline=offline,
+                        ignoreCache=ignoreCache,
+                    )
+
+                    with internal_trs_cached_content.path.open(
+                        mode="r", encoding="utf-8"
+                    ) as ctmf:
+                        trs__meta = json.load(ctmf)
+                except Exception as e:
+                    raise WFException(
+                        f"trs_endpoint could not be guessed from {parsedRepoURL.path} (raised exception)"
+                    ) from e
+
+                if not isinstance(trs__meta, dict):
+                    raise WFException(
+                        f"trs_endpoint could not be guessed from {parsedRepoURL.path} (not returning JSON object)"
+                    )
+
+                trs__meta__id: "Optional[str]" = trs__meta.get("id")
+                if trs__meta__id is None:
+                    raise WFException(
+                        f"trs_endpoint could not be guessed from {parsedRepoURL.path} (not returning id)"
+                    )
+
+                trs__meta__url: "Optional[str]" = trs__meta.get("url")
+                if trs__meta__url is None:
+                    raise WFException(
+                        f"trs_endpoint could not be guessed from {parsedRepoURL.path} (not returning url)"
+                    )
+
+                if "descriptor_type" in trs__meta:
+                    version_id = trs__meta__id
+                    # Now we need to backtrack in the url to get the workflow id
+                    tool_url_suffix = "/versions/" + urllib.parse.quote(
+                        version_id, safe=""
+                    )
+
+                    # If this happens, this implementation is not so compliant with standard
+                    dockstore_tool_url_suffix = "/versions/" + urllib.parse.quote(
+                        trs__meta.get("name", ""), safe=""
+                    )
+                    if trs__meta__url.endswith(dockstore_tool_url_suffix):
+                        tool_url_suffix = dockstore_tool_url_suffix
+                        version_id = trs__meta.get("name", "")
+
+                    if not trs__meta__url.endswith(tool_url_suffix):
+                        raise WFException(
+                            f"trs_endpoint could not be guessed from {parsedRepoURL.path} and {trs__meta__url} (version {version_id}, mismatched API route)"
+                        )
+
+                    trs_tool_url = trs__meta__url[0 : -len(tool_url_suffix)]
+                    try:
+                        internal_trs_cached_content = self.cacheHandler.fetch(
+                            cast("URIType", trs_tool_url),
+                            destdir=meta_dir,
+                            offline=offline,
+                            ignoreCache=ignoreCache,
+                        )
+
+                        with internal_trs_cached_content.path.open(
+                            mode="r", encoding="utf-8"
+                        ) as ctmf:
+                            trs__meta = json.load(ctmf)
+                    except Exception as e:
+                        raise WFException(
+                            f"trs_endpoint could not be guessed from {trs_tool_url} (came from {parsedRepoURL.path}, raised exception)"
+                        ) from e
+
+                    trs__meta__id = trs__meta.get("id")
+                    if trs__meta__id is None:
+                        raise WFException(
+                            f"trs_endpoint could not be guessed from {trs_tool_url} (came from {parsedRepoURL.path}, not returning id)"
+                        )
+
+                    trs__meta__url = trs__meta.get("url")
+                    if trs__meta__url is None:
+                        raise WFException(
+                            f"trs_endpoint could not be guessed from {trs_tool_url} (came from {parsedRepoURL.path}, not returning url)"
+                        )
+                else:
+                    trs_tool_url = parsedRepoURL.path
+                    version_id = None
+
+                if "toolclass" in trs__meta:
+                    workflow_id = trs__meta__id
+
+                    # Now we need to backtrack in the url to get the workflow id
+                    tool_url_suffix = "/tools/" + urllib.parse.quote(
+                        workflow_id, safe=""
+                    )
+                    if not trs__meta__url.endswith(tool_url_suffix):
+                        raise WFException(
+                            f"trs_endpoint could not be guessed from {trs_tool_url} and {trs__meta__url} (mismatched API route)"
+                        )
+
+                    trs_endpoint = trs__meta__url[0 : -len(tool_url_suffix)]
+                else:
+                    raise WFException(
+                        f"trs_endpoint could not be guessed from {parsedRepoURL.path} (no clues)"
+                    )
+
             if (trs_endpoint is not None) and len(trs_endpoint) > 0:
                 i_workflow, repoDir = self.getWorkflowRepoFromTRS(
                     trs_endpoint,
@@ -2284,14 +2392,41 @@ class WfExSBackend:
         with trsMetadataCache.open(mode="r", encoding="utf-8") as ctmf:
             trs_endpoint_meta = json.load(ctmf)
 
-        # Minimal check
-        trs_version = trs_endpoint_meta.get("api_version")
-        if trs_version is None:
-            trs_version = trs_endpoint_meta.get("type", {}).get("version")
+        # Minimal checks
+        trs_version_str: "Optional[str]" = None
+        trs_artifact: "Optional[str]" = None
+        trs_group: "Optional[str]" = None
+        trs_endpoint_meta_type: "Optional[Mapping[str, str]]" = trs_endpoint_meta.get(
+            "type"
+        )
+        if trs_endpoint_meta_type is not None:
+            trs_version_str = trs_endpoint_meta_type.get("version")
+            trs_artifact = trs_endpoint_meta_type.get("artifact")
+            trs_group = trs_endpoint_meta_type.get("group")
+        else:
+            # Supporting 2.0beta2
+            trs_version_str = trs_endpoint_meta.get("api_version")
 
-        if trs_version is None:
-            raise WFException(
-                "Unable to identify TRS version from {}".format(trs_endpoint_meta_url)
+        if trs_version_str is None:
+            errstr = f"Unable to identify TRS version from {trs_endpoint_meta_url}. Is this a TRS endpoint?"
+            self.logger.error(errstr)
+            raise WFException(errstr)
+
+        # Avoiding querying a GA4GH DRS service, for instance
+        if trs_artifact is not None and trs_artifact.lower() not in ("trs", "yevis"):
+            errstr = f"Unsupported GA4GH service {trs_artifact} (group {trs_group}) from {trs_endpoint_meta_url}"
+            self.logger.error(errstr)
+            raise WFException(errstr)
+
+        # Warning about potentially unsupported versions
+        trs_version_tuple = tuple(map(int, trs_version_str.split(".")))
+        if trs_version_tuple < (2, 0, 1):
+            self.logger.warning(
+                f"{trs_endpoint_meta_url} is offering old TRS version {trs_version_str}, which diverges from what this implementation supports"
+            )
+        elif trs_version_tuple > (3, 0):
+            self.logger.warning(
+                f"{trs_endpoint_meta_url} is offering TRS version {trs_version_str}, which might diverge from what this implementation supports"
             )
 
         # Now, check the tool does exist in the TRS, and the version
@@ -2460,11 +2595,42 @@ class WfExSBackend:
             remote_workflow_entrypoint = trs_meta.metadata.get(
                 "remote_workflow_entrypoint"
             )
+            trs_files_path: "Optional[pathlib.Path]" = None
             if remote_workflow_entrypoint is not None:
                 # Give it a chance to identify the original repo of the workflow
                 repo = self.guess_repo_params(remote_workflow_entrypoint, fail_ok=True)
 
+                self.logger.error(
+                    f"Now guessing from {remote_workflow_entrypoint} {repo}"
+                )
                 if repo is not None:
+                    try:
+                        # This is really, really needed to recognize
+                        # when to fall back to the safe path of what
+                        # we already have
+                        repoDir, repoEffectiveCheckout = self.doMaterializeRepo(
+                            repo,
+                            doUpdate=ignoreCache,
+                        )
+                    except FetcherException as fe:
+                        self.logger.warning(
+                            f"Repo for {remote_workflow_entrypoint} was guessed, but some element was unreachable. Falling back to GA4GH TRS contents from {toolFilesURL}"
+                        )
+                        self.logger.warning(f"(nested exception was {fe})")
+                        repo = RemoteRepo(repo_url=cast("RepoURL", toolFilesURL))
+
+                    if repo.repo_type is None:
+                        workflow_entrypoint = trs_meta.metadata.get(
+                            "workflow_entrypoint"
+                        )
+                        if workflow_entrypoint is not None:
+                            repo = RemoteRepo(
+                                repo_url=cast("RepoURL", toolFilesURL),
+                                rel_path=workflow_entrypoint,
+                                repo_type=RepoType.TRS,
+                            )
+                            trs_files_path = cached_trs_files.path
+
                     self.logger.debug(
                         "Derived repository {} ({} , rel {}) from {}".format(
                             repo.repo_url, repo.tag, repo.rel_path, trs_tools_url
@@ -2474,7 +2640,7 @@ class WfExSBackend:
                         IdentifiedWorkflow(
                             workflow_type=expectedEngineDesc, remote_repo=repo
                         ),
-                        None,
+                        trs_files_path,
                     )
 
             workflow_entrypoint = trs_meta.metadata.get("workflow_entrypoint")
