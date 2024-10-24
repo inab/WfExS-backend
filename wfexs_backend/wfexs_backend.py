@@ -2668,66 +2668,37 @@ class WfExSBackend:
         doUpdate: "bool" = True,
         registerInCache: "bool" = True,
     ) -> "Tuple[pathlib.Path, RepoTag]":
+        fetcher_clazz: "Optional[Type[AbstractRepoFetcher]]" = None
         if repo.repo_type not in (RepoType.Other, RepoType.SoftwareHeritage):
-            (
-                remote_url,
-                repo_effective_checkout,
-                repo_path,
-                metadata_array,
-            ) = self._doMaterializeGitRepo(repo, doUpdate=doUpdate)
+            fetcher_clazz = GitFetcher
         elif repo.repo_type == RepoType.SoftwareHeritage:
-            (
-                remote_url,
-                repo_effective_checkout,
-                repo_path,
-                metadata_array,
-            ) = self._doMaterializeSoftwareHeritageDirOrContent(repo, doUpdate=doUpdate)
-        else:
+            fetcher_clazz = SoftwareHeritageFetcher
+
+        if fetcher_clazz is None:
             raise WfExSBackendException(
                 f"Don't know how to materialize {repo.repo_url} as a repository"
             )
 
-        if registerInCache:
-            kind = ContentKind.Directory if repo_path.is_dir() else ContentKind.File
-            self.cacheHandler.inject(
-                remote_url,
-                destdir=self.cacheWorkflowDir,
-                fetched_metadata_array=metadata_array,
-                finalCachedFilename=repo_path,
-                inputKind=kind,
-            )
-
-        return repo_path, repo_effective_checkout
-
-    def _doMaterializeGitRepo(
-        self,
-        repo: "RemoteRepo",
-        doUpdate: "bool" = True,
-    ) -> "Tuple[URIType, RepoTag, pathlib.Path, Sequence[URIWithMetadata]]":
-        """
-
-        :param repoURL:
-        :param repoTag:
-        :param doUpdate:
-        :return:
-        """
-        gitFetcherInst = self.instantiateRepoFetcher(GitFetcher)
-        repoDir, materialized_repo, metadata_array = gitFetcherInst.materialize_repo(
-            repo.repo_url,
-            repoTag=repo.tag,
+        fetcher = self.instantiateRepoFetcher(fetcher_clazz)
+        (
+            repo_path,
+            materialized_repo,
+            metadata_array,
+        ) = fetcher.materialize_repo_from_repo(
+            repo,
             doUpdate=doUpdate,
             base_repo_destdir=self.cacheWorkflowDir,
         )
 
         # Now, let's register the checkout with cache structures
         # using its public URI
-        if not repo.repo_url.startswith("git"):
-            remote_url = "git+" + repo.repo_url
-        else:
-            remote_url = repo.repo_url
+        remote_url: "str" = repo.repo_url
+        if fetcher_clazz == GitFetcher:
+            if not repo.repo_url.startswith("git"):
+                remote_url = "git+" + repo.repo_url
 
-        if repo.tag is not None:
-            remote_url += "@" + repo.tag
+            if repo.tag is not None:
+                remote_url += "@" + repo.tag
 
         repo_desc: "Optional[Mapping[str, Any]]" = materialized_repo.gen_repo_desc()
         if repo_desc is None:
@@ -2739,48 +2710,18 @@ class WfExSBackend:
             ),
             *metadata_array,
         ]
-        return (
-            cast("URIType", remote_url),
-            materialized_repo.get_checkout(),
-            repoDir,
-            augmented_metadata_array,
-        )
 
-    def _doMaterializeSoftwareHeritageDirOrContent(
-        self,
-        repo: "RemoteRepo",
-        doUpdate: "bool" = True,
-    ) -> "Tuple[URIType, RepoTag, pathlib.Path, Sequence[URIWithMetadata]]":
-        """
+        if registerInCache:
+            kind = ContentKind.Directory if repo_path.is_dir() else ContentKind.File
+            self.cacheHandler.inject(
+                cast("URIType", remote_url),
+                destdir=self.cacheWorkflowDir,
+                fetched_metadata_array=augmented_metadata_array,
+                finalCachedFilename=repo_path,
+                inputKind=kind,
+            )
 
-        :param repoURL:
-        :param repoTag:
-        :param doUpdate:
-        :return:
-        """
-        swhFetcherInst = self.instantiateRepoFetcher(SoftwareHeritageFetcher)
-        repoDir, materialized_repo, metadata_array = swhFetcherInst.materialize_repo(
-            cast("RepoURL", repo.tag) if repo.tag is not None else repo.repo_url,
-            doUpdate=doUpdate,
-            base_repo_destdir=self.cacheWorkflowDir,
-        )
-
-        repo_desc: "Optional[Mapping[str, Any]]" = materialized_repo.gen_repo_desc()
-        if repo_desc is None:
-            repo_desc = {}
-        augmented_metadata_array = [
-            URIWithMetadata(
-                uri=cast("URIType", repo.repo_url),
-                metadata=repo_desc,
-            ),
-            *metadata_array,
-        ]
-        return (
-            repo.repo_url,
-            materialized_repo.get_checkout(),
-            repoDir,
-            augmented_metadata_array,
-        )
+        return repo_path, materialized_repo.get_checkout()
 
     def getWorkflowBundleFromURI(
         self,
