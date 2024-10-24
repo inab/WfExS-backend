@@ -101,6 +101,10 @@ repos:
       - id: black
         exclude: "^[^/]*env/|development-[^/]*/|docs/"
         args: [--diff, --check]
+      - id: black
+        name: black_apply
+        exclude: "^[^/]*env/|development-[^/]*/|docs/"
+        stages: [manual]
 
   - repo: https://github.com/jmfernandez/citation-cff-checker.git
     rev: v0.1.0
