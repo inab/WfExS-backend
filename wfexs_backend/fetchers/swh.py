@@ -226,6 +226,22 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             web_url=web_url,
         )
 
+    def materialize_repo_from_repo(
+        self,
+        repo: "RemoteRepo",
+        repo_tag_destdir: "Optional[PathLikePath]" = None,
+        base_repo_destdir: "Optional[PathLikePath]" = None,
+        doUpdate: "Optional[bool]" = True,
+    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
+        return self.materialize_repo(
+            repoURL=cast("RepoURL", repo.tag)
+            if repo.tag is not None
+            else repo.repo_url,
+            repo_tag_destdir=repo_tag_destdir,
+            base_repo_destdir=base_repo_destdir,
+            doUpdate=doUpdate,
+        )
+
     def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
         """
         This method is required to generate a PID which usually

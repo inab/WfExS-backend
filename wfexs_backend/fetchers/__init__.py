@@ -309,6 +309,21 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
     ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
         pass
 
+    def materialize_repo_from_repo(
+        self,
+        repo: "RemoteRepo",
+        repo_tag_destdir: "Optional[PathLikePath]" = None,
+        base_repo_destdir: "Optional[PathLikePath]" = None,
+        doUpdate: "Optional[bool]" = True,
+    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
+        return self.materialize_repo(
+            repoURL=repo.repo_url,
+            repoTag=repo.tag,
+            repo_tag_destdir=repo_tag_destdir,
+            base_repo_destdir=base_repo_destdir,
+            doUpdate=doUpdate,
+        )
+
     @abc.abstractmethod
     def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
         """
