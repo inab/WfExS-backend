@@ -17,6 +17,8 @@
 # limitations under the License.
 from __future__ import absolute_import
 
+import inspect
+import logging
 import os
 import pathlib
 import random
@@ -117,6 +119,12 @@ class WfExSPassphraseGenerator:
         cacheDir: "Optional[pathlib.Path]" = None,
         word_sets: "Mapping[str, Sequence[RemoteWordlistResource]]" = DEFAULT_WORD_SETS,
     ):
+        self.logger = logging.getLogger(
+            dict(inspect.getmembers(self))["__module__"]
+            + "::"
+            + self.__class__.__name__
+        )
+
         # The cache is an integral part, as it is where the
         # different components are going to be fetched
         self.cacheHandler = cacheHandler
@@ -169,31 +177,37 @@ class WfExSPassphraseGenerator:
                     pass
 
                 if indexed_filename is None:
-                    # Time to fetch the wordlist
-                    i_cached_content = self.cacheHandler.fetch(
-                        cast("URIType", word_set_uri),
-                        destdir=self.cacheDir,
-                        offline=False,
-                    )
-
-                    # Prepare the compressed index
-                    with tempfile.NamedTemporaryFile() as tmp_indexed_filename:
-                        CompressedIndexedText.IndexTextFile(
-                            i_cached_content.path.as_posix(),
-                            tmp_indexed_filename.name,
-                            substart=remote_wordlist.substart,
-                            subend=remote_wordlist.subend,
-                        )
-                        # And inject it in the cache
-                        indexed_filename, _ = self.cacheHandler.inject(
-                            wordlist_internal_uri,
+                    try:
+                        # Time to fetch the wordlist
+                        i_cached_content = self.cacheHandler.fetch(
+                            cast("URIType", word_set_uri),
                             destdir=self.cacheDir,
-                            tempCachedFilename=pathlib.Path(tmp_indexed_filename.name),
+                            offline=False,
                         )
 
-                assert indexed_filename is not None
+                        # Prepare the compressed index
+                        with tempfile.NamedTemporaryFile() as tmp_indexed_filename:
+                            CompressedIndexedText.IndexTextFile(
+                                i_cached_content.path.as_posix(),
+                                tmp_indexed_filename.name,
+                                substart=remote_wordlist.substart,
+                                subend=remote_wordlist.subend,
+                            )
+                            # And inject it in the cache
+                            indexed_filename, _ = self.cacheHandler.inject(
+                                wordlist_internal_uri,
+                                destdir=self.cacheDir,
+                                tempCachedFilename=pathlib.Path(
+                                    tmp_indexed_filename.name
+                                ),
+                            )
+                    except Exception as e:
+                        self.logger.error(
+                            f"Unable to index {word_set_uri} (exception {e.__class__.__name__}). It might impact passphrase generation. Skipping"
+                        )
 
-                indexed_filenames.append(indexed_filename)
+                if indexed_filename is not None:
+                    indexed_filenames.append(indexed_filename)
 
             word_sets[wordlist_tag] = CompressedIndexedText(
                 cfiles=list(map(lambda infil: infil.as_posix(), indexed_filenames))
