@@ -77,9 +77,11 @@ class WfExSPassphraseGenerator:
             )
         ],
         "cain": [
+            # Originally
             # https://wiki.skullsecurity.org/index.php/Passwords
+            # and http://downloads.skullsecurity.org/passwords/cain.txt.bz2
             RemoteWordlistResource(
-                "http://downloads.skullsecurity.org/passwords/cain.txt.bz2"
+                "https://github.com/duyet/bruteforce-database/raw/233b5e59a87b96ec696ddcb33b8a37709ca6aa8a/cain.txt"
             ),
         ],
         "adjectives": [
