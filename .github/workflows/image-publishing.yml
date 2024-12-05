@@ -50,8 +50,8 @@ jobs:
         uses: docker/build-push-action@v6.10.0
         with:
           context: container_recipes
-          build-args:
-            - wfexs_checkout=${{ github.sha }}
+          build-args: |
+            wfexs_checkout=${{ github.sha }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

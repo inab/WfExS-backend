@@ -29,4 +29,4 @@ repository-artifact: "https://github.com/inab/WfExS-backend/pkgs/container/wfexs
 type: software
 title: "WfExS-backend"
 version: 1.0.0rc2
-date-released: "2024-12-03"
+date-released: "2024-12-05"
