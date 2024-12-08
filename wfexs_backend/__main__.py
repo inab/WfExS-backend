@@ -1061,7 +1061,9 @@ def processStagedWorkdirCommand(
                             )
                             expanded_licences = wB.curate_licence_list(op_licences)
                             wfInstance.createStageResearchObject(
-                                filename=args.staged_workdir_command_args[1],
+                                filename=pathlib.Path(
+                                    args.staged_workdir_command_args[1]
+                                ),
                                 payloads=doMaterializedROCrate,
                                 licences=expanded_licences,
                                 resolved_orcids=resolved_orcids,
@@ -1078,7 +1080,9 @@ def processStagedWorkdirCommand(
                                 )
                                 expanded_licences = wB.curate_licence_list(op_licences)
                                 wfInstance.createResultsResearchObject(
-                                    filename=args.staged_workdir_command_args[1],
+                                    filename=pathlib.Path(
+                                        args.staged_workdir_command_args[1]
+                                    ),
                                     payloads=doMaterializedROCrate,
                                     licences=expanded_licences,
                                     resolved_orcids=resolved_orcids,

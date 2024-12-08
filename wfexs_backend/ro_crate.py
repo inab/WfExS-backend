@@ -2631,19 +2631,26 @@ you can find here an almost complete list of the possible ones:
         crate_meta_outputs: "MutableSequence[rocrate.model.entity.Entity]" = []
         if stagedExec.diagram is not None:
             # This is the original diagram, in DOT format (for now)
-            abs_diagram = os.path.join(self.work_dir, stagedExec.diagram)
+            abs_diagram = (
+                stagedExec.diagram
+                if stagedExec.diagram.is_absolute()
+                else (self.work_dir / stagedExec.diagram).resolve()
+            )
+            rel_diagram = stagedExec.diagram.relative_to(self.work_dir)
             dot_file = WorkflowDiagram(
                 self.crate,
-                source=os.path.join(self.work_dir, stagedExec.diagram),
-                dest_path=stagedExec.diagram,
+                source=abs_diagram,
+                dest_path=rel_diagram,
                 fetch_remote=False,
                 validate_url=False,
                 properties={
-                    "contentSize": str(os.stat(abs_diagram).st_size),
+                    "contentSize": str(abs_diagram.stat().st_size),
                     "sha256": ComputeDigestFromFile(
                         abs_diagram, "sha256", repMethod=hexDigest
                     ),
-                    "encodingFormat": magic.from_file(abs_diagram, mime=True),
+                    "encodingFormat": magic.from_file(
+                        abs_diagram.as_posix(), mime=True
+                    ),
                 },
             )
             self.crate.add(dot_file)
@@ -2663,7 +2670,12 @@ you can find here an almost complete list of the possible ones:
             os.close(png_dot_handle)
 
             with tempfile.NamedTemporaryFile() as d_err:
-                dot_cmd = [self.dot_binary, "-Tpng", "-o" + png_dot_path, abs_diagram]
+                dot_cmd = [
+                    self.dot_binary,
+                    "-Tpng",
+                    "-o" + png_dot_path,
+                    abs_diagram.as_posix(),
+                ]
 
                 diagram_dot_path_for_rocrate = stagedExec.diagram.relative_to(
                     self.work_dir
@@ -2687,7 +2699,7 @@ you can find here an almost complete list of the possible ones:
                     png_dot_file = WorkflowDiagram(
                         self.crate,
                         source=png_dot_path,
-                        dest_path=stagedExec.diagram.as_posix() + ".png",
+                        dest_path=rel_diagram.as_posix() + ".png",
                         fetch_remote=False,
                         validate_url=False,
                         properties={
