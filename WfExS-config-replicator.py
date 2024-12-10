@@ -110,13 +110,13 @@ def loadXLSXParams(paramsFilename: "str") -> "Sequence[Mapping[str, Any]]":
         # by latest openpyxl annotations
         sheet = cast("Worksheet", sheet_raw)  # type: ignore[redundant-cast]
         gotHeader = False
-        headerMap: "MutableMapping[int,str]" = {}
+        headerMap: "MutableMapping[Optional[int],str]" = {}
         for cells_in_row in sheet.iter_rows():
             # Either get the header or the data
             if gotHeader:
                 params: "MutableMapping[str, MutableSequence[Any]]" = dict()
                 for cell in cells_in_row:
-                    headerName = headerMap.get(cell.col_idx)
+                    headerName = headerMap.get(cell.column)
                     if headerName is not None:
                         theVal = cell.value
                         params.setdefault(headerName, []).append(theVal)
@@ -129,7 +129,7 @@ def loadXLSXParams(paramsFilename: "str") -> "Sequence[Mapping[str, Any]]":
                         if len(headerName) > 0:
                             gotHeader = True
                             # The column index is 1-based
-                            headerMap[cell.col_idx] = headerName
+                            headerMap[cell.column] = headerName
 
     return paramsArray
 
