@@ -17,8 +17,8 @@
 
 # These are the software versions being installed
 # in the virtual environment
-: ${SQUASHFUSE_VER:=0.5.2}
-: ${GO_VER:=1.20.14}
+: ${APPTAINER_VER:=1.3.6}
+: ${GO_VER:=1.23.4}
 
 # These are placeholders
 : ${GO_OS:=linux}
@@ -37,7 +37,7 @@ case "${wfexsDir}" in
 	;;
 esac
 
-downloadDir="$(mktemp -d --tmpdir wfexs_squashfuse_installer.XXXXXXXXXXX)"
+downloadDir="$(mktemp -d --tmpdir wfexs_apptainer_installer.XXXXXXXXXXX)"
 echo "$0: ${downloadDir} will be used to download third party dependencies, and later removed"
 
 cleanup() {
@@ -63,15 +63,18 @@ if [ $# -gt 0 ]; then
 	if [ "$1" == "force" ] ; then
 		doForce=1
 		if [ $# -gt 1 ] ; then
-			SQUASHFUSE_VER="$2"
+			APPTAINER_VER="$2"
+			if [ $# -gt 2 ] ; then
+				GO_VER="$3"
+			fi
 		fi
 	fi
 fi
 
 # Before installing, check whether apptainer is already available
 if [ -z "$doForce" ] ; then
-	if type -a squashfuse >& /dev/null ; then
-		echo "squashfuse $(squashfuse --version 2>&1|head -n 1) is already available in the system. Skipping install"
+	if type -a apptainer >& /dev/null ; then
+		echo "Apptainer $(apptainer version) is already available in the system. Skipping install"
 		exit 0
 	fi
 fi
@@ -86,7 +89,7 @@ trap - ERR
 source "$wfexsDir"/basic-installer.bash
 
 failed=
-for cmd in mksquashfs ; do
+for cmd in mksquashfs squashfuse fuse2fs ; do
 	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
@@ -103,26 +106,32 @@ if [ -n "$failed" ] ; then
 fi
 
 
-# Now, it is time to check squashfuse binaries availability
+# Now, it is time to check apptainer binaries availability
 if [ -z "$doForce" ] ; then
-	if [ -x "${envDir}/bin/squashfuse" ] ; then
-		echo "Squashfuse $("${envDir}/bin/squashfuse" --version 2>&1|head -n 1) is already available in the environment. Skipping install"
+	if [ -x "${envDir}/bin/apptainer" ] ; then
+		echo "Apptainer $(apptainer version) is already available in the environment. Skipping install"
 		exit 0
 	fi
 fi
 
+# Compilation artifacts should go to the temporary download directory
+checkInstallGO "${GO_VER}" "${platformOS}" "${platformArchGO}" "${downloadDir}"
+
 # Fetch and compile apptainer
-squashfuseBundlePrefix=squashfuse-"${SQUASHFUSE_VER}"
-squashfuseBundle="${squashfuseBundlePrefix}".tar.gz
+apptainerBundlePrefix=apptainer-"${APPTAINER_VER}"
+apptainerBundle="${apptainerBundlePrefix}".tar.gz
 
-( cd "${downloadDir}" && curl -L -O https://github.com/vasi/squashfuse/archive/"${SQUASHFUSE_VER}"/"${squashfuseBundle}" )
-tar -x -z -C "${downloadDir}" -f "${downloadDir}/${squashfuseBundle}"
-# Removing squashfuse bundle
-rm "${downloadDir}/${squashfuseBundle}"
-cd "${downloadDir}"/"${squashfuseBundlePrefix}"
+( cd "${downloadDir}" && curl -L -O https://github.com/apptainer/apptainer/releases/download/v"${APPTAINER_VER}"/"${apptainerBundle}" )
+tar -x -z -C "${downloadDir}" -f "${downloadDir}/${apptainerBundle}"
+# Removing apptainer bundle
+rm "${downloadDir}/${apptainerBundle}"
+cd "${downloadDir}"/"${apptainerBundlePrefix}"
 
-# Now, the right moment to compile and install rootless squashfuse
-./autogen.sh
-CFLAGS=-std=c99 ./configure --enable-multithreading --prefix="${envDir}"
-make && make install
+# Now, the right moment to compile and install rootless apptainer
+./mconfig -b ./builddir --without-suid --prefix="${envDir}"
+make -C ./builddir
+make -C ./builddir install
 
+# Last, in order to keep compatibility, there should be a symlink called
+# singularity pointing to apptainer
+ln -sf apptainer "${envDir}"/bin/singularity

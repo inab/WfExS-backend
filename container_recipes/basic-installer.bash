@@ -155,8 +155,6 @@ except:
 
 sys.exit(0)
 EOF
-	python3 -P -c "$CHECKWFEXS"
-	retval=$?
 else
 	python_p_flag=""
 	read -r -d "" CHECKWFEXS <<EOF
@@ -183,11 +181,16 @@ except:
 sys.exit(0)
 EOF
 fi
-python3 $python_p_flag -c "$CHECKWFEXS"
+if [ -d "${scriptDir}"/../wfexs_backend ] ; then
+	pythonpath_env="${scriptDir}/..:$PYTHONPATH"
+else
+	pythonpath_env="$PYTHONPATH"
+fi
+PYTHONPATH="$pythonpath_env" python3 $python_p_flag -c "$CHECKWFEXS"
 retval=$?
 set -eu
 if [ "$retval" -eq 0 ] ; then
-	envDir="$(python3 -c 'import sys; print(sys.prefix)')"
+	envDir="$(PYTHONPATH="$pythonpath_env" python3 -c 'import sys; print(sys.prefix)')"
 else
 	envDir=""
 fi
@@ -199,7 +202,7 @@ if [ -z "$envDir" ]; then
 	requirementsFile="$(readlink -f "${scriptDir}"/../requirements.txt)"
 	wfexsDir="$(dirname "${requirementsFile}")"
 
-	envDir="$(python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
+	envDir="$(PYTHONPATH="$pythonpath_env" python3 -c 'import sys; print(""  if sys.prefix==sys.base_prefix  else  sys.prefix)')"
 	if [ -n "${envDir}" ] ; then
 		echo "Using currently active environment ${envDir} to install the dependencies"
 	elif [ ! -f "${requirementsFile}" ] ; then

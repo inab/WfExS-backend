@@ -6,7 +6,7 @@ Stage: spython-base
 # The default images of python are based on debian
 # These arguments help customizing what it is included in the generated image
 wfexs_checkout=574fe343c0b59eecd95afbc67894456359ebe649
-apptainer_version=1.3.3
+apptainer_version=1.3.6
 # JDK version parameters
 JDK_MAJOR_VER=11
 # Nested arguments are not allowed
@@ -14,7 +14,7 @@ JDK_VER=11.0.11
 JDK_REV=9
 OPENJ9_VER=0.26.0
 # Go version to compile
-GO_VER=1.17.13
+GO_VER=1.20.14
 # gocryptfs version
 GOCRYPTFS_VER=v2.4.0
 # static bash version
