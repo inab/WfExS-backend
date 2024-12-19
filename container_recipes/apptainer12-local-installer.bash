@@ -17,12 +17,12 @@
 
 # These are the software versions being installed
 # in the virtual environment
-APPTAINER_VER=1.2.2
-GO_VER=1.20.7
+: ${APPTAINER_VER:=1.2.5}
+: ${GO_VER:=1.20.14}
 
 # These are placeholders
-GO_OS=linux
-GO_ARCH=amd64
+: ${GO_OS:=linux}
+: ${GO_ARCH:=amd64}
 
 # Getting the installation directory
 wfexsDir="$(dirname "$0")"
@@ -48,9 +48,15 @@ cleanup() {
 	rm -rf "${downloadDir}"
 }
 
-trap cleanup EXIT ERR
+cleanuperr() {
+	cleanup
+	exit 1
+}
 
-set -e
+trap cleanup EXIT
+trap cleanuperr ERR
+
+set -eu
 
 doForce=
 if [ $# -gt 0 ]; then
@@ -79,17 +85,21 @@ if [ $# -gt 0 ]; then
 fi
 # Second, let's load the environment in order to install
 # apptainer in the python profile
+trap - ERR
 source "$wfexsDir"/basic-installer.bash
 
 failed=
 for cmd in mksquashfs squashfuse fuse2fs ; do
+	set +e
 	type -a "$cmd" 2> /dev/null
 	retval=$?
+	set -e
 	if [ "$retval" -ne 0 ] ; then
 		failed=1
 		echo "ERROR: Command $cmd not found in PATH and needed for the installation"
 	fi
 done
+trap cleanuperr ERR
 
 if [ -n "$failed" ] ; then
 	exit 1
