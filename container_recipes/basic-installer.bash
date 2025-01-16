@@ -259,11 +259,12 @@ if [ -z "$envDir" ]; then
 	if [ -f "$constraintsFile" ] ; then
 		PIP_INSTALL_PARAMS+=( -c "${constraintsFile}" )
 	fi
-	pip install --require-virtualenv "${PIP_INSTALL_PARAMS[@]}"
 
-	# Now, should we run something wrapped?
-	if [ $# != 0 ] ; then
-		pip install --require-virtualenv -r "${wfexsDir}"/dev-requirements.txt -r "${wfexsDir}"/mypy-requirements.txt
+	# Now, should we run something wrapped (for development purposes)?
+	if [ $# = 0 ] ; then
+		pip install --require-virtualenv "${PIP_INSTALL_PARAMS[@]}"
+	else
+		pip install --require-virtualenv "${PIP_INSTALL_PARAMS[@]}" -r "${wfexsDir}"/dev-requirements.txt -r "${wfexsDir}"/mypy-requirements.txt
 		"$@"
 	fi
 fi
