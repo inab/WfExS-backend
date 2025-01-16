@@ -1,0 +1,65 @@
+name: pip-audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * 1"
+
+jobs:
+  pip-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13" ]
+    name: pip-audit python ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+          architecture: x64
+      - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
+        run: |
+          pip install --upgrade pip wheel
+          pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
+#      - name: 'Freeze Python ${{ matrix.python-version }} constraints'
+#        run: |
+#          pip freeze > constraints-${{ matrix.python-version }}.txt
+      - uses: pypa/gh-action-pip-audit@v1.1.0
+#      - uses: actions/upload-artifact@v3
+#        with:
+#          retention-days: 2
+#          path: constraints-${{ matrix.python-version }}.txt
+#
+#  pull_request_changes:
+#    # Do this only when it is not a pull request validation
+#    if: github.event_name != 'pull_request'
+#    runs-on: ubuntu-latest
+#    name: Pull request with the newly generated contents
+#    needs:
+#      - pre-commit
+#    steps:
+#      - uses: actions/checkout@v3
+#      - uses: actions/download-artifact@v3
+#        with:
+#          path: changes-dir
+#      - name: Move artifacts to their right place
+#        run: |
+#          cp -dpr changes-dir/artifact/* .
+#          rm -r changes-dir/artifact
+#      - name: Create Pull Request
+#        id: cpr
+#        uses: peter-evans/create-pull-request@v5
+#        with:
+#          title: Updated constraints (triggered by ${{ github.sha }})
+#          branch: create-pull-request/patch-constraints
+#          delete-branch: true
+#          commit-message: "[create-pull-request] Automatically commit updated contents (constraints)"
+#      - name: Check outputs
+#        if: ${{ steps.cpr.outputs.pull-request-number }}
+#        run: |
+#          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
+#          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
