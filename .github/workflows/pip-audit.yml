@@ -34,6 +34,7 @@ jobs:
       - id: gen-cve-output
         run: |
           source /tmp/PIPAUDIT/bin/activate
+          set +e
           pip-audit -f markdown -o /tmp/report-before.md
           refreeze=$?
           if [ "$refreeze" != 0 ] ; then
@@ -50,12 +51,10 @@ jobs:
             auditres=$?
             
             if [ "$auditres" = 0 ] ; then
-              echo -n "output=" >> "$GITHUB_OUTPUT"
-              (echo "# Fixed issues" ; cat /tmp/report-before.md) | base64 -w 0 >> "$GITHUB_OUTPUT"
+              (echo "# Fixed issues" ; cat /tmp/report-before.md) >> "$GITHUB_STEP_SUMMARY"
             else
               # Time to emit the report
-              echo -n "output=" >> "$GITHUB_OUTPUT"
-              (echo "# Issues not solved" ; cat /tmp/report-after.md) | base64 -w 0 >> "$GITHUB_OUTPUT"              
+              (echo "# Issues not solved" ; cat /tmp/report-after.md) >> "$GITHUB_STEP_SUMMARY"              
             fi
           fi
       - uses: actions/upload-artifact@v3
@@ -108,12 +107,10 @@ jobs:
             auditres=$?
             
             if [ "$auditres" = 0 ] ; then
-              echo -n "output=" >> "$GITHUB_OUTPUT"
-              (echo "# Fixed issues" ; cat /tmp/report-before.md) | base64 -w 0 >> "$GITHUB_OUTPUT"
+              (echo "# Fixed issues" ; cat /tmp/report-before.md) >> "$GITHUB_STEP_SUMMARY"
             else
               # Time to emit the report
-              echo -n "output=" >> "$GITHUB_OUTPUT"
-              (echo "# Issues not solved" ; cat /tmp/report-after.md) | base64 -w 0 >> "$GITHUB_OUTPUT"              
+              (echo "# Issues not solved" ; cat /tmp/report-after.md) >> "$GITHUB_STEP_SUMMARY"              
             fi
           fi
       - uses: actions/upload-artifact@v3
