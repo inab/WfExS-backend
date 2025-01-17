@@ -35,6 +35,7 @@ jobs:
           # echo "storing to file: ${{ steps.gen-cve-output.outputs.internal-be-careful-output }}"
           # echo ${{ steps.gen-cve-output.outputs.internal-be-careful-output }} > $GITHUB_WORKSPACE/security_scans.md
           # echo "saved."
+          type -a pip-audit
           cat <<EOF
           ${{ steps.gen-cve-output.outputs.internal-be-careful-output }}
           EOF
