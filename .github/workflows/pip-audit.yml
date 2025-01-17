@@ -31,6 +31,7 @@ jobs:
       - id: gen-cve-output
         uses: pypa/gh-action-pip-audit@v1.1.0
       - name: show_markdown
+        if: always()
         run: |
           # echo "storing to file: ${{ steps.gen-cve-output.outputs.internal-be-careful-output }}"
           # echo ${{ steps.gen-cve-output.outputs.internal-be-careful-output }} > $GITHUB_WORKSPACE/security_scans.md
