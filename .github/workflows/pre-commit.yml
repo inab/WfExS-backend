@@ -34,7 +34,6 @@ jobs:
           files: requirements.txt
 
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
-        if: ${{ matrix.python-version != '3.6' }}
         run: |
           pip install --upgrade pip wheel
           if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
@@ -42,15 +41,11 @@ jobs:
           else
             pip install -r requirements.txt
           fi
-      #- name: 'Install requirements  (custom Python ${{ matrix.python-version }})'
-      #  if: ${{ matrix.python-version == '3.6' }}
-      #  run: |
-      #    pip install wheel
-      #    pip install -r requirements.txt -r requirements-additional-${{ matrix.python-version }}.txt
       - name: 'Freeze Python ${{ matrix.python-version }} constraints'
         run: |
           pip freeze > constraints-${{ matrix.python-version }}.txt
-      - run: pip install -r dev-requirements.txt -r mypy-requirements.txt
+      - run: |
+          pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt
       - name: MyPy cache
         uses: actions/cache@v3
         with:
