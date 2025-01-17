@@ -91,6 +91,7 @@ jobs:
       - id: gen-cve-output
         run: |
           source /tmp/PIPAUDIT/bin/activate
+          set +e
           pip-audit -f markdown -o /tmp/report-before.md
           refreeze=$?
           if [ "$refreeze" != 0 ] ; then
