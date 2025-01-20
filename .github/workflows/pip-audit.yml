@@ -152,18 +152,43 @@ jobs:
         run: echo "timestamp=$(date -Is)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        id: download
         with:
           pattern: audit-*
           merge-multiple: true
           path: changes-dir
       - name: Move artifacts to their right place
+        id: move
         run: |
-          cp -dpr changes-dir/artifact/constraints-*.txt .
-          cat changes-dir/artifact/audit-report-*.md > /tmp/pull-body.md
-          rm -r changes-dir/artifact
+          skip=true
+          if [ -d "${{steps.download.outputs.download-path}}" ] ; then
+            for con in "${{steps.download.outputs.download-path}}"/constraints-*.txt ; do
+              case "$con" in
+                */"constraints-*.txt")
+                  break
+                  ;;
+                *)
+                  cp -p "$con" .
+                  skip=false
+                  ;;
+              esac
+            done
+            for aud in "${{steps.download.outputs.download-path}}"/audit-*.txt ; do
+              case "$aud" in
+                */"audit-*.txt")
+                  break
+                  ;;
+                *)
+                  cat "$con" >> /tmp/pull-body.md
+                  ;;
+              esac
+            done
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@v7
+        if: steps.move.outputs.skip == 'false'
         with:
           title: Updated constraints due security reasons (triggered on ${{ steps.timestamp.outputs.timestamp }} by ${{ github.sha }})
           branch: create-pull-request/patch-audit-constraints
@@ -173,5 +198,5 @@ jobs:
       - name: Check outputs
         if: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
-          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
-          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
+          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}" >> "$GITHUB_STEP_SUMMARY"
