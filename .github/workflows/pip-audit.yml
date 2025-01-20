@@ -179,7 +179,7 @@ jobs:
                   break
                   ;;
                 *)
-                  cat "$con" >> pull-body.md
+                  cat "$aud" >> pull-body.md
                   ;;
               esac
             done
