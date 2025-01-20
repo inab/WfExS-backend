@@ -164,7 +164,7 @@ jobs:
           if [ -d "${{steps.download.outputs.download-path}}" ] ; then
             for con in "${{steps.download.outputs.download-path}}"/constraints-*.txt ; do
               case "$con" in
-                */"constraints-*.txt")
+                */constraints-\*.txt)
                   break
                   ;;
                 *)
@@ -175,7 +175,7 @@ jobs:
             done
             for aud in "${{steps.download.outputs.download-path}}"/audit-*.txt ; do
               case "$aud" in
-                */"audit-*.txt")
+                */audit-\*.txt)
                   break
                   ;;
                 *)
@@ -184,6 +184,7 @@ jobs:
               esac
             done
           fi
+          ls -l
           echo "skip=$skip" >> "$GITHUB_OUTPUT"
       - name: Create Pull Request
         id: cpr
