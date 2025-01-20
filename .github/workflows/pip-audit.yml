@@ -179,7 +179,7 @@ jobs:
                   break
                   ;;
                 *)
-                  cat "$con" >> /tmp/pull-body.md
+                  cat "$con" >> pull-body.md
                   ;;
               esac
             done
@@ -192,9 +192,10 @@ jobs:
         with:
           title: Updated constraints due security reasons (triggered on ${{ steps.timestamp.outputs.timestamp }} by ${{ github.sha }})
           branch: create-pull-request/patch-audit-constraints
+          add-paths: constraints-*.txt
           delete-branch: true
           commit-message: "[create-pull-request] Automatically updated constraints due security reasons"
-          body-path: /tmp/pull-body.md
+          body-path: pull-body.md
       - name: Check outputs
         if: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
