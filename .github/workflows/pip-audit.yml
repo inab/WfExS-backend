@@ -14,7 +14,7 @@ jobs:
     name: pip-audit python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -55,16 +55,22 @@ jobs:
             set -e
             
             if [ "$auditres" = 0 ] ; then
-              (echo "# Fixed issues" ; cat /tmp/report-before.md) >> "$GITHUB_STEP_SUMMARY"
+              echo "# Fixed dependency issues for Python ${{ matrix.python-version }}" > audit-report-${{ matrix.python-version }}.md
+              cat /tmp/report-before.md >> audit-report-${{ matrix.python-version }}.md
             else
               # Time to emit the report
-              (echo "# Issues not solved" ; cat /tmp/report-after.md) >> "$GITHUB_STEP_SUMMARY"              
+              echo "# Dependency issues not solved for Python ${{ matrix.python-version }}" > audit-report-${{ matrix.python-version }}.md
+              cat /tmp/report-after.md >> audit-report-${{ matrix.python-version }}.md
             fi
+            cat audit-report-${{ matrix.python-version }}.md >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: audit-${{ matrix.python-version }}
           retention-days: 2
-          path: constraints-${{ matrix.python-version }}.txt
+          path: |
+            constraints-${{ matrix.python-version }}.txt
+            audit-report-${{ matrix.python-version }}.md
 
   pip-audit-22_04:
     runs-on: ubuntu-22.04
@@ -74,7 +80,7 @@ jobs:
     name: pip-audit python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -115,16 +121,22 @@ jobs:
             set -e
             
             if [ "$auditres" = 0 ] ; then
-              (echo "# Fixed issues" ; cat /tmp/report-before.md) >> "$GITHUB_STEP_SUMMARY"
+              echo "# Fixed dependency issues for Python ${{ matrix.python-version }}" > audit-report-${{ matrix.python-version }}.md
+              cat /tmp/report-before.md >> audit-report-${{ matrix.python-version }}.md
             else
               # Time to emit the report
-              (echo "# Issues not solved" ; cat /tmp/report-after.md) >> "$GITHUB_STEP_SUMMARY"              
+              echo "# Dependency issues not solved for Python ${{ matrix.python-version }}" > audit-report-${{ matrix.python-version }}.md
+              cat /tmp/report-after.md >> audit-report-${{ matrix.python-version }}.md
             fi
+            cat audit-report-${{ matrix.python-version }}.md >> "$GITHUB_STEP_SUMMARY"
           fi
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: audit-${{ matrix.python-version }}
           retention-days: 2
-          path: constraints-${{ matrix.python-version }}.txt
+          path: |
+            constraints-${{ matrix.python-version }}.txt
+            audit-report-${{ matrix.python-version }}.md
 
   pull_request_changes:
     # Do this only when it is not a pull request validation
@@ -138,22 +150,26 @@ jobs:
       - name: Get analysis timestamp
         id: timestamp
         run: echo "timestamp=$(date -Is)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
         with:
+          pattern: audit-*
+          merge-multiple: true
           path: changes-dir
       - name: Move artifacts to their right place
         run: |
-          cp -dpr changes-dir/artifact/* .
+          cp -dpr changes-dir/artifact/constraints-*.txt .
+          cat changes-dir/artifact/audit-report-*.md > /tmp/pull-body.md
           rm -r changes-dir/artifact
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           title: Updated constraints due security reasons (triggered on ${{ steps.timestamp.outputs.timestamp }} by ${{ github.sha }})
           branch: create-pull-request/patch-audit-constraints
           delete-branch: true
-          commit-message: "[create-pull-request] Automatically propose updated constraints"
+          commit-message: "[create-pull-request] Automatically updated constraints due security reasons"
+          body-path: /tmp/pull-body.md
       - name: Check outputs
         if: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
