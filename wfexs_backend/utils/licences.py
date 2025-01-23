@@ -54,9 +54,13 @@ import urllib.parse
 
 import xdg.BaseDirectory
 
+from ..scheme_catalog import (
+    SchemeCatalog,
+)
+
 from ..cache_handler import (
     CacheHandlerException,
-    SchemeHandlerCacheHandler,
+    CacheHandler,
 )
 
 from ..common import (
@@ -65,7 +69,7 @@ from ..common import (
     NoLicenceDescription,
 )
 
-from ..fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
+from ..fetchers.http import HTTPFetcher
 
 
 # Licences
@@ -518,7 +522,7 @@ class LicenceMatcher:
 
     def __init__(
         self,
-        cacheHandler: "SchemeHandlerCacheHandler",
+        cacheHandler: "CacheHandler",
         cacheDir: "Optional[pathlib.Path]" = None,
         spdx_version: "str" = DEFAULT_SPDX_VERSION,
     ):
@@ -627,10 +631,15 @@ class LicenceMatcherSingleton(LicenceMatcher):
                 xdg.BaseDirectory.save_cache_path("es.elixir.WfExSLicenceMatcher")
             )
 
+            scheme_catalog = SchemeCatalog(
+                scheme_handlers=HTTPFetcher.GetSchemeHandlers(),
+            )
+
             # Private cache handler instance
             # with LicenceMatcher
-            cacheHandler = SchemeHandlerCacheHandler(
-                cachePath, schemeHandlers=HTTP_SCHEME_HANDLERS
+            cacheHandler = CacheHandler(
+                cachePath,
+                scheme_catalog=scheme_catalog,
             )
             cls.__instance = LicenceMatcher(cacheHandler)
 
