@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12", "3.13" ]
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
@@ -34,7 +34,6 @@ jobs:
           files: requirements.txt
 
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
-        if: ${{ matrix.python-version != '3.6' }}
         run: |
           pip install --upgrade pip wheel
           if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
@@ -42,15 +41,81 @@ jobs:
           else
             pip install -r requirements.txt
           fi
-      #- name: 'Install requirements  (custom Python ${{ matrix.python-version }})'
-      #  if: ${{ matrix.python-version == '3.6' }}
-      #  run: |
-      #    pip install wheel
-      #    pip install -r requirements.txt -r requirements-additional-${{ matrix.python-version }}.txt
       - name: 'Freeze Python ${{ matrix.python-version }} constraints'
         run: |
           pip freeze > constraints-${{ matrix.python-version }}.txt
-      - run: pip install -r dev-requirements.txt -r mypy-requirements.txt
+      - run: |
+          pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt
+      - name: MyPy cache
+        uses: actions/cache@v3
+        with:
+          path: .mypy_cache/${{ matrix.python-version }}
+          key: mypy-${{ matrix.python-version }}
+      - name: 'pre-commit'
+        uses: pre-commit/action@v3.0.1
+#        if: ${{ matrix.python-version != '3.6' }}
+        with:
+          extra_args: --all -c .pre-commit-config.yaml
+ #     - name: 'pre-commit (custom Python ${{ matrix.python-version }})'
+ #       uses: pre-commit/action@v3.0.0
+ #       if: ${{ matrix.python-version == '3.6' }}
+ #       with:
+ #         extra_args: --all -c .pre-commit-config-gh-${{ matrix.python-version }}.yaml
+      - name: Check transitive dependencies licences
+        id: license_check_report
+#        uses: pilosus/action-pip-license-checker@v1.0.0
+#        continue-on-error: true
+        uses: pilosus/action-pip-license-checker@v2.0.0
+        with:
+          requirements: constraints-${{ matrix.python-version }}.txt
+          fail: 'StrongCopyleft'
+          exclude: 'pylint.*'
+      - name: Print licences report
+        if: ${{ always() }}
+        run: echo "${{ steps.license_check_report.outputs.report }}"
+      - uses: actions/upload-artifact@v3
+        with:
+          retention-days: 2
+          path: constraints-${{ matrix.python-version }}.txt
+
+  pre-commit-22_04:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        python-version: [ "3.7" ]
+    name: Pre-commit python ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            mypy-requirements.txt
+            dev-requirements.txt
+          architecture: x64
+      - name: Changed requirements.txt
+        id: changed-requirements-txt
+        uses: tj-actions/changed-files@v44
+        with:
+          files: requirements.txt
+
+      - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
+        run: |
+          pip install --upgrade pip wheel
+          if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
+            pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
+          else
+            pip install -r requirements.txt
+          fi
+      - name: 'Freeze Python ${{ matrix.python-version }} constraints'
+        run: |
+          pip freeze > constraints-${{ matrix.python-version }}.txt
+      - run: |
+          pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt
       - name: MyPy cache
         uses: actions/cache@v3
         with:
@@ -90,6 +155,7 @@ jobs:
     name: Pull request with the newly generated contents
     needs:
       - pre-commit
+      - pre-commit-22_04
     steps:
       - uses: actions/checkout@v3
       - uses: actions/download-artifact@v3

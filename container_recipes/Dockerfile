@@ -11,14 +11,14 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/su
 FROM	python:3.12 AS podman_build
 # These arguments help customizing what it is included in the generated image
 ARG	wfexs_checkout=0910fe6eec015c7a112f129f0adb4a998ef27a8c
-ARG	apptainer_version=1.3.3
+ARG	apptainer_version=1.3.6
 # JDK version parameters
 ARG	JDK_MAJOR_VER=11
 ARG	JDK_VER=${JDK_MAJOR_VER}.0.11
 ARG	JDK_REV=9
 ARG	OPENJ9_VER=0.26.0
 # Go version to compile
-ARG	GO_VER=1.17.13
+ARG	GO_VER=1.20.14
 # gocryptfs version
 ARG	GOCRYPTFS_VER=v2.4.0
 # static bash version

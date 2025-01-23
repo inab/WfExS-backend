@@ -42,6 +42,15 @@ repos:
         require_serial: true
         entry: mypy
         args: [--strict, --show-error-codes, --no-warn-unused-ignores]
+      - id: pip-audit-local
+        name: pip-audit over local environment
+        stages: [manual]
+        language: system
+        always_run: true
+        pass_filenames: false
+        require_serial: true
+        entry: pip-audit
+        args: []
 
 ## Main problem: python executable path, used to find the environment, is hardcoded
 #  - repo: https://github.com/pre-commit/mirrors-mypy.git
@@ -110,3 +119,9 @@ repos:
     rev: v0.1.0
     hooks:
       - id: cff_ver_validate
+  - repo: https://github.com/pypa/pip-audit
+    rev: v2.7.3
+    hooks:
+      - id: pip-audit
+        stages: [manual]
+        args: ["-r", "requirements.txt"]
