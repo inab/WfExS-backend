@@ -2684,7 +2684,7 @@ class WfExSBackend:
             repo_path,
             materialized_repo,
             metadata_array,
-        ) = fetcher.materialize_repo_from_repo(
+        ) = fetcher.materialize_repo_from_repo_transient(
             repo,
             doUpdate=doUpdate,
             base_repo_destdir=self.cacheWorkflowDir,

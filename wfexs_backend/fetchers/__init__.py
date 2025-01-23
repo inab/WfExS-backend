@@ -309,7 +309,7 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
     ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
         pass
 
-    def materialize_repo_from_repo(
+    def materialize_repo_from_repo_transient(
         self,
         repo: "RemoteRepo",
         repo_tag_destdir: "Optional[PathLikePath]" = None,
