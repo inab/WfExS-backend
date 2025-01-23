@@ -750,7 +750,3 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             # TODO: Integrate licences from TRS report??
             licences=None,
         )
-
-
-INTERNAL_TRS_SCHEME_PREFIX = GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
-TRS_SCHEME_PREFIX = GA4GHTRSFetcher.TRS_SCHEME_PREFIX

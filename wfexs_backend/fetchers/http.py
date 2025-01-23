@@ -215,30 +215,3 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
             kind_or_resolved=ContentKind.File,
             metadata_array=[uri_with_metadata],
         )
-
-
-def fetchClassicURL(
-    remote_file: "URIType",
-    cachedFilename: "Union[PathLikePath, IO[bytes]]",
-    secContext: "Optional[SecurityContextConfig]" = None,
-) -> "ProtocolFetcherReturn":
-    if isinstance(cachedFilename, (str, os.PathLike)):
-        return HTTPFetcher().fetch(remote_file, cachedFilename, secContext=secContext)
-    else:
-        return HTTPFetcher().streamfetch(
-            remote_file, cachedFilename, secContext=secContext
-        )
-
-
-SCHEME_HANDLERS: "Mapping[str, DocumentedProtocolFetcher]" = {
-    "http": DocumentedProtocolFetcher(
-        fetcher=fetchClassicURL,
-        description="HTTP download URLs",
-        priority=20,
-    ),
-    "https": DocumentedProtocolFetcher(
-        fetcher=fetchClassicURL,
-        description="HTTPS download URLs",
-        priority=20,
-    ),
-}

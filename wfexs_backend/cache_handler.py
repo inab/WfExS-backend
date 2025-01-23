@@ -1135,39 +1135,3 @@ class CacheHandler:
             fingerprint=final_fingerprint,
             clonable=clonable,
         )
-
-
-class SchemeHandlerCacheHandler(CacheHandler):
-    def __init__(
-        self,
-        cacheDir: "pathlib.Path",
-        schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]" = dict(),
-    ):
-        scheme_catalog = SchemeCatalog(scheme_handlers=schemeHandlers)
-        super().__init__(cacheDir, scheme_catalog)
-
-    def addRawSchemeHandlers(
-        self, schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]"
-    ) -> None:
-        self.scheme_catalog.addRawSchemeHandlers(schemeHandlers)
-
-    def bypassSchemeHandlers(
-        self,
-        schemeHandlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]",
-    ) -> None:
-        self.scheme_catalog.bypassSchemeHandlers(schemeHandlers)
-
-    def instantiateStatefulFetcher(
-        self,
-        statefulFetcher: "Type[StatefulFetcher]",
-        progs: "ProgsMapping" = dict(),
-        setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> "StatefulFetcher":
-        return self.scheme_catalog.instantiateStatefulFetcher(
-            statefulFetcher,
-            progs=progs,
-            setup_block=setup_block,
-        )
-
-    def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str, int]]":
-        return self.scheme_catalog.describeRegisteredSchemes()
