@@ -345,7 +345,7 @@ from .utils.misc import (
 from .utils.zipfile_path import path_relative_to
 
 from .fetchers.trs_files import (
-    TRS_SCHEME_PREFIX,
+    GA4GHTRSFetcher,
 )
 
 if TYPE_CHECKING:
@@ -933,7 +933,7 @@ class WF:
 
                     the_pid = urllib.parse.urlunparse(
                         urllib.parse.ParseResult(
-                            scheme=TRS_SCHEME_PREFIX,
+                            scheme=GA4GHTRSFetcher.TRS_SCHEME_PREFIX,
                             netloc=parsedTRSURL.netloc,
                             path="/".join(pid_steps),
                             params="",
