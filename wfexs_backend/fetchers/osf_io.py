@@ -35,7 +35,7 @@ from . import (
     FetcherException,
     ProtocolFetcherReturn,
 )
-from .http import fetchClassicURL
+from .http import HTTPFetcher
 
 from ..common import (
     ContentKind,
@@ -93,11 +93,12 @@ def fetchOSFIO(
 
     metadata_url = cast("URIType", parse.urljoin(OSF_IO_RECORD_REST, osf_io_id))
 
+    http_fetcher = HTTPFetcher()
     gathered_meta = {"fetched": metadata_url}
     metadata_array = [URIWithMetadata(remote_file, gathered_meta)]
     try:
         metaio = io.BytesIO()
-        _, metametaio, _ = fetchClassicURL(metadata_url, metaio)
+        _, metametaio, _ = http_fetcher.streamfetch(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
@@ -131,7 +132,7 @@ def fetchOSFIO(
     metadata_array.append(URIWithMetadata(remote_file, gathered_l_meta))
     try:
         metaio = io.BytesIO()
-        _, metametalicio, _ = fetchClassicURL(osf_io_lic_link, metaio)
+        _, metametalicio, _ = http_fetcher.streamfetch(osf_io_lic_link, metaio)
         l_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_l_meta["payload"] = l_metadata
         metadata_array.extend(metametalicio)
@@ -166,7 +167,7 @@ def fetchOSFIO(
     metadata_array.append(URIWithMetadata(remote_file, gathered_fm_meta))
     try:
         metaio = io.BytesIO()
-        _, metametafmio, _ = fetchClassicURL(osf_io_files_meta_link, metaio)
+        _, metametafmio, _ = http_fetcher.streamfetch(osf_io_files_meta_link, metaio)
         fm_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_fm_meta["payload"] = fm_metadata
         metadata_array.extend(metametafmio)
@@ -199,7 +200,7 @@ def fetchOSFIO(
     metadata_array.append(URIWithMetadata(remote_file, gathered_s_meta))
     try:
         metaio = io.BytesIO()
-        _, metametasio, _ = fetchClassicURL(osf_io_store_link, metaio)
+        _, metametasio, _ = http_fetcher.streamfetch(osf_io_store_link, metaio)
         s_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_s_meta["payload"] = s_metadata
         metadata_array.extend(metametasio)
@@ -265,12 +266,12 @@ def fetchOSFIO(
                 the_file_local_path = cast(
                     "AbsPath", os.path.join(cachedFilename, relpath)
                 )
-                _, metacont, _ = fetchClassicURL(
+                _, metacont, _ = http_fetcher.fetch(
                     the_file["links"]["download"], the_file_local_path
                 )
                 metadata_array.extend(metacont)
         elif kind == ContentKind.File:
-            _, metacont, _ = fetchClassicURL(
+            _, metacont, _ = http_fetcher.fetch(
                 the_files[0]["links"]["download"], cachedFilename
             )
             metadata_array.extend(metacont)

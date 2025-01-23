@@ -50,7 +50,7 @@ from . import (
     FetcherException,
     ProtocolFetcherReturn,
 )
-from .http import fetchClassicURL
+from .http import HTTPFetcher
 
 
 PRIDE_PROJECT_SCHEME = "pride.project"
@@ -92,7 +92,7 @@ def fetchPRIDEProject(
     metadata = None
     try:
         metaio = io.BytesIO()
-        _, metametaio, _ = fetchClassicURL(metadata_url, metaio)
+        _, metametaio, _ = HTTPFetcher().streamfetch(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)

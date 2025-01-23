@@ -35,7 +35,7 @@ from . import (
     FetcherException,
     ProtocolFetcherReturn,
 )
-from .http import fetchClassicURL
+from .http import HTTPFetcher
 
 from ..common import (
     ContentKind,
@@ -95,11 +95,12 @@ def fetchZenodo(
 
     metadata_url = cast("URIType", parse.urljoin(ZENODO_RECORD_REST, zenodo_id))
 
+    http_fetcher = HTTPFetcher()
     gathered_meta = {"fetched": metadata_url}
     metadata_array = [URIWithMetadata(remote_file, gathered_meta)]
     try:
         metaio = io.BytesIO()
-        _, metametaio, _ = fetchClassicURL(metadata_url, metaio)
+        _, metametaio, _ = http_fetcher.streamfetch(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)
@@ -128,7 +129,7 @@ def fetchZenodo(
     metadata_array.append(URIWithMetadata(remote_file, gathered_l_meta))
     try:
         metaio = io.BytesIO()
-        _, metametalicio, _ = fetchClassicURL(licence_meta_url, metaio)
+        _, metametalicio, _ = http_fetcher.streamfetch(licence_meta_url, metaio)
         l_metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_l_meta["payload"] = l_metadata
         metadata_array.extend(metametalicio)
@@ -208,12 +209,12 @@ def fetchZenodo(
                 the_file_local_path = cast(
                     "AbsPath", os.path.join(cachedFilename, relpath)
                 )
-                _, metacont, _ = fetchClassicURL(
+                _, metacont, _ = http_fetcher.fetch(
                     the_file["links"]["self"], the_file_local_path
                 )
                 metadata_array.extend(metacont)
         else:
-            _, metacont, _ = fetchClassicURL(
+            _, metacont, _ = http_fetcher.fetch(
                 the_files[0]["links"]["self"], cachedFilename
             )
             metadata_array.extend(metacont)
