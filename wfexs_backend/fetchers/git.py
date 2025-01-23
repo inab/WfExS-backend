@@ -47,6 +47,10 @@ if TYPE_CHECKING:
         Final,
     )
 
+    from ..scheme_catalog import (
+        SchemeCatalog,
+    )
+
     from ..common import (
         AbsPath,
         AnyPath,
@@ -70,9 +74,10 @@ from urllib import parse, request
 import dulwich.porcelain
 
 from . import (
-    AbstractRepoFetcher,
+    AbstractSchemeRepoFetcher,
     DocumentedStatefulProtocolFetcher,
     FetcherException,
+    MaterializedRepo,
     ProtocolFetcherReturn,
     RemoteRepo,
     RepoGuessException,
@@ -90,7 +95,7 @@ from ..utils.contents import link_or_copy
 GITHUB_NETLOC = "github.com"
 
 
-class GitFetcher(AbstractRepoFetcher):
+class GitFetcher(AbstractSchemeRepoFetcher):
     GIT_PROTO: "Final[str]" = "git"
     GIT_PROTO_PREFIX: "Final[str]" = GIT_PROTO + "+"
     GITHUB_SCHEME: "Final[str]" = "github"
@@ -102,9 +107,12 @@ class GitFetcher(AbstractRepoFetcher):
     GIT_SCHEMES: "Final[Sequence[str]]" = ["https", "git", "ssh", "file"]
 
     def __init__(
-        self, progs: "ProgsMapping", setup_block: "Optional[Mapping[str, Any]]" = None
+        self,
+        scheme_catalog: "SchemeCatalog",
+        progs: "ProgsMapping" = dict(),
+        setup_block: "Optional[Mapping[str, Any]]" = None,
     ):
-        super().__init__(progs=progs, setup_block=setup_block)
+        super().__init__(scheme_catalog, progs=progs, setup_block=setup_block)
 
         self.git_cmd = self.progs.get(
             self.DEFAULT_GIT_CMD, cast("RelPath", self.DEFAULT_GIT_CMD)
@@ -501,7 +509,8 @@ class GitFetcher(AbstractRepoFetcher):
         """
         This method is required to generate a PID which usually
         represents an element (usually a workflow) in a repository.
-        If the fetcher does not recognize the type of repo, it should
+        If the fetcher does not recognize the type of repo, either using
+        repo_url content or the repo type in the worst case, it should
         return None
         """
         parsed_wf_url = parse.urlparse(remote_repo.repo_url)
@@ -651,14 +660,13 @@ class GitFetcher(AbstractRepoFetcher):
 
         return retval
 
-    def materialize_repo(
+    def materialize_repo_from_repo(
         self,
-        repoURL: "RepoURL",
-        repoTag: "Optional[RepoTag]" = None,
+        repo: "RemoteRepo",
         repo_tag_destdir: "Optional[PathLikePath]" = None,
         base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
+    ) -> "MaterializedRepo":
         """
 
         :param repoURL: The URL to the repository.
@@ -667,6 +675,9 @@ class GitFetcher(AbstractRepoFetcher):
         :param doUpdate:
         :return:
         """
+
+        repoURL = repo.repo_url
+        repoTag = repo.tag
 
         # Assure directory exists before next step
         if repo_tag_destdir is None:
@@ -831,10 +842,10 @@ class GitFetcher(AbstractRepoFetcher):
             checkout=repo_effective_checkout,
         )
 
-        return (
-            repo_tag_destpath,
-            remote_repo,
-            [],
+        return MaterializedRepo(
+            local=repo_tag_destpath,
+            repo=remote_repo,
+            metadata_array=[],
         )
 
     def fetch(
@@ -908,9 +919,13 @@ class GitFetcher(AbstractRepoFetcher):
             parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, "", "", "")),
         )
 
-        repo_tag_destdir, remote_repo, metadata_array = self.materialize_repo(
-            repoURL, repoTag=repoTag
+        materialized_repo_return = self.materialize_repo_from_repo(
+            RemoteRepo(repo_url=repoURL, tag=repoTag),
         )
+        repo_tag_destdir = materialized_repo_return.local
+        remote_repo = materialized_repo_return.repo
+        metadata_array = materialized_repo_return.metadata_array
+
         if repoRelPath is not None:
             remote_repo = remote_repo._replace(rel_path=cast("RelPath", repoRelPath))
 

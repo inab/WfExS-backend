@@ -38,11 +38,18 @@ if TYPE_CHECKING:
         URIType,
     )
 
+from wfexs_backend.scheme_catalog import (
+    SchemeCatalog,
+)
+
 from wfexs_backend.fetchers import (
     RemoteRepo,
     RepoGuessFlavor,
     RepoType,
 )
+
+from wfexs_backend.fetchers.http import HTTPFetcher
+
 from wfexs_backend.fetchers.git import GitFetcher
 
 WfExS_basedir = Path(__file__).parent.parent
@@ -254,7 +261,11 @@ def test_build_git_pid_from_repo(
     if remote_repo is None:
         pytest.skip("Skipped test because no remote repo was provided")
     else:
-        fetcher = GitFetcher({})
+        scheme_catalog = SchemeCatalog(
+            scheme_handlers=HTTPFetcher.GetSchemeHandlers(),
+        )
+
+        fetcher = GitFetcher(scheme_catalog, progs={})
         output = fetcher.build_pid_from_repo(remote_repo)
 
         assert output == repo_pid
