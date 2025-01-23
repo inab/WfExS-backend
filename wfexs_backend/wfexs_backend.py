@@ -83,9 +83,13 @@ from .encrypted_fs import (
 )
 
 
+from .scheme_catalog import (
+    SchemeCatalog,
+)
+
 from .cache_handler import (
     CachedContent,
-    SchemeHandlerCacheHandler,
+    CacheHandler,
 )
 
 from .container_factories import (
@@ -128,7 +132,7 @@ from .utils.rocrate import (
 )
 
 from .fetchers import (
-    AbstractRepoFetcher,
+    AbstractSchemeRepoFetcher,
     AbstractStatefulFetcher,
     DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
@@ -161,8 +165,7 @@ from .workflow_engines import (
 )
 
 from .fetchers.trs_files import (
-    TRS_SCHEME_PREFIX,
-    INTERNAL_TRS_SCHEME_PREFIX,
+    GA4GHTRSFetcher,
 )
 
 
@@ -217,7 +220,7 @@ if TYPE_CHECKING:
     )
 
     from .fetchers import (
-        RepoFetcher,
+        SchemeRepoFetcher,
         StatefulFetcher,
     )
 
@@ -678,17 +681,21 @@ class WfExSBackend:
         self.baseWorkDir = baseWorkDir
         self.defaultParanoidMode = False
 
-        self._sngltn: "MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher]" = (
+        self._sngltn_fetcher: "MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher]" = (
             dict()
         )
-        self.repo_fetchers: "MutableSequence[AbstractRepoFetcher]" = list()
+        self.repo_fetchers: "MutableSequence[AbstractSchemeRepoFetcher]" = list()
+        # scheme_catalog is created on first use
+        self.scheme_catalog = SchemeCatalog()
         # cacheHandler is created on first use
-        self.cacheHandler = SchemeHandlerCacheHandler(self.cacheDir)
+        self.cacheHandler = CacheHandler(
+            self.cacheDir, scheme_catalog=self.scheme_catalog
+        )
 
         fetchers_setup_block = local_config.get("fetchers-setup")
 
         # All the scheme handlers should be added here
-        self.findAndAddSchemeHandlersFromModuleName(
+        self.scheme_catalog.findAndAddSchemeHandlersFromModuleName(
             fetchers_setup_block=fetchers_setup_block
         )
 
@@ -748,7 +755,7 @@ class WfExSBackend:
 
     def getCacheHandler(
         self, cache_type: "CacheType"
-    ) -> "Tuple[SchemeHandlerCacheHandler, Optional[pathlib.Path]]":
+    ) -> "Tuple[CacheHandler, Optional[pathlib.Path]]":
         return self.cacheHandler, self.cachePathMap.get(cache_type)
 
     def instantiateStatefulFetcher(
@@ -759,25 +766,29 @@ class WfExSBackend:
         """
         Method to instantiate stateful fetchers once
         """
-        instStatefulFetcher = self._sngltn.get(statefulFetcher)
+        instStatefulFetcher = self._sngltn_fetcher.get(statefulFetcher)
         if instStatefulFetcher is None:
             # Setting the default list of programs
             for prog in statefulFetcher.GetNeededPrograms():
                 self.progs.setdefault(prog, cast("RelPath", prog))
             # Let's augment the list of needed progs by this
             # stateful fetcher
-            instStatefulFetcher = self.cacheHandler.instantiateStatefulFetcher(
+            instStatefulFetcher = self.scheme_catalog.instantiateStatefulFetcher(
                 statefulFetcher, progs=self.progs, setup_block=setup_block
             )
-            self._sngltn[statefulFetcher] = instStatefulFetcher
+            self._sngltn_fetcher[statefulFetcher] = instStatefulFetcher
+
+            # Also, if it is a repository fetcher, record it separately
+            if isinstance(instStatefulFetcher, AbstractSchemeRepoFetcher):
+                self.repo_fetchers.append(instStatefulFetcher)
 
         return cast("StatefulFetcher", instStatefulFetcher)
 
     def instantiateRepoFetcher(
         self,
-        repoFetcher: "Type[RepoFetcher]",
+        repoFetcher: "Type[SchemeRepoFetcher]",
         setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> "RepoFetcher":
+    ) -> "SchemeRepoFetcher":
         """
         Method to instantiate repo fetchers once
         """
@@ -995,141 +1006,6 @@ class WfExSBackend:
     ) -> "Optional[Type[AbstractExportPlugin]]":
         return self._export_plugins.get(plugin_id)
 
-    def findAndAddSchemeHandlersFromModuleName(
-        self,
-        the_module_name: "str" = "wfexs_backend.fetchers",
-        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
-        try:
-            the_module = importlib.import_module(the_module_name)
-            self.findAndAddSchemeHandlersFromModule(
-                the_module,
-                fetchers_setup_block=fetchers_setup_block,
-            )
-        except Exception as e:
-            errmsg = f"Unable to import module {the_module_name} in order to gather scheme handlers, due errors:"
-            self.logger.exception(errmsg)
-            raise WfExSBackendException(errmsg) from e
-
-    def findAndAddSchemeHandlersFromModule(
-        self,
-        the_module: "ModuleType",
-        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
-        for finder, module_name, ispkg in iter_namespace(the_module):
-            try:
-                named_module = importlib.import_module(module_name)
-            except:
-                self.logger.exception(
-                    f"Skipping module {module_name} in order to gather scheme handlers, due errors:"
-                )
-                continue
-
-            # First, try locating a variable named SCHEME_HANDLERS
-            # then, the different class declarations inheriting
-            # from AbstractStatefulFetcher
-            skipit = True
-            for name, obj in inspect.getmembers(named_module):
-                if name == "SCHEME_HANDLERS":
-                    if isinstance(obj, dict):
-                        self.addSchemeHandlers(
-                            obj,
-                            fetchers_setup_block=fetchers_setup_block,
-                        )
-                        skipit = False
-                elif (
-                    inspect.isclass(obj)
-                    and not inspect.isabstract(obj)
-                    and issubclass(obj, AbstractStatefulFetcher)
-                ):
-                    # Now, let's learn whether the class is enabled
-                    if getattr(obj, "ENABLED", False):
-                        self.addStatefulSchemeHandlers(
-                            obj,
-                            fetchers_setup_block=fetchers_setup_block,
-                        )
-                        skipit = False
-
-            if skipit:
-                self.logger.debug(
-                    f"Fetch module {named_module} was not eligible (no SCHEME_HANDLERS dictionary or subclass of {AbstractStatefulFetcher.__name__})"
-                )
-
-    def addStatefulSchemeHandlers(
-        self,
-        statefulSchemeHandler: "Type[AbstractStatefulFetcher]",
-        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
-        """
-        This method adds scheme handlers (aka "fetchers") from
-        a given stateful fetcher, also adding the needed programs
-        """
-
-        # Get the scheme handlers from this fetcher
-        schemeHandlers = statefulSchemeHandler.GetSchemeHandlers()
-
-        self.addSchemeHandlers(
-            schemeHandlers, fetchers_setup_block=fetchers_setup_block
-        )
-
-    # This pattern is used to validate the schemes
-    SCHEME_PAT: "Final[Pattern[str]]" = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*$")
-
-    def addSchemeHandlers(
-        self,
-        schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, DocumentedStatefulProtocolFetcher]]",
-        fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
-        """
-        This method adds scheme handlers (aka "fetchers")
-        or instantiates stateful scheme handlers (aka "stateful fetchers")
-        """
-        if isinstance(schemeHandlers, dict):
-            instSchemeHandlers = dict()
-            if fetchers_setup_block is None:
-                fetchers_setup_block = dict()
-            for scheme, schemeHandler in schemeHandlers.items():
-                if self.SCHEME_PAT.search(scheme) is None:
-                    self.logger.warning(
-                        f"Fetcher associated to scheme {scheme} has been skipped, as the scheme does not comply with RFC3986"
-                    )
-                    continue
-
-                lScheme = scheme.lower()
-                # When no setup block is available for the scheme fetcher,
-                # provide an empty one
-                setup_block = fetchers_setup_block.get(lScheme, dict())
-
-                instSchemeHandler = None
-                if isinstance(schemeHandler, DocumentedStatefulProtocolFetcher):
-                    instSchemeInstance = self.instantiateStatefulFetcher(
-                        schemeHandler.fetcher_class, setup_block=setup_block
-                    )
-                    if instSchemeInstance is not None:
-                        instSchemeHandler = DocumentedProtocolFetcher(
-                            fetcher=instSchemeInstance.fetch,
-                            description=instSchemeInstance.description
-                            if schemeHandler.description is None
-                            else schemeHandler.description,
-                            priority=schemeHandler.priority,
-                        )
-
-                        # Also, if it is a repository fetcher, record it separately
-                        if isinstance(instSchemeInstance, AbstractRepoFetcher):
-                            self.repo_fetchers.append(instSchemeInstance)
-                elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
-                    schemeHandler.fetcher
-                ):
-                    instSchemeHandler = schemeHandler
-
-                # Only the ones which have overcome the sanity checks
-                if instSchemeHandler is not None:
-                    # Schemes are case insensitive, so register only
-                    # the lowercase version
-                    instSchemeHandlers[lScheme] = instSchemeHandler
-
-            self.cacheHandler.addRawSchemeHandlers(instSchemeHandlers)
-
     def gen_workflow_pid(self, remote_repo: "RemoteRepo") -> "str":
         """
         This method tries generating the workflow pid passing the remote
@@ -1147,7 +1023,7 @@ class WfExSBackend:
         return remote_repo.repo_url if retval is None else retval
 
     def describeFetchableSchemes(self) -> "Sequence[Tuple[str, str, int]]":
-        return self.cacheHandler.describeRegisteredSchemes()
+        return self.scheme_catalog.describeRegisteredSchemes()
 
     def newSetup(
         self,
@@ -2084,14 +1960,18 @@ class WfExSBackend:
         repoDir: "Optional[pathlib.Path]" = None
         putative: "bool" = False
         cached_putative_path: "Optional[pathlib.Path]" = None
-        if parsedRepoURL.scheme in ("", TRS_SCHEME_PREFIX, INTERNAL_TRS_SCHEME_PREFIX):
+        if parsedRepoURL.scheme in (
+            "",
+            GA4GHTRSFetcher.TRS_SCHEME_PREFIX,
+            GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX,
+        ):
             # Extracting the TRS endpoint details from the parsedRepoURL
-            if parsedRepoURL.scheme == TRS_SCHEME_PREFIX:
+            if parsedRepoURL.scheme == GA4GHTRSFetcher.TRS_SCHEME_PREFIX:
                 # Duplication of code borrowed from trs_files.py
                 path_steps: "Sequence[str]" = parsedRepoURL.path.split("/")
                 if len(path_steps) < 3 or path_steps[0] != "":
                     raise WfExSBackendException(
-                        f"Ill-formed TRS CURIE {putative_repo_url}. It should be in the format of {TRS_SCHEME_PREFIX}://id/version or {TRS_SCHEME_PREFIX}://prefix-with-slashes/id/version"
+                        f"Ill-formed TRS CURIE {putative_repo_url}. It should be in the format of {GA4GHTRSFetcher.TRS_SCHEME_PREFIX}://id/version or {GA4GHTRSFetcher.TRS_SCHEME_PREFIX}://prefix-with-slashes/id/version"
                     )
                 trs_steps = cast("MutableSequence[str]", path_steps[0:-2])
                 trs_steps.extend(["ga4gh", "trs", "v2", ""])
@@ -2108,7 +1988,7 @@ class WfExSBackend:
 
                 workflow_id = urllib.parse.unquote(path_steps[-2])
                 version_id = urllib.parse.unquote(path_steps[-1])
-            elif parsedRepoURL.scheme == INTERNAL_TRS_SCHEME_PREFIX:
+            elif parsedRepoURL.scheme == GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX:
                 # Time to try guessing everything
                 try:
                     internal_trs_cached_content = self.cacheHandler.fetch(
@@ -2584,7 +2464,10 @@ class WfExSBackend:
             # Learning the available files and maybe
             # which is the entrypoint to the workflow
             cached_trs_files = self.cacheFetch(
-                cast("URIType", INTERNAL_TRS_SCHEME_PREFIX + ":" + toolFilesURL),
+                cast(
+                    "URIType",
+                    GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX + ":" + toolFilesURL,
+                ),
                 CacheType.TRS,
                 offline=offline,
                 ignoreCache=ignoreCache,
@@ -2668,7 +2551,7 @@ class WfExSBackend:
         doUpdate: "bool" = True,
         registerInCache: "bool" = True,
     ) -> "Tuple[pathlib.Path, RepoTag]":
-        fetcher_clazz: "Optional[Type[AbstractRepoFetcher]]" = None
+        fetcher_clazz: "Optional[Type[AbstractSchemeRepoFetcher]]" = None
         if repo.repo_type not in (RepoType.Other, RepoType.SoftwareHeritage):
             fetcher_clazz = GitFetcher
         elif repo.repo_type == RepoType.SoftwareHeritage:
@@ -2680,15 +2563,14 @@ class WfExSBackend:
             )
 
         fetcher = self.instantiateRepoFetcher(fetcher_clazz)
-        (
-            repo_path,
-            materialized_repo,
-            metadata_array,
-        ) = fetcher.materialize_repo_from_repo_transient(
+        materialized_repo_return = fetcher.materialize_repo_from_repo(
             repo,
             doUpdate=doUpdate,
             base_repo_destdir=self.cacheWorkflowDir,
         )
+        repo_path = materialized_repo_return.local
+        materialized_repo = materialized_repo_return.repo
+        metadata_array = materialized_repo_return.metadata_array
 
         # Now, let's register the checkout with cache structures
         # using its public URI
