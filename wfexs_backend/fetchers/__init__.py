@@ -317,61 +317,9 @@ class MaterializedRepo(NamedTuple):
     recommends_upstream: "bool" = False
 
 
-class AbstractRepoFetcher(AbstractStatefulFetcher):
+class AbstractSchemeRepoFetcher(AbstractStatefulFetcher):
     PRIORITY: "ClassVar[int]" = DEFAULT_PRIORITY + 10
 
-    @abc.abstractmethod
-    def materialize_repo(
-        self,
-        repoURL: "RepoURL",
-        repoTag: "Optional[RepoTag]" = None,
-        repo_tag_destdir: "Optional[PathLikePath]" = None,
-        base_repo_destdir: "Optional[PathLikePath]" = None,
-        doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
-        """
-        Subclasses have to implement this method, which is used to materialize
-        a repository described by a RemoteRepo instance.
-
-        :param repo: The description of the repository to be materialized.
-        :type repo: class: `wfexs_backend.fetchers.RemoteRepo`
-        :param repo_tag_destdir: Destination of the materialized repo.
-        :type repo_tag_destdir: str, `os.PathLike[str]`, optional
-        :param base_repo_destdir: If repo_tag_destdir is None, parent directory of the newly created destination directory for the repo.
-        :type base_repo_destdir: str, `os.PathLike[str]`, optional
-        :param doUpdate: Should the code try updating an already materialized repo? Defaults to False
-        :type doUpdate: bool
-
-        The returned tuple has next elements:
-        * The local path where the repo was materialized.
-        * A RemoteRepo instance.
-        * The metadata gathered through the materialisation process.
-        """
-        pass
-
-    @abc.abstractmethod
-    def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
-        """
-        This method is required to generate a PID which usually
-        represents an element (usually a workflow) in a repository.
-        If the fetcher does not recognize the type of repo, either using
-        repo_url content or the repo type in the worst case, it should
-        return None
-        """
-        pass
-
-    @classmethod
-    @abc.abstractmethod
-    def GuessRepoParams(
-        cls,
-        orig_wf_url: "Union[URIType, parse.ParseResult]",
-        logger: "Optional[logging.Logger]" = None,
-        fail_ok: "bool" = False,
-    ) -> "Optional[RemoteRepo]":
-        pass
-
-
-class AbstractSchemeRepoFetcher(AbstractRepoFetcher):
     """
     This abstract subclass is used to force the initialization of the
     scheme catalog instance
@@ -390,26 +338,6 @@ class AbstractSchemeRepoFetcher(AbstractRepoFetcher):
             progs=progs, setup_block=setup_block, scheme_catalog=scheme_catalog
         )
         self.scheme_catalog: "SchemeCatalog"
-
-    def materialize_repo(
-        self,
-        repoURL: "RepoURL",
-        repoTag: "Optional[RepoTag]" = None,
-        repo_tag_destdir: "Optional[PathLikePath]" = None,
-        base_repo_destdir: "Optional[PathLikePath]" = None,
-        doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
-        mrepo = self.materialize_repo_from_repo(
-            RemoteRepo(
-                repo_url=repoURL,
-                tag=repoTag,
-            ),
-            repo_tag_destdir=repo_tag_destdir,
-            base_repo_destdir=base_repo_destdir,
-            doUpdate=doUpdate,
-        )
-
-        return mrepo.local, mrepo.repo, mrepo.metadata_array
 
     @abc.abstractmethod
     def materialize_repo_from_repo(
@@ -439,6 +367,27 @@ class AbstractSchemeRepoFetcher(AbstractRepoFetcher):
         * An optional, upstream URI representing the repo. For instance,
           in the case of a TRS or a SWH hosted repo, the registered upstream URL.
         """
+        pass
+
+    @abc.abstractmethod
+    def build_pid_from_repo(self, remote_repo: "RemoteRepo") -> "Optional[str]":
+        """
+        This method is required to generate a PID which usually
+        represents an element (usually a workflow) in a repository.
+        If the fetcher does not recognize the type of repo, either using
+        repo_url content or the repo type in the worst case, it should
+        return None
+        """
+        pass
+
+    @classmethod
+    @abc.abstractmethod
+    def GuessRepoParams(
+        cls,
+        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        logger: "Optional[logging.Logger]" = None,
+        fail_ok: "bool" = False,
+    ) -> "Optional[RemoteRepo]":
         pass
 
 
