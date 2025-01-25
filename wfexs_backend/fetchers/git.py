@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
     from typing import (
         Any,
+        ClassVar,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -96,6 +97,8 @@ GITHUB_NETLOC = "github.com"
 
 
 class GitFetcher(AbstractSchemeRepoFetcher):
+    PRIORITY: "ClassVar[int]" = AbstractSchemeRepoFetcher.PRIORITY + 10
+
     GIT_PROTO: "Final[str]" = "git"
     GIT_PROTO_PREFIX: "Final[str]" = GIT_PROTO + "+"
     GITHUB_SCHEME: "Final[str]" = "github"

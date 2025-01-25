@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
     from typing import (
         Any,
+        ClassVar,
         IO,
         Mapping,
         MutableSequence,
@@ -89,6 +90,8 @@ from ..utils.contents import (
 
 
 class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
+    PRIORITY: "ClassVar[int]" = AbstractSchemeRepoFetcher.PRIORITY + 20
+
     SOFTWARE_HERITAGE_SCHEME: "Final[str]" = "swh"
     SWH_API_REST: "Final[str]" = "https://archive.softwareheritage.org/api/1/"
     SWH_API_REST_KNOWN: "Final[URIType]" = cast(
