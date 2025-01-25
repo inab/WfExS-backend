@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,6 +70,10 @@ if TYPE_CHECKING:
         URIWithMetadata,
     )
 
+    from ..scheme_catalog import (
+        SchemeCatalog,
+    )
+
     class RepoDesc(TypedDict):
         repo: Required[RepoURL]
         tag: Required[Optional[RepoTag]]
@@ -110,10 +114,6 @@ from urllib import parse
 
 from ..common import (
     AbstractWfExSException,
-)
-
-from ..scheme_catalog import (
-    SchemeCatalog,
 )
 
 # Default priority
