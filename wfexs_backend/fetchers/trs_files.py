@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -62,6 +62,8 @@ from ..utils.misc import (
     urlresolv,
 )
 
+from .http import HTTPFetcher
+
 if TYPE_CHECKING:
     from typing import (
         Any,
@@ -86,7 +88,13 @@ if TYPE_CHECKING:
         RepoURL,
         SecurityContextConfig,
         SymbolicName,
+        TRS_Workflow_Descriptor,
         URIType,
+    )
+
+    from ..workflow import (
+        WFVersionId,
+        WorkflowId,
     )
 
     from ..scheme_catalog import (
@@ -98,6 +106,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
     INTERNAL_TRS_SCHEME_PREFIX: "Final[str]" = "wfexs.trs.files"
     TRS_SCHEME_PREFIX: "Final[str]" = "trs"
 
+    TRS_TOOLS_SUFFIX: "Final[str]" = "tools/"
     TRS_FILES_SUFFIX: "Final[str]" = "/files"
     TRS_DESCRIPTOR_INFIX: "Final[str]" = "/descriptor/"
 
@@ -133,7 +142,233 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
     ) -> "Optional[RemoteRepo]":
-        pass
+        # Deciding which is the input
+        wf_url: "RepoURL"
+        parsed_wf_url: "parse.ParseResult"
+        if isinstance(orig_wf_url, parse.ParseResult):
+            parsed_wf_url = orig_wf_url
+            wf_url = cast("RepoURL", parse.urlunparse(orig_wf_url))
+        else:
+            wf_url = cast("RepoURL", orig_wf_url)
+            parsed_wf_url = parse.urlparse(orig_wf_url)
+
+        if parsed_wf_url.scheme in HTTPFetcher.GetSchemeHandlers():
+            wf_url = cast("RepoURL", cls.INTERNAL_TRS_SCHEME_PREFIX + ":" + wf_url)
+            parsed_wf_url = parse.urlparse(wf_url)
+
+        putative_tool_uri: "Optional[URIType]" = None
+        if parsed_wf_url.scheme == cls.TRS_SCHEME_PREFIX:
+            # Duplication of code borrowed from trs_files.py
+            path_steps: "Sequence[str]" = parsed_wf_url.path.split("/")
+            if len(path_steps) < 3 or path_steps[0] != "":
+                if fail_ok:
+                    return None
+                raise FetcherException(
+                    f"Ill-formed TRS CURIE {wf_url}. It should be in the format of {cls.TRS_SCHEME_PREFIX}://server/id/version or {cls.TRS_SCHEME_PREFIX}://server-plus-prefix-with-slashes/id/version"
+                )
+            trs_steps = cast("MutableSequence[str]", path_steps[0:-2])
+            trs_steps.extend(["ga4gh", "trs", "v2", ""])
+            trs_endpoint = urllib.parse.urlunparse(
+                urllib.parse.ParseResult(
+                    scheme="https",
+                    netloc=parsed_wf_url.netloc,
+                    path="/".join(trs_steps),
+                    params="",
+                    query="",
+                    fragment="",
+                )
+            )
+
+            workflow_id = urllib.parse.unquote(path_steps[-2])
+            version_id = urllib.parse.unquote(path_steps[-1])
+            putative_tool_uri = cast("URIType", wf_url)
+        elif parsed_wf_url.scheme == cls.INTERNAL_TRS_SCHEME_PREFIX:
+            putative_tool_uri = cast("URIType", parsed_wf_url.path)
+            parsed_putative_tool_uri = urllib.parse.urlparse(putative_tool_uri)
+            is_wh = parsed_putative_tool_uri.netloc.endswith("workflowhub.eu")
+
+            # Time to try guessing everything
+            try:
+                resio = io.BytesIO()
+                _, metaresio, _ = HTTPFetcher().streamfetch(
+                    putative_tool_uri,
+                    resio,
+                    secContext={
+                        "headers": {
+                            "Accept": "application/json",
+                        },
+                    },
+                )
+                trs__meta = json.loads(resio.getvalue().decode("utf-8"))
+            except Exception as e:
+                if fail_ok:
+                    return None
+                raise FetcherException(
+                    f"trs_endpoint could not be guessed from {putative_tool_uri} (raised exception)"
+                ) from e
+
+            if not isinstance(trs__meta, dict):
+                if fail_ok:
+                    return None
+                raise FetcherException(
+                    f"trs_endpoint could not be guessed from {putative_tool_uri} (not returning JSON object)"
+                )
+
+            trs__meta__id: "Optional[str]" = trs__meta.get("id")
+            if trs__meta__id is None:
+                if fail_ok:
+                    return None
+                raise FetcherException(
+                    f"trs_endpoint could not be guessed from {putative_tool_uri} (not returning id)"
+                )
+
+            trs__meta__url: "Optional[str]" = trs__meta.get("url")
+            if trs__meta__url is None:
+                if fail_ok:
+                    return None
+                raise FetcherException(
+                    f"trs_endpoint could not be guessed from {putative_tool_uri} (not returning url)"
+                )
+
+            # Non compliant emitted trs__meta__url
+            if is_wh:
+                trs__meta__url = putative_tool_uri
+
+            if "descriptor_type" in trs__meta:
+                version_id = trs__meta__id
+                # Now we need to backtrack in the url to get the workflow id
+                tool_url_suffix = "/versions/" + urllib.parse.quote(version_id, safe="")
+
+                # If this happens, this implementation is not so compliant with standard
+                dockstore_tool_url_suffix = "/versions/" + urllib.parse.quote(
+                    trs__meta.get("name", ""), safe=""
+                )
+                if trs__meta__url.endswith(dockstore_tool_url_suffix):
+                    tool_url_suffix = dockstore_tool_url_suffix
+                    version_id = trs__meta.get("name", "")
+
+                if not trs__meta__url.endswith(tool_url_suffix):
+                    if fail_ok:
+                        return None
+                    raise FetcherException(
+                        f"trs_endpoint could not be guessed from {putative_tool_uri} and {trs__meta__url} (version {version_id}, expected suffix {tool_url_suffix}, mismatched API route)"
+                    )
+
+                trs_tool_url = cast(
+                    "URIType", trs__meta__url[0 : -len(tool_url_suffix)]
+                )
+                try:
+                    resio = io.BytesIO()
+                    _, metaresio, _ = HTTPFetcher().streamfetch(
+                        trs_tool_url,
+                        resio,
+                    )
+                    trs__meta = json.loads(resio.getvalue().decode("utf-8"))
+
+                except Exception as e:
+                    if fail_ok:
+                        return None
+                    raise FetcherException(
+                        f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, raised exception)"
+                    ) from e
+
+                trs__meta__id = trs__meta.get("id")
+                if trs__meta__id is None:
+                    if fail_ok:
+                        return None
+                    raise FetcherException(
+                        f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, not returning id)"
+                    )
+
+                trs__meta__url = trs__meta.get("url")
+                if trs__meta__url is None:
+                    if fail_ok:
+                        return None
+                    raise FetcherException(
+                        f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, not returning url)"
+                    )
+            else:
+                trs_tool_url = putative_tool_uri
+                version_id = None
+
+            if "toolclass" in trs__meta:
+                workflow_id = trs__meta__id
+
+                # Now we need to backtrack in the url to get the workflow id
+                tool_url_suffix = "/tools/" + urllib.parse.quote(workflow_id, safe="")
+                if not trs_tool_url.endswith(tool_url_suffix):
+                    if fail_ok:
+                        return None
+                    raise FetcherException(
+                        f"trs_endpoint could not be guessed from {trs_tool_url} and {trs__meta__url} (expected suffix {tool_url_suffix}, mismatched API route)"
+                    )
+
+                trs_endpoint = trs_tool_url[0 : -len(tool_url_suffix)]
+            else:
+                if fail_ok:
+                    return None
+                raise FetcherException(
+                    f"trs_endpoint could not be guessed from {putative_tool_uri} (no clues)"
+                )
+
+        # Next two elifs should *never* happen
+        elif fail_ok:
+            return None
+        else:
+            raise FetcherException(
+                f"trs_endpoint could not be guessed from {orig_wf_url} (no clues)"
+            )
+
+        # This is needed to guarantee it is always declared
+        assert putative_tool_uri is not None
+
+        return RemoteRepo(
+            repo_url=cast("RepoURL", putative_tool_uri),
+            repo_type=RepoType.TRS,
+        )
+
+    @classmethod
+    def BuildRepoPIDFromTRSParams(
+        cls,
+        trs_endpoint: "str",
+        workflow_id: "WorkflowId",
+        version_id: "Optional[WFVersionId]",
+        descriptor_type: "Optional[TRS_Workflow_Descriptor]",
+    ) -> "URIType":
+        if isinstance(workflow_id, int):
+            workflow_id_str = str(workflow_id)
+        else:
+            workflow_id_str = workflow_id
+
+        # The base URL must end with a slash
+        if trs_endpoint[-1] != "/":
+            trs_endpoint += "/"
+
+        # Removing the tools suffix, which appeared in first WfExS iterations
+        if trs_endpoint.endswith("/" + cls.TRS_TOOLS_SUFFIX):
+            trs_endpoint = trs_endpoint[0 : -len(cls.TRS_TOOLS_SUFFIX)]
+
+        trs_tools_url = cast(
+            "URIType",
+            urllib.parse.urljoin(
+                trs_endpoint,
+                cls.TRS_TOOLS_SUFFIX + urllib.parse.quote(workflow_id_str, safe=""),
+            ),
+        )
+
+        if version_id is not None:
+            trs_tool_url = (
+                trs_tools_url
+                + "/versions/"
+                + urllib.parse.quote(str(version_id), safe="")
+            )
+
+            if descriptor_type is not None:
+                trs_tool_url += "/" + urllib.parse.quote(descriptor_type, safe="")
+        else:
+            trs_tool_url = trs_tools_url
+
+        return cast("URIType", cls.INTERNAL_TRS_SCHEME_PREFIX + ":" + trs_tool_url)
 
     def materialize_repo_from_repo(
         self,
