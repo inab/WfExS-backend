@@ -136,12 +136,12 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         return tuple()
 
     @classmethod
-    def GuessRepoParams(
+    def GuessTRSParams(
         cls,
         orig_wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
-    ) -> "Optional[RemoteRepo]":
+    ) -> "Optional[Tuple[RepoURL, str, Sequence[str], WorkflowId, Optional[WFVersionId]]]":
         # Deciding which is the input
         wf_url: "RepoURL"
         parsed_wf_url: "parse.ParseResult"
@@ -158,7 +158,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
         putative_tool_uri: "Optional[URIType]" = None
         if parsed_wf_url.scheme == cls.TRS_SCHEME_PREFIX:
-            # Duplication of code borrowed from trs_files.py
+            # Duplication of code
             path_steps: "Sequence[str]" = parsed_wf_url.path.split("/")
             if len(path_steps) < 3 or path_steps[0] != "":
                 if fail_ok:
@@ -166,12 +166,15 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 raise FetcherException(
                     f"Ill-formed TRS CURIE {wf_url}. It should be in the format of {cls.TRS_SCHEME_PREFIX}://server/id/version or {cls.TRS_SCHEME_PREFIX}://server-plus-prefix-with-slashes/id/version"
                 )
+
             trs_steps = cast("MutableSequence[str]", path_steps[0:-2])
             trs_steps.extend(["ga4gh", "trs", "v2", ""])
+
+            trs_service_netloc = parsed_wf_url.netloc
             trs_endpoint = urllib.parse.urlunparse(
                 urllib.parse.ParseResult(
                     scheme="https",
-                    netloc=parsed_wf_url.netloc,
+                    netloc=trs_service_netloc,
                     path="/".join(trs_steps),
                     params="",
                     query="",
@@ -185,6 +188,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         elif parsed_wf_url.scheme == cls.INTERNAL_TRS_SCHEME_PREFIX:
             putative_tool_uri = cast("URIType", parsed_wf_url.path)
             parsed_putative_tool_uri = urllib.parse.urlparse(putative_tool_uri)
+            # Detecting workflowhub derivatives
             is_wh = parsed_putative_tool_uri.netloc.endswith("workflowhub.eu")
 
             # Time to try guessing everything
@@ -263,7 +267,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         trs_tool_url,
                         resio,
                     )
-                    trs__meta = json.loads(resio.getvalue().decode("utf-8"))
+                    trs_tool_meta = json.loads(resio.getvalue().decode("utf-8"))
 
                 except Exception as e:
                     if fail_ok:
@@ -272,7 +276,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, raised exception)"
                     ) from e
 
-                trs__meta__id = trs__meta.get("id")
+                trs__meta__id = trs_tool_meta.get("id")
                 if trs__meta__id is None:
                     if fail_ok:
                         return None
@@ -280,7 +284,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, not returning id)"
                     )
 
-                trs__meta__url = trs__meta.get("url")
+                trs__meta__url = trs_tool_meta.get("url")
                 if trs__meta__url is None:
                     if fail_ok:
                         return None
@@ -289,9 +293,12 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     )
             else:
                 trs_tool_url = putative_tool_uri
+                trs_tool_meta = None
                 version_id = None
 
-            if "toolclass" in trs__meta:
+            if (version_id is not None and "toolclass" in trs_tool_meta) or (
+                version_id is None and "toolclass" in trs__meta
+            ):
                 workflow_id = trs__meta__id
 
                 # Now we need to backtrack in the url to get the workflow id
@@ -304,6 +311,17 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     )
 
                 trs_endpoint = trs_tool_url[0 : -len(tool_url_suffix)]
+
+                ga4gh_trs_suffix = "/ga4gh/trs/v2"
+                # This is here for not so compliant services like yevis
+                trs_transient_endpoint = (
+                    trs_endpoint[0 : -len(ga4gh_trs_suffix)]
+                    if trs_endpoint.endswith(ga4gh_trs_suffix)
+                    else trs_endpoint
+                )
+                parsed_trs_endpoint = urllib.parse.urlparse(trs_transient_endpoint)
+                trs_service_netloc = parsed_trs_endpoint.netloc
+                trs_steps = parsed_trs_endpoint.path.split("/")
             else:
                 if fail_ok:
                     return None
@@ -322,9 +340,30 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         # This is needed to guarantee it is always declared
         assert putative_tool_uri is not None
 
-        return RemoteRepo(
-            repo_url=cast("RepoURL", putative_tool_uri),
-            repo_type=RepoType.TRS,
+        return (
+            cast("RepoURL", putative_tool_uri),
+            trs_service_netloc,
+            trs_steps,
+            workflow_id,
+            version_id,
+        )
+
+    @classmethod
+    def GuessRepoParams(
+        cls,
+        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        logger: "Optional[logging.Logger]" = None,
+        fail_ok: "bool" = False,
+    ) -> "Optional[RemoteRepo]":
+        trs_params = cls.GuessTRSParams(orig_wf_url, logger=logger, fail_ok=fail_ok)
+
+        return (
+            None
+            if trs_params is None
+            else RemoteRepo(
+                repo_url=trs_params[0],
+                repo_type=RepoType.TRS,
+            )
         )
 
     @classmethod
@@ -893,12 +932,38 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
         # TODO: improve this to cover the different cases
         parsedInputURL = parse.urlparse(remote_repo.repo_url)
-        if (
-            parsedInputURL.scheme
-            in (self.INTERNAL_TRS_SCHEME_PREFIX, self.TRS_SCHEME_PREFIX)
-            or remote_repo.repo_type == RepoType.TRS
+        if parsedInputURL.scheme in (
+            self.INTERNAL_TRS_SCHEME_PREFIX,
+            self.TRS_SCHEME_PREFIX,
         ):
             return remote_repo.repo_url
+        elif remote_repo.repo_type == RepoType.TRS:
+            guessed_trs_params = self.GuessTRSParams(
+                parsedInputURL, logger=self.logger, fail_ok=True
+            )
+            if guessed_trs_params is not None:
+                (
+                    trs_tool_url,
+                    trs_service_netloc,
+                    trs_steps,
+                    workflow_id,
+                    version_id,
+                ) = guessed_trs_params
+                new_steps = [*trs_steps, urllib.parse.quote(str(workflow_id), safe="")]
+                if version_id is not None:
+                    new_steps.append(urllib.parse.quote(str(version_id), safe=""))
+
+                computed_trs_endpoint = urllib.parse.urlunparse(
+                    urllib.parse.ParseResult(
+                        scheme=self.TRS_SCHEME_PREFIX,
+                        netloc=trs_service_netloc,
+                        path="/".join(new_steps),
+                        params="",
+                        query="",
+                        fragment="",
+                    )
+                )
+                return computed_trs_endpoint
 
         return None
 
