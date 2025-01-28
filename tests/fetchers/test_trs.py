@@ -19,7 +19,7 @@
 import pytest
 import logging
 
-from pathlib import Path
+import pathlib
 
 from typing import (
     cast,
@@ -133,11 +133,11 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
             RemoteRepo(
                 repo_url=cast(
                     "RepoURL",
-                    "https://dockstore.org/api/ga4gh/trs/v2/tools/%23workflow%2Fgithub.com%2FNCI-GDC%2Fgdc-dnaseq-cwl%2FGDC_DNASeq",
+                    "https://dockstore.org/api/ga4gh/trs/v2/tools/%23workflow%2Fgithub.com%2FNCI-GDC%2Fgdc-dnaseq-cwl%2FGDC_DNASeq/versions/release",
                 ),
                 repo_type=RepoType.TRS,
             ),
-            "trs://dockstore.org/api/%23workflow%2Fgithub.com%2FNCI-GDC%2Fgdc-dnaseq-cwl%2FGDC_DNASeq",
+            "trs://dockstore.org/api/%23workflow%2Fgithub.com%2FNCI-GDC%2Fgdc-dnaseq-cwl%2FGDC_DNASeq/release",
         ),
         (
             "https://workflowhub.eu/ga4gh/trs/v2/tools/",
@@ -306,3 +306,28 @@ def test_build_trs_pid_from_repo(
         output = fetcher.build_pid_from_repo(remote_repo)
 
         assert output in (url, repo_pid)
+
+
+@TRS_PARAMS_TESTBED
+def test_materialize_repo_from_repo(
+    tmppath: "pathlib.Path",
+    trs_endpoint: "str",
+    workflow_id: "WorkflowId",
+    version_id: "Optional[WFVersionId]",
+    descriptor_type: "Optional[TRS_Workflow_Descriptor]",
+    url: "str",
+    remote_repo: "Optional[RemoteRepo]",
+    repo_pid: "Optional[str]",
+) -> "None":
+    if remote_repo is None:
+        pytest.skip("Skipped test because no remote repo was provided")
+    else:
+        scheme_catalog = SchemeCatalog(
+            scheme_handlers=HTTPFetcher.GetSchemeHandlers(),
+        )
+
+        fetcher = GA4GHTRSFetcher(scheme_catalog, progs={})
+        materialized_repo = fetcher.materialize_repo_from_repo(remote_repo)
+        logger.warning(materialized_repo)
+
+        assert False

@@ -21,6 +21,7 @@ from __future__ import absolute_import
 import atexit
 import copy
 import hashlib
+import inspect
 import io
 import json
 import logging
@@ -29,6 +30,7 @@ import pathlib
 import shutil
 import tempfile
 import urllib.parse
+import sys
 import warnings
 
 from typing import (
@@ -37,6 +39,10 @@ from typing import (
 )
 
 from urllib import parse
+
+# This code needs exception groups
+if sys.version_info[:2] < (3, 11):
+    from exceptiongroup import ExceptionGroup
 
 from . import (
     AbstractSchemeRepoFetcher,
@@ -47,6 +53,10 @@ from . import (
     ProtocolFetcherReturn,
     RemoteRepo,
     RepoType,
+)
+
+from .. import (
+    get_WfExS_version_str,
 )
 
 from ..common import (
@@ -63,6 +73,10 @@ from ..utils.misc import (
 )
 
 from .http import HTTPFetcher
+
+from ..scheme_catalog import (
+    SchemeCatalog,
+)
 
 if TYPE_CHECKING:
     from typing import (
@@ -95,10 +109,6 @@ if TYPE_CHECKING:
     from ..workflow import (
         WFVersionId,
         WorkflowId,
-    )
-
-    from ..scheme_catalog import (
-        SchemeCatalog,
     )
 
 
@@ -141,7 +151,18 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         orig_wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
-    ) -> "Optional[Tuple[RepoURL, str, Sequence[str], WorkflowId, Optional[WFVersionId]]]":
+        scheme_catalog: "Optional[SchemeCatalog]" = None,
+    ) -> "Optional[Tuple[RepoURL, str, Sequence[str], WorkflowId, WFVersionId, str, Sequence[URIWithMetadata], Optional[Mapping[str, Any]]]]":
+        if scheme_catalog is None:
+            scheme_catalog = SchemeCatalog(
+                scheme_handlers=HTTPFetcher.GetSchemeHandlers()
+            )
+
+        if logger is None:
+            logger = logging.getLogger(
+                dict(inspect.getmembers(cls))["__module__"] + "::" + cls.__name__
+            )
+
         # Deciding which is the input
         wf_url: "RepoURL"
         parsed_wf_url: "parse.ParseResult"
@@ -156,7 +177,10 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             wf_url = cast("RepoURL", cls.INTERNAL_TRS_SCHEME_PREFIX + ":" + wf_url)
             parsed_wf_url = parse.urlparse(wf_url)
 
+        metadata_array: "MutableSequence[URIWithMetadata]" = []
         putative_tool_uri: "Optional[URIType]" = None
+        descriptor: "Optional[str]" = None
+        service_info_metadata: "Optional[MutableMapping[str, Any]]" = None
         if parsed_wf_url.scheme == cls.TRS_SCHEME_PREFIX:
             # Duplication of code
             path_steps: "Sequence[str]" = parsed_wf_url.path.split("/")
@@ -168,10 +192,10 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 )
 
             trs_steps = cast("MutableSequence[str]", path_steps[0:-2])
-            trs_steps.extend(["ga4gh", "trs", "v2", ""])
+            trs_steps.extend(["ga4gh", "trs", "v2", "service-info"])
 
             trs_service_netloc = parsed_wf_url.netloc
-            trs_endpoint = urllib.parse.urlunparse(
+            trs_service_info = urllib.parse.urlunparse(
                 urllib.parse.ParseResult(
                     scheme="https",
                     netloc=trs_service_netloc,
@@ -182,33 +206,105 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 )
             )
 
+            service_info_wfexs_meta = {
+                "fetched": trs_service_info,
+                "payload": cast("Optional[Mapping[str, Any]]", None),
+            }
+            metadata_array.append(URIWithMetadata(wf_url, service_info_wfexs_meta))
+            try:
+                metaio = io.BytesIO()
+                _, metametaio, _ = scheme_catalog.streamfetch(
+                    cast("URIType", trs_service_info), metaio
+                )
+                service_info_metadata = json.loads(metaio.getvalue().decode("utf-8"))
+                service_info_wfexs_meta["payload"] = service_info_metadata
+                metadata_array.extend(metametaio)
+
+                trs_endpoint = trs_service_info[0 : -len("service-info")]
+            except Exception as e1:
+                non_standard_trs_steps = cast("MutableSequence[str]", path_steps[0:-2])
+                non_standard_trs_steps.extend(["service-info"])
+
+                non_standard_trs_service_info = urllib.parse.urlunparse(
+                    urllib.parse.ParseResult(
+                        scheme="https",
+                        netloc=trs_service_netloc,
+                        path="/".join(non_standard_trs_steps),
+                        params="",
+                        query="",
+                        fragment="",
+                    )
+                )
+
+                try:
+                    metaio = io.BytesIO()
+                    _, metametaio, _ = scheme_catalog.streamfetch(
+                        cast("URIType", non_standard_trs_service_info), metaio
+                    )
+                    service_info_metadata = json.loads(
+                        metaio.getvalue().decode("utf-8")
+                    )
+                    service_info_wfexs_meta["payload"] = service_info_metadata
+                    metadata_array.extend(metametaio)
+                    trs_endpoint = trs_service_info[0 : -len("service-info")]
+                except Exception as e2:
+                    if fail_ok:
+                        return None
+                    raise ExceptionGroup(
+                        f"Error fetching or processing TRS service info metadata for {wf_url} (tried both {trs_service_info} and {non_standard_trs_service_info})",
+                        [e1, e2],
+                    )
+
+            trs_tool_uri = (
+                trs_endpoint
+                + cls.TRS_TOOLS_SUFFIX
+                + path_steps[-2]
+                + "/versions/"
+                + path_steps[-1]
+            )
             workflow_id = urllib.parse.unquote(path_steps[-2])
             version_id = urllib.parse.unquote(path_steps[-1])
-            putative_tool_uri = cast("URIType", wf_url)
+            descriptor = None
         elif parsed_wf_url.scheme == cls.INTERNAL_TRS_SCHEME_PREFIX:
-            putative_tool_uri = cast("URIType", parsed_wf_url.path)
+            putative_tool_uri = cast(
+                "URIType",
+                parsed_wf_url.path[0:-1]
+                if parsed_wf_url.path.endswith("/")
+                else parsed_wf_url.path,
+            )
+
             parsed_putative_tool_uri = urllib.parse.urlparse(putative_tool_uri)
+            trs_service_netloc = parsed_putative_tool_uri.netloc
             # Detecting workflowhub derivatives
             is_wh = parsed_putative_tool_uri.netloc.endswith("workflowhub.eu")
 
             # Time to try guessing everything
+            tool_wfexs_meta = {
+                "fetched": putative_tool_uri,
+                "payload": None,
+            }
+            metadata_array.append(URIWithMetadata(wf_url, tool_wfexs_meta))
             try:
                 resio = io.BytesIO()
-                _, metaresio, _ = HTTPFetcher().streamfetch(
+                _, metaresio, _ = scheme_catalog.streamfetch(
                     putative_tool_uri,
                     resio,
-                    secContext={
+                    sec_context={
                         "headers": {
                             "Accept": "application/json",
+                            # Added to avoid Cloudflare anti-bot policy
+                            "User-Agent": get_WfExS_version_str(),
                         },
                     },
                 )
                 trs__meta = json.loads(resio.getvalue().decode("utf-8"))
+                tool_wfexs_meta["payload"] = trs__meta
+                metadata_array.extend(metaresio)
             except Exception as e:
                 if fail_ok:
                     return None
                 raise FetcherException(
-                    f"trs_endpoint could not be guessed from {putative_tool_uri} (raised exception)"
+                    f"trs_endpoint could not be guessed from {putative_tool_uri} (raised exception {e})"
                 ) from e
 
             if not isinstance(trs__meta, dict):
@@ -218,116 +314,99 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     f"trs_endpoint could not be guessed from {putative_tool_uri} (not returning JSON object)"
                 )
 
-            trs__meta__id: "Optional[str]" = trs__meta.get("id")
-            if trs__meta__id is None:
-                if fail_ok:
+            # Is this the "abstract" tool definition?
+            versions = trs__meta.get("versions")
+            if isinstance(versions, list) and "toolclass" in trs__meta:
+                if len(versions) == 0:
+                    if fail_ok:
+                        return None
+                    raise FetcherException(
+                        f"No versions found associated to TRS tool reachable through {putative_tool_uri}"
+                    )
+                # Reuse the last version
+                trs_tool_meta = versions[-1]
+                trs_endpoint = urllib.parse.urlunparse(
+                    urllib.parse.ParseResult(
+                        scheme=parsed_putative_tool_uri.scheme,
+                        netloc=parsed_putative_tool_uri.netloc,
+                        path="/".join(parsed_putative_tool_uri.path.split("/")[0:-2])
+                        + "/",
+                        params="",
+                        query="",
+                        fragment="",
+                    )
+                )
+                workflow_id = urllib.parse.unquote(
+                    parsed_putative_tool_uri.path.split("/")[-1]
+                )
+                trs_tool_prefix = putative_tool_uri
+                version_id = trs_tool_meta.get("id")
+                name = trs_tool_meta.get("name")
+                if version_id is not None:
+                    # Dockstore misbehaves
+                    if (
+                        name is not None
+                        and version_id.endswith(name)
+                        and parsed_putative_tool_uri.netloc.endswith("dockstore.org")
+                    ):
+                        version_id = name
+                    trs_tool_uri = (
+                        trs_tool_prefix
+                        + "/versions/"
+                        + urllib.parse.quote(version_id, safe="")
+                    )
+                elif fail_ok:
                     return None
-                raise FetcherException(
-                    f"trs_endpoint could not be guessed from {putative_tool_uri} (not returning id)"
-                )
-
-            trs__meta__url: "Optional[str]" = trs__meta.get("url")
-            if trs__meta__url is None:
-                if fail_ok:
-                    return None
-                raise FetcherException(
-                    f"trs_endpoint could not be guessed from {putative_tool_uri} (not returning url)"
-                )
-
-            # Non compliant emitted trs__meta__url
-            if is_wh:
-                trs__meta__url = putative_tool_uri
-
-            if "descriptor_type" in trs__meta:
-                version_id = trs__meta__id
-                # Now we need to backtrack in the url to get the workflow id
-                tool_url_suffix = "/versions/" + urllib.parse.quote(version_id, safe="")
-
-                # If this happens, this implementation is not so compliant with standard
-                dockstore_tool_url_suffix = "/versions/" + urllib.parse.quote(
-                    trs__meta.get("name", ""), safe=""
-                )
-                if trs__meta__url.endswith(dockstore_tool_url_suffix):
-                    tool_url_suffix = dockstore_tool_url_suffix
-                    version_id = trs__meta.get("name", "")
-
-                if not trs__meta__url.endswith(tool_url_suffix):
-                    if fail_ok:
-                        return None
+                else:
                     raise FetcherException(
-                        f"trs_endpoint could not be guessed from {putative_tool_uri} and {trs__meta__url} (version {version_id}, expected suffix {tool_url_suffix}, mismatched API route)"
+                        f"No version id found associated to specific version of TRS tool reachable through {putative_tool_uri}"
                     )
-
-                trs_tool_url = cast(
-                    "URIType", trs__meta__url[0 : -len(tool_url_suffix)]
+            # ... or a concrete one?
+            elif "descriptor_type" in trs__meta:
+                trs_tool_meta = trs__meta
+                trs_endpoint = urllib.parse.urlunparse(
+                    urllib.parse.ParseResult(
+                        scheme=parsed_putative_tool_uri.scheme,
+                        netloc=parsed_putative_tool_uri.netloc,
+                        path="/".join(parsed_putative_tool_uri.path.split("/")[0:-4])
+                        + "/",
+                        params="",
+                        query="",
+                        fragment="",
+                    )
                 )
-                try:
-                    resio = io.BytesIO()
-                    _, metaresio, _ = HTTPFetcher().streamfetch(
-                        trs_tool_url,
-                        resio,
-                    )
-                    trs_tool_meta = json.loads(resio.getvalue().decode("utf-8"))
-
-                except Exception as e:
-                    if fail_ok:
-                        return None
-                    raise FetcherException(
-                        f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, raised exception)"
-                    ) from e
-
-                trs__meta__id = trs_tool_meta.get("id")
-                if trs__meta__id is None:
-                    if fail_ok:
-                        return None
-                    raise FetcherException(
-                        f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, not returning id)"
-                    )
-
-                trs__meta__url = trs_tool_meta.get("url")
-                if trs__meta__url is None:
-                    if fail_ok:
-                        return None
-                    raise FetcherException(
-                        f"trs_endpoint could not be guessed from {trs_tool_url} (came from {putative_tool_uri}, not returning url)"
-                    )
+                trs_tool_prefix = cast(
+                    "URIType",
+                    urllib.parse.urlunparse(
+                        urllib.parse.ParseResult(
+                            scheme=parsed_putative_tool_uri.scheme,
+                            netloc=parsed_putative_tool_uri.netloc,
+                            path="/".join(
+                                parsed_putative_tool_uri.path.split("/")[0:-2]
+                            )
+                            + "/",
+                            params="",
+                            query="",
+                            fragment="",
+                        )
+                    ),
+                )
+                workflow_id = urllib.parse.unquote(
+                    parsed_putative_tool_uri.path.split("/")[-3]
+                )
+                version_id = urllib.parse.unquote(
+                    parsed_putative_tool_uri.path.split("/")[-1]
+                )
+                trs_tool_uri = putative_tool_uri
+            elif fail_ok:
+                return None
             else:
-                trs_tool_url = putative_tool_uri
-                trs_tool_meta = None
-                version_id = None
-
-            if (version_id is not None and "toolclass" in trs_tool_meta) or (
-                version_id is None and "toolclass" in trs__meta
-            ):
-                workflow_id = trs__meta__id
-
-                # Now we need to backtrack in the url to get the workflow id
-                tool_url_suffix = "/tools/" + urllib.parse.quote(workflow_id, safe="")
-                if not trs_tool_url.endswith(tool_url_suffix):
-                    if fail_ok:
-                        return None
-                    raise FetcherException(
-                        f"trs_endpoint could not be guessed from {trs_tool_url} and {trs__meta__url} (expected suffix {tool_url_suffix}, mismatched API route)"
-                    )
-
-                trs_endpoint = trs_tool_url[0 : -len(tool_url_suffix)]
-
-                ga4gh_trs_suffix = "/ga4gh/trs/v2"
-                # This is here for not so compliant services like yevis
-                trs_transient_endpoint = (
-                    trs_endpoint[0 : -len(ga4gh_trs_suffix)]
-                    if trs_endpoint.endswith(ga4gh_trs_suffix)
-                    else trs_endpoint
-                )
-                parsed_trs_endpoint = urllib.parse.urlparse(trs_transient_endpoint)
-                trs_service_netloc = parsed_trs_endpoint.netloc
-                trs_steps = parsed_trs_endpoint.path.split("/")
-            else:
-                if fail_ok:
-                    return None
                 raise FetcherException(
-                    f"trs_endpoint could not be guessed from {putative_tool_uri} (no clues)"
+                    f"trs_endpoint at {putative_tool_uri} is not answering what it is expected"
                 )
+
+            parsed_trs_endpoint = urllib.parse.urlparse(trs_endpoint)
+            trs_steps = parsed_trs_endpoint.path[0:-1].split("/")
 
         # Next two elifs should *never* happen
         elif fail_ok:
@@ -338,14 +417,36 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             )
 
         # This is needed to guarantee it is always declared
-        assert putative_tool_uri is not None
+        assert trs_tool_uri is not None
+        assert trs_tool_meta is not None
+
+        if not isinstance(trs_tool_meta.get("descriptor_type"), list):
+            raise FetcherException(
+                f"Unable to obtain descriptor_type from tool descriptor obtained from {putative_tool_uri}"
+            )
+
+        descriptor_types = trs_tool_meta["descriptor_type"]
+        if len(descriptor_types) == 0:
+            raise FetcherException(
+                f"Empty list of descriptor_type from tool descriptor obtained from {putative_tool_uri}"
+            )
+
+        descriptor = descriptor_types[0]
+        assert descriptor is not None
+        if len(descriptor_types) > 1:
+            logger.warning(
+                f"Found {len(descriptor_types)} descriptor types for tool {putative_tool_uri}, using first ({descriptor})"
+            )
 
         return (
-            cast("RepoURL", putative_tool_uri),
+            cast("RepoURL", trs_tool_uri),
             trs_service_netloc,
             trs_steps,
             workflow_id,
             version_id,
+            descriptor,
+            metadata_array,
+            service_info_metadata,
         )
 
     @classmethod
@@ -416,178 +517,41 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
     ) -> "MaterializedRepo":
+        if repo.repo_type != RepoType.TRS:
+            raise FetcherException(
+                f"Remote repository {repo} is not of type TRS. Unable to fulfil request"
+            )
         remote_file = repo.repo_url
         repoTag = repo.tag
 
-        parsedInputURL = parse.urlparse(remote_file)
-        path_steps: "Sequence[str]" = parsedInputURL.path.split("/")
-        embedded_remote_file = parsedInputURL.path
+        guessed_trs_params = self.GuessTRSParams(
+            remote_file, logger=self.logger, scheme_catalog=self.scheme_catalog
+        )
+        if guessed_trs_params is None:
+            raise FetcherException(f"Unable to guess TRS params from {repo}")
 
-        metadata_array: "MutableSequence[URIWithMetadata]" = []
-        if parsedInputURL.scheme == self.INTERNAL_TRS_SCHEME_PREFIX:
-            # TODO: Improve this code
-            if not embedded_remote_file.endswith(self.TRS_FILES_SUFFIX):
-                files_metadata_url = cast(
-                    "URIType", embedded_remote_file + self.TRS_FILES_SUFFIX
-                )
-                descriptor_base_url = embedded_remote_file + self.TRS_DESCRIPTOR_INFIX
-            else:
-                files_metadata_url = cast("URIType", embedded_remote_file)
-                descriptor_base_url = (
-                    embedded_remote_file[0 : -len(self.TRS_FILES_SUFFIX)]
-                    + self.TRS_DESCRIPTOR_INFIX
-                )
-            # TODO: fetch here service info metadata
-        elif parsedInputURL.scheme == self.TRS_SCHEME_PREFIX:
-            # TRS official scheme
-            if len(path_steps) < 3 or path_steps[0] != "":
-                raise FetcherException(
-                    f"Ill-formed TRS CURIE {remote_file}. It should be in the format of {self.TRS_SCHEME_PREFIX}://id/version or {self.TRS_SCHEME_PREFIX}://prefix-with-slashes/id/version"
-                )
-
-            trs_base_steps = cast("MutableSequence[str]", path_steps[0:-2])
-            trs_base_steps.extend(["ga4gh", "trs", "v2"])
-
-            # Performing some sanity checks about the API
-            service_info_steps = copy.copy(trs_base_steps)
-            service_info_steps.append("service-info")
-            service_info_metadata_url = cast(
-                "URIType",
-                parse.urlunparse(
-                    parse.ParseResult(
-                        scheme="https",
-                        netloc=parsedInputURL.netloc,
-                        path="/".join(service_info_steps),
-                        params="",
-                        query="",
-                        fragment="",
-                    )
-                ),
-            )
-            service_info_wfexs_meta = {
-                "fetched": service_info_metadata_url,
-                "payload": None,
-            }
-            metadata_array.append(URIWithMetadata(remote_file, service_info_wfexs_meta))
-            try:
-                metaio = io.BytesIO()
-                _, metametaio, _ = self.scheme_catalog.streamfetch(
-                    service_info_metadata_url, metaio
-                )
-                service_info_metadata = json.loads(metaio.getvalue().decode("utf-8"))
-                service_info_wfexs_meta["payload"] = service_info_metadata
-                metadata_array.extend(metametaio)
-            except FetcherException as fe:
-                raise FetcherException(
-                    f"Error fetching or processing TRS service info metadata for {remote_file} : {fe.code} {fe.reason}"
-                ) from fe
-
-            trs_version_str: "Optional[str]" = None
-            trs_artifact: "Optional[str]" = None
-            trs_group: "Optional[str]" = None
-            trs_endpoint_meta_type: "Optional[Mapping[str, str]]" = (
-                service_info_metadata.get("type")
-            )
-            if trs_endpoint_meta_type is not None:
-                trs_version_str = trs_endpoint_meta_type.get("version")
-                trs_artifact = trs_endpoint_meta_type.get("artifact")
-                trs_group = trs_endpoint_meta_type.get("group")
-
-            if trs_version_str is None:
-                errstr = f"Unable to identify TRS version from {service_info_metadata_url}. Is this a TRS endpoint?"
-                raise FetcherException(errstr)
-
-            # Avoiding querying a GA4GH DRS service, for instance
-            if trs_artifact is not None and trs_artifact.lower() not in (
-                "trs",
-                "yevis",
-            ):
-                errstr = f"Unsupported GA4GH service {trs_artifact} (group {trs_group}) from {service_info_metadata_url}"
-                raise FetcherException(errstr)
-
-            # Warning about potentially unsupported versions
-            trs_version_tuple = tuple(map(int, trs_version_str.split(".")))
-            if trs_version_tuple < (2, 0, 1):
-                self.logger.warning(
-                    f"{service_info_metadata_url} is offering old TRS version {trs_version_str}, which diverges from what this implementation supports"
-                )
-            elif trs_version_tuple > (3, 0):
-                self.logger.warning(
-                    f"{service_info_metadata_url} is offering TRS version {trs_version_str}, which might diverge from what this implementation supports"
-                )
-
-            version_steps = copy.copy(trs_base_steps)
-            version_steps.extend(["tools", path_steps[-2], "versions", path_steps[-1]])
-            version_metadata_url = cast(
-                "URIType",
-                parse.urlunparse(
-                    parse.ParseResult(
-                        scheme="https",
-                        netloc=parsedInputURL.netloc,
-                        path="/".join(version_steps),
-                        params="",
-                        query="",
-                        fragment="",
-                    )
-                ),
-            )
-            version_meta = {
-                "fetched": version_metadata_url,
-                "payload": None,
-            }
-            metadata_array.append(URIWithMetadata(remote_file, version_meta))
-            try:
-                metaio = io.BytesIO()
-                _, metametaio, _ = self.scheme_catalog.streamfetch(
-                    version_metadata_url, metaio
-                )
-                version_metadata = json.loads(metaio.getvalue().decode("utf-8"))
-                version_meta["payload"] = version_metadata
-                metadata_array.extend(metametaio)
-
-            except FetcherException as fe:
-                raise FetcherException(
-                    f"Error fetching or processing TRS version metadata for {remote_file} : {fe.code} {fe.reason}"
-                ) from fe
-
-            # At last, we can finish building the URL
-            new_path_steps = [
-                *version_steps,
-                version_metadata["descriptor_type"][0],
-                "files",
-            ]
-
-            files_metadata_url = cast(
-                "URIType",
-                parse.urlunparse(
-                    parse.ParseResult(
-                        scheme="https",
-                        netloc=parsedInputURL.netloc,
-                        path="/".join(new_path_steps),
-                        params="",
-                        query="",
-                        fragment="",
-                    )
-                ),
-            )
-
-            descriptor_steps = [
-                *version_steps,
-                version_metadata["descriptor_type"][0],
-                "descriptor",
-            ]
-            descriptor_base_url = parse.urlunparse(
-                parse.ParseResult(
-                    scheme="https",
-                    netloc=parsedInputURL.netloc,
-                    path="/".join(descriptor_steps) + "/",
-                    params="",
-                    query="",
-                    fragment="",
-                )
-            )
-        else:
-            raise FetcherException(f"FIXME: Unhandled scheme {parsedInputURL.scheme}")
+        (
+            trs_tool_url,
+            trs_service_netloc,
+            trs_steps,
+            workflow_id,
+            version_id,
+            descriptor,
+            guessed_metadata_array,
+            service_info_metadata,
+        ) = guessed_trs_params
+        files_metadata_url = (
+            trs_tool_url
+            + "/"
+            + urllib.parse.quote(descriptor, safe="")
+            + self.TRS_FILES_SUFFIX
+        )
+        descriptor_base_url = (
+            trs_tool_url
+            + "/"
+            + urllib.parse.quote(descriptor, safe="")
+            + self.TRS_DESCRIPTOR_INFIX
+        )
 
         # Assure directory exists before next step
         if repo_tag_destdir is None:
@@ -629,19 +593,22 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             "workflow_entrypoint": None,
             "remote_workflow_entrypoint": None,
         }
-        metadata_array = [URIWithMetadata(remote_file, topMeta)]
+        metadata_array = [
+            *guessed_metadata_array,
+            URIWithMetadata(remote_file, topMeta),
+        ]
         try:
             metaio = io.BytesIO()
             _, metametaio, _ = self.scheme_catalog.streamfetch(
-                files_metadata_url, metaio
+                cast("URIType", files_metadata_url), metaio
             )
             metadata = json.loads(metaio.getvalue().decode("utf-8"))
             topMeta["payload"] = metadata
             metadata_array.extend(metametaio)
         except FetcherException as fe:
             raise FetcherException(
-                "Error fetching or processing TRS files metadata for {} : {} {}".format(
-                    remote_file, fe.code, fe.reason
+                "Error fetching or processing TRS files metadata for {} : {} {} (offending url {})".format(
+                    remote_file, fe.code, fe.reason, files_metadata_url
                 )
             ) from fe
 
@@ -891,6 +858,42 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
         upstream_repo: "Optional[RemoteRepo]" = None
         recommends_upstream: "bool" = False
+
+        if service_info_metadata is None:
+            parsed_trs_tool_url = urllib.parse.urlparse(trs_tool_url)
+            trs_service_info = urllib.parse.urlunparse(
+                urllib.parse.ParseResult(
+                    scheme=parsed_trs_tool_url.scheme,
+                    netloc=parsed_trs_tool_url.netloc,
+                    path="/".join(parsed_trs_tool_url.path.split("/")[0:-4])
+                    + "/service-info",
+                    params="",
+                    query="",
+                    fragment="",
+                )
+            )
+
+            service_info_wfexs_meta = {
+                "fetched": trs_service_info,
+                "payload": cast("Optional[Mapping[str, Any]]", None),
+            }
+            metadata_array.append(
+                URIWithMetadata(trs_tool_url, service_info_wfexs_meta)
+            )
+            try:
+                metaio = io.BytesIO()
+                _, metametaio, _ = self.scheme_catalog.streamfetch(
+                    cast("URIType", trs_service_info), metaio
+                )
+                service_info_metadata = json.loads(metaio.getvalue().decode("utf-8"))
+                service_info_wfexs_meta["payload"] = service_info_metadata
+                metadata_array.extend(metametaio)
+
+            except Exception as e:
+                raise FetcherException(
+                    f"Unable to fetch service info metadata {trs_service_info} (affects tool {trs_tool_url})"
+                ) from e
+
         # Checking whether it is WorkflowHub
         # to recommend the generated Workflow RO-Crate
         if service_info_metadata.get("organization", {}).get("name") == "WorkflowHub":
@@ -948,7 +951,19 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     trs_steps,
                     workflow_id,
                     version_id,
+                    descriptor,
+                    guessed_metadata_array,
+                    service_info_metadata,
                 ) = guessed_trs_params
+
+                # Remove /ga4gh/trs/v2 from the end
+                if (
+                    len(trs_steps) >= 3
+                    and trs_steps[-1] == "v2"
+                    and trs_steps[-2] == "trs"
+                    and trs_steps[-3] == "ga4gh"
+                ):
+                    trs_steps = trs_steps[0:-3]
                 new_steps = [*trs_steps, urllib.parse.quote(str(workflow_id), safe="")]
                 if version_id is not None:
                     new_steps.append(urllib.parse.quote(str(version_id), safe=""))
@@ -963,6 +978,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         fragment="",
                     )
                 )
+                self.logger.error(f"Y FUE {computed_trs_endpoint} {parsedInputURL}")
                 return computed_trs_endpoint
 
         return None
