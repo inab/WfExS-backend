@@ -517,7 +517,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
     ) -> "MaterializedRepo":
-        if repo.repo_type != RepoType.TRS:
+        if repo.repo_type not in (RepoType.TRS, None):
             raise FetcherException(
                 f"Remote repository {repo} is not of type TRS. Unable to fulfil request"
             )
@@ -675,20 +675,25 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
         if is_anon:
             prefix_url = ""
+        elif len(file_rel_2_url) == 1:
+            # FIXME?: this is not going to work in Windows
+            prefix_url = os.path.dirname(tuple(file_rel_2_url.values())[0])
         else:
             prefix_url = os.path.commonpath(tuple(file_rel_2_url.values()))
 
-        # We have to create anonymous directories to avoid leaving the download "sandbox"
-        abs_download_dir = repo_tag_destpath
-        if "/" in prefix_url:
-            # This is needed to perform an effective work
-            prefix_url += "/"
             # Due the peversion of commonpath, double slashes are collapsed
             colon_pos = prefix_url.find(":")
             if colon_pos > 0:
                 prefix_url = (
                     prefix_url[0 : colon_pos + 1] + "/" + prefix_url[colon_pos + 1 :]
                 )
+
+        # We have to create anonymous directories to avoid leaving the download "sandbox"
+        abs_download_dir = repo_tag_destpath
+        if "/" in prefix_url:
+            # This is needed to perform an effective work
+            if not prefix_url.endswith("/"):
+                prefix_url += "/"
 
             # Computing resolved relative paths
             for file_desc in metadata:
@@ -701,6 +706,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     if is_abs_url:
                         # An absolute URL, like in the case of DDBJ TRS implementation
                         file_url = cast("URIType", file_rel_path)
+                        self.logger.warning(file_rel_2_url)
                     else:
                         file_url = cast(
                             "URIType",
@@ -935,7 +941,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
         # TODO: improve this to cover the different cases
         parsedInputURL = parse.urlparse(remote_repo.repo_url)
-        if parsedInputURL.scheme in (
+        if remote_repo.repo_type is None and parsedInputURL.scheme in (
             self.INTERNAL_TRS_SCHEME_PREFIX,
             self.TRS_SCHEME_PREFIX,
         ):
@@ -978,7 +984,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         fragment="",
                     )
                 )
-                self.logger.error(f"Y FUE {computed_trs_endpoint} {parsedInputURL}")
+
                 return computed_trs_endpoint
 
         return None

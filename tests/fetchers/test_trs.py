@@ -70,6 +70,7 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
         "url",
         "remote_repo",
         "repo_pid",
+        "upstream_repo",
     ],
     [
         (
@@ -94,6 +95,12 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://dockstore.org/api/%23workflow%2Fgithub.com%2Fsevenbridges-openworkflows%2FBroad-Best-Practice-Somatic-CNV-Workflows%2FGATK-Somatic-CNV-Panel-Workflow/master",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://raw.githubusercontent.com/sevenbridges-openworkflows/Broad-Best-Practice-Somatic-CNV-Workflows/master/BroadCNVPanelWorkflow/gatk-cnv-panel-workflow_decomposed.cwl",
+                ),
+            ),
         ),
         (
             "https://dockstore.org/api/ga4gh/trs/v2/",
@@ -116,6 +123,12 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://dockstore.org/api/%23workflow%2Fgithub.com%2FNCI-GDC%2Fgdc-dnaseq-cwl%2FGDC_DNASeq/master",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://raw.githubusercontent.com/NCI-GDC/gdc-dnaseq-cwl/master/workflows/dnaseq/transform.cwl",
+                ),
+            ),
         ),
         (
             "https://dockstore.org/api/ga4gh/trs/v2/",
@@ -138,6 +151,12 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://dockstore.org/api/%23workflow%2Fgithub.com%2FNCI-GDC%2Fgdc-dnaseq-cwl%2FGDC_DNASeq/release",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://raw.githubusercontent.com/NCI-GDC/gdc-dnaseq-cwl/release/workflows/dnaseq/transform.cwl",
+                ),
+            ),
         ),
         (
             "https://workflowhub.eu/ga4gh/trs/v2/tools/",
@@ -158,6 +177,13 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://workflowhub.eu/107/1",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://workflowhub.eu/ga4gh/trs/v2/tools/107/versions/1/CWL/files?format=zip",
+                ),
+                repo_type=RepoType.Raw,
+            ),
         ),
         (
             "https://workflowhub.eu/ga4gh/trs/v2/tools/",
@@ -178,6 +204,13 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://workflowhub.eu/106/3",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://workflowhub.eu/ga4gh/trs/v2/tools/106/versions/3/NFL/files?format=zip",
+                ),
+                repo_type=RepoType.Raw,
+            ),
         ),
         (
             "https://workflowhub.eu/ga4gh/trs/v2/",
@@ -198,6 +231,13 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://workflowhub.eu/119/1",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://workflowhub.eu/ga4gh/trs/v2/tools/119/versions/1/NFL/files?format=zip",
+                ),
+                repo_type=RepoType.Raw,
+            ),
         ),
         (
             "https://workflowhub.eu/ga4gh/trs/v2/tools/",
@@ -218,6 +258,13 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://workflowhub.eu/244/4",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://workflowhub.eu/ga4gh/trs/v2/tools/244/versions/4/NFL/files?format=zip",
+                ),
+                repo_type=RepoType.Raw,
+            ),
         ),
         (
             "https://ddbj.github.io/workflow-registry/",
@@ -238,6 +285,12 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 repo_type=RepoType.TRS,
             ),
             "trs://ddbj.github.io/workflow-registry/0d2ae4c2-fe4c-48f7-811a-ac277776533e/1.0.0",
+            RemoteRepo(
+                repo_url=cast(
+                    "RepoURL",
+                    "https://zenodo.org/api/files/2422dda0-1bd9-4109-aa44-53d55fd934de/download-sra.cwl",
+                ),
+            ),
         ),
     ],
 )
@@ -252,6 +305,7 @@ def test_guess_trs_repo_params(
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",
+    upstream_repo: "Optional[RemoteRepo]",
 ) -> "None":
     output = GA4GHTRSFetcher.GuessRepoParams(cast("URIType", url), logger=logger)
 
@@ -274,6 +328,7 @@ def test_build_trs_internal_url_from_repo(
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",
+    upstream_repo: "Optional[RemoteRepo]",
 ) -> "None":
     output = GA4GHTRSFetcher.BuildRepoPIDFromTRSParams(
         trs_endpoint,
@@ -294,6 +349,7 @@ def test_build_trs_pid_from_repo(
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",
+    upstream_repo: "Optional[RemoteRepo]",
 ) -> "None":
     if remote_repo is None:
         pytest.skip("Skipped test because no remote repo was provided")
@@ -318,6 +374,7 @@ def test_materialize_repo_from_repo(
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",
+    upstream_repo: "Optional[RemoteRepo]",
 ) -> "None":
     if remote_repo is None:
         pytest.skip("Skipped test because no remote repo was provided")
@@ -327,7 +384,9 @@ def test_materialize_repo_from_repo(
         )
 
         fetcher = GA4GHTRSFetcher(scheme_catalog, progs={})
-        materialized_repo = fetcher.materialize_repo_from_repo(remote_repo)
-        logger.warning(materialized_repo)
+        materialized_repo = fetcher.materialize_repo_from_repo(
+            remote_repo, base_repo_destdir=tmppath
+        )
 
-        assert False
+        # Let's check the guessed repo'
+        assert materialized_repo.upstream_repo == upstream_repo
