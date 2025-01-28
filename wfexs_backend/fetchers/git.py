@@ -516,6 +516,8 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         repo_url content or the repo type in the worst case, it should
         return None
         """
+        if remote_repo.repo_type not in (RepoType.Git, None):
+            return None
         parsed_wf_url = parse.urlparse(remote_repo.repo_url)
 
         retval: "Optional[str]" = None
@@ -678,6 +680,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         :param doUpdate:
         :return:
         """
+        if repo.repo_type not in (RepoType.Git, None):
+            raise FetcherException(
+                f"Input RemoteRepo instance is not recognized as a fetchable URI (type {repo.repo_type})"
+            )
 
         repoURL = repo.repo_url
         repoTag = repo.tag

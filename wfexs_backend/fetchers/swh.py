@@ -240,7 +240,10 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         """
 
         parsed_wf_url = parse.urlparse(remote_repo.repo_url)
-        if parsed_wf_url.scheme not in self.GetSchemeHandlers():
+        if (
+            parsed_wf_url.scheme not in self.GetSchemeHandlers()
+            or remote_repo.repo_type not in (RepoType.TRS, None)
+        ):
             return None
 
         # FIXME: improve this
@@ -255,6 +258,15 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
     ) -> "MaterializedRepo":
         repoURL = cast("RepoURL", repo.tag) if repo.tag is not None else repo.repo_url
         repoTag = repo.tag
+
+        parsed_wf_url = parse.urlparse(repoURL)
+        if (
+            parsed_wf_url.scheme not in self.GetSchemeHandlers()
+            or repo.repo_type not in (RepoType.SoftwareHeritage, None)
+        ):
+            raise FetcherException(
+                f"Input RemoteRepo instance is not recognized as a fetchable URI (repo {repoURL} , type {repo.repo_type})"
+            )
 
         # If we are here is because the repo is valid
         # as it should have been checked by GuessRepoParams
