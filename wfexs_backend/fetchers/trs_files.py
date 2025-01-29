@@ -99,6 +99,7 @@ if TYPE_CHECKING:
         PathLikePath,
         ProgsMapping,
         RelPath,
+        RepoTag,
         RepoURL,
         SecurityContextConfig,
         SymbolicName,
@@ -149,6 +150,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
     def GuessTRSParams(
         cls,
         orig_wf_url: "Union[URIType, parse.ParseResult]",
+        override_version_id: "Optional[WFVersionId]" = None,
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
         scheme_catalog: "Optional[SchemeCatalog]" = None,
@@ -255,15 +257,19 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         [e1, e2],
                     )
 
+            version_id = (
+                urllib.parse.unquote(path_steps[-1])
+                if not override_version_id
+                else override_version_id
+            )
             trs_tool_uri = (
                 trs_endpoint
                 + cls.TRS_TOOLS_SUFFIX
                 + path_steps[-2]
                 + "/versions/"
-                + path_steps[-1]
+                + urllib.parse.quote(cast("str", version_id), safe="")
             )
             workflow_id = urllib.parse.unquote(path_steps[-2])
-            version_id = urllib.parse.unquote(path_steps[-1])
             descriptor = None
         elif parsed_wf_url.scheme == cls.INTERNAL_TRS_SCHEME_PREFIX:
             putative_tool_uri = cast(
@@ -323,8 +329,35 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     raise FetcherException(
                         f"No versions found associated to TRS tool reachable through {putative_tool_uri}"
                     )
-                # Reuse the last version
-                trs_tool_meta = versions[-1]
+
+                if override_version_id:
+                    for putative_trs_tool_meta in versions:
+                        version_id = putative_trs_tool_meta.get("id")
+                        name = putative_trs_tool_meta.get("name")
+                        if version_id is not None:
+                            # Dockstore misbehaves
+                            if (
+                                name is not None
+                                and str(version_id).endswith(name)
+                                and parsed_putative_tool_uri.netloc.endswith(
+                                    "dockstore.org"
+                                )
+                            ):
+                                version_id = name
+                        if version_id == override_version_id:
+                            trs_tool_meta = putative_trs_tool_meta
+                            break
+                    else:
+                        if fail_ok:
+                            return None
+                        raise FetcherException(
+                            f"Forced version {override_version_id} not found associated to TRS tool reachable through {putative_tool_uri}"
+                        )
+
+                else:
+                    # Reuse the last version
+                    trs_tool_meta = versions[-1]
+
                 trs_endpoint = urllib.parse.urlunparse(
                     urllib.parse.ParseResult(
                         scheme=parsed_putative_tool_uri.scheme,
@@ -346,14 +379,14 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     # Dockstore misbehaves
                     if (
                         name is not None
-                        and version_id.endswith(name)
+                        and str(version_id).endswith(name)
                         and parsed_putative_tool_uri.netloc.endswith("dockstore.org")
                     ):
                         version_id = name
                     trs_tool_uri = (
                         trs_tool_prefix
                         + "/versions/"
-                        + urllib.parse.quote(version_id, safe="")
+                        + urllib.parse.quote(str(version_id), safe="")
                     )
                 elif fail_ok:
                     return None
@@ -363,6 +396,50 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     )
             # ... or a concrete one?
             elif "descriptor_type" in trs__meta:
+                if override_version_id:
+                    rpslash = putative_tool_uri.rfind("/")
+                    putative_tool_uri = cast(
+                        "URIType",
+                        putative_tool_uri[0 : rpslash + 1]
+                        + urllib.parse.quote(str(override_version_id), safe=""),
+                    )
+                    parsed_putative_tool_uri = urllib.parse.urlparse(putative_tool_uri)
+                    # Time to try guessing everything
+                    tool_wfexs_meta = {
+                        "fetched": putative_tool_uri,
+                        "payload": None,
+                    }
+                    metadata_array.append(URIWithMetadata(wf_url, tool_wfexs_meta))
+                    try:
+                        resio = io.BytesIO()
+                        _, metaresio, _ = scheme_catalog.streamfetch(
+                            putative_tool_uri,
+                            resio,
+                            sec_context={
+                                "headers": {
+                                    "Accept": "application/json",
+                                    # Added to avoid Cloudflare anti-bot policy
+                                    "User-Agent": get_WfExS_version_str(),
+                                },
+                            },
+                        )
+                        trs__meta = json.loads(resio.getvalue().decode("utf-8"))
+                        tool_wfexs_meta["payload"] = trs__meta
+                        metadata_array.extend(metaresio)
+                    except Exception as e:
+                        if fail_ok:
+                            return None
+                        raise FetcherException(
+                            f"trs_endpoint could not be guessed from {putative_tool_uri} (forced version {override_version_id}, raised exception {e})"
+                        ) from e
+
+                    if "descriptor_type" not in trs__meta:
+                        if fail_ok:
+                            return None
+                        raise FetcherException(
+                            f"trs_endpoint at {putative_tool_uri} (forced version {override_version_id}) is not answering what it is expected"
+                        )
+
                 trs_tool_meta = trs__meta
                 trs_endpoint = urllib.parse.urlunparse(
                     urllib.parse.ParseResult(
@@ -463,6 +540,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             if trs_params is None
             else RemoteRepo(
                 repo_url=trs_params[0],
+                tag=cast("RepoTag", trs_params[4]),
                 repo_type=RepoType.TRS,
             )
         )
@@ -525,7 +603,10 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         repoTag = repo.tag
 
         guessed_trs_params = self.GuessTRSParams(
-            remote_file, logger=self.logger, scheme_catalog=self.scheme_catalog
+            remote_file,
+            logger=self.logger,
+            scheme_catalog=self.scheme_catalog,
+            override_version_id=repoTag,
         )
         if guessed_trs_params is None:
             raise FetcherException(f"Unable to guess TRS params from {repo}")
@@ -575,7 +656,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         raise FetcherException(errstr)
 
                 repo_hashed_tag_id = hashlib.sha1(
-                    b"" if repoTag is None else repoTag.encode("utf-8")
+                    b"" if version_id is None else str(version_id).encode("utf-8")
                 ).hexdigest()
                 repo_tag_destpath = repo_destpath / repo_hashed_tag_id
         else:
@@ -922,6 +1003,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             local=repo_tag_destpath,
             repo=RemoteRepo(
                 repo_url=remote_file,
+                tag=cast("RepoTag", str(version_id)),
                 rel_path=cast("Optional[RelPath]", topMeta["workflow_entrypoint"]),
                 repo_type=RepoType.TRS,
             ),
@@ -948,7 +1030,10 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             return remote_repo.repo_url
         elif remote_repo.repo_type == RepoType.TRS:
             guessed_trs_params = self.GuessTRSParams(
-                parsedInputURL, logger=self.logger, fail_ok=True
+                parsedInputURL,
+                override_version_id=remote_repo.tag,
+                logger=self.logger,
+                fail_ok=True,
             )
             if guessed_trs_params is not None:
                 (
