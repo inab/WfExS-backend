@@ -66,7 +66,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
         "trs_endpoint",
         "workflow_id",
         "version_id",
-        "descriptor_type",
         "url",
         "remote_repo",
         "repo_pid",
@@ -80,7 +79,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 "#workflow/github.com/sevenbridges-openworkflows/Broad-Best-Practice-Somatic-CNV-Workflows/GATK-Somatic-CNV-Panel-Workflow",
             ),
             cast("Optional[WFVersionId]", "master"),
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -109,7 +107,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 "WorkflowId", "#workflow/github.com/NCI-GDC/gdc-dnaseq-cwl/GDC_DNASeq"
             ),
             cast("Optional[WFVersionId]", "master"),
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -138,7 +135,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
                 "WorkflowId", "#workflow/github.com/NCI-GDC/gdc-dnaseq-cwl/GDC_DNASeq"
             ),
             None,
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -165,7 +161,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
             "https://workflowhub.eu/ga4gh/trs/v2/tools/",
             cast("WorkflowId", 107),
             cast("Optional[WFVersionId]", 1),
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -193,7 +188,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
             "https://workflowhub.eu/ga4gh/trs/v2/tools/",
             cast("WorkflowId", 106),
             cast("Optional[WFVersionId]", 3),
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -221,7 +215,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
             "https://workflowhub.eu/ga4gh/trs/v2/",
             cast("WorkflowId", 119),
             cast("Optional[WFVersionId]", 1),
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -249,7 +242,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
             "https://workflowhub.eu/ga4gh/trs/v2/tools/",
             cast("WorkflowId", 244),
             cast("Optional[WFVersionId]", 4),
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -277,7 +269,6 @@ TRS_PARAMS_TESTBED = pytest.mark.parametrize(
             "https://ddbj.github.io/workflow-registry/",
             cast("WorkflowId", "0d2ae4c2-fe4c-48f7-811a-ac277776533e"),
             cast("Optional[WFVersionId]", "1.0.0"),
-            None,
             cast(
                 "URIType",
                 GA4GHTRSFetcher.INTERNAL_TRS_SCHEME_PREFIX
@@ -309,7 +300,6 @@ def test_guess_trs_repo_params(
     trs_endpoint: "str",
     workflow_id: "WorkflowId",
     version_id: "Optional[WFVersionId]",
-    descriptor_type: "Optional[TRS_Workflow_Descriptor]",
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",
@@ -332,7 +322,6 @@ def test_build_trs_internal_url_from_repo(
     trs_endpoint: "str",
     workflow_id: "WorkflowId",
     version_id: "Optional[WFVersionId]",
-    descriptor_type: "Optional[TRS_Workflow_Descriptor]",
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",
@@ -342,7 +331,6 @@ def test_build_trs_internal_url_from_repo(
         trs_endpoint,
         workflow_id,
         version_id,
-        descriptor_type,
     )
 
     assert output == url
@@ -353,7 +341,6 @@ def test_build_trs_pid_from_repo(
     trs_endpoint: "str",
     workflow_id: "WorkflowId",
     version_id: "Optional[WFVersionId]",
-    descriptor_type: "Optional[TRS_Workflow_Descriptor]",
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",
@@ -378,7 +365,6 @@ def test_materialize_repo_from_repo(
     trs_endpoint: "str",
     workflow_id: "WorkflowId",
     version_id: "Optional[WFVersionId]",
-    descriptor_type: "Optional[TRS_Workflow_Descriptor]",
     url: "str",
     remote_repo: "Optional[RemoteRepo]",
     repo_pid: "Optional[str]",

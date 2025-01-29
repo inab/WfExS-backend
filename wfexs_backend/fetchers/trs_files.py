@@ -551,7 +551,6 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         trs_endpoint: "str",
         workflow_id: "WorkflowId",
         version_id: "Optional[WFVersionId]",
-        descriptor_type: "Optional[TRS_Workflow_Descriptor]",
     ) -> "URIType":
         if isinstance(workflow_id, int):
             workflow_id_str = str(workflow_id)
@@ -580,9 +579,6 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 + "/versions/"
                 + urllib.parse.quote(str(version_id), safe="")
             )
-
-            if descriptor_type is not None:
-                trs_tool_url += "/" + urllib.parse.quote(descriptor_type, safe="")
         else:
             trs_tool_url = trs_tools_url
 
