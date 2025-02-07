@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -452,16 +452,21 @@ class SchemeCatalog:
 
                 instSchemeHandler = None
                 if isinstance(schemeHandler, DocumentedStatefulProtocolFetcher):
-                    instSchemeInstance = self.instantiateStatefulFetcher(
-                        schemeHandler.fetcher_class, setup_block=setup_block
-                    )
-                    if instSchemeInstance is not None:
-                        instSchemeHandler = DocumentedProtocolFetcher(
-                            fetcher=instSchemeInstance.fetch,
-                            description=instSchemeInstance.description
-                            if schemeHandler.description is None
-                            else schemeHandler.description,
-                            priority=schemeHandler.priority,
+                    try:
+                        instSchemeInstance = self.instantiateStatefulFetcher(
+                            schemeHandler.fetcher_class, setup_block=setup_block
+                        )
+                        if instSchemeInstance is not None:
+                            instSchemeHandler = DocumentedProtocolFetcher(
+                                fetcher=instSchemeInstance.fetch,
+                                description=instSchemeInstance.description
+                                if schemeHandler.description is None
+                                else schemeHandler.description,
+                                priority=schemeHandler.priority,
+                            )
+                    except Exception as e:
+                        self.logger.exception(
+                            f"Error while instantiating handler implemented at {schemeHandler.fetcher_class} for scheme {lScheme}"
                         )
                 elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
                     schemeHandler.fetcher
@@ -473,5 +478,9 @@ class SchemeCatalog:
                     # Schemes are case insensitive, so register only
                     # the lowercase version
                     instSchemeHandlers[lScheme] = instSchemeHandler
+                else:
+                    self.logger.warning(
+                        f"Scheme {lScheme} could not be properly instantiated"
+                    )
 
             self.addRawSchemeHandlers(instSchemeHandlers)
