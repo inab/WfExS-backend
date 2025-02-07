@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -449,7 +449,6 @@ class WF:
     DEFAULT_TRS_ENDPOINT: "Final[str]" = (
         "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
     )
-    TRS_TOOLS_PATH: "Final[str]" = "tools/"
 
     def __init__(
         self,
@@ -654,14 +653,11 @@ class WF:
                 [] if default_actions is None else default_actions
             )
 
+            # We are assuming here the provided TRS endpoint is right
             # The endpoint should always end with a slash
             if isinstance(trs_endpoint, str):
                 if trs_endpoint[-1] != "/":
                     trs_endpoint += "/"
-
-                # Removing the tools suffix, which appeared in first WfExS iterations
-                if trs_endpoint.endswith("/" + self.TRS_TOOLS_PATH):
-                    trs_endpoint = trs_endpoint[0 : -len(self.TRS_TOOLS_PATH)]
 
             self.trs_endpoint = trs_endpoint
         else:
@@ -1944,6 +1940,7 @@ class WF:
         repoDir: "Optional[pathlib.Path]" = None
         injected_workflow: "Optional[LocalWorkflow]" = None
         rel_path_files: "Optional[Sequence[Union[RelPath, URIType]]]" = None
+        # Materialize the workflow, even if it was already materialized
         if self.remote_repo is None or ignoreCache:
             repoEffectiveCheckout: "Optional[RepoTag]"
             # Injectable repo info is a precondition for injectable local workflow
@@ -1996,11 +1993,18 @@ class WF:
                             f"Injected workflow has a different relPath from the injected repo"
                         )
                 else:
-                    repoDir, repoEffectiveCheckout = self.wfexs.doMaterializeRepo(
+                    (
+                        repoDir,
+                        materialized_repo,
+                        downstream_repos,
+                    ) = self.wfexs.doMaterializeRepo(
                         repo,
                         doUpdate=ignoreCache,
                         # registerInCache=True,
                     )
+                    assert len(downstream_repos) > 0
+                    repo = materialized_repo.repo
+                    repoEffectiveCheckout = repo.get_checkout()
             else:
                 (
                     repoDir,
