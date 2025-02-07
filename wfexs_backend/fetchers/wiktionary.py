@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,11 +63,6 @@ from . import (
 
 class WiktionaryFetcher(AbstractStatefulFetcher):
     WIKTIONARY_PROTO: "Final[str]" = "wfexs.wiktionary"
-
-    def __init__(
-        self, progs: "ProgsMapping", setup_block: "Optional[Mapping[str, Any]]" = None
-    ):
-        super().__init__(progs=progs, setup_block=setup_block)
 
     @classmethod
     def GetSchemeHandlers(cls) -> "Mapping[str, DocumentedStatefulProtocolFetcher]":
