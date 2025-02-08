@@ -183,6 +183,9 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         putative_tool_uri: "Optional[URIType]" = None
         descriptor: "Optional[str]" = None
         service_info_metadata: "Optional[MutableMapping[str, Any]]" = None
+        trs_tool_uri: "URIType"
+        trs_tool_meta: "Optional[Mapping[str, Any]]" = None
+        version_id: "Optional[WFVersionId]" = None
         if parsed_wf_url.scheme == cls.TRS_SCHEME_PREFIX:
             # Duplication of code
             path_steps: "Sequence[str]" = parsed_wf_url.path.split("/")
@@ -262,12 +265,13 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 if not override_version_id
                 else override_version_id
             )
-            trs_tool_uri = (
+            trs_tool_uri = cast(
+                "URIType",
                 trs_endpoint
                 + cls.TRS_TOOLS_SUFFIX
                 + path_steps[-2]
                 + "/versions/"
-                + urllib.parse.quote(cast("str", version_id), safe="")
+                + urllib.parse.quote(cast("str", version_id), safe=""),
             )
             workflow_id = urllib.parse.unquote(path_steps[-2])
             descriptor = None
@@ -358,6 +362,8 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     # Reuse the last version
                     trs_tool_meta = versions[-1]
 
+                assert trs_tool_meta is not None
+
                 trs_endpoint = urllib.parse.urlunparse(
                     urllib.parse.ParseResult(
                         scheme=parsed_putative_tool_uri.scheme,
@@ -373,7 +379,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     parsed_putative_tool_uri.path.split("/")[-1]
                 )
                 trs_tool_prefix = putative_tool_uri
-                version_id = trs_tool_meta.get("id")
+                version_id = cast("Optional[WFVersionId]", trs_tool_meta.get("id"))
                 name = trs_tool_meta.get("name")
                 if version_id is not None:
                     # Dockstore misbehaves
@@ -383,10 +389,11 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                         and parsed_putative_tool_uri.netloc.endswith("dockstore.org")
                     ):
                         version_id = name
-                    trs_tool_uri = (
+                    trs_tool_uri = cast(
+                        "URIType",
                         trs_tool_prefix
                         + "/versions/"
-                        + urllib.parse.quote(str(version_id), safe="")
+                        + urllib.parse.quote(str(version_id), safe=""),
                     )
                 elif fail_ok:
                     return None
@@ -494,7 +501,37 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             )
 
         # This is needed to guarantee it is always declared
+        assert version_id is not None
         assert trs_tool_uri is not None
+        if trs_tool_meta is None:
+            trs_tool_wfexs_meta: "MutableMapping[str, Union[URIType, Optional[Mapping[str, Any]]]]" = {
+                "fetched": trs_tool_uri,
+                "payload": None,
+            }
+            metadata_array.append(URIWithMetadata(wf_url, trs_tool_wfexs_meta))
+            try:
+                resio = io.BytesIO()
+                _, metaresio, _ = scheme_catalog.streamfetch(
+                    trs_tool_uri,
+                    resio,
+                    sec_context={
+                        "headers": {
+                            "Accept": "application/json",
+                            # Added to avoid Cloudflare anti-bot policy
+                            "User-Agent": get_WfExS_version_str(),
+                        },
+                    },
+                )
+                trs_tool_meta = json.loads(resio.getvalue().decode("utf-8"))
+                trs_tool_wfexs_meta["payload"] = trs_tool_meta
+                metadata_array.extend(metaresio)
+            except Exception as e:
+                if fail_ok:
+                    return None
+                raise FetcherException(
+                    f"trs_endpoint could not be guessed from {putative_tool_uri} (forced version {override_version_id}, raised exception {e})"
+                ) from e
+
         assert trs_tool_meta is not None
 
         if not isinstance(trs_tool_meta.get("descriptor_type"), list):
