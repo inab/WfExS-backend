@@ -251,7 +251,9 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     )
                     service_info_wfexs_meta["payload"] = service_info_metadata
                     metadata_array.extend(metametaio)
-                    trs_endpoint = trs_service_info[0 : -len("service-info")]
+                    trs_endpoint = non_standard_trs_service_info[
+                        0 : -len("service-info")
+                    ]
                 except Exception as e2:
                     if fail_ok:
                         return None
