@@ -189,6 +189,9 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
             wf_url = cast("RepoURL", orig_wf_url)
             parsed_wf_url = parse.urlparse(orig_wf_url)
 
+        if fail_ok and parsed_wf_url.scheme not in cls.GetSchemeHandlers():
+            return None
+
         if offline:
             raise OfflineRepoGuessException(
                 f"Queries related to {wf_url} are not allowed in offline mode"
