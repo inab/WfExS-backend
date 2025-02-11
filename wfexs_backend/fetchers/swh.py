@@ -251,7 +251,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         parsed_wf_url = parse.urlparse(remote_repo.repo_url)
         if (
             parsed_wf_url.scheme not in self.GetSchemeHandlers()
-            or remote_repo.repo_type not in (RepoType.TRS, None)
+            or remote_repo.repo_type not in (RepoType.SoftwareHeritage, None)
         ):
             return None
 
