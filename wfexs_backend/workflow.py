@@ -1996,6 +1996,7 @@ class WF:
                     (
                         repoDir,
                         materialized_repo,
+                        workflow_type,
                         downstream_repos,
                     ) = self.wfexs.doMaterializeRepo(
                         repo,

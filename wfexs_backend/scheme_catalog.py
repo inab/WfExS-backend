@@ -256,10 +256,14 @@ class SchemeCatalog:
         instStatefulFetcher: "Optional[AbstractStatefulFetcher]" = None
         if inspect.isclass(statefulFetcher):
             if issubclass(statefulFetcher, AbstractStatefulFetcher):
+                # Setting the default list of programs
+                mutable_progs = copy.copy(progs)
+                for prog in statefulFetcher.GetNeededPrograms():
+                    mutable_progs.setdefault(prog, cast("RelPath", prog))
                 try:
                     if issubclass(statefulFetcher, AbstractSchemeRepoFetcher):
                         instStatefulFetcher = statefulFetcher(
-                            self, progs=progs, setup_block=setup_block
+                            self, progs=mutable_progs, setup_block=setup_block
                         )
                     else:
                         instStatefulFetcher = statefulFetcher(
@@ -289,12 +293,14 @@ class SchemeCatalog:
         self,
         the_module_name: "str" = "wfexs_backend.fetchers",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
+        progs: "ProgsMapping" = dict(),
+    ) -> "Sequence[AbstractSchemeRepoFetcher]":
         try:
             the_module = importlib.import_module(the_module_name)
-            self.findAndAddSchemeHandlersFromModule(
+            return self.findAndAddSchemeHandlersFromModule(
                 the_module,
                 fetchers_setup_block=fetchers_setup_block,
+                progs=progs,
             )
         except Exception as e:
             errmsg = f"Unable to import module {the_module_name} in order to gather scheme handlers, due errors:"
@@ -305,7 +311,10 @@ class SchemeCatalog:
         self,
         the_module: "ModuleType",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
+        progs: "ProgsMapping" = dict(),
+    ) -> "Sequence[AbstractSchemeRepoFetcher]":
+        repo_fetchers: "MutableSequence[AbstractSchemeRepoFetcher]" = []
+
         for finder, module_name, ispkg in iter_namespace(the_module):
             try:
                 named_module = importlib.import_module(module_name)
@@ -334,9 +343,12 @@ class SchemeCatalog:
                 ):
                     # Now, let's learn whether the class is enabled
                     if getattr(obj, "ENABLED", False):
-                        self.addStatefulSchemeHandlers(
-                            obj,
-                            fetchers_setup_block=fetchers_setup_block,
+                        repo_fetchers.extend(
+                            self.addStatefulSchemeHandlers(
+                                obj,
+                                fetchers_setup_block=fetchers_setup_block,
+                                progs=progs,
+                            )
                         )
                         skipit = False
 
@@ -345,11 +357,14 @@ class SchemeCatalog:
                     f"Fetch module {named_module} was not eligible (no SCHEME_HANDLERS dictionary or subclass of {AbstractStatefulFetcher.__name__})"
                 )
 
+        return repo_fetchers
+
     def addStatefulSchemeHandlers(
         self,
         statefulSchemeHandler: "Type[AbstractStatefulFetcher]",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
+        progs: "ProgsMapping" = dict(),
+    ) -> "Sequence[AbstractSchemeRepoFetcher]":
         """
         This method adds scheme handlers (aka "fetchers") from
         a given stateful fetcher, also adding the needed programs
@@ -358,8 +373,10 @@ class SchemeCatalog:
         # Get the scheme handlers from this fetcher
         schemeHandlers = statefulSchemeHandler.GetSchemeHandlers()
 
-        self.addSchemeHandlers(
-            schemeHandlers, fetchers_setup_block=fetchers_setup_block
+        return self.addSchemeHandlers(
+            schemeHandlers,
+            fetchers_setup_block=fetchers_setup_block,
+            progs=progs,
         )
 
     def get(self, scheme: "str") -> "Optional[DocumentedProtocolFetcher]":
@@ -429,32 +446,40 @@ class SchemeCatalog:
         self,
         schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, DocumentedStatefulProtocolFetcher]]",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-    ) -> None:
+        progs: "ProgsMapping" = dict(),
+    ) -> "Sequence[AbstractSchemeRepoFetcher]":
         """
         This method adds scheme handlers (aka "fetchers")
         or instantiates stateful scheme handlers (aka "stateful fetchers")
         """
-        if isinstance(schemeHandlers, dict):
-            instSchemeHandlers = dict()
-            if fetchers_setup_block is None:
-                fetchers_setup_block = dict()
-            for scheme, schemeHandler in schemeHandlers.items():
-                if self.SCHEME_PAT.search(scheme) is None:
-                    self.logger.warning(
-                        f"Fetcher associated to scheme {scheme} has been skipped, as the scheme does not comply with RFC3986"
-                    )
-                    continue
+        instSchemeHandlers = dict()
+        fetchers_mapping: "MutableMapping[Type[AbstractStatefulFetcher], DocumentedProtocolFetcher]" = (
+            dict()
+        )
+        repo_fetchers: "MutableSequence[AbstractSchemeRepoFetcher]" = []
+        if fetchers_setup_block is None:
+            fetchers_setup_block = dict()
+        for scheme, schemeHandler in schemeHandlers.items():
+            if self.SCHEME_PAT.search(scheme) is None:
+                self.logger.warning(
+                    f"Fetcher associated to scheme {scheme} has been skipped, as the scheme does not comply with RFC3986"
+                )
+                continue
 
-                lScheme = scheme.lower()
-                # When no setup block is available for the scheme fetcher,
-                # provide an empty one
-                setup_block = fetchers_setup_block.get(lScheme, dict())
+            lScheme = scheme.lower()
+            # When no setup block is available for the scheme fetcher,
+            # provide an empty one
+            setup_block = fetchers_setup_block.get(lScheme, dict())
 
-                instSchemeHandler = None
-                if isinstance(schemeHandler, DocumentedStatefulProtocolFetcher):
+            instSchemeHandler: "Optional[DocumentedProtocolFetcher]" = None
+            if isinstance(schemeHandler, DocumentedStatefulProtocolFetcher):
+                instSchemeHandler = fetchers_mapping.get(schemeHandler.fetcher_class)
+                if instSchemeHandler is None:
                     try:
                         instSchemeInstance = self.instantiateStatefulFetcher(
-                            schemeHandler.fetcher_class, setup_block=setup_block
+                            schemeHandler.fetcher_class,
+                            setup_block=setup_block,
+                            progs=progs,
                         )
                         if instSchemeInstance is not None:
                             instSchemeHandler = DocumentedProtocolFetcher(
@@ -464,23 +489,32 @@ class SchemeCatalog:
                                 else schemeHandler.description,
                                 priority=schemeHandler.priority,
                             )
+                            fetchers_mapping[
+                                schemeHandler.fetcher_class
+                            ] = instSchemeHandler
+                            if isinstance(
+                                instSchemeInstance, AbstractSchemeRepoFetcher
+                            ):
+                                repo_fetchers.append(instSchemeInstance)
                     except Exception as e:
                         self.logger.exception(
                             f"Error while instantiating handler implemented at {schemeHandler.fetcher_class} for scheme {lScheme}"
                         )
-                elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
-                    schemeHandler.fetcher
-                ):
-                    instSchemeHandler = schemeHandler
+            elif isinstance(schemeHandler, DocumentedProtocolFetcher) and callable(
+                schemeHandler.fetcher
+            ):
+                instSchemeHandler = schemeHandler
 
-                # Only the ones which have overcome the sanity checks
-                if instSchemeHandler is not None:
-                    # Schemes are case insensitive, so register only
-                    # the lowercase version
-                    instSchemeHandlers[lScheme] = instSchemeHandler
-                else:
-                    self.logger.warning(
-                        f"Scheme {lScheme} could not be properly instantiated"
-                    )
+            # Only the ones which have overcome the sanity checks
+            if instSchemeHandler is not None:
+                # Schemes are case insensitive, so register only
+                # the lowercase version
+                instSchemeHandlers[lScheme] = instSchemeHandler
+            else:
+                self.logger.warning(
+                    f"Scheme {lScheme} could not be properly instantiated"
+                )
 
-            self.addRawSchemeHandlers(instSchemeHandlers)
+        self.addRawSchemeHandlers(instSchemeHandlers)
+
+        return repo_fetchers

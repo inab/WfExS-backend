@@ -686,7 +686,6 @@ class WfExSBackend:
         self._sngltn_fetcher: "MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher]" = (
             dict()
         )
-        self._repo_fetchers: "MutableSequence[AbstractSchemeRepoFetcher]" = list()
         # scheme_catalog is created on first use
         self.scheme_catalog = SchemeCatalog()
         # cacheHandler is created on first use
@@ -697,8 +696,11 @@ class WfExSBackend:
         fetchers_setup_block = local_config.get("fetchers-setup")
 
         # All the scheme handlers should be added here
-        self.scheme_catalog.findAndAddSchemeHandlersFromModuleName(
-            fetchers_setup_block=fetchers_setup_block
+        self._repo_fetchers = (
+            self.scheme_catalog.findAndAddSchemeHandlersFromModuleName(
+                fetchers_setup_block=fetchers_setup_block,
+                progs=self.progs,
+            )
         )
 
         # Registry of export plugins is created here
@@ -763,42 +765,6 @@ class WfExSBackend:
         self, cache_type: "CacheType"
     ) -> "Tuple[CacheHandler, Optional[pathlib.Path]]":
         return self.cacheHandler, self.cachePathMap.get(cache_type)
-
-    def instantiateStatefulFetcher(
-        self,
-        statefulFetcher: "Type[StatefulFetcher]",
-        setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> "StatefulFetcher":
-        """
-        Method to instantiate stateful fetchers once
-        """
-        instStatefulFetcher = self._sngltn_fetcher.get(statefulFetcher)
-        if instStatefulFetcher is None:
-            # Setting the default list of programs
-            for prog in statefulFetcher.GetNeededPrograms():
-                self.progs.setdefault(prog, cast("RelPath", prog))
-            # Let's augment the list of needed progs by this
-            # stateful fetcher
-            instStatefulFetcher = self.scheme_catalog.instantiateStatefulFetcher(
-                statefulFetcher, progs=self.progs, setup_block=setup_block
-            )
-            self._sngltn_fetcher[statefulFetcher] = instStatefulFetcher
-
-            # Also, if it is a repository fetcher, record it separately
-            if isinstance(instStatefulFetcher, AbstractSchemeRepoFetcher):
-                self._repo_fetchers.append(instStatefulFetcher)
-
-        return cast("StatefulFetcher", instStatefulFetcher)
-
-    def instantiateRepoFetcher(
-        self,
-        repoFetcher: "Type[SchemeRepoFetcher]",
-        setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> "SchemeRepoFetcher":
-        """
-        Method to instantiate repo fetchers once
-        """
-        return self.instantiateStatefulFetcher(repoFetcher, setup_block=setup_block)
 
     def findAndAddWorkflowEnginesFromModuleName(
         self,
@@ -1967,7 +1933,7 @@ class WfExSBackend:
 
         # It is not an absolute URL, so it is being an identifier in the workflow
         i_workflow: "Optional[IdentifiedWorkflow]" = None
-        engineDesc: "Optional[WorkflowType]" = None
+        workflow_type: "Optional[WorkflowType]" = None
         guessedRepo: "Optional[RemoteRepo]" = None
         repoDir: "Optional[pathlib.Path]" = None
         putative: "bool" = False
@@ -2037,7 +2003,7 @@ class WfExSBackend:
                 raise WfExSBackendException(message)
 
             guessedRepo = i_workflow.remote_repo
-            engineDesc = i_workflow.workflow_type
+            workflow_type = i_workflow.workflow_type
             if cached_putative_path is not None:
                 self.cacheROCrateFilename = cached_putative_path
 
@@ -2054,7 +2020,12 @@ class WfExSBackend:
                 len(parsedRepoURL.scheme) > 0
             ), f"Repository id {guessedRepo.repo_url} should be a parsable URI"
 
-            repoDir, materialized_repo, downstream_repos = self.doMaterializeRepo(
+            (
+                repoDir,
+                materialized_repo,
+                workflow_type,
+                downstream_repos,
+            ) = self.doMaterializeRepo(
                 guessedRepo,
                 fetcher=guessed[1] if guessed is not None else None,
                 doUpdate=ignoreCache,
@@ -2065,7 +2036,7 @@ class WfExSBackend:
             repoEffectiveCheckout = repo.get_checkout()
             # TODO: should we preserve the chain of repos?
 
-        return repoDir, repo, engineDesc, repoEffectiveCheckout
+        return repoDir, repo, workflow_type, repoEffectiveCheckout
 
     TRS_METADATA_FILE: "Final[RelPath]" = cast("RelPath", "trs_metadata.json")
     TRS_QUERY_CACHE_FILE: "Final[RelPath]" = cast("RelPath", "trs_result.json")
@@ -2076,7 +2047,7 @@ class WfExSBackend:
         fetcher: "Optional[AbstractSchemeRepoFetcher]" = None,
         doUpdate: "bool" = True,
         registerInCache: "bool" = True,
-    ) -> "Tuple[pathlib.Path, MaterializedRepo, Sequence[RemoteRepo]]":
+    ) -> "Tuple[pathlib.Path, MaterializedRepo, Optional[WorkflowType], Sequence[RemoteRepo]]":
         """
         This method is used to materialize repos described using instances
         of RemoteRepo. It starts asking all the known repo fetchers whether
@@ -2115,6 +2086,7 @@ class WfExSBackend:
                     f"Don't know how to materialize {repo.repo_url} (of type {repo.repo_type}) as a repository"
                 )
 
+        workflow_type: "Optional[WorkflowType]" = None
         # An specialized fetcher is used
         downstream_repos: "MutableSequence[RemoteRepo]"
         if fetcher is not None:
@@ -2172,6 +2144,7 @@ class WfExSBackend:
                     (
                         upstream_repo_path,
                         upstream_materialized_repo,
+                        upstream_workflow_type,
                         upstream_downstream_repos,
                     ) = self.doMaterializeRepo(
                         materialized_repo.upstream_repo,
@@ -2182,6 +2155,7 @@ class WfExSBackend:
                     return (
                         upstream_repo_path,
                         upstream_materialized_repo,
+                        upstream_workflow_type,
                         downstream_repos,
                     )
                 except Exception as e:
@@ -2206,6 +2180,7 @@ class WfExSBackend:
                 # It is an RO-Crate
                 downstream_repos.append(repo)
                 i_workflow_repo = i_workflow.remote_repo
+                workflow_type = i_workflow.workflow_type
                 if repo_rel_path is not None:
                     i_workflow_repo = i_workflow_repo._replace(rel_path=repo_rel_path)
                 downstream_repos.append(i_workflow_repo)
@@ -2215,6 +2190,7 @@ class WfExSBackend:
                     (
                         upstream_repo_path,
                         upstream_materialized_repo,
+                        upstream_workflow_type,
                         upstream_downstream_repos,
                     ) = self.doMaterializeRepo(
                         i_workflow_repo,
@@ -2225,6 +2201,7 @@ class WfExSBackend:
                     return (
                         upstream_repo_path,
                         upstream_materialized_repo,
+                        upstream_workflow_type,
                         downstream_repos,
                     )
                 except Exception as e:
@@ -2263,7 +2240,7 @@ class WfExSBackend:
                     metadata_array=metadata_array,
                 )
 
-        return repo_path, materialized_repo, downstream_repos
+        return repo_path, materialized_repo, workflow_type, downstream_repos
 
     def getWorkflowBundleFromURI(
         self,
