@@ -1077,12 +1077,20 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         ):
             return remote_repo.repo_url
         elif remote_repo.repo_type == RepoType.TRS:
-            guessed_trs_params = self.GuessTRSParams(
-                parsedInputURL,
-                override_version_id=remote_repo.tag,
-                logger=self.logger,
-                fail_ok=True,
-            )
+            try:
+                guessed_trs_params = self.GuessTRSParams(
+                    parsedInputURL,
+                    override_version_id=remote_repo.tag,
+                    logger=self.logger,
+                    fail_ok=True,
+                    offline=True,
+                )
+            except OfflineRepoGuessException as orge:
+                self.logger.error(
+                    f"While building pid for {remote_repo.repo_url} called code which should be safe offline"
+                )
+                guessed_trs_params = None
+
             if guessed_trs_params is not None:
                 (
                     trs_tool_url,

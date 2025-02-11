@@ -381,6 +381,8 @@ class AbstractSchemeRepoFetcher(AbstractStatefulFetcher):
         If the fetcher does not recognize the type of repo, either using
         repo_url content or the repo type in the worst case, it should
         return None
+
+        Calling this method in offline mode should be safe
         """
         pass
 
