@@ -50,8 +50,10 @@ from . import (
     DocumentedStatefulProtocolFetcher,
     FetcherException,
     MaterializedRepo,
+    OfflineRepoGuessException,
     ProtocolFetcherReturn,
     RemoteRepo,
+    RepoGuessException,
     RepoType,
 )
 
@@ -154,6 +156,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
         scheme_catalog: "Optional[SchemeCatalog]" = None,
+        offline: "bool" = False,
     ) -> "Optional[Tuple[RepoURL, str, Sequence[str], WorkflowId, WFVersionId, str, Sequence[URIWithMetadata], Optional[Mapping[str, Any]]]]":
         if scheme_catalog is None:
             scheme_catalog = SchemeCatalog(
@@ -187,12 +190,16 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         trs_tool_meta: "Optional[Mapping[str, Any]]" = None
         version_id: "Optional[WFVersionId]" = None
         if parsed_wf_url.scheme == cls.TRS_SCHEME_PREFIX:
+            if offline:
+                raise OfflineRepoGuessException(
+                    f"Queries related to {wf_url} are not allowed in offline mode"
+                )
             # Duplication of code
             path_steps: "Sequence[str]" = parsed_wf_url.path.split("/")
             if len(path_steps) < 3 or path_steps[0] != "":
                 if fail_ok:
                     return None
-                raise FetcherException(
+                raise RepoGuessException(
                     f"Ill-formed TRS CURIE {wf_url}. It should be in the format of {cls.TRS_SCHEME_PREFIX}://server/id/version or {cls.TRS_SCHEME_PREFIX}://server-plus-prefix-with-slashes/id/version"
                 )
 
@@ -278,6 +285,10 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             workflow_id = urllib.parse.unquote(path_steps[-2])
             descriptor = None
         elif parsed_wf_url.scheme == cls.INTERNAL_TRS_SCHEME_PREFIX:
+            if offline:
+                raise OfflineRepoGuessException(
+                    f"Queries related to {wf_url} are not allowed in offline mode"
+                )
             putative_tool_uri = cast(
                 "URIType",
                 parsed_wf_url.path[0:-1]
@@ -315,14 +326,14 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             except Exception as e:
                 if fail_ok:
                     return None
-                raise FetcherException(
+                raise RepoGuessException(
                     f"trs_endpoint could not be guessed from {putative_tool_uri} (raised exception {e})"
                 ) from e
 
             if not isinstance(trs__meta, dict):
                 if fail_ok:
                     return None
-                raise FetcherException(
+                raise RepoGuessException(
                     f"trs_endpoint could not be guessed from {putative_tool_uri} (not returning JSON object)"
                 )
 
@@ -332,7 +343,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 if len(versions) == 0:
                     if fail_ok:
                         return None
-                    raise FetcherException(
+                    raise RepoGuessException(
                         f"No versions found associated to TRS tool reachable through {putative_tool_uri}"
                     )
 
@@ -356,7 +367,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     else:
                         if fail_ok:
                             return None
-                        raise FetcherException(
+                        raise RepoGuessException(
                             f"Forced version {override_version_id} not found associated to TRS tool reachable through {putative_tool_uri}"
                         )
 
@@ -400,7 +411,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 elif fail_ok:
                     return None
                 else:
-                    raise FetcherException(
+                    raise RepoGuessException(
                         f"No version id found associated to specific version of TRS tool reachable through {putative_tool_uri}"
                     )
             # ... or a concrete one?
@@ -438,14 +449,14 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     except Exception as e:
                         if fail_ok:
                             return None
-                        raise FetcherException(
+                        raise RepoGuessException(
                             f"trs_endpoint could not be guessed from {putative_tool_uri} (forced version {override_version_id}, raised exception {e})"
                         ) from e
 
                     if "descriptor_type" not in trs__meta:
                         if fail_ok:
                             return None
-                        raise FetcherException(
+                        raise RepoGuessException(
                             f"trs_endpoint at {putative_tool_uri} (forced version {override_version_id}) is not answering what it is expected"
                         )
 
@@ -487,7 +498,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             elif fail_ok:
                 return None
             else:
-                raise FetcherException(
+                raise RepoGuessException(
                     f"trs_endpoint at {putative_tool_uri} is not answering what it is expected"
                 )
 
@@ -498,7 +509,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         elif fail_ok:
             return None
         else:
-            raise FetcherException(
+            raise RepoGuessException(
                 f"trs_endpoint could not be guessed from {orig_wf_url} (no clues)"
             )
 
@@ -530,20 +541,20 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             except Exception as e:
                 if fail_ok:
                     return None
-                raise FetcherException(
+                raise RepoGuessException(
                     f"trs_endpoint could not be guessed from {putative_tool_uri} (forced version {override_version_id}, raised exception {e})"
                 ) from e
 
         assert trs_tool_meta is not None
 
         if not isinstance(trs_tool_meta.get("descriptor_type"), list):
-            raise FetcherException(
+            raise RepoGuessException(
                 f"Unable to obtain descriptor_type from tool descriptor obtained from {putative_tool_uri}"
             )
 
         descriptor_types = trs_tool_meta["descriptor_type"]
         if len(descriptor_types) == 0:
-            raise FetcherException(
+            raise RepoGuessException(
                 f"Empty list of descriptor_type from tool descriptor obtained from {putative_tool_uri}"
             )
 
@@ -571,8 +582,11 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         orig_wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
+        offline: "bool" = False,
     ) -> "Optional[RemoteRepo]":
-        trs_params = cls.GuessTRSParams(orig_wf_url, logger=logger, fail_ok=fail_ok)
+        trs_params = cls.GuessTRSParams(
+            orig_wf_url, logger=logger, fail_ok=fail_ok, offline=offline
+        )
 
         return (
             None

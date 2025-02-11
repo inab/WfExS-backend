@@ -70,6 +70,7 @@ from . import (
     DocumentedStatefulProtocolFetcher,
     FetcherException,
     MaterializedRepo,
+    OfflineRepoGuessException,
     ProtocolFetcherReturn,
     RemoteRepo,
     RepoGuessException,
@@ -176,6 +177,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         orig_wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
+        offline: "bool" = False,
     ) -> "Optional[RemoteRepo]":
         # Deciding which is the input
         wf_url: "RepoURL"
@@ -186,6 +188,11 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         else:
             wf_url = cast("RepoURL", orig_wf_url)
             parsed_wf_url = parse.urlparse(orig_wf_url)
+
+        if offline:
+            raise OfflineRepoGuessException(
+                f"Queries related to {wf_url} are not allowed in offline mode"
+            )
 
         if parsed_wf_url.scheme not in cls.GetSchemeHandlers():
             return None
@@ -211,7 +218,9 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         except Exception as e:
             if fail_ok:
                 return None
-            raise
+            raise RepoGuessException(
+                f"Errors while querying {wf_url} for guessing purposes"
+            ) from e
 
         # It could be a valid swh identifier, but it is not registered
         if not isinstance(val_doc, dict) or not val_doc.get(

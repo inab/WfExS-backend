@@ -250,6 +250,10 @@ class RepoGuessException(FetcherException):
     pass
 
 
+class OfflineRepoGuessException(RepoGuessException):
+    pass
+
+
 class RepoType(enum.Enum):
     Git = "git"
     Raw = "raw"
@@ -387,6 +391,7 @@ class AbstractSchemeRepoFetcher(AbstractStatefulFetcher):
         orig_wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
+        offline: "bool" = False,
     ) -> "Optional[RemoteRepo]":
         pass
 

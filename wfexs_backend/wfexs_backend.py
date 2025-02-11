@@ -1868,6 +1868,7 @@ class WfExSBackend:
         self,
         wf_url: "Union[URIType, parse.ParseResult]",
         fail_ok: "bool" = False,
+        offline: "bool" = False,
     ) -> "Optional[Tuple[RemoteRepo, AbstractSchemeRepoFetcher]]":
         if isinstance(wf_url, parse.ParseResult):
             parsedRepoURL = wf_url
@@ -1878,7 +1879,10 @@ class WfExSBackend:
         fetcher: "Optional[AbstractSchemeRepoFetcher]" = None
         for fetcher in self.repo_fetchers:
             remote_repo = fetcher.GuessRepoParams(
-                parsedRepoURL, logger=self.logger, fail_ok=fail_ok
+                parsedRepoURL,
+                logger=self.logger,
+                fail_ok=fail_ok,
+                offline=offline,
             )
             if remote_repo is not None:
                 return remote_repo, fetcher
@@ -1942,7 +1946,7 @@ class WfExSBackend:
             raise WFException("trs_endpoint was not provided")
 
         # Trying to be smarter
-        guessed = self.guess_repo_params(parsedRepoURL, fail_ok=True)
+        guessed = self.guess_repo_params(parsedRepoURL, offline=offline, fail_ok=True)
         if guessed is not None:
             guessedRepo = guessed[0]
             if guessedRepo.tag is None and version_id is not None:
@@ -2312,7 +2316,9 @@ class WfExSBackend:
 
             try:
                 identified_workflow = self.getWorkflowRepoFromROCrateFile(
-                    roCrateFile, expectedEngineDesc
+                    roCrateFile,
+                    expectedEngineDesc=expectedEngineDesc,
+                    offline=offline,
                 )
                 return (
                     identified_workflow,
@@ -2338,6 +2344,7 @@ class WfExSBackend:
         self,
         roCrateFile: "pathlib.Path",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
+        offline: "bool" = False,
     ) -> "IdentifiedWorkflow":
         """
 
@@ -2389,7 +2396,7 @@ class WfExSBackend:
             )
 
         # We need this additional step to guess the repo type
-        guessed = self.guess_repo_params(repo.repo_url, fail_ok=True)
+        guessed = self.guess_repo_params(repo.repo_url, offline=offline, fail_ok=True)
         if guessed is None or guessed[0].repo_type is None:
             raise WfExSBackendException(
                 f"Unable to guess repository from RO-Crate manifest obtained from {public_name}"

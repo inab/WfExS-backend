@@ -79,6 +79,7 @@ from . import (
     DocumentedStatefulProtocolFetcher,
     FetcherException,
     MaterializedRepo,
+    OfflineRepoGuessException,
     ProtocolFetcherReturn,
     RemoteRepo,
     RepoGuessException,
@@ -149,6 +150,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
     def _find_git_repo_in_uri(
         cls,
         remote_file: "Union[URIType, parse.ParseResult]",
+        offline: "bool" = False,
     ) -> "Tuple[RemoteRepo, Sequence[str], Sequence[RepoTag]]":
         if isinstance(remote_file, parse.ParseResult):
             parsedInputURL = remote_file
@@ -170,6 +172,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             remote_uri_anc = parse.urlunparse(parsedInputURL._replace(path=pre_path))
 
             remote_refs_dict: "Mapping[bytes, bytes]"
+            if offline:
+                raise OfflineRepoGuessException(
+                    f"Query to {remote_uri_anc} is not allowed in offline mode"
+                )
             try:
                 # Dulwich works both with file, ssh, git and http(s) protocols
                 remote_refs_dict = dulwich.porcelain.ls_remote(remote_uri_anc)
@@ -257,7 +263,12 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
+        offline: "bool" = False,
     ) -> "Optional[RemoteRepo]":
+        """
+        When it is in offline mode, GuessRepoParams can raise an OfflineRepoGuessException
+        """
+
         repoURL = None
         repoTag = None
         repoRelPath = None
@@ -299,7 +310,9 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                         fragment="",
                     )
                 )
-                found_params = cls._find_git_repo_in_uri(cast("URIType", repoURL))
+                found_params = cls._find_git_repo_in_uri(
+                    cast("URIType", repoURL), offline=offline
+                )
 
             elif (
                 parsed_wf_url.scheme in ("http", "https")
@@ -307,7 +320,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 and "@" not in parsed_wf_url.path
                 and parsed_wf_url.fragment == ""
             ):
-                found_params = cls._find_git_repo_in_uri(parsed_wf_url)
+                found_params = cls._find_git_repo_in_uri(parsed_wf_url, offline=offline)
                 repoURL = found_params[0].repo_url
                 repoType = RepoType.Git
                 guessedRepoFlavor = RepoGuessFlavor.GitHub
@@ -354,7 +367,9 @@ class GitFetcher(AbstractSchemeRepoFetcher):
 
                     # And now, guessing the tag/checkout and the relative path
                     # WARNING! This code can have problems with tags which contain slashes
-                    found_params = cls._find_git_repo_in_uri(cast("URIType", repoURL))
+                    found_params = cls._find_git_repo_in_uri(
+                        cast("URIType", repoURL), offline=offline
+                    )
                     if len(wf_path) >= 4:
                         repo_branches_tags = found_params[2]
                         # Validate against existing branch and tag names
@@ -448,20 +463,24 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 repoURL = parse.urlunparse(
                     (gitScheme, parsed_wf_url.netloc, gitPath, "", "", "")
                 )
-                found_params = cls._find_git_repo_in_uri(cast("URIType", repoURL))
+                found_params = cls._find_git_repo_in_uri(
+                    cast("URIType", repoURL), offline=offline
+                )
                 guessedRepoFlavor = found_params[0].guess_flavor
             # TODO handling other popular cases, like bitbucket
             elif parsed_wf_url.scheme in ("http", "https", "file", "ssh"):
-                found_params = cls._find_git_repo_in_uri(parsed_wf_url)
+                found_params = cls._find_git_repo_in_uri(parsed_wf_url, offline=offline)
             else:
                 return None
 
+        except OfflineRepoGuessException as ogge:
+            raise
         except RepoGuessException as gge:
             if not fail_ok:
                 import traceback
 
                 traceback.print_exc()
-                raise FetcherException(
+                raise RepoGuessException(
                     f"FIXME: Unsupported http(s) git repository {wf_url} (see cascade exception)"
                 ) from gge
 
@@ -472,7 +491,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             if guessedRepoFlavor is None:
                 guessedRepoFlavor = found_params[0].guess_flavor
         elif not fail_ok:
-            raise FetcherException(
+            raise RepoGuessException(
                 f"FIXME: Unsupported git repository {wf_url}. (Is it really a git repo???)"
             )
 
