@@ -451,8 +451,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 found_params = cls._find_git_repo_in_uri(cast("URIType", repoURL))
                 guessedRepoFlavor = found_params[0].guess_flavor
             # TODO handling other popular cases, like bitbucket
-            else:
+            elif parsed_wf_url.scheme in ("http", "https", "file", "ssh"):
                 found_params = cls._find_git_repo_in_uri(parsed_wf_url)
+            else:
+                return None
 
         except RepoGuessException as gge:
             if not fail_ok:
