@@ -822,7 +822,6 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     if is_abs_url:
                         # An absolute URL, like in the case of DDBJ TRS implementation
                         file_url = cast("URIType", file_rel_path)
-                        self.logger.warning(file_rel_2_url)
                     else:
                         file_url = cast(
                             "URIType",
