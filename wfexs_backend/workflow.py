@@ -2002,6 +2002,7 @@ class WF:
                         repo,
                         doUpdate=ignoreCache,
                         # registerInCache=True,
+                        offline=offline,
                     )
                     assert len(downstream_repos) > 0
                     repo = materialized_repo.repo

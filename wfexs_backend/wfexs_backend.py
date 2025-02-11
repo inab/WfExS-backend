@@ -2030,6 +2030,7 @@ class WfExSBackend:
                 fetcher=guessed[1] if guessed is not None else None,
                 doUpdate=ignoreCache,
                 registerInCache=registerInCache,
+                offline=offline,
             )
             assert len(downstream_repos) > 0
             repo = materialized_repo.repo
@@ -2047,6 +2048,7 @@ class WfExSBackend:
         fetcher: "Optional[AbstractSchemeRepoFetcher]" = None,
         doUpdate: "bool" = True,
         registerInCache: "bool" = True,
+        offline: "bool" = False,
     ) -> "Tuple[pathlib.Path, MaterializedRepo, Optional[WorkflowType], Sequence[RemoteRepo]]":
         """
         This method is used to materialize repos described using instances
@@ -2150,6 +2152,7 @@ class WfExSBackend:
                         materialized_repo.upstream_repo,
                         doUpdate=doUpdate,
                         registerInCache=registerInCache,
+                        offline=offline,
                     )
                     downstream_repos.extend(upstream_downstream_repos)
                     return (
@@ -2174,6 +2177,7 @@ class WfExSBackend:
                 repo.repo_url,
                 ignoreCache=doUpdate,
                 registerInCache=registerInCache,
+                offline=offline,
             )
 
             if i_workflow is not None:
@@ -2196,6 +2200,7 @@ class WfExSBackend:
                         i_workflow_repo,
                         doUpdate=doUpdate,
                         registerInCache=registerInCache,
+                        offline=offline,
                     )
                     downstream_repos.extend(upstream_downstream_repos)
                     return (
