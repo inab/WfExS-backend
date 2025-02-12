@@ -111,6 +111,7 @@ from .utils.licences import (
 )
 
 from .utils.marshalling_handling import (
+    marshall_namedtuple,
     unmarshall_namedtuple,
 )
 
@@ -1864,19 +1865,69 @@ class WfExSBackend:
             config_directory=self.config_directory,
         )
 
+    def matchRepoFetcherByClassname(
+        self, clazzname: "str"
+    ) -> "Optional[AbstractSchemeRepoFetcher]":
+        for fetcher in self._repo_fetchers:
+            if fetcher.__class__.__name__ == clazzname:
+                return fetcher
+
+        return None
+
     def guess_repo_params(
         self,
         wf_url: "Union[URIType, parse.ParseResult]",
         fail_ok: "bool" = False,
         offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        registerInCache: "bool" = True,
     ) -> "Optional[Tuple[RemoteRepo, AbstractSchemeRepoFetcher]]":
+        remote_repo: "Optional[RemoteRepo]" = None
+        fetcher: "Optional[AbstractSchemeRepoFetcher]" = None
+        guess_cache = self.cacheWorkflowDir / "guess-cache"
+
+        if not ignoreCache:
+            try:
+                # Let's check whether the workflow was registered
+                # kind: "ContentKind"
+                # path: "pathlib.Path"
+                # metadata_array: "Sequence[URIWithMetadata]"
+                # licences: "Tuple[URIType, ...]"
+                # fingerprint: "Optional[Fingerprint]" = None
+                # clonable: "bool" = True
+                cached_content = self.cacheHandler.fetch(
+                    cast("URIType", wf_url),
+                    offline=True,
+                    destdir=guess_cache,
+                )
+                # Always a cached metadata file
+                assert cached_content.kind == ContentKind.File
+                with cached_content.path.open(mode="r", encoding="utf-8") as ccH:
+                    guessed_repo_payload = json.load(ccH)
+
+                if isinstance(guessed_repo_payload, (tuple, list)):
+                    remote_repo, fetcher_class_name = unmarshall_namedtuple(
+                        guessed_repo_payload
+                    )
+                    # Now, time to find the fetcher itself
+                    if remote_repo is not None:
+                        fetcher = self.matchRepoFetcherByClassname(fetcher_class_name)
+                        if fetcher is not None:
+                            return remote_repo, fetcher
+                    self.logger.debug(
+                        f"Cached empty guessing elements associated to {wf_url}. Ignoring"
+                    )
+                elif offline:
+                    # Do not try again if it is in offline mode
+                    return None
+            except Exception as e:
+                self.logger.debug(f"Guessed {wf_url} not cached (exception {e})")
+
         if isinstance(wf_url, parse.ParseResult):
             parsedRepoURL = wf_url
         else:
             parsedRepoURL = urllib.parse.urlparse(wf_url)
 
-        remote_repo: "Optional[RemoteRepo]" = None
-        fetcher: "Optional[AbstractSchemeRepoFetcher]" = None
         for fetcher in self.repo_fetchers:
             remote_repo = fetcher.GuessRepoParams(
                 parsedRepoURL,
@@ -1885,6 +1936,31 @@ class WfExSBackend:
                 offline=offline,
             )
             if remote_repo is not None:
+                if registerInCache:
+                    temp_cached = guess_cache / ("caching-" + str(uuid.uuid4()))
+                    try:
+                        with temp_cached.open(mode="w", encoding="utf-8") as tC:
+                            json.dump(
+                                marshall_namedtuple(
+                                    (remote_repo, fetcher.__class__.__name__)
+                                ),
+                                tC,
+                            )
+                        self.cacheHandler.inject(
+                            cast("URIType", wf_url),
+                            destdir=guess_cache,
+                            tempCachedFilename=temp_cached,
+                            inputKind=ContentKind.File,
+                        )
+                    except Exception as e:
+                        self.logger.exception(
+                            f"Unable to register guess cache for {wf_url} (see exception trace)"
+                        )
+                    finally:
+                        # Removing the leftovers, whether they worked or not
+                        if temp_cached.exists():
+                            temp_cached.unlink()
+
                 return remote_repo, fetcher
 
         return None
@@ -1946,7 +2022,13 @@ class WfExSBackend:
             raise WFException("trs_endpoint was not provided")
 
         # Trying to be smarter
-        guessed = self.guess_repo_params(parsedRepoURL, offline=offline, fail_ok=True)
+        guessed = self.guess_repo_params(
+            parsedRepoURL,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            registerInCache=registerInCache,
+            fail_ok=True,
+        )
         if guessed is not None:
             guessedRepo = guessed[0]
             if guessedRepo.tag is None and version_id is not None:
@@ -1968,6 +2050,7 @@ class WfExSBackend:
                 putative_repo_url,
                 offline=offline,
                 ignoreCache=ignoreCache,
+                registerInCache=registerInCache,
             )
 
             if i_workflow is None:
@@ -2087,11 +2170,6 @@ class WfExSBackend:
             else:
                 fetcher = None
 
-            if fetcher is None and repo.repo_type not in (RepoType.Raw, None):
-                raise WfExSBackendException(
-                    f"Don't know how to materialize {repo.repo_url} (of type {repo.repo_type}) as a repository"
-                )
-
         workflow_type: "Optional[WorkflowType]" = None
         # An specialized fetcher is used
         downstream_repos: "MutableSequence[RemoteRepo]"
@@ -2169,6 +2247,10 @@ class WfExSBackend:
                     self.logger.warning(
                         f"Recommended upstream repo {materialized_repo.upstream_repo} from repo {repo} could not be fetched, skipping. Exception: {e}"
                     )
+        elif repo.repo_type not in (RepoType.Raw, None):
+            raise WfExSBackendException(
+                f"Don't know how to materialize {repo.repo_url} (of type {repo.repo_type}) as a repository"
+            )
         else:
             downstream_repos = []
             # Let's try guessing whether it is an RO-Crate
@@ -2319,6 +2401,8 @@ class WfExSBackend:
                     roCrateFile,
                     expectedEngineDesc=expectedEngineDesc,
                     offline=offline,
+                    ignoreCache=ignoreCache,
+                    registerInCache=registerInCache,
                 )
                 return (
                     identified_workflow,
@@ -2345,6 +2429,8 @@ class WfExSBackend:
         roCrateFile: "pathlib.Path",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
         offline: "bool" = False,
+        ignoreCache: "bool" = False,
+        registerInCache: "bool" = True,
     ) -> "IdentifiedWorkflow":
         """
 
@@ -2396,7 +2482,13 @@ class WfExSBackend:
             )
 
         # We need this additional step to guess the repo type
-        guessed = self.guess_repo_params(repo.repo_url, offline=offline, fail_ok=True)
+        guessed = self.guess_repo_params(
+            repo.repo_url,
+            offline=offline,
+            ignoreCache=ignoreCache,
+            registerInCache=registerInCache,
+            fail_ok=True,
+        )
         if guessed is None or guessed[0].repo_type is None:
             raise WfExSBackendException(
                 f"Unable to guess repository from RO-Crate manifest obtained from {public_name}"
