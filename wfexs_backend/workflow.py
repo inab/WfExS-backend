@@ -893,7 +893,6 @@ class WF:
         self.arch: "Optional[ProcessorArchitecture]" = None
 
         self.stagedExecutions: "Optional[MutableSequence[StagedExecution]]" = None
-        self.cacheROCrateFilename: "Optional[pathlib.Path]" = None
 
         self.runExportActions: "Optional[MutableSequence[MaterializedExportAction]]" = (
             None

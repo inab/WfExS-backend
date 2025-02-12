@@ -2091,8 +2091,6 @@ class WfExSBackend:
 
             guessedRepo = i_workflow.remote_repo
             workflow_type = i_workflow.workflow_type
-            if cached_putative_path is not None:
-                self.cacheROCrateFilename = cached_putative_path
 
         assert guessedRepo is not None
         assert guessedRepo.repo_url is not None
