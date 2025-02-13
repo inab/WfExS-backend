@@ -2078,19 +2078,18 @@ class WfExSBackend:
                     rel_path=cast("Optional[RelPath]", repoRelPath),
                 )
                 putative = True
+            else:
+                # This can be incorrect, but let it be for now
+                if (
+                    requested_workflow_type is not None
+                    and requested_workflow_type != i_workflow.workflow_type
+                ):
+                    message = f"Fetched workflow is of type {i_workflow.workflow_type.shortname} , but it was explicitly requested to be of type {requested_workflow_type.shortname}"
+                    self.logger.error(message)
+                    raise WfExSBackendException(message)
 
-        # This can be incorrect, but let it be for now
-        if i_workflow is not None:
-            if (
-                requested_workflow_type is not None
-                and requested_workflow_type != i_workflow.workflow_type
-            ):
-                message = f"Fetched workflow is of type {i_workflow.workflow_type.shortname} , but it was explicitly requested to be of type {requested_workflow_type.shortname}"
-                self.logger.error(message)
-                raise WfExSBackendException(message)
-
-            guessedRepo = i_workflow.remote_repo
-            workflow_type = i_workflow.workflow_type
+                guessedRepo = i_workflow.remote_repo
+                workflow_type = i_workflow.workflow_type
 
         assert guessedRepo is not None
         assert guessedRepo.repo_url is not None
