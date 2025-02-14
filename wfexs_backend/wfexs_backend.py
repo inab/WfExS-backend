@@ -141,6 +141,7 @@ from .fetchers import (
     FetcherException,
     MaterializedRepo,
     RemoteRepo,
+    RepoGuessFlavor,  # This is needed for proper unmarshalling of cached repository guesses
     RepoType,
 )
 
