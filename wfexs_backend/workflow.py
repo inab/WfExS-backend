@@ -456,7 +456,7 @@ class WF:
         workflow_id: "Optional[WorkflowId]" = None,
         version_id: "Optional[WFVersionId]" = None,
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
-        trs_endpoint: "str" = DEFAULT_TRS_ENDPOINT,
+        trs_endpoint: "Optional[str]" = None,
         params: "Optional[ParamsBlock]" = None,
         enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
@@ -1828,12 +1828,18 @@ class WF:
                 # It should not happen
                 enabled_profiles = [str(profiles)]
 
+        parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
+        if parsed_workflow_id.scheme != "":
+            trs_endpoint = workflow_meta.get("trs_endpoint")
+        else:
+            trs_endpoint = workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT)
+
         return cls(
             wfexs,
             workflow_meta["workflow_id"],
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
-            trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=trs_endpoint,
             params=workflow_meta.get("params", dict()),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
@@ -1892,12 +1898,18 @@ class WF:
                 # It should not happen
                 enabled_profiles = [str(profiles)]
 
+        parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
+        if parsed_workflow_id.scheme != "":
+            trs_endpoint = workflow_meta.get("trs_endpoint")
+        else:
+            trs_endpoint = workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT)
+
         return cls(
             wfexs,
             workflow_meta["workflow_id"],
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
-            trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=trs_endpoint,
             params=workflow_meta.get("params", dict()),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
@@ -2125,7 +2137,7 @@ class WF:
                     )
             else:
                 raise WFException(
-                    "No engine recognized a valid workflow at {}".format(self.repoURL)
+                    f"No engine recognized a valid workflow at {self.repoURL} ({localWorkflow})"
                 )
         else:
             self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)

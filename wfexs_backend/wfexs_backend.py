@@ -487,11 +487,18 @@ class WfExSBackend:
                 # It should not happen
                 enabled_profiles = [str(profiles)]
 
+        parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
+        trs_endpoint: "Optional[str]"
+        if parsed_workflow_id.scheme != "":
+            trs_endpoint = workflow_meta.get("trs_endpoint")
+        else:
+            trs_endpoint = workflow_meta.get("trs_endpoint", WF.DEFAULT_TRS_ENDPOINT)
+
         return cls(updated_local_config, config_directory=config_directory).newSetup(
             workflow_meta["workflow_id"],
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
-            trs_endpoint=workflow_meta.get("trs_endpoint", WF.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=trs_endpoint,
             params=workflow_meta.get("params", {}),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", {}),
@@ -1004,7 +1011,7 @@ class WfExSBackend:
         workflow_id: "WorkflowId",
         version_id: "Optional[WFVersionId]" = None,
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
-        trs_endpoint: "str" = WF.DEFAULT_TRS_ENDPOINT,
+        trs_endpoint: "Optional[str]" = None,
         params: "Optional[ParamsBlock]" = None,
         enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
