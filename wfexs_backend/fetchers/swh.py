@@ -653,9 +653,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
                 f"Unexpected Software Heritage object type {object_type} for {repoURL}"
             )
 
-        remote_repo = RemoteRepo(
-            repo_url=repoURL,
-            tag=repoTag,
+        remote_repo = repo._replace(
             repo_type=RepoType.SoftwareHeritage,
             checkout=cast("RepoTag", repo_effective_checkout),
         )

@@ -865,7 +865,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                     "RepoTag", revproc.stdout.read().rstrip()
                 )
 
-        remote_repo = repo._replace(checkout=repo_effective_checkout)
+        remote_repo = repo._replace(
+            repo_type=RepoType.Git,
+            checkout=repo_effective_checkout,
+        )
 
         return MaterializedRepo(
             local=repo_tag_destpath,
