@@ -457,6 +457,7 @@ class WF:
         version_id: "Optional[WFVersionId]" = None,
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "Optional[str]" = None,
+        prefer_upstream_source: "Optional[bool]" = None,
         params: "Optional[ParamsBlock]" = None,
         enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
@@ -603,6 +604,8 @@ class WF:
                     workflow_meta["workflow_type"] = descriptor_type
             if trs_endpoint is not None:
                 workflow_meta["trs_endpoint"] = trs_endpoint
+            if prefer_upstream_source is not None:
+                workflow_meta["prefer_upstream_source"] = prefer_upstream_source
             if workflow_config is not None:
                 workflow_meta["workflow_config"] = workflow_config
             if params is not None:
@@ -641,6 +644,9 @@ class WF:
             self.id = str(workflow_id) if workflow_id is not None else None
             self.version_id = str(version_id) if version_id is not None else None
             self.descriptor_type = descriptor_type
+            self.prefer_upstream_source = (
+                prefer_upstream_source if prefer_upstream_source is not None else True
+            )
             self.params = params
             self.enabled_profiles = enabled_profiles
             self.environment = environment
@@ -665,6 +671,7 @@ class WF:
             self.id = None
             self.version_id = None
             self.descriptor_type = None
+            self.prefer_upstream_source = True
 
         if instanceId is not None:
             self.instanceId = instanceId
@@ -1840,6 +1847,7 @@ class WF:
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
+            prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
             params=workflow_meta.get("params", dict()),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
@@ -1910,6 +1918,7 @@ class WF:
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
+            prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
             params=workflow_meta.get("params", dict()),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
@@ -1930,6 +1939,7 @@ class WF:
         version_id: "Optional[WFVersionId]",
         trs_endpoint: "Optional[str]",
         descriptor_type: "Optional[TRS_Workflow_Descriptor]",
+        prefer_upstream_source: "bool" = True,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
@@ -2011,6 +2021,7 @@ class WF:
                         downstream_repos,
                     ) = self.wfexs.doMaterializeRepo(
                         repo,
+                        prefer_upstream_source=prefer_upstream_source,
                         doUpdate=ignoreCache,
                         # registerInCache=True,
                         offline=offline,
@@ -2028,6 +2039,7 @@ class WF:
                     workflow_id=workflow_id,
                     version_id=version_id,
                     trs_endpoint=trs_endpoint,
+                    prefer_upstream_source=prefer_upstream_source,
                     descriptor_type=descriptor_type,
                     ignoreCache=ignoreCache,
                     offline=offline,
@@ -2195,6 +2207,7 @@ class WF:
                 self.version_id,
                 self.trs_endpoint,
                 self.descriptor_type,
+                prefer_upstream_source=self.prefer_upstream_source,
                 offline=offline,
                 ignoreCache=ignoreCache,
                 injectable_repo=injectable_repo,
@@ -4302,6 +4315,7 @@ This is an enumeration of the types of collected contents:
     def staging_recipe(self) -> "WritableWorkflowMetaConfigBlock":
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
             "workflow_id": self.id,
+            "prefer_upstream_source": self.prefer_upstream_source,
             "paranoid_mode": self.paranoidMode,
         }
         if self.nickname is not None:
@@ -4424,6 +4438,9 @@ This is an enumeration of the types of collected contents:
                     self.version_id = workflow_meta.get("version")
                     self.descriptor_type = workflow_meta.get("workflow_type")
                     self.trs_endpoint = workflow_meta.get("trs_endpoint")
+                    self.prefer_upstream_source = workflow_meta.get(
+                        "prefer_upstream_source", True
+                    )
                     self.workflow_config = workflow_meta.get("workflow_config")
                     self.params = workflow_meta.get("params")
                     profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get(

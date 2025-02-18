@@ -499,6 +499,7 @@ class WfExSBackend:
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
+            prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
             params=workflow_meta.get("params", {}),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", {}),
@@ -1012,6 +1013,7 @@ class WfExSBackend:
         version_id: "Optional[WFVersionId]" = None,
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
         trs_endpoint: "Optional[str]" = None,
+        prefer_upstream_source: "Optional[bool]" = None,
         params: "Optional[ParamsBlock]" = None,
         enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
@@ -1032,6 +1034,7 @@ class WfExSBackend:
             version_id=version_id,
             descriptor_type=descriptor_type,
             trs_endpoint=trs_endpoint,
+            prefer_upstream_source=prefer_upstream_source,
             params=params,
             enabled_profiles=enabled_profiles,
             environment=environment,
@@ -1979,6 +1982,7 @@ class WfExSBackend:
         version_id: "Optional[WFVersionId]" = None,
         trs_endpoint: "Optional[str]" = None,
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
+        prefer_upstream_source: "bool" = True,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         offline: "bool" = False,
@@ -2056,6 +2060,7 @@ class WfExSBackend:
                 repoRelPath,
             ) = self.getWorkflowBundleFromURI(
                 putative_repo_url,
+                prefer_upstream_source=prefer_upstream_source,
                 offline=offline,
                 ignoreCache=ignoreCache,
                 registerInCache=registerInCache,
@@ -2120,6 +2125,7 @@ class WfExSBackend:
             ) = self.doMaterializeRepo(
                 guessedRepo,
                 fetcher=guessed[1] if guessed is not None else None,
+                prefer_upstream_source=prefer_upstream_source,
                 doUpdate=ignoreCache,
                 registerInCache=registerInCache,
                 offline=offline,
@@ -2138,6 +2144,7 @@ class WfExSBackend:
         self,
         repo: "RemoteRepo",
         fetcher: "Optional[AbstractSchemeRepoFetcher]" = None,
+        prefer_upstream_source: "bool" = True,
         doUpdate: "bool" = True,
         registerInCache: "bool" = True,
         offline: "bool" = False,
@@ -2226,7 +2233,8 @@ class WfExSBackend:
 
             # Go to the next repo only if it is recommended
             if (
-                materialized_repo.recommends_upstream
+                prefer_upstream_source
+                and materialized_repo.recommends_upstream
                 and materialized_repo.upstream_repo is not None
             ):
                 try:
@@ -2237,6 +2245,7 @@ class WfExSBackend:
                         upstream_downstream_repos,
                     ) = self.doMaterializeRepo(
                         materialized_repo.upstream_repo,
+                        prefer_upstream_source=prefer_upstream_source,
                         doUpdate=doUpdate,
                         registerInCache=registerInCache,
                         offline=offline,
@@ -2266,6 +2275,7 @@ class WfExSBackend:
                 repo_rel_path,
             ) = self.getWorkflowBundleFromURI(
                 repo.repo_url,
+                prefer_upstream_source=prefer_upstream_source,
                 ignoreCache=doUpdate,
                 registerInCache=registerInCache,
                 offline=offline,
@@ -2289,6 +2299,7 @@ class WfExSBackend:
                         upstream_downstream_repos,
                     ) = self.doMaterializeRepo(
                         i_workflow_repo,
+                        prefer_upstream_source=prefer_upstream_source,
                         doUpdate=doUpdate,
                         registerInCache=registerInCache,
                         offline=offline,
@@ -2342,6 +2353,7 @@ class WfExSBackend:
         self,
         remote_url: "URIType",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
+        prefer_upstream_source: "bool" = True,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
@@ -2405,6 +2417,7 @@ class WfExSBackend:
                 identified_workflow = self.getWorkflowRepoFromROCrateFile(
                     roCrateFile,
                     expectedEngineDesc=expectedEngineDesc,
+                    prefer_upstream_source=prefer_upstream_source,
                     offline=offline,
                     ignoreCache=ignoreCache,
                     registerInCache=registerInCache,
@@ -2433,6 +2446,7 @@ class WfExSBackend:
         self,
         roCrateFile: "pathlib.Path",
         expectedEngineDesc: "Optional[WorkflowType]" = None,
+        prefer_upstream_source: "bool" = True,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
@@ -2470,6 +2484,9 @@ class WfExSBackend:
         # This workflow URL, in the case of github, can provide the repo,
         # the branch/tag/checkout , and the relative directory in the
         # fetched content (needed by Nextflow)
+
+        # TODO: honour prefer_upstream_source parameter when it is false
+        # and the payload of the RO-Crate contains a copy of the workflow
 
         # Some RO-Crates might have this value missing or ill-built
         repo, workflow_type, _ = self.rocrate_toolbox.extractWorkflowMetadata(
