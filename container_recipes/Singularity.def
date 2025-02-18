@@ -1,4 +1,21 @@
 Bootstrap: docker
+From: alpine:3
+Stage: bwrap-build
+
+%arguments
+bubblewrap_checkout=9ca3b05ec787acfb4b17bed37db5719fa777834f
+
+%post
+#  apk add --no-cache git meson build-base bash cmake libcap-static libcap-dev libselinux-dev && \
+  apk add --no-cache git meson build-base bash cmake libcap-static libcap-dev && \
+  git clone --filter=blob:none --no-checkout https://github.com/containers/bubblewrap.git && \
+  cd bubblewrap && \
+  git checkout "{{ bubblewrap_checkout }}" && \
+  meson setup --buildtype release --default-library static --prefer-static --strip _builddir -Dc_link_args='-static' && \
+  meson compile -C _builddir && \
+  meson install -C _builddir
+
+Bootstrap: docker
 From: python:3.12
 Stage: spython-base
 
@@ -22,6 +39,8 @@ STATIC_BASH_VER=5.1.004-1.2.2
 # static busybox version
 BUSYBOX_VER=1.35.0
 
+%files from bwrap-build
+  /usr/local/bin/bwrap /usr/local/bin/bwrap
 
 %post
 set -ue
@@ -59,7 +78,9 @@ git sparse-checkout set constraints-${PYVER}.txt container_recipes/basic-install
 git checkout "{{ wfexs_checkout }}" && \
 pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@{{ wfexs_checkout }}" -c constraints-${PYVER}.txt && \
 python -m compileall "$(python -c 'import sys; print(sys.prefix)')" && \
-mv container_recipes/* / && \
+mkdir -p /wfexs-installer && \
+mv container_recipes/* /wfexs-installer && \
+mv /wfexs-installer/podman_containers_nokeyring.conf /etc/containers/containers.conf && \
 cd .. && \
 rm -rf WfExS-backend
 # Transfer other third party installation script
@@ -73,7 +94,7 @@ GO_VER="{{ GO_VER }}" \
 GOCRYPTFS_VER="{{ GOCRYPTFS_VER }}" \
 STATIC_BASH_VER="{{ STATIC_BASH_VER }}" \
 BUSYBOX_VER="{{ BUSYBOX_VER }}" \
-bash /full-installer.bash
+bash /wfexs-installer/full-installer.bash
 
 %runscript
 cd /

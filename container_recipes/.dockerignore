@@ -2,3 +2,7 @@
 *.tar
 *.tar.*
 *.def
+*.bash
+*.json
+Dockerfile*
+Singularity.def

@@ -1,11 +1,26 @@
-FROM	gcc:13 AS entr_build
+FROM	alpine:3 AS entr_build
+#FROM	gcc:13 AS entr_build
 ARG	suid_entrypoint_checkout=b47842ece910303b96bd708e73a53a95dfa3d8bc
 WORKDIR	/
-# hadolint ignore=DL3003
-RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/suid_entrypoint.git && \
+# hadolint ignore=DL3003,DL3018
+RUN	apk add --no-cache git build-base && \
+	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/suid_entrypoint.git && \
 	cd suid_entrypoint && \
 	git checkout "$suid_entrypoint_checkout" && \
 	gcc -static -o suid_entrypoint suid_entrypoint.c
+
+FROM	alpine:3 AS bwrap_build
+ARG	bubblewrap_checkout=9ca3b05ec787acfb4b17bed37db5719fa777834f
+WORKDIR	/
+# RUN	apk add --no-cache git meson build-base bash cmake libcap-static libcap-dev libselinux-dev && \
+# hadolint ignore=DL3003,DL3018
+RUN	apk add --no-cache git meson build-base bash cmake libcap-static libcap-dev && \
+	git clone --filter=blob:none --no-checkout https://github.com/containers/bubblewrap.git && \
+	cd bubblewrap && \
+	git checkout "$bubblewrap_checkout" && \
+	meson setup --buildtype release --default-library static --prefer-static --strip _builddir -Dc_link_args='-static' && \
+	meson compile -C _builddir && \
+	meson install -C _builddir
 
 # The default images of python are based on debian
 FROM	python:3.12 AS podman_build
@@ -33,7 +48,7 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}_${DPKG_ARCH}.deb && \
 	apt-get update && \
 	apt-get install -y ./*.deb && \
-	rm -f *.deb
+	rm -f ./*.deb
 # Install docker-ce-cli
 # hadolint ignore=DL3008
 RUN	wget -nv -O /etc/apt/keyrings/docker.asc https://download.docker.com/linux/debian/gpg && \
@@ -62,10 +77,13 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-bac
 	git checkout "${wfexs_checkout}" && \
 	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-${PYVER}.txt && \
 	python -m compileall "$(python -c 'import sys; print(sys.prefix)')" && \
-	mv container_recipes/* / && \
-	mv /podman_containers_nokeyring.conf /etc/containers/containers.conf && \
+	mkdir -p /wfexs-installer && \
+	mv container_recipes/* /wfexs-installer && \
+	mv /wfexs-installer/podman_containers_nokeyring.conf /etc/containers/containers.conf && \
 	cd .. && \
 	rm -rf WfExS-backend
+# Transfer statically linked bwrap
+COPY	--from=bwrap_build /usr/local/bin/bwrap /usr/local/bin/bwrap
 # Transfer other third party installation script
 # COPY	basic-installer.bash full-installer.bash ./
 # Install third party software
@@ -77,7 +95,7 @@ RUN	JDK_MAJOR_VER="${JDK_MAJOR_VER}" \
 	GOCRYPTFS_VER="${GOCRYPTFS_VER}" \
 	STATIC_BASH_VER="${STATIC_BASH_VER}" \
 	BUSYBOX_VER="${BUSYBOX_VER}" \
-	bash /full-installer.bash
+	bash /wfexs-installer/full-installer.bash
 CMD	["/bin/bash"]
 
 FROM podman_build AS docker_build
