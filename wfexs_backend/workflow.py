@@ -5477,7 +5477,10 @@ This is an enumeration of the types of collected contents:
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
         assert self.remote_repo is not None
-        assert self.remote_repo.tag is not None
+        assert self.remote_repo.tag is not None or self.remote_repo.repo_type in (
+            RepoType.Raw,
+            None,
+        )
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
         assert self.staged_setup.work_dir is not None
@@ -5551,7 +5554,10 @@ This is an enumeration of the types of collected contents:
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
         assert self.remote_repo is not None
-        assert self.remote_repo.tag is not None
+        assert self.remote_repo.tag is not None or self.remote_repo.repo_type in (
+            RepoType.Raw,
+            None,
+        )
         assert self.staged_setup.work_dir is not None
         assert (
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0
