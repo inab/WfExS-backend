@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 100
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -73,8 +73,9 @@ jobs:
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_report.outputs.report }}"
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: pre-commit-${{ matrix.python-version }}
           retention-days: 2
           path: constraints-${{ matrix.python-version }}.txt
 
@@ -88,7 +89,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 100
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -143,8 +144,9 @@ jobs:
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_report.outputs.report }}"
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
+          name: pre-commit-${{ matrix.python-version }}
           retention-days: 2
           path: constraints-${{ matrix.python-version }}.txt
 
@@ -157,24 +159,46 @@ jobs:
       - pre-commit
       - pre-commit-22_04
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/download-artifact@v3
+      - name: Get analysis timestamp
+        id: timestamp
+        run: echo "timestamp=$(date -Is)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        id: download
         with:
+          pattern: pre-commit-*
+          merge-multiple: true
           path: changes-dir
       - name: Move artifacts to their right place
+        id: move
         run: |
-          cp -dpr changes-dir/artifact/* .
-          rm -r changes-dir/artifact
+          skip=true
+          if [ -d "${{steps.download.outputs.download-path}}" ] ; then
+            for con in "${{steps.download.outputs.download-path}}"/constraints-*.txt ; do
+              case "$con" in
+                */constraints-\*.txt)
+                  break
+                  ;;
+                *)
+                  cp -p "$con" .
+                  skip=false
+                  ;;
+              esac
+            done
+          fi
+          echo "skip=$skip" >> "$GITHUB_OUTPUT"
       - name: Create Pull Request
         id: cpr
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
+        if: steps.move.outputs.skip == 'false'
         with:
-          title: Updated constraints (triggered by ${{ github.sha }})
+          title: Updated constraints (triggered on ${{ steps.timestamp.outputs.timestamp }} by ${{ github.sha }})
           branch: create-pull-request/patch-constraints
+          add-paths: constraints-*.txt
           delete-branch: true
           commit-message: "[create-pull-request] Automatically commit updated contents (constraints)"
       - name: Check outputs
         if: ${{ steps.cpr.outputs.pull-request-number }}
         run: |
-          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
-          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}"
+          echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Pull Request URL - ${{ steps.cpr.outputs.pull-request-url }}" >> "$GITHUB_STEP_SUMMARY"
