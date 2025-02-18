@@ -40,7 +40,7 @@ curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/contai
 
 docker build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
-Dockerfile
+"$(dirname Dockerfile)"
 ```
 
 ### Podman
@@ -82,7 +82,7 @@ curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/contai
 podman build -t inab/wfexs-backend:${WFEXS_VER} \
 --build-arg wfexs_checkout="${WFEXS_VER}" \
 --target podman_build \
-Dockerfile
+"$(dirname Dockerfile)"
 ```
 
 ### SIF image
