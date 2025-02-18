@@ -2161,7 +2161,7 @@ you can find here an almost complete list of the possible ones:
                     )
 
                 else:
-                    raise ROCrateGenerationException(
+                    self.logger.warning(
                         "FIXME: Unsupported http(s) git repository {}".format(
                             remote_repo.repo_url
                         )
