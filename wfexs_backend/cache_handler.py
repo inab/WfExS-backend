@@ -126,6 +126,10 @@ from .fetchers import (
     InvalidFetcherException,
 )
 
+from .scheme_catalog import (
+    SchemeCatalog,
+)
+
 from .utils.contents import link_or_copy
 from .utils.digests import (
     ComputeDigestFromDirectory,
@@ -161,13 +165,13 @@ class CacheHandlerSchemeException(CacheHandlerException):
     pass
 
 
-class SchemeHandlerCacheHandler:
+class CacheHandler:
     CACHE_METADATA_SCHEMA = cast("RelPath", "cache-metadata.json")
 
     def __init__(
         self,
         cacheDir: "pathlib.Path",
-        schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]" = dict(),
+        scheme_catalog: "Optional[SchemeCatalog]" = None,
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -178,109 +182,9 @@ class SchemeHandlerCacheHandler:
 
         # TODO: create caching database
         self.cacheDir = cacheDir
-        self.schemeHandlers: "MutableMapping[str, DocumentedProtocolFetcher]" = dict()
-
-        self.addRawSchemeHandlers(schemeHandlers)
-
-    def addRawSchemeHandlers(
-        self, schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]"
-    ) -> None:
-        # No validation is done here about validness of schemes
-        if isinstance(schemeHandlers, dict):
-            self.schemeHandlers.update(schemeHandlers)
-        else:
-            raise InvalidFetcherException("Unable to add raw scheme handlers")
-
-    def bypassSchemeHandler(
-        self,
-        scheme: "str",
-        handler: "Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]",
-        progs: "ProgsMapping" = dict(),
-        setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> None:
-        """
-        This method adds and overwrites a scheme handler,
-        instantiating it if it is a stateful one.
-
-        :param scheme:
-        :param handler:
-        """
-        the_handler: "DocumentedProtocolFetcher"
-        if isinstance(handler, DocumentedStatefulProtocolFetcher):
-            inst_handler = self.instantiateStatefulFetcher(
-                handler.fetcher_class, progs=progs, setup_block=setup_block
-            )
-            the_handler = DocumentedProtocolFetcher(
-                fetcher=inst_handler.fetch,
-                description=inst_handler.description
-                if handler.description is None
-                else handler.description,
-                priority=handler.priority,
-            )
-        elif isinstance(handler, DocumentedProtocolFetcher) and isinstance(
-            handler.fetcher,
-            (
-                types.FunctionType,
-                types.LambdaType,
-                types.MethodType,
-                types.BuiltinFunctionType,
-                types.BuiltinMethodType,
-            ),
-        ):
-            the_handler = handler
-        else:
-            raise InvalidFetcherException(
-                "Trying to set for scheme {} a invalid handler".format(scheme)
-            )
-
-        self.schemeHandlers[scheme.lower()] = the_handler
-
-    def bypassSchemeHandlers(
-        self,
-        schemeHandlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]",
-    ) -> None:
-        # No validation is done here about validness of schemes
-        if isinstance(schemeHandlers, dict):
-            for scheme, clazz in schemeHandlers.items():
-                self.bypassSchemeHandler(scheme, clazz)
-        else:
-            raise InvalidFetcherException(
-                "Unable to instantiate to add scheme handlers"
-            )
-
-    def instantiateStatefulFetcher(
-        self,
-        statefulFetcher: "Type[StatefulFetcher]",
-        progs: "ProgsMapping" = dict(),
-        setup_block: "Optional[Mapping[str, Any]]" = None,
-    ) -> "StatefulFetcher":
-        """
-        Method to instantiate stateful fetchers
-        """
-        instStatefulFetcher = None
-        if inspect.isclass(statefulFetcher):
-            if issubclass(statefulFetcher, AbstractStatefulFetcher):
-                try:
-                    instStatefulFetcher = statefulFetcher(
-                        progs=progs, setup_block=setup_block
-                    )
-                except Exception as e:
-                    raise FetcherInstanceException(
-                        f"Error while instantiating {statefulFetcher.__name__}"
-                    ) from e
-
-        if instStatefulFetcher is None:
-            raise InvalidFetcherException(
-                "Unable to instantiate something which is not a class inheriting from AbstractStatefulFetcher"
-            )
-
-        return cast("StatefulFetcher", instStatefulFetcher)
-
-    def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str, int]]":
-        return [
-            (scheme, desc_fetcher.description, desc_fetcher.priority)
-            for scheme, desc_fetcher in self.schemeHandlers.items()
-        ]
+        if scheme_catalog is None:
+            scheme_catalog = SchemeCatalog()
+        self.scheme_catalog: "SchemeCatalog" = scheme_catalog
 
     def _genUriMetaCachedFilename(
         self, hashDir: "pathlib.Path", the_remote_file: "URIType"
@@ -1092,9 +996,11 @@ class SchemeHandlerCacheHandler:
                     # Content is fetched here
                     # As of RFC3986, schemes are case insensitive
                     theScheme = parsedInputURL.scheme.lower()
-                    schemeHandler = self.schemeHandlers.get(theScheme)
+                    schemeHandler = self.scheme_catalog.get(theScheme)
 
                     try:
+                        # TODO: this code is redundant with the one in
+                        # SchemeHandler method getSchemeHandler
                         if schemeHandler is None:
                             errmsg = f"No {theScheme} scheme handler for {the_remote_file} (while processing {remote_file}). Was this data injected in the cache?"
                             self.logger.error(errmsg)
@@ -1104,6 +1010,8 @@ class SchemeHandlerCacheHandler:
                             else:
                                 raise che
 
+                        # TODO: this code is partially redundant with
+                        # the one in SchemeHandler method fetch
                         try:
                             # Content is fetched here
                             pfr = schemeHandler.fetcher(

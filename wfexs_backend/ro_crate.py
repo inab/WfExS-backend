@@ -1302,7 +1302,7 @@ you can find here an almost complete list of the possible ones:
                     the_size = os.stat(container.localPath).st_size
                     if container.image_signature is not None:
                         digest, algo = extract_digest(container.image_signature)
-                        if digest is None:
+                        if digest is None or digest == False:
                             digest, algo = unstringifyDigest(container.image_signature)
                         assert algo is not None
                         the_signature = hexDigest(algo, digest)
@@ -1561,7 +1561,7 @@ you can find here an almost complete list of the possible ones:
                             the_signature: "Optional[Fingerprint]" = None
                             if itemInValues.fingerprint is not None:
                                 digest, algo = extract_digest(itemInValues.fingerprint)
-                                if digest is not None:
+                                if digest is not None and digest != False:
                                     assert algo is not None
                                     the_signature = hexDigest(algo, digest)
 
@@ -1796,7 +1796,7 @@ you can find here an almost complete list of the possible ones:
                                     sec_digest, sec_algo = extract_digest(
                                         secInput.fingerprint
                                     )
-                                    if sec_digest is not None:
+                                    if sec_digest is not None and sec_digest != False:
                                         assert sec_algo is not None
                                         the_sec_signature = hexDigest(
                                             sec_algo, sec_digest
@@ -2161,7 +2161,7 @@ you can find here an almost complete list of the possible ones:
                     )
 
                 else:
-                    raise ROCrateGenerationException(
+                    self.logger.warning(
                         "FIXME: Unsupported http(s) git repository {}".format(
                             remote_repo.repo_url
                         )
@@ -2977,7 +2977,7 @@ you can find here an almost complete list of the possible ones:
         assert the_content.signature is not None
 
         digest, algo = extract_digest(the_content.signature)
-        if digest is None:
+        if digest is None or digest == False:
             digest, algo = unstringifyDigest(the_content.signature)
         assert algo is not None
         dest_path = os.path.relpath(the_content.local, self.work_dir)

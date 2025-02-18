@@ -1,7 +1,7 @@
 # THIS IS AN INCOMPLETE EXAMPLE (use as template)
 # Use this example only to test TRS access to Dockstore works in stage,
 # as its parameters are not properly set
-trs_endpoint: https://dockstore.org/api/api/ga4gh/v2/
+trs_endpoint: https://dockstore.org/api/ga4gh/v2/
 workflow_id: '#workflow/github.com/sevenbridges-openworkflows/Broad-Best-Practice-Somatic-CNV-Workflows/GATK-Somatic-CNV-Panel-Workflow'
 version: master
 workflow_config:

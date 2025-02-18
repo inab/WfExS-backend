@@ -575,6 +575,12 @@
 				}
 			]
 		},
+		"prefer_upstream_source": {
+			"title": "Prefer upstream source for the workflow, if available",
+			"description": "Prefer discovered and recommended upstream source for the workflow (if available) instead of the initially requested one, which can happen in cascade. This is needed for cases where the workflow is incomplete in the initially proposed source, and it is a somewhat known fact",
+			"type": "boolean",
+			"default": true
+		},
 		"nickname": {
 			"title": "A friendly nickname (prefix) for the instances",
 			"type": "string"

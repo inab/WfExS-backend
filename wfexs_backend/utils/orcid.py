@@ -51,7 +51,7 @@ if TYPE_CHECKING:
 from ..common import (
     ResolvedORCID,
 )
-from ..fetchers.http import fetchClassicURL
+from ..fetchers.http import HTTPFetcher
 from ..fetchers import FetcherException
 
 ORCID_HOST: "Final[str]" = "orcid.org"
@@ -95,7 +95,7 @@ def validate_orcid(
         public_record_b = io.BytesIO()
         public_orcid_url = cast("URIType", f"{ORCID_URL_PREFIX}/{possible_orcid}")
         # If there is any issue fetching, next call should raise an exception
-        _, meta_public_record, _ = fetchClassicURL(
+        _, meta_public_record, _ = HTTPFetcher().streamfetch(
             cast("URIType", f"{public_orcid_url}/public-record.json"), public_record_b
         )
         try:

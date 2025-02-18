@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -70,6 +70,10 @@ if TYPE_CHECKING:
         URIWithMetadata,
     )
 
+    from ..scheme_catalog import (
+        SchemeCatalog,
+    )
+
     class RepoDesc(TypedDict):
         repo: Required[RepoURL]
         tag: Required[Optional[RepoTag]]
@@ -97,12 +101,20 @@ if TYPE_CHECKING:
         ProtocolFetcherReturn,
     ]
 
+    ProtocolStreamFetcher: TypeAlias = Callable[
+        [
+            URIType,
+            IO[bytes],
+            DefaultNamedArg(Optional[SecurityContextConfig], "secContext"),
+        ],
+        ProtocolFetcherReturn,
+    ]
+
 from urllib import parse
 
 from ..common import (
     AbstractWfExSException,
 )
-
 
 # Default priority
 DEFAULT_PRIORITY: "Final[int]" = 0
@@ -158,6 +170,7 @@ class AbstractStatefulFetcher(abc.ABC):
         self,
         progs: "ProgsMapping" = dict(),
         setup_block: "Optional[Mapping[str, Any]]" = None,
+        scheme_catalog: "Optional[SchemeCatalog]" = None,
     ):
         import inspect
 
@@ -169,6 +182,7 @@ class AbstractStatefulFetcher(abc.ABC):
         # This is used to resolve program names
         self.progs = progs
         self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+        self.scheme_catalog = scheme_catalog
 
     @abc.abstractmethod
     def fetch(
@@ -236,6 +250,10 @@ class RepoGuessException(FetcherException):
     pass
 
 
+class OfflineRepoGuessException(RepoGuessException):
+    pass
+
+
 class RepoType(enum.Enum):
     Git = "git"
     Raw = "raw"
@@ -295,18 +313,64 @@ class RemoteRepo(NamedTuple):
         )
 
 
-class AbstractRepoFetcher(AbstractStatefulFetcher):
+class MaterializedRepo(NamedTuple):
+    local: "pathlib.Path"
+    repo: "RemoteRepo"
+    metadata_array: "Sequence[URIWithMetadata]"
+    upstream_repo: "Optional[RemoteRepo]" = None
+    recommends_upstream: "bool" = False
+
+
+class AbstractSchemeRepoFetcher(AbstractStatefulFetcher):
     PRIORITY: "ClassVar[int]" = DEFAULT_PRIORITY + 10
 
-    @abc.abstractmethod
-    def materialize_repo(
+    """
+    This abstract subclass is used to force the initialization of the
+    scheme catalog instance
+    """
+
+    def __init__(
         self,
-        repoURL: "RepoURL",
-        repoTag: "Optional[RepoTag]" = None,
+        scheme_catalog: "SchemeCatalog",
+        progs: "ProgsMapping" = dict(),
+        setup_block: "Optional[Mapping[str, Any]]" = None,
+    ):
+        """
+        The scheme catalog is enforced
+        """
+        super().__init__(
+            progs=progs, setup_block=setup_block, scheme_catalog=scheme_catalog
+        )
+        self.scheme_catalog: "SchemeCatalog"
+
+    @abc.abstractmethod
+    def materialize_repo_from_repo(
+        self,
+        repo: "RemoteRepo",
         repo_tag_destdir: "Optional[PathLikePath]" = None,
         base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
+    ) -> "MaterializedRepo":
+        """
+        Subclasses have to implement this method, which is used to materialize
+        a repository described by a RemoteRepo instance.
+
+        :param repo: The description of the repository to be materialized.
+        :type repo: class: `wfexs_backend.fetchers.RemoteRepo`
+        :param repo_tag_destdir: Destination of the materialized repo.
+        :type repo_tag_destdir: str, `os.PathLike[str]`, optional
+        :param base_repo_destdir: If repo_tag_destdir is None, parent directory of the newly created destination directory for the repo.
+        :type base_repo_destdir: str, `os.PathLike[str]`, optional
+        :param doUpdate: Should the code try updating an already materialized repo? Defaults to False
+        :type doUpdate: bool
+
+        The returned tuple has next elements:
+        * The local path where the repo was materialized.
+        * A RemoteRepo instance.
+        * The metadata gathered through the materialisation process.
+        * An optional, upstream URI representing the repo. For instance,
+          in the case of a TRS or a SWH hosted repo, the registered upstream URL.
+        """
         pass
 
     @abc.abstractmethod
@@ -314,8 +378,11 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
         """
         This method is required to generate a PID which usually
         represents an element (usually a workflow) in a repository.
-        If the fetcher does not recognize the type of repo, it should
+        If the fetcher does not recognize the type of repo, either using
+        repo_url content or the repo type in the worst case, it should
         return None
+
+        Calling this method in offline mode should be safe
         """
         pass
 
@@ -326,12 +393,13 @@ class AbstractRepoFetcher(AbstractStatefulFetcher):
         orig_wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
+        offline: "bool" = False,
     ) -> "Optional[RemoteRepo]":
         pass
 
 
 if TYPE_CHECKING:
-    RepoFetcher = TypeVar("RepoFetcher", bound=AbstractRepoFetcher)
+    SchemeRepoFetcher = TypeVar("SchemeRepoFetcher", bound=AbstractSchemeRepoFetcher)
 
 
 class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
@@ -353,6 +421,6 @@ class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
     ) -> "ProtocolFetcherReturn":
         """
         This is the method to be implemented by the stateful streaming fetcher
-        which can receive as destination either a file
+        which can receive as destination a byte stream
         """
         pass

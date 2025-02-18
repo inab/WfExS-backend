@@ -29,6 +29,8 @@ from typing import (
 if TYPE_CHECKING:
     from typing import (
         Optional,
+        Type,
+        Union,
     )
 
     from wfexs_backend.common import (
@@ -38,14 +40,24 @@ if TYPE_CHECKING:
         URIType,
     )
 
+from wfexs_backend.scheme_catalog import (
+    SchemeCatalog,
+)
+
 from wfexs_backend.fetchers import (
     RemoteRepo,
+    RepoGuessException,
     RepoGuessFlavor,
     RepoType,
 )
+
+from wfexs_backend.fetchers.http import HTTPFetcher
+
 from wfexs_backend.fetchers.git import GitFetcher
 
-WfExS_basedir = Path(__file__).parent.parent
+import wfexs_backend
+
+WfExS_basedir = Path(wfexs_backend.__file__).parent.parent
 WfExS_basedir_file_uri = WfExS_basedir.as_uri()
 WfExS_git_basedir = WfExS_basedir / ".git"
 WfExS_git_basedir_file_uri = WfExS_git_basedir.as_uri()
@@ -54,7 +66,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 GIT_TESTBED = pytest.mark.parametrize(
-    ["url", "remote_repo", "repo_pid"],
+    ["url", "remote_repo_or_exception_class", "repo_pid"],
     [
         (
             "https://github.com/inab/WfExS-backend.git",
@@ -116,12 +128,9 @@ GIT_TESTBED = pytest.mark.parametrize(
             "git+ssh://git@github.com:inab/WfExS-backend.git@main",
         ),
         (
+            # This tag does not exists!
             "ssh://git@github.com:inab/WfExS-backend.git@0.1.2",
-            RemoteRepo(
-                repo_url=cast("RepoURL", "ssh://git@github.com/inab/WfExS-backend.git"),
-                repo_type=RepoType.Git,
-                tag=cast("RepoTag", "0.1.2"),
-            ),
+            RepoGuessException,
             "git+ssh://git@github.com:inab/WfExS-backend.git@0.1.2",
         ),
         (
@@ -153,12 +162,9 @@ GIT_TESTBED = pytest.mark.parametrize(
             "git+" + WfExS_git_basedir_file_uri,
         ),
         (
+            # This tag does not exists!
             WfExS_git_basedir_file_uri + "@0.1.2",
-            RemoteRepo(
-                repo_url=cast("RepoURL", WfExS_git_basedir_file_uri),
-                repo_type=RepoType.Git,
-                tag=cast("RepoTag", "0.1.2"),
-            ),
+            RepoGuessException,
             "git+" + WfExS_git_basedir_file_uri + "@0.1.2",
         ),
         (
@@ -233,28 +239,48 @@ GIT_TESTBED = pytest.mark.parametrize(
 
 @GIT_TESTBED
 def test_guess_git_repo_params(
-    url: "str", remote_repo: "Optional[RemoteRepo]", repo_pid: "Optional[str]"
+    url: "str",
+    remote_repo_or_exception_class: "Optional[Union[RemoteRepo, Type[Exception]]]",
+    repo_pid: "Optional[str]",
 ) -> "None":
-    output = GitFetcher.GuessRepoParams(cast("URIType", url), logger=logger)
+    if (
+        isinstance(remote_repo_or_exception_class, RemoteRepo)
+        or remote_repo_or_exception_class is None
+    ):
+        output = GitFetcher.GuessRepoParams(cast("URIType", url), logger=logger)
 
-    # When no tag is given, ignore what it was discovered
-    if output is not None and remote_repo is not None:
-        if remote_repo.tag is None:
-            output = output._replace(tag=None)
-        # For now, patch this
-        if remote_repo.checkout is not None:
-            output = output._replace(checkout=remote_repo.checkout)
-    assert output == remote_repo
+        # When no tag is given, ignore what it was discovered
+        if output is not None and remote_repo_or_exception_class is not None:
+            if remote_repo_or_exception_class.tag is None:
+                output = output._replace(tag=None)
+            # For now, patch this
+            if remote_repo_or_exception_class.checkout is not None:
+                output = output._replace(
+                    checkout=remote_repo_or_exception_class.checkout
+                )
+        assert output == remote_repo_or_exception_class
+
+    else:
+        with pytest.raises(remote_repo_or_exception_class):
+            output = GitFetcher.GuessRepoParams(cast("URIType", url), logger=logger)
 
 
 @GIT_TESTBED
 def test_build_git_pid_from_repo(
-    url: "str", remote_repo: "Optional[RemoteRepo]", repo_pid: "Optional[str]"
+    url: "str",
+    remote_repo_or_exception_class: "Optional[Union[RemoteRepo, Type[Exception]]]",
+    repo_pid: "Optional[str]",
 ) -> "None":
-    if remote_repo is None:
+    if remote_repo_or_exception_class is None or not isinstance(
+        remote_repo_or_exception_class, RemoteRepo
+    ):
         pytest.skip("Skipped test because no remote repo was provided")
     else:
-        fetcher = GitFetcher({})
-        output = fetcher.build_pid_from_repo(remote_repo)
+        scheme_catalog = SchemeCatalog(
+            scheme_handlers=HTTPFetcher.GetSchemeHandlers(),
+        )
+
+        fetcher = GitFetcher(scheme_catalog, progs={})
+        output = fetcher.build_pid_from_repo(remote_repo_or_exception_class)
 
         assert output == repo_pid

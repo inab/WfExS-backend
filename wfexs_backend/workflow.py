@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -345,7 +345,7 @@ from .utils.misc import (
 from .utils.zipfile_path import path_relative_to
 
 from .fetchers.trs_files import (
-    TRS_SCHEME_PREFIX,
+    GA4GHTRSFetcher,
 )
 
 if TYPE_CHECKING:
@@ -449,7 +449,6 @@ class WF:
     DEFAULT_TRS_ENDPOINT: "Final[str]" = (
         "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
     )
-    TRS_TOOLS_PATH: "Final[str]" = "tools/"
 
     def __init__(
         self,
@@ -457,7 +456,8 @@ class WF:
         workflow_id: "Optional[WorkflowId]" = None,
         version_id: "Optional[WFVersionId]" = None,
         descriptor_type: "Optional[TRS_Workflow_Descriptor]" = None,
-        trs_endpoint: "str" = DEFAULT_TRS_ENDPOINT,
+        trs_endpoint: "Optional[str]" = None,
+        prefer_upstream_source: "Optional[bool]" = None,
         params: "Optional[ParamsBlock]" = None,
         enabled_profiles: "Optional[Sequence[str]]" = None,
         environment: "Optional[EnvironmentBlock]" = None,
@@ -604,6 +604,8 @@ class WF:
                     workflow_meta["workflow_type"] = descriptor_type
             if trs_endpoint is not None:
                 workflow_meta["trs_endpoint"] = trs_endpoint
+            if prefer_upstream_source is not None:
+                workflow_meta["prefer_upstream_source"] = prefer_upstream_source
             if workflow_config is not None:
                 workflow_meta["workflow_config"] = workflow_config
             if params is not None:
@@ -642,6 +644,9 @@ class WF:
             self.id = str(workflow_id) if workflow_id is not None else None
             self.version_id = str(version_id) if version_id is not None else None
             self.descriptor_type = descriptor_type
+            self.prefer_upstream_source = (
+                prefer_upstream_source if prefer_upstream_source is not None else True
+            )
             self.params = params
             self.enabled_profiles = enabled_profiles
             self.environment = environment
@@ -654,14 +659,11 @@ class WF:
                 [] if default_actions is None else default_actions
             )
 
+            # We are assuming here the provided TRS endpoint is right
             # The endpoint should always end with a slash
             if isinstance(trs_endpoint, str):
                 if trs_endpoint[-1] != "/":
                     trs_endpoint += "/"
-
-                # Removing the tools suffix, which appeared in first WfExS iterations
-                if trs_endpoint.endswith("/" + self.TRS_TOOLS_PATH):
-                    trs_endpoint = trs_endpoint[0 : -len(self.TRS_TOOLS_PATH)]
 
             self.trs_endpoint = trs_endpoint
         else:
@@ -669,6 +671,7 @@ class WF:
             self.id = None
             self.version_id = None
             self.descriptor_type = None
+            self.prefer_upstream_source = True
 
         if instanceId is not None:
             self.instanceId = instanceId
@@ -897,7 +900,6 @@ class WF:
         self.arch: "Optional[ProcessorArchitecture]" = None
 
         self.stagedExecutions: "Optional[MutableSequence[StagedExecution]]" = None
-        self.cacheROCrateFilename: "Optional[pathlib.Path]" = None
 
         self.runExportActions: "Optional[MutableSequence[MaterializedExportAction]]" = (
             None
@@ -933,7 +935,7 @@ class WF:
 
                     the_pid = urllib.parse.urlunparse(
                         urllib.parse.ParseResult(
-                            scheme=TRS_SCHEME_PREFIX,
+                            scheme=GA4GHTRSFetcher.TRS_SCHEME_PREFIX,
                             netloc=parsedTRSURL.netloc,
                             path="/".join(pid_steps),
                             params="",
@@ -1833,12 +1835,19 @@ class WF:
                 # It should not happen
                 enabled_profiles = [str(profiles)]
 
+        parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
+        if parsed_workflow_id.scheme != "":
+            trs_endpoint = workflow_meta.get("trs_endpoint")
+        else:
+            trs_endpoint = workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT)
+
         return cls(
             wfexs,
             workflow_meta["workflow_id"],
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
-            trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=trs_endpoint,
+            prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
             params=workflow_meta.get("params", dict()),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
@@ -1897,12 +1906,19 @@ class WF:
                 # It should not happen
                 enabled_profiles = [str(profiles)]
 
+        parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
+        if parsed_workflow_id.scheme != "":
+            trs_endpoint = workflow_meta.get("trs_endpoint")
+        else:
+            trs_endpoint = workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT)
+
         return cls(
             wfexs,
             workflow_meta["workflow_id"],
             workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
-            trs_endpoint=workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT),
+            trs_endpoint=trs_endpoint,
+            prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
             params=workflow_meta.get("params", dict()),
             enabled_profiles=enabled_profiles,
             environment=workflow_meta.get("environment", dict()),
@@ -1923,6 +1939,7 @@ class WF:
         version_id: "Optional[WFVersionId]",
         trs_endpoint: "Optional[str]",
         descriptor_type: "Optional[TRS_Workflow_Descriptor]",
+        prefer_upstream_source: "bool" = True,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
         injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
@@ -1944,6 +1961,7 @@ class WF:
         repoDir: "Optional[pathlib.Path]" = None
         injected_workflow: "Optional[LocalWorkflow]" = None
         rel_path_files: "Optional[Sequence[Union[RelPath, URIType]]]" = None
+        # Materialize the workflow, even if it was already materialized
         if self.remote_repo is None or ignoreCache:
             repoEffectiveCheckout: "Optional[RepoTag]"
             # Injectable repo info is a precondition for injectable local workflow
@@ -1996,11 +2014,21 @@ class WF:
                             f"Injected workflow has a different relPath from the injected repo"
                         )
                 else:
-                    repoDir, repoEffectiveCheckout = self.wfexs.doMaterializeRepo(
+                    (
+                        repoDir,
+                        materialized_repo,
+                        workflow_type,
+                        downstream_repos,
+                    ) = self.wfexs.doMaterializeRepo(
                         repo,
+                        prefer_upstream_source=prefer_upstream_source,
                         doUpdate=ignoreCache,
                         # registerInCache=True,
+                        offline=offline,
                     )
+                    assert len(downstream_repos) > 0
+                    repo = materialized_repo.repo
+                    repoEffectiveCheckout = repo.get_checkout()
             else:
                 (
                     repoDir,
@@ -2011,6 +2039,7 @@ class WF:
                     workflow_id=workflow_id,
                     version_id=version_id,
                     trs_endpoint=trs_endpoint,
+                    prefer_upstream_source=prefer_upstream_source,
                     descriptor_type=descriptor_type,
                     ignoreCache=ignoreCache,
                     offline=offline,
@@ -2120,7 +2149,7 @@ class WF:
                     )
             else:
                 raise WFException(
-                    "No engine recognized a valid workflow at {}".format(self.repoURL)
+                    f"No engine recognized a valid workflow at {self.repoURL} ({localWorkflow})"
                 )
         else:
             self.logger.debug("Fixed engine " + self.engineDesc.trs_descriptor)
@@ -2178,6 +2207,7 @@ class WF:
                 self.version_id,
                 self.trs_endpoint,
                 self.descriptor_type,
+                prefer_upstream_source=self.prefer_upstream_source,
                 offline=offline,
                 ignoreCache=ignoreCache,
                 injectable_repo=injectable_repo,
@@ -4285,6 +4315,7 @@ This is an enumeration of the types of collected contents:
     def staging_recipe(self) -> "WritableWorkflowMetaConfigBlock":
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
             "workflow_id": self.id,
+            "prefer_upstream_source": self.prefer_upstream_source,
             "paranoid_mode": self.paranoidMode,
         }
         if self.nickname is not None:
@@ -4407,6 +4438,9 @@ This is an enumeration of the types of collected contents:
                     self.version_id = workflow_meta.get("version")
                     self.descriptor_type = workflow_meta.get("workflow_type")
                     self.trs_endpoint = workflow_meta.get("trs_endpoint")
+                    self.prefer_upstream_source = workflow_meta.get(
+                        "prefer_upstream_source", True
+                    )
                     self.workflow_config = workflow_meta.get("workflow_config")
                     self.params = workflow_meta.get("params")
                     profiles: "Optional[Union[str, Sequence[str]]]" = workflow_meta.get(
@@ -5443,7 +5477,10 @@ This is an enumeration of the types of collected contents:
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
         assert self.remote_repo is not None
-        assert self.remote_repo.tag is not None
+        assert self.remote_repo.tag is not None or self.remote_repo.repo_type in (
+            RepoType.Raw,
+            None,
+        )
         assert self.materializedParams is not None
         assert self.materializedEnvironment is not None
         assert self.staged_setup.work_dir is not None
@@ -5517,7 +5554,10 @@ This is an enumeration of the types of collected contents:
         assert self.localWorkflow is not None
         assert self.materializedEngine is not None
         assert self.remote_repo is not None
-        assert self.remote_repo.tag is not None
+        assert self.remote_repo.tag is not None or self.remote_repo.repo_type in (
+            RepoType.Raw,
+            None,
+        )
         assert self.staged_setup.work_dir is not None
         assert (
             isinstance(self.stagedExecutions, list) and len(self.stagedExecutions) > 0

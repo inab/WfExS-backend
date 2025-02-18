@@ -561,7 +561,6 @@ def bin2dataurl(content: "bytes") -> "URIType":
 
     return cast(
         "URIType",
-        data_url.construct_data_url(
-            mime_type=mime_type, base64_encode=True, data=content
-        ),
+        # mime_type=mime_type, base64_encoded=True, data=content
+        data_url.construct_data_url(mime_type, True, content),
     )

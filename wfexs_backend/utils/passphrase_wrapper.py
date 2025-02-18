@@ -53,11 +53,15 @@ from funny_passphrase.indexer import CompressedIndexedText
 
 import xdg.BaseDirectory
 
+from ..scheme_catalog import (
+    SchemeCatalog,
+)
+
 from ..cache_handler import (
     CacheOfflineException,
-    SchemeHandlerCacheHandler,
+    CacheHandler,
 )
-from ..fetchers.http import SCHEME_HANDLERS as HTTP_SCHEME_HANDLERS
+from ..fetchers.http import HTTPFetcher
 from ..fetchers.wiktionary import WiktionaryFetcher
 
 
@@ -115,7 +119,7 @@ class WfExSPassphraseGenerator:
 
     def __init__(
         self,
-        cacheHandler: "SchemeHandlerCacheHandler",
+        cacheHandler: "CacheHandler",
         cacheDir: "Optional[pathlib.Path]" = None,
         word_sets: "Mapping[str, Sequence[RemoteWordlistResource]]" = DEFAULT_WORD_SETS,
     ):
@@ -289,10 +293,14 @@ class WfExSPassGenSingleton(WfExSPassphraseGenerator):
 
             # Private cache handler instance
             # with Wiktionary
-            cacheHandler = SchemeHandlerCacheHandler(
-                cachePath, schemeHandlers=HTTP_SCHEME_HANDLERS
+            scheme_catalog = SchemeCatalog(
+                scheme_handlers=HTTPFetcher.GetSchemeHandlers()
             )
-            cacheHandler.bypassSchemeHandlers(WiktionaryFetcher.GetSchemeHandlers())
+            scheme_catalog.bypassSchemeHandlers(WiktionaryFetcher.GetSchemeHandlers())
+            cacheHandler = CacheHandler(
+                cachePath,
+                scheme_catalog=scheme_catalog,
+            )
             cls.__instance = WfExSPassphraseGenerator(cacheHandler)
 
         return cls.__instance

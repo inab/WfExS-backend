@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,17 +38,19 @@ if TYPE_CHECKING:
         URIType,
     )
 
+from wfexs_backend.scheme_catalog import (
+    SchemeCatalog,
+)
+
 from wfexs_backend.fetchers import (
     RemoteRepo,
     RepoGuessFlavor,
     RepoType,
 )
-from wfexs_backend.fetchers.swh import SoftwareHeritageFetcher
 
-WfExS_basedir = Path(__file__).parent.parent
-WfExS_basedir_file_uri = WfExS_basedir.as_uri()
-WfExS_git_basedir = WfExS_basedir / ".git"
-WfExS_git_basedir_file_uri = WfExS_git_basedir.as_uri()
+from wfexs_backend.fetchers.http import HTTPFetcher
+
+from wfexs_backend.fetchers.swh import SoftwareHeritageFetcher
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -139,7 +141,11 @@ def test_build_swh_pid_from_repo(
     if remote_repo is None:
         pytest.skip("Skipped test because no remote repo was provided")
     else:
-        fetcher = SoftwareHeritageFetcher({})
+        scheme_catalog = SchemeCatalog(
+            scheme_handlers=HTTPFetcher.GetSchemeHandlers(),
+        )
+
+        fetcher = SoftwareHeritageFetcher(scheme_catalog, progs={})
         output = fetcher.build_pid_from_repo(remote_repo)
 
         assert output == repo_pid
