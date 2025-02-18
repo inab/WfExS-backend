@@ -52,7 +52,7 @@ from . import (
     FetcherException,
     ProtocolFetcherReturn,
 )
-from .http import fetchClassicURL
+from .http import HTTPFetcher
 
 from ..common import (
     LicensedURI,
@@ -73,7 +73,7 @@ def query_n2t(
     gathered_meta = {"fetched": query_url}
 
     n2t_io = io.BytesIO()
-    _, meta_n2t_io, _ = fetchClassicURL(query_url, n2t_io)
+    _, meta_n2t_io, _ = HTTPFetcher().streamfetch(query_url, n2t_io)
     answer = yaml.safe_load(n2t_io.getvalue().decode("utf-8"))
 
     gathered_meta["payload"] = answer
@@ -197,11 +197,12 @@ def downloadContentFromDRS(
             "URIType", drs_service_prefix + "objects/" + object_id
         )
 
+        http_fetcher = HTTPFetcher()
         gathered_meta = {"fetched": object_metadata_url}
         metadata = None
         try:
             metaio = io.BytesIO()
-            _, metametaio, _ = fetchClassicURL(
+            _, metametaio, _ = http_fetcher.streamfetch(
                 object_metadata_url, metaio, secContext=upperSecContext
             )
             object_metadata = json.loads(metaio.getvalue().decode("utf-8"))
@@ -234,7 +235,7 @@ def downloadContentFromDRS(
 
                 try:
                     metaaccio = io.BytesIO()
-                    _, metametaaccio, _ = fetchClassicURL(
+                    _, metametaaccio, _ = http_fetcher.streamfetch(
                         object_access_metadata_url,
                         metaaccio,
                         secContext=upperSecContext,

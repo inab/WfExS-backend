@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
     from typing import (
         Any,
+        ClassVar,
         IO,
         Mapping,
         MutableSequence,
@@ -65,16 +66,18 @@ if TYPE_CHECKING:
     )
 
 from . import (
-    AbstractRepoFetcher,
+    AbstractSchemeRepoFetcher,
     DocumentedStatefulProtocolFetcher,
     FetcherException,
+    MaterializedRepo,
+    OfflineRepoGuessException,
     ProtocolFetcherReturn,
     RemoteRepo,
     RepoGuessException,
     RepoType,
 )
 
-from .http import fetchClassicURL
+from .http import HTTPFetcher
 
 from ..common import (
     ContentKind,
@@ -87,7 +90,9 @@ from ..utils.contents import (
 )
 
 
-class SoftwareHeritageFetcher(AbstractRepoFetcher):
+class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
+    PRIORITY: "ClassVar[int]" = AbstractSchemeRepoFetcher.PRIORITY + 20
+
     SOFTWARE_HERITAGE_SCHEME: "Final[str]" = "swh"
     SWH_API_REST: "Final[str]" = "https://archive.softwareheritage.org/api/1/"
     SWH_API_REST_KNOWN: "Final[URIType]" = cast(
@@ -136,7 +141,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         # urljoin cannot be used due working with URIs
         resolve_uri = cast("URIType", cls.SWH_API_REST_RESOLVE + swh_quoted_id + "/")
         try:
-            _, metaresio, _ = fetchClassicURL(
+            _, metaresio, _ = HTTPFetcher().streamfetch(
                 resolve_uri,
                 resio,
                 secContext={
@@ -172,6 +177,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         orig_wf_url: "Union[URIType, parse.ParseResult]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
+        offline: "bool" = False,
     ) -> "Optional[RemoteRepo]":
         # Deciding which is the input
         wf_url: "RepoURL"
@@ -183,6 +189,14 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             wf_url = cast("RepoURL", orig_wf_url)
             parsed_wf_url = parse.urlparse(orig_wf_url)
 
+        if fail_ok and parsed_wf_url.scheme not in cls.GetSchemeHandlers():
+            return None
+
+        if offline:
+            raise OfflineRepoGuessException(
+                f"Queries related to {wf_url} are not allowed in offline mode"
+            )
+
         if parsed_wf_url.scheme not in cls.GetSchemeHandlers():
             return None
 
@@ -191,7 +205,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         putative_core_swhid = wf_url.split(";", 1)[0]
         try:
             valio = io.BytesIO()
-            _, metavalio, _ = fetchClassicURL(
+            _, metavalio, _ = HTTPFetcher().streamfetch(
                 cls.SWH_API_REST_KNOWN,
                 valio,
                 secContext={
@@ -207,7 +221,9 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         except Exception as e:
             if fail_ok:
                 return None
-            raise
+            raise RepoGuessException(
+                f"Errors while querying {wf_url} for guessing purposes"
+            ) from e
 
         # It could be a valid swh identifier, but it is not registered
         if not isinstance(val_doc, dict) or not val_doc.get(
@@ -230,24 +246,40 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
         """
         This method is required to generate a PID which usually
         represents an element (usually a workflow) in a repository.
-        If the fetcher does not recognize the type of repo, it should
+        If the fetcher does not recognize the type of repo, either using
+        repo_url content or the repo type in the worst case, it should
         return None
         """
+
         parsed_wf_url = parse.urlparse(remote_repo.repo_url)
-        if parsed_wf_url.scheme not in self.GetSchemeHandlers():
+        if (
+            parsed_wf_url.scheme not in self.GetSchemeHandlers()
+            or remote_repo.repo_type not in (RepoType.SoftwareHeritage, None)
+        ):
             return None
 
         # FIXME: improve this
         return remote_repo.repo_url
 
-    def materialize_repo(
+    def materialize_repo_from_repo(
         self,
-        repoURL: "RepoURL",
-        repoTag: "Optional[RepoTag]" = None,
+        repo: "RemoteRepo",
         repo_tag_destdir: "Optional[PathLikePath]" = None,
         base_repo_destdir: "Optional[PathLikePath]" = None,
         doUpdate: "Optional[bool]" = True,
-    ) -> "Tuple[pathlib.Path, RemoteRepo, Sequence[URIWithMetadata]]":
+    ) -> "MaterializedRepo":
+        repoURL = cast("RepoURL", repo.tag) if repo.tag is not None else repo.repo_url
+        repoTag = repo.tag
+
+        parsed_wf_url = parse.urlparse(repoURL)
+        if (
+            parsed_wf_url.scheme not in self.GetSchemeHandlers()
+            or repo.repo_type not in (RepoType.SoftwareHeritage, None)
+        ):
+            raise FetcherException(
+                f"Input RemoteRepo instance is not recognized as a fetchable URI (repo {repoURL} , type {repo.repo_type})"
+            )
+
         # If we are here is because the repo is valid
         # as it should have been checked by GuessRepoParams
 
@@ -298,10 +330,10 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                         object_id + "/",
                     ),
                 )
-                _, metarelio, _ = fetchClassicURL(
+                _, metarelio, _ = self.scheme_catalog.streamfetch(
                     release_uri,
                     relio,
-                    secContext={
+                    sec_context={
                         "headers": {
                             "Accept": "application/json",
                         },
@@ -337,10 +369,10 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                 )
             try:
                 revio = io.BytesIO()
-                _, metarevio, _ = fetchClassicURL(
+                _, metarevio, _ = self.scheme_catalog.streamfetch(
                     cast("URIType", revision_uri),
                     revio,
-                    secContext={
+                    sec_context={
                         "headers": {
                             "Accept": "application/json",
                         },
@@ -390,10 +422,10 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                     time.sleep(self.WAIT_SECS)
                 try:
                     dirio = io.BytesIO()
-                    _, metadirio, _ = fetchClassicURL(
+                    _, metadirio, _ = self.scheme_catalog.streamfetch(
                         cast("URIType", directory_url),
                         dirio,
-                        secContext={
+                        sec_context={
                             "headers": {
                                 "Accept": "application/json",
                             },
@@ -434,7 +466,7 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
 
                 with tempfile.NamedTemporaryFile() as tmp_targz_filename:
                     try:
-                        _, metafetchio, _ = fetchClassicURL(
+                        _, metafetchio, _ = self.scheme_catalog.fetch(
                             dir_fetch_url,
                             cast("AbsPath", tmp_targz_filename.name),
                         )
@@ -520,10 +552,10 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
 
             try:
                 contentio = io.BytesIO()
-                _, metacontentio, _ = fetchClassicURL(
+                _, metacontentio, _ = self.scheme_catalog.streamfetch(
                     cast("URIType", content_url),
                     contentio,
-                    secContext={
+                    sec_context={
                         "headers": {
                             "Accept": "application/json",
                         },
@@ -550,14 +582,15 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
 
             # Assure base directory exists before next step
             # here repo_tag_destdir is a file
-            repo_tag_destfile: "Union[PathLikePath, IO[bytes]]"
+            repo_tag_destfile: "Optional[PathLikePath]" = None
+            repo_tag_deststream: "Optional[IO[bytes]]" = None
             if repo_tag_destdir is None:
                 if base_repo_destdir is None:
                     temp_file_descriptor, repo_tag_destdir = cast(
                         "Tuple[int, AbsPath]",
                         tempfile.mkstemp(prefix="wfexs", suffix=".swh"),
                     )
-                    repo_tag_destfile = os.fdopen(temp_file_descriptor, mode="wb")
+                    repo_tag_deststream = os.fdopen(temp_file_descriptor, mode="wb")
                     atexit.register(os.unlink, repo_tag_destdir)
                 else:
                     repo_hashed_id = hashlib.sha1(repoURL.encode("utf-8")).hexdigest()
@@ -586,17 +619,29 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             repo_tag_destpath = pathlib.Path(repo_tag_destdir)
 
             try:
-                _, metafetchio, _ = fetchClassicURL(
-                    content_fetch_url,
-                    repo_tag_destfile,
-                )
+                if repo_tag_destfile is not None:
+                    _, metafetchio, _ = self.scheme_catalog.fetch(
+                        content_fetch_url,
+                        repo_tag_destfile,
+                    )
+                elif repo_tag_deststream is not None:
+                    _, metafetchio, _ = self.scheme_catalog.streamfetch(
+                        content_fetch_url,
+                        repo_tag_deststream,
+                    )
+                else:
+                    raise FetcherException(
+                        f"No fetch of {content_fetch_url} (assertion?)"
+                    )
+            except FetcherException as fe:
+                raise
             except Exception as e:
                 raise FetcherException(
                     f"HTTP REST call {content_fetch_url} failed"
                 ) from e
             finally:
-                if not isinstance(repo_tag_destfile, (str, os.PathLike)):
-                    repo_tag_destfile.close()
+                if repo_tag_deststream is not None:
+                    repo_tag_deststream.close()
 
             gathered_meta = {
                 "fetched": content_fetch_url,
@@ -608,17 +653,28 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
                 f"Unexpected Software Heritage object type {object_type} for {repoURL}"
             )
 
-        remote_repo = RemoteRepo(
-            repo_url=repoURL,
-            tag=repoTag,
+        remote_repo = repo._replace(
             repo_type=RepoType.SoftwareHeritage,
             checkout=cast("RepoTag", repo_effective_checkout),
         )
 
-        return (
-            repo_tag_destpath,
-            remote_repo,
-            metadata_array,
+        upstream_repo: "Optional[RemoteRepo]" = None
+        origin: "Optional[str]" = res_doc.get("metadata", {}).get("origin")
+        # This is an heuristic to build a git scheme uri
+        if origin is not None:
+            upstream_repo = RemoteRepo(
+                repo_url=cast("RepoURL", origin),
+                rel_path=cast("Optional[RelPath]", res_doc["metadata"].get("path")),
+                repo_type=RepoType.Git
+                if ("git" in origin) or ("bitbucket" in origin)
+                else None,
+            )
+
+        return MaterializedRepo(
+            local=repo_tag_destpath,
+            repo=remote_repo,
+            metadata_array=metadata_array,
+            upstream_repo=upstream_repo,
         )
 
     def fetch(
@@ -646,9 +702,12 @@ class SoftwareHeritageFetcher(AbstractRepoFetcher):
             repoRelPath = None
 
         # It is materialized in a temporary location
-        repo_tag_destdir, remote_repo, metadata_array = self.materialize_repo(
-            cast("RepoURL", remote_file)
+        materialized_repo_return = self.materialize_repo_from_repo(
+            RemoteRepo(repo_url=cast("RepoURL", remote_file)),
         )
+        repo_tag_destdir = materialized_repo_return.local
+        remote_repo = materialized_repo_return.repo
+        metadata_array = materialized_repo_return.metadata_array
 
         preferredName: "Optional[RelPath]"
         # repoRelPath is only acknowledged when the resolved repo

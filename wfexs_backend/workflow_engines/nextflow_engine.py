@@ -123,7 +123,7 @@ from ..container_factories.no_container import (
     NoContainerFactory,
 )
 
-from ..fetchers.http import fetchClassicURL
+from ..fetchers.http import HTTPFetcher
 from ..utils.contents import (
     copy2_nofollow,
 )
@@ -862,7 +862,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     nextflow_version, nextflow_script_url, cachedScript
                 )
             )
-            fetchClassicURL(nextflow_script_url, cachedScript)
+            HTTPFetcher().fetch(nextflow_script_url, cachedScript)
 
         # Checking the installer has execution permissions
         if not os.access(cachedScript, os.R_OK | os.X_OK):

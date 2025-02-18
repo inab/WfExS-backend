@@ -34,7 +34,7 @@ from . import (
     FetcherException,
     ProtocolFetcherReturn,
 )
-from .http import fetchClassicURL
+from .http import HTTPFetcher
 
 from ..common import (
     URIWithMetadata,
@@ -95,9 +95,10 @@ def fetchDOI(
 
     gathered_ra_meta = {"fetched": metadata_ra_url}
     metadata_array = [URIWithMetadata(remote_file, gathered_ra_meta)]
+    http_fetcher = HTTPFetcher()
     try:
         metaio = io.BytesIO()
-        _, metametaraio, _ = fetchClassicURL(metadata_ra_url, metaio)
+        _, metametaraio, _ = http_fetcher.streamfetch(metadata_ra_url, metaio)
         metadata_ra = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_ra_meta["payload"] = metadata_ra
         metadata_array.extend(metametaraio)
@@ -120,7 +121,7 @@ def fetchDOI(
     metadata_array.append(URIWithMetadata(remote_file, gathered_meta))
     try:
         metaio = io.BytesIO()
-        _, metametaio, _ = fetchClassicURL(metadata_url, metaio)
+        _, metametaio, _ = http_fetcher.streamfetch(metadata_url, metaio)
         metadata = json.loads(metaio.getvalue().decode("utf-8"))
         gathered_meta["payload"] = metadata
         metadata_array.extend(metametaio)

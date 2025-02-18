@@ -749,7 +749,7 @@ def processCacheCommand(
                 cached_content = wfBackend.cacheFetch(
                     cast("URIType", uri_to_fetch),
                     args.cache_type,
-                    offline=False,
+                    offline=args.doCacheOffline,
                     vault=vault,
                     sec_context_name=secContextName,
                     default_clonable=default_clonable,
@@ -1253,6 +1253,13 @@ def _get_wfexs_argparse_internal(
         "--cascade",
         dest="doCacheCascade",
         help="Try doing the operation in cascade (including the URIs which resolve to other URIs)",
+        action="store_true",
+        default=False,
+    )
+    ap_c.add_argument(
+        "--offline",
+        dest="doCacheOffline",
+        help="Try checking the offline behaviour of cache management",
         action="store_true",
         default=False,
     )

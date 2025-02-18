@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -45,6 +45,10 @@ if TYPE_CHECKING:
         URIType,
     )
 
+    from ..scheme_catalog import (
+        SchemeCatalog,
+    )
+
 from . import (
     AbstractStatefulFetcher,
     DocumentedStatefulProtocolFetcher,
@@ -64,9 +68,14 @@ class FASPFetcher(AbstractStatefulFetcher):
     DEFAULT_ASPERA_CMD: "Final[SymbolicName]" = cast("SymbolicName", "ascp")
 
     def __init__(
-        self, progs: "ProgsMapping", setup_block: "Optional[Mapping[str, Any]]" = None
+        self,
+        progs: "ProgsMapping",
+        setup_block: "Optional[Mapping[str, Any]]" = None,
+        scheme_catalog: "Optional[SchemeCatalog]" = None,
     ):
-        super().__init__(progs=progs, setup_block=setup_block)
+        super().__init__(
+            progs=progs, setup_block=setup_block, scheme_catalog=scheme_catalog
+        )
 
         self.ascp_cmd = self.progs.get(
             self.DEFAULT_ASPERA_CMD, cast("RelPath", self.DEFAULT_ASPERA_CMD)
