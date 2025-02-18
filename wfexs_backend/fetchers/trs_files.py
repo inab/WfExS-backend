@@ -264,7 +264,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 except Exception as e2:
                     if fail_ok:
                         return None
-                    raise ExceptionGroup(
+                    raise ExceptionGroup(  # pylint: disable=possibly-used-before-assignment
                         f"Error fetching or processing TRS service info metadata for {wf_url} (tried both {trs_service_info} and {non_standard_trs_service_info})",
                         [e1, e2],
                     )
