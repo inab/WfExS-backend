@@ -20,9 +20,12 @@ import atexit
 import hashlib
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import tempfile
+import warnings
+
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -72,7 +75,10 @@ if TYPE_CHECKING:
 
 from urllib import parse, request
 
+from dulwich.client import get_transport_and_path
+
 import dulwich.porcelain
+import dulwich.repo
 
 from . import (
     AbstractSchemeRepoFetcher,
@@ -156,7 +162,17 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             parsedInputURL = remote_file
         else:
             parsedInputURL = parse.urlparse(remote_file)
-        sp_path = parsedInputURL.path.split("/")
+
+        # Getting the tag or branch in cases like https://github.com/inab/WfExS-backend.git@0.2.0
+        repoTag: "Optional[str]" = None
+        if "@" in parsedInputURL.path:
+            gitPath, repoTag = parsedInputURL.path.rsplit("@", 1)
+            reparsedInputURL = parsedInputURL._replace(path=gitPath)
+        else:
+            gitPath = parsedInputURL.path
+            reparsedInputURL = parsedInputURL
+
+        sp_path = reparsedInputURL.path.split("/")
 
         shortest_pre_path: "Optional[URIType]" = None
         longest_post_path: "Optional[Sequence[str]]" = None
@@ -169,7 +185,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             pre_path = "/".join(sp_path[:pos])
             if pre_path == "":
                 pre_path = "/"
-            remote_uri_anc = parse.urlunparse(parsedInputURL._replace(path=pre_path))
+            # Remove fragments
+            remote_uri_anc = parse.urlunparse(
+                reparsedInputURL._replace(path=pre_path, fragment="")
+            )
 
             remote_refs_dict: "Mapping[bytes, bytes]"
             if offline:
@@ -180,63 +199,112 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 # Dulwich works both with file, ssh, git and http(s) protocols
                 remote_refs_dict = dulwich.porcelain.ls_remote(remote_uri_anc)
                 repo_type = RepoType.Git
+
+                break
             except (
                 dulwich.errors.NotGitRepository,
                 dulwich.errors.GitProtocolError,
             ) as ngr:
                 # Skip and continue
                 continue
+        else:
+            # Metadata is all we really need
+            remote_uri_anc = parse.urlunparse(reparsedInputURL._replace(fragment=""))
+            req = request.Request(remote_uri_anc, method="HEAD")
+            try:
+                with request.urlopen(req) as resp:
+                    # Is it gitlab?
+                    if list(
+                        filter(
+                            lambda c: "gitlab" in c,
+                            resp.headers.get_all("Set-Cookie"),
+                        )
+                    ):
+                        repo_type = RepoType.Git
+                        guessed_repo_flavor = RepoGuessFlavor.GitLab
+                    elif list(
+                        filter(
+                            lambda c: GITHUB_NETLOC in c,
+                            resp.headers.get_all("Set-Cookie"),
+                        )
+                    ):
+                        repo_type = RepoType.Git
+                        guessed_repo_flavor = RepoGuessFlavor.GitHub
+                    elif list(
+                        filter(
+                            lambda c: "bitbucket" in c,
+                            resp.headers.get_all("X-View-Name"),
+                        )
+                    ):
+                        repo_type = RepoType.Git
+                        guessed_repo_flavor = RepoGuessFlavor.BitBucket
+            except Exception as e:
+                pass
 
-            the_remote_uri = remote_uri_anc
+        if repo_type != RepoType.Git:
+            raise RepoGuessException(f"Unable to identify {remote_file} as a git repo")
 
-            head_remote_ref = remote_refs_dict[cls.HEAD_LABEL]
-            repo_branches = []
-            b_default_repo_tag = None
-            for remote_label, remote_ref in remote_refs_dict.items():
-                if remote_label.startswith(cls.REFS_HEADS_PREFIX):
-                    b_repo_tag = remote_label[len(cls.REFS_HEADS_PREFIX) :].decode(
-                        "utf-8", errors="continue"
-                    )
-                    repo_branches.append(cast("RepoTag", b_repo_tag))
-                    if b_default_repo_tag is None and remote_ref == head_remote_ref:
+        the_remote_uri = remote_uri_anc
+
+        # Now, try matching either a branch or a tag
+        head_remote_ref = remote_refs_dict[cls.HEAD_LABEL]
+        repo_branches = []
+        b_default_repo_tag = None
+        b_checkout: "Optional[RepoTag]" = None
+        for remote_label, remote_ref in remote_refs_dict.items():
+            b_repo_tag: "Optional[str]" = None
+            if remote_label.startswith(cls.REFS_HEADS_PREFIX):
+                b_repo_tag = remote_label[len(cls.REFS_HEADS_PREFIX) :].decode(
+                    "utf-8", errors="continue"
+                )
+            elif remote_label.startswith(cls.REFS_TAGS_PREFIX):
+                b_repo_tag = remote_label[len(cls.REFS_TAGS_PREFIX) :].decode(
+                    "utf-8", errors="continue"
+                )
+
+            if b_repo_tag is not None:
+                repo_branches.append(cast("RepoTag", b_repo_tag))
+                if b_default_repo_tag is None:
+                    b_remote_ref = remote_ref.decode("utf-8", errors="continue")
+                    if repoTag is None and remote_ref == head_remote_ref:
                         b_default_repo_tag = b_repo_tag
+                        b_checkout = cast("RepoTag", b_remote_ref)
+                    elif repoTag in (b_repo_tag, b_remote_ref):
+                        b_default_repo_tag = repoTag
+                        b_checkout = cast("RepoTag", b_remote_ref)
 
-            # It is considered a git repo!
-            shortest_pre_path = cast("URIType", pre_path)
-            longest_post_path = sp_path[pos:]
-            if repo_type is None:
-                # Metadata is all we really need
-                repo_type = RepoType.Raw
-                req = request.Request(remote_uri_anc, method="HEAD")
-                try:
-                    with request.urlopen(req) as resp:
-                        # Is it gitlab?
-                        if list(
-                            filter(
-                                lambda c: "gitlab" in c,
-                                resp.headers.get_all("Set-Cookie"),
-                            )
-                        ):
-                            repo_type = RepoType.Git
-                            guessed_repo_flavor = RepoGuessFlavor.GitLab
-                        elif list(
-                            filter(
-                                lambda c: GITHUB_NETLOC in c,
-                                resp.headers.get_all("Set-Cookie"),
-                            )
-                        ):
-                            repo_type = RepoType.Git
-                            guessed_repo_flavor = RepoGuessFlavor.GitHub
-                        elif list(
-                            filter(
-                                lambda c: "bitbucket" in c,
-                                resp.headers.get_all("X-View-Name"),
-                            )
-                        ):
-                            repo_type = RepoType.Git
-                            guessed_repo_flavor = RepoGuessFlavor.BitBucket
-                except Exception as e:
-                    pass
+                    if b_default_repo_tag is not None:
+                        break
+
+        if b_default_repo_tag is None:
+            if repoTag is None:
+                raise RepoGuessException(
+                    f"No tag was obtained while getting default branch name from {remote_file}"
+                )
+
+            if len(repoTag) != 40 or re.search(r"[^a-f0-9]", repoTag):
+                raise RepoGuessException(
+                    f"Tried to use ill formed {repoTag} SHA to query {remote_file} repo. It should be a 40 characters alphanumeric code."
+                )
+
+            # Possible sha in repoTag
+            memory_repo = dulwich.repo.MemoryRepo()
+            transport, path = get_transport_and_path(remote_uri_anc)
+            fetch_pack_result = transport.fetch(
+                path, cast("dulwich.repo.Repo", memory_repo)
+            )
+            try:
+                memory_repo.get_object(repoTag.encode("utf-8"))
+                b_default_repo_tag = repoTag
+                b_checkout = cast("RepoTag", repoTag)
+            except (Exception, ValueError) as e:
+                raise RepoGuessException(
+                    f"Git repo {remote_uri_anc} does not have either a reference or a commit identified as {repoTag}"
+                ) from e
+
+        # It is considered a git repo!
+        shortest_pre_path = cast("URIType", pre_path)
+        longest_post_path = sp_path[pos:]
 
         if repo_type is None:
             raise RepoGuessException(f"Unable to identify {remote_file} as a git repo")
@@ -244,16 +312,32 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         if b_default_repo_tag is None:
             raise RepoGuessException(
                 f"No tag was obtained while getting default branch name from {remote_file}"
+                if repoTag is None
+                else f"No tag matched {repoTag} from {remote_file}"
             )
 
         assert longest_post_path is not None
         assert repo_branches is not None
 
+        # Getting the repoRelPath (if available)
+        the_rel_path: "Optional[RelPath]" = None
+        if len(reparsedInputURL.fragment) > 0:
+            frag_qs = parse.parse_qs(reparsedInputURL.fragment)
+            subDirArr = frag_qs.get("subdirectory", [])
+            if len(subDirArr) > 0:
+                the_rel_path = cast(
+                    "RelPath", "/".join([*longest_post_path, subDirArr[0]])
+                )
+        elif len(longest_post_path) > 0:
+            the_rel_path = cast("RelPath", "/".join(longest_post_path))
+
         repo = RemoteRepo(
             repo_url=cast("RepoURL", the_remote_uri),
+            rel_path=the_rel_path,
             tag=cast("RepoTag", b_default_repo_tag),
             repo_type=repo_type,
             guess_flavor=guessed_repo_flavor,
+            checkout=b_checkout,
         )
         return repo, longest_post_path, repo_branches
 
@@ -392,10 +476,12 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                             repoTag = wf_path[3]
                             if len(wf_path) > 4:
                                 repoRelPath = "/".join(wf_path[4:])
+            # TODO handling other popular cases, like bitbucket
             elif (
                 parsed_wf_url.scheme == ""
                 or (parsed_wf_url.scheme in cls.GetSchemeHandlers())
                 or (parsed_wf_url.scheme in cls.GIT_SCHEMES)
+                or parsed_wf_url.scheme == "http"
             ):
                 if parsed_wf_url.scheme == "":
                     # It could be a checkout uri in the form of 'git@github.com:inab/WfExS-backend.git'
@@ -446,30 +532,12 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                         parse.urlunparse(denorm_parsed_wf_url)
                     )
 
-                # Getting the tag or branch
-                if "@" in parsed_wf_url.path:
-                    gitPath, repoTag = parsed_wf_url.path.split("@", 1)
-                else:
-                    gitPath = parsed_wf_url.path
-
-                # Getting the repoRelPath (if available)
-                if len(parsed_wf_url.fragment) > 0:
-                    frag_qs = parse.parse_qs(parsed_wf_url.fragment)
-                    subDirArr = frag_qs.get("subdirectory", [])
-                    if len(subDirArr) > 0:
-                        repoRelPath = subDirArr[0]
-
-                # Now, reassemble the repoURL
-                repoURL = parse.urlunparse(
-                    (gitScheme, parsed_wf_url.netloc, gitPath, "", "", "")
-                )
-                found_params = cls._find_git_repo_in_uri(
-                    cast("URIType", repoURL), offline=offline
-                )
-                guessedRepoFlavor = found_params[0].guess_flavor
-            # TODO handling other popular cases, like bitbucket
-            elif parsed_wf_url.scheme in ("http", "https", "file", "ssh"):
                 found_params = cls._find_git_repo_in_uri(parsed_wf_url, offline=offline)
+                if found_params is not None:
+                    repoURL = found_params[0].repo_url
+                    repoRelPath = found_params[0].rel_path
+                    guessedRepoFlavor = found_params[0].guess_flavor
+
             else:
                 return None
 
@@ -927,7 +995,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         repoTag: "Optional[RepoTag]"
         if "@" in parsedInputURL.path:
             gitPath, repoTag = cast(
-                "Tuple[str, RepoTag]", tuple(parsedInputURL.path.split("@", 1))
+                "Tuple[str, RepoTag]", tuple(parsedInputURL.path.rsplit("@", 1))
             )
         else:
             gitPath = parsedInputURL.path
