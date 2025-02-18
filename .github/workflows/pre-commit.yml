@@ -35,7 +35,7 @@ jobs:
 
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
         run: |
-          pip install --upgrade pip wheel
+          pip install --upgrade pip wheel setuptools
           if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
             pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
           else
@@ -106,7 +106,7 @@ jobs:
 
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
         run: |
-          pip install --upgrade pip wheel
+          pip install --upgrade pip wheel setuptools
           if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
             pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
           else
