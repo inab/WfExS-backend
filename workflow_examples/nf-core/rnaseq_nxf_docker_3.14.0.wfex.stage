@@ -6,6 +6,7 @@ workflow_config:
     profile:
       - docker
     maxProcesses: 16
+    maxTaskDuration: "24h"
 placeholders:
   test_datasets: "https://raw.githubusercontent.com/nf-core/test-datasets/rnaseq/reference"
   igenomes_base: "s3://ngi-igenomes/igenomes"
@@ -24,6 +25,8 @@ params:
       header-rows: 1
   genome: "{genome}"
   igenomes_base: "{igenomes_base}"
+
+  max_time: "24h"
 
   genomes:
     GRCh38:
