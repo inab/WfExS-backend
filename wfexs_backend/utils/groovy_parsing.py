@@ -667,8 +667,13 @@ def extract_nextflow_features(
 def cached_parse_and_digest_groovy_content(
     content: "str",
     cache_dir: "Optional[str]" = None,
-    ro_cache_dirs: "Optional[Sequence[str]]" = None,
+    ro_cache_dir: "Optional[str]" = None,
 ) -> "Union[RuleNode, LeafNode, EmptyNode]":
+    ro_cache_dirs: "Sequence[str]" = []
+    if ro_cache_dir is not None:
+        ro_cache_dirs = [
+            ro_cache_dir,
+        ]
     t_tree = parse_and_digest_groovy_content(
         content,
         cache_directory=cache_dir,
@@ -683,24 +688,25 @@ def analyze_nf_content(
     content: "str",
     only_names: "Sequence[str]" = [],
     cache_path: "Optional[PathLikePath]" = None,
-    ro_cache_paths: "Optional[Sequence[PathLikePath]]" = None,
+    ro_cache_path: "Optional[PathLikePath]" = None,
 ) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], Sequence[NfPlugin], ContextAssignments]":
     cache_dir: "Optional[str]" = None
     if cache_path is not None:
         cache_dir = (
             cache_path if isinstance(cache_path, str) else cache_path.__fspath__()
         )
-    ro_cache_dirs: "Sequence[str]" = []
-    if ro_cache_paths is not None:
-        ro_cache_dirs = list(
-            map(
-                lambda rcp: rcp if isinstance(rcp, str) else rcp.__fspath__(),
-                ro_cache_paths,
-            )
+    ro_cache_dir: "Optional[str]" = None
+    if ro_cache_path is not None:
+        ro_cache_dir = (
+            ro_cache_path
+            if isinstance(ro_cache_path, str)
+            else ro_cache_path.__fspath__()
         )
 
     t_tree = cached_parse_and_digest_groovy_content(
-        content, ro_cache_dirs=ro_cache_dirs, cache_dir=cache_dir
+        content,
+        cache_dir=cache_dir,
+        ro_cache_dir=ro_cache_dir,
     )
 
     if "rule" in t_tree:
