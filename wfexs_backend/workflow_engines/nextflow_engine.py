@@ -126,6 +126,7 @@ from ..container_factories.no_container import (
 from ..fetchers.http import HTTPFetcher
 from ..utils.contents import (
     copy2_nofollow,
+    link_or_copy_pathlib,
 )
 from ..utils.groovy_parsing import (
     analyze_nf_content,
@@ -327,7 +328,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.nxf_assets.mkdir(parents=True, exist_ok=True)
 
         # Setting up packed directory
-        self.groovy_cache_dir = self.cacheWorkflowDir / "groovy-parsing-cache"
+        self.global_groovy_cache_dir = self.cacheWorkflowDir / "groovy-parsing-cache"
+        self.global_groovy_cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # Setting up packed directory
+        self.groovy_cache_dir = self.engineTweaksDir / "groovy-parsing-cache"
         self.groovy_cache_dir.mkdir(parents=True, exist_ok=True)
 
     @classmethod
@@ -362,6 +367,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
     @property
     def engine_url(self) -> "URIType":
         return self.NEXTFLOW_IO
+
+    def _update_global_groovy_cache(self) -> "None":
+        link_or_copy_pathlib(
+            self.groovy_cache_dir,
+            self.global_groovy_cache_dir,
+            force_copy=True,
+            no_merge=False,
+        )
 
     NXF_VER_PAT: "Pattern[str]" = re.compile(r"!?[>=]*([^ ]+)")
 
@@ -437,8 +450,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 ) = analyze_nf_content(
                     firstPathContent,
                     only_names=only_names,
-                    cache_dir=self.groovy_cache_dir.as_posix(),
+                    cache_path=self.groovy_cache_dir,
+                    ro_cache_path=self.global_groovy_cache_dir,
                 )
+
+                # Now, update the global cache dir
+                self._update_global_groovy_cache()
             except Exception as e:
                 errstr = f"Failed to parse initial file {os.path.relpath(firstPath, nfDir)} with groovy parser"
                 self.logger.exception(errstr)
@@ -504,8 +521,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         ) = analyze_nf_content(
                             newNxfConfigContent,
                             only_names=only_names,
-                            cache_dir=self.groovy_cache_dir.as_posix(),
+                            cache_path=self.groovy_cache_dir,
+                            ro_cache_path=self.global_groovy_cache_dir,
                         )
+
+                        # Now, update the global cache dir
+                        self._update_global_groovy_cache()
                     except Exception as e:
                         errstr = f"Failed to parse configuration file {relNewNxfConfig} with groovy parser"
                         self.logger.exception(errstr)
@@ -667,8 +688,12 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         ) = analyze_nf_content(
                             content,
                             only_names=only_names,
-                            cache_dir=self.groovy_cache_dir.as_posix(),
+                            cache_path=self.groovy_cache_dir,
+                            ro_cache_path=self.global_groovy_cache_dir,
                         )
+
+                        # Now, update the global cache dir
+                        self._update_global_groovy_cache()
                     except Exception as e:
                         errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
                         self.logger.exception(errstr)
@@ -1527,8 +1552,14 @@ STDERR
                         _,
                         interesting_assignments,
                     ) = analyze_nf_content(
-                        content, cache_dir=self.groovy_cache_dir.as_posix()
+                        content,
+                        cache_path=self.groovy_cache_dir,
+                        ro_cache_path=self.global_groovy_cache_dir,
                     )
+
+                    # Now, update the global cache dir
+                    if not offline:
+                        self._update_global_groovy_cache()
                 except Exception as e:
                     errstr = f"Failed to parse Nextflow file {relNxfScript} with groovy parser"
                     self.logger.exception(errstr)
@@ -1598,8 +1629,14 @@ STDERR
                         l_plugins,
                         _,
                     ) = analyze_nf_content(
-                        content, cache_dir=self.groovy_cache_dir.as_posix()
+                        content,
+                        cache_path=self.groovy_cache_dir,
+                        ro_cache_path=self.global_groovy_cache_dir,
                     )
+
+                    # Now, update the global cache dir
+                    if not offline:
+                        self._update_global_groovy_cache()
                 except Exception as e:
                     errstr = f"Failed to parse file {relNxfScript} with groovy parser while looking for plugins"
                     self.logger.warning(errstr)
@@ -1608,21 +1645,22 @@ STDERR
 
         # And materialize/install them
         pluginsline = ",".join(map(lambda plugin: plugin.label, plugins))
-        if len(pluginsline) > 0:
-            (
-                retval,
-                nxf_plugin_inst_stdout_v,
-                nxf_plugin_inst_stderr_v,
-            ) = self.runNextflowCommand(
-                matWorkflowEngine.version,
-                ["plugin", "install", pluginsline],
-                workdir=pathlib.Path(matWorkflowEngine.engine_path),
-                nextflow_path=matWorkflowEngine.engine_path,
-            )
-            self.logger.info(f"Installing nextflow plugins {pluginsline}")
-            if retval != 0:
-                errstr = f"""\
-Could not install Nextflow plugins {pluginsline} . Retval {retval}
+        if len(plugins) > 0:
+            for plugin in plugins:
+                (
+                    retval,
+                    nxf_plugin_inst_stdout_v,
+                    nxf_plugin_inst_stderr_v,
+                ) = self.runNextflowCommand(
+                    matWorkflowEngine.version,
+                    ["plugin", "install", plugin.label],
+                    workdir=pathlib.Path(matWorkflowEngine.engine_path),
+                    nextflow_path=matWorkflowEngine.engine_path,
+                )
+                self.logger.info(f"Installing nextflow plugin {plugin.label}")
+                if retval != 0:
+                    errstr = f"""\
+Could not install Nextflow plugin {plugin.label} with Nextflow {matWorkflowEngine.version}. Retval {retval}
 ======
 STDOUT
 ======
@@ -1632,8 +1670,9 @@ STDERR
 ======
 {nxf_plugin_inst_stderr_v}
 """
-                self.logger.error(errstr)
-                raise WorkflowEngineInstallException(errstr)
+                    self.logger.warning(errstr)
+                    # self.logger.error(errstr)
+                    # raise WorkflowEngineInstallException(errstr)
 
         return matWorkflowEngine, containerTags
 
