@@ -46,6 +46,10 @@ if TYPE_CHECKING:
         Union,
     )
 
+    from ..common import (
+        PathLikePath,
+    )
+
     from groovy_parser.parser import (
         EmptyNode,
         LeafNode,
@@ -658,12 +662,18 @@ def extract_nextflow_features(
     return processes, includes, workflows, includeconfigs, plugins
 
 
+# ro_cache_dirs and cache_dirs must be str in order to be hashable
 @functools.lru_cache(maxsize=128)
 def cached_parse_and_digest_groovy_content(
     content: "str",
     cache_dir: "Optional[str]" = None,
+    ro_cache_dirs: "Optional[Sequence[str]]" = None,
 ) -> "Union[RuleNode, LeafNode, EmptyNode]":
-    t_tree = parse_and_digest_groovy_content(content, cache_directory=cache_dir)
+    t_tree = parse_and_digest_groovy_content(
+        content,
+        cache_directory=cache_dir,
+        ro_cache_directories=ro_cache_dirs,
+    )
 
     # This one can be written as JSON
     return t_tree
@@ -672,9 +682,26 @@ def cached_parse_and_digest_groovy_content(
 def analyze_nf_content(
     content: "str",
     only_names: "Sequence[str]" = [],
-    cache_dir: "Optional[str]" = None,
+    cache_path: "Optional[PathLikePath]" = None,
+    ro_cache_paths: "Optional[Sequence[PathLikePath]]" = None,
 ) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], Sequence[NfPlugin], ContextAssignments]":
-    t_tree = cached_parse_and_digest_groovy_content(content, cache_dir=cache_dir)
+    cache_dir: "Optional[str]" = None
+    if cache_path is not None:
+        cache_dir = (
+            cache_path if isinstance(cache_path, str) else cache_path.__fspath__()
+        )
+    ro_cache_dirs: "Sequence[str]" = []
+    if ro_cache_paths is not None:
+        ro_cache_dirs = list(
+            map(
+                lambda rcp: rcp if isinstance(rcp, str) else rcp.__fspath__(),
+                ro_cache_paths,
+            )
+        )
+
+    t_tree = cached_parse_and_digest_groovy_content(
+        content, ro_cache_dirs=ro_cache_dirs, cache_dir=cache_dir
+    )
 
     if "rule" in t_tree:
         c_t_tree = cast("RuleNode", t_tree)
@@ -743,7 +770,7 @@ if __name__ == "__main__":
                     includeconfigs,
                     plugins,
                     interesting_assignments,
-                ) = analyze_nf_content(content, cache_dir=cache_directory)
+                ) = analyze_nf_content(content, cache_path=cache_directory)
             with open(jsonfile, mode="w", encoding="utf-8") as jH:
                 json.dump(t_tree, jH, indent=4)
             with open(resultfile, mode="w", encoding="utf-8") as rW:
