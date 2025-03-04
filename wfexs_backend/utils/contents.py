@@ -22,6 +22,7 @@ import logging
 import os
 import pathlib
 import shutil
+import sys
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -304,17 +305,61 @@ def copy_nofollow(src: "PathLikePath", dest: "PathLikePath") -> "None":
     shutil.copy(src, dest, follow_symlinks=False)
 
 
+def copytree_pathlib(
+    src: "pathlib.Path",
+    dest: "pathlib.Path",
+    force_copy: "bool" = False,
+    preserve_attrs: "bool" = True,
+    no_merge: "bool" = True,
+) -> None:
+    assert src.is_dir()
+    if dest.exists() and no_merge:
+        shutil.rmtree(dest)
+
+    if not dest.exists():
+        dest.mkdir(parents=True, exist_ok=True)
+    elif no_merge:
+        raise FileExistsError(f"Directory exists: {dest.as_posix()}")
+
+    for entry in os.scandir(src):
+        if entry.is_dir(follow_symlinks=False):
+            # Skip these directories
+            if entry.name in (".", ".."):
+                continue
+            copytree_pathlib(
+                src / entry.name,
+                dest / entry.name,
+                force_copy=force_copy,
+                preserve_attrs=preserve_attrs,
+                no_merge=no_merge,
+            )
+        else:
+            link_or_copy_pathlib(
+                src / entry.name,
+                dest / entry.name,
+                force_copy=force_copy,
+                preserve_attrs=preserve_attrs,
+                no_merge=no_merge,
+            )
+
+    # Last, but not the least important
+    if preserve_attrs:
+        shutil.copystat(src, dest)
+
+
 def link_or_copy(
     src: "PathLikePath",
     dest: "PathLikePath",
     force_copy: "bool" = False,
     preserve_attrs: "bool" = True,
+    no_merge: "bool" = True,
 ) -> None:
     link_or_copy_pathlib(
         src if isinstance(src, pathlib.Path) else pathlib.Path(src),
         dest if isinstance(dest, pathlib.Path) else pathlib.Path(dest),
         force_copy=force_copy,
         preserve_attrs=preserve_attrs,
+        no_merge=no_merge,
     )
 
 
@@ -323,6 +368,7 @@ def link_or_copy_pathlib(
     dest: "pathlib.Path",
     force_copy: "bool" = False,
     preserve_attrs: "bool" = True,
+    no_merge: "bool" = True,
 ) -> None:
     assert (
         src.exists()
@@ -374,11 +420,31 @@ def link_or_copy_pathlib(
             else:
                 # Recursively hardlinking
                 # as of https://stackoverflow.com/a/10778930
-                if dest_exists:
+                if dest_exists and no_merge:
                     shutil.rmtree(dest)
 
                 # TODO: study passing link_or_copy as copy_function
-                shutil.copytree(src, dest, copy_function=link_or_copy)  # type: ignore[arg-type]
+                if sys.version_info[:2] >= (3, 8):
+                    shutil.copytree(  # pylint: disable=unexpected-keyword-arg
+                        src,
+                        dest,
+                        copy_function=lambda s, d: link_or_copy(
+                            s,
+                            d,
+                            force_copy=force_copy,
+                            preserve_attrs=preserve_attrs,
+                            no_merge=no_merge,
+                        ),
+                        dirs_exist_ok=not no_merge,
+                    )  # type: ignore[arg-type]
+                else:
+                    copytree_pathlib(
+                        src,
+                        dest,
+                        force_copy=force_copy,
+                        preserve_attrs=preserve_attrs,
+                        no_merge=no_merge,
+                    )
         except OSError as ose:
             # Even when we are detecting whether it is the same
             # device, it can happen both paths are in different
@@ -419,15 +485,23 @@ def link_or_copy_pathlib(
         else:
             # Recursively copying the content
             # as it is in a separated filesystem
-            if dest_exists:
+            if dest_exists and no_merge:
                 shutil.rmtree(dest)
             if isinstance(src, ZipfilePath):
                 src.copy_to(dest, preserve_attrs=preserve_attrs)
-            else:
-                shutil.copytree(
+            elif sys.version_info[:2] >= (3, 8):
+                shutil.copytree(  # pylint: disable=unexpected-keyword-arg
                     src,
                     dest,
                     copy_function=copy2_nofollow if preserve_attrs else copy_nofollow,
+                    dirs_exist_ok=not no_merge,
+                )
+            else:
+                # TO BE REMOVED ON PYTHON 3.7 SUPPORT DEPRECATION
+                import distutils.dir_util
+
+                distutils.dir_util.copy_tree(
+                    src.as_posix(), dest.as_posix(), preserve_mode=preserve_attrs
                 )
 
 
