@@ -2,7 +2,7 @@ fail_fast: true
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v2.3.0
+    rev: v4.4.0
     hooks:
       # This one has been added to fail fast on syntax errors
       # before running expensive pylint
