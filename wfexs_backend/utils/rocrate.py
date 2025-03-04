@@ -1847,6 +1847,10 @@ WHERE   {
                     values=[mat_content],
                     # implicit=,
                 )
+            elif cached_input.values is None:
+                cached_input = cached_input._replace(
+                    values=[mat_content],
+                )
             else:
                 cached_input = cached_input._replace(
                     values=[*cached_input.values, mat_content],

@@ -1707,44 +1707,47 @@ STDERR
             for step in splittedPath[:-1]:
                 node = node.setdefault(step, {})
 
-            nxfValues: "MutableSequence[Union[str, int, float]]" = []
+            nxfValues: "MutableSequence[Union[str, int, float, None]]" = []
 
-            for value in matInput.values:
-                if isinstance(value, MaterializedContent):
-                    if value.kind in (
-                        ContentKind.Directory,
-                        ContentKind.File,
-                        ContentKind.ContentWithURIs,
-                    ):
-                        if not value.local.exists():
-                            self.logger.warning(
-                                "Input {} has values which are not materialized".format(
-                                    matInput.name
+            if matInput.values is not None:
+                for value in matInput.values:
+                    if isinstance(value, MaterializedContent):
+                        if value.kind in (
+                            ContentKind.Directory,
+                            ContentKind.File,
+                            ContentKind.ContentWithURIs,
+                        ):
+                            if not value.local.exists():
+                                self.logger.warning(
+                                    "Input {} has values which are not materialized".format(
+                                        matInput.name
+                                    )
+                                )
+                            # Use the extrapolated local file containing paths
+                            # instead of the original one containing URLs
+                            nxfValues.append(
+                                value.local.as_posix()
+                                if value.extrapolated_local is None
+                                else value.extrapolated_local.as_posix()
+                            )
+                        else:
+                            raise WorkflowEngineException(
+                                "ERROR: Input {} has values of type {} this code does not know how to handle".format(
+                                    matInput.name, value.kind
                                 )
                             )
-                        # Use the extrapolated local file containing paths
-                        # instead of the original one containing URLs
-                        nxfValues.append(
-                            value.local.as_posix()
-                            if value.extrapolated_local is None
-                            else value.extrapolated_local.as_posix()
-                        )
+                    elif matInput.autoFilled:
+                        # This is needed to correct paths for different executions
+                        assert isinstance(value, str)
+                        if os.path.isabs(value):
+                            rel_path = os.path.relpath(value, self.outputsDir)
+                        else:
+                            rel_path = value
+                        nxfValues.append(os.path.join(outputsDir, rel_path))
                     else:
-                        raise WorkflowEngineException(
-                            "ERROR: Input {} has values of type {} this code does not know how to handle".format(
-                                matInput.name, value.kind
-                            )
-                        )
-                elif matInput.autoFilled:
-                    # This is needed to correct paths for different executions
-                    assert isinstance(value, str)
-                    if os.path.isabs(value):
-                        rel_path = os.path.relpath(value, self.outputsDir)
-                    else:
-                        rel_path = value
-                    nxfValues.append(os.path.join(outputsDir, rel_path))
-                else:
-                    nxfValues.append(value)
+                        nxfValues.append(value)
+            else:
+                nxfValues = [None]
 
             node[splittedPath[-1]] = nxfValues if len(nxfValues) != 1 else nxfValues[0]
 
@@ -1901,7 +1904,7 @@ STDERR
         # Now, the environment variables to include
         bindable_paths: "MutableSequence[pathlib.Path]" = []
         for mat_env in matEnvironment:
-            if len(mat_env.values) > 0:
+            if mat_env.values is not None and len(mat_env.values) > 0:
                 envWhitelist.append(mat_env.name)
                 env_vals: "MutableSequence[str]" = []
                 for mat_val in mat_env.values:
@@ -2111,6 +2114,7 @@ wfexs_allParams()
                 name=cast("SymbolicParamName", "-profile"),
                 values=[",".join(profiles)],
             )
+            assert profile_input.values is not None
             nxf_params.extend(
                 [profile_input.name, cast("str", profile_input.values[0])]
             )
@@ -2245,7 +2249,7 @@ wfexs_allParams()
         # Now, the environment variables to include
         bindable_paths: "MutableSequence[pathlib.Path]" = []
         for mat_env in context_environment:
-            if len(mat_env.values) > 0:
+            if mat_env.values is not None and len(mat_env.values) > 0:
                 envWhitelist.append(mat_env.name)
                 env_vals: "MutableSequence[str]" = []
                 for mat_val in mat_env.values:
@@ -2418,6 +2422,7 @@ wfexs_allParams()
                 name=cast("SymbolicParamName", "-profile"),
                 values=[",".join(profiles)],
             )
+            assert profile_input.values is not None
             nxf_params.extend(
                 [profile_input.name, cast("str", profile_input.values[0])]
             )

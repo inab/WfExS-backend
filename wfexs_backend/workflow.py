@@ -1596,8 +1596,10 @@ class WF:
         new_cached_inputs = []
         for cached_input in cached_inputs:
             new_cached_input = cached_input
-            if len(new_cached_input.values) > 0 and isinstance(
-                new_cached_input.values[0], MaterializedContent
+            if (
+                new_cached_input.values is not None
+                and len(new_cached_input.values) > 0
+                and isinstance(new_cached_input.values[0], MaterializedContent)
             ):
                 new_values: "MutableSequence[MaterializedContent]" = []
                 for value in cast(
@@ -3401,8 +3403,11 @@ class WF:
                             )
 
                             injectable_input = injectable_inputs_dict.get(linearKey)
+                            # TODO: fix the case of null values declared in RO-Crate once
+                            # they are properly modelled there (or I learn about)
                             if (
                                 injectable_input is not None
+                                and injectable_input.values is not None
                                 and len(injectable_input.values) > 0
                             ):
                                 # Input being injected
@@ -5234,15 +5239,16 @@ This is an enumeration of the types of collected contents:
                         raise PermissionError(
                             f"Param {item.name} contents have export restrictions"
                         )
-                    retval.extend(
-                        cast(
-                            "Iterable[MaterializedContent]",
-                            filter(
-                                lambda mpc: isinstance(mpc, MaterializedContent),
-                                materializedParam.values,
-                            ),
+                    if materializedParam.values is not None:
+                        retval.extend(
+                            cast(
+                                "Iterable[MaterializedContent]",
+                                filter(
+                                    lambda mpc: isinstance(mpc, MaterializedContent),
+                                    materializedParam.values,
+                                ),
+                            )
                         )
-                    )
                     if materializedParam.secondaryInputs:
                         retval.extend(materializedParam.secondaryInputs)
                 else:
@@ -5290,6 +5296,7 @@ This is an enumeration of the types of collected contents:
                         raise PermissionError(
                             f"Environment variable {item.name} contents have export restrictions"
                         )
+                    assert materializedEnvVar.values is not None
                     retval.extend(
                         cast(
                             "Iterable[MaterializedContent]",
@@ -5332,6 +5339,7 @@ This is an enumeration of the types of collected contents:
                         raise KeyError(
                             f"Output {item.name} to be exported does not exist"
                         )
+                    assert matCheckOutput.values is not None
                     retval.extend(
                         cast(
                             "Iterable[Union[GeneratedContent, GeneratedDirectoryContent]]",

@@ -410,6 +410,7 @@ if TYPE_CHECKING:
         Sequence[str],
         Sequence[int],
         Sequence[float],
+        None,
         Sequence[MaterializedContent],
     ]
 
@@ -598,7 +599,7 @@ class MaterializedOutput(NamedTuple):
     name: "SymbolicOutputName"
     kind: "ContentKind"
     expectedCardinality: "Tuple[int, int]"
-    values: "Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[AbstractGeneratedContent]]"
+    values: "Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], None, Sequence[AbstractGeneratedContent]]"
     syntheticOutput: "Optional[bool]" = None
     filledFrom: "Optional[str]" = None
     glob: "Optional[GlobPattern]" = None

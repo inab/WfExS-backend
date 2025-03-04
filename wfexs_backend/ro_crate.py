@@ -1446,31 +1446,32 @@ you can find here an almost complete list of the possible ones:
                 + urllib.parse.quote(in_item.name, safe="")
             )
 
-            itemInValue0 = in_item.values[0]
             additional_type: "Optional[str]" = None
             is_content_with_uris = False
-            # A bool is an instance of int in Python
-            if isinstance(itemInValue0, bool):
-                additional_type = "Boolean"
-            elif isinstance(itemInValue0, int):
-                additional_type = "Integer"
-            elif isinstance(itemInValue0, str):
-                additional_type = "Text"
-            elif isinstance(itemInValue0, float):
-                additional_type = "Float"
-            elif isinstance(itemInValue0, MaterializedContent):
-                if len(in_item.values) > 1:
-                    additional_type = "Collection"
-                elif itemInValue0.kind in (
-                    ContentKind.File,
-                    ContentKind.ContentWithURIs,
-                ):
-                    additional_type = "File"
-                    is_content_with_uris = (
-                        itemInValue0.kind == ContentKind.ContentWithURIs
-                    )
-                elif itemInValue0.kind == ContentKind.Directory:
-                    additional_type = "Dataset"
+            if in_item.values is not None:
+                itemInValue0 = in_item.values[0]
+                # A bool is an instance of int in Python
+                if isinstance(itemInValue0, bool):
+                    additional_type = "Boolean"
+                elif isinstance(itemInValue0, int):
+                    additional_type = "Integer"
+                elif isinstance(itemInValue0, str):
+                    additional_type = "Text"
+                elif isinstance(itemInValue0, float):
+                    additional_type = "Float"
+                elif isinstance(itemInValue0, MaterializedContent):
+                    if len(in_item.values) > 1:
+                        additional_type = "Collection"
+                    elif itemInValue0.kind in (
+                        ContentKind.File,
+                        ContentKind.ContentWithURIs,
+                    ):
+                        additional_type = "File"
+                        is_content_with_uris = (
+                            itemInValue0.kind == ContentKind.ContentWithURIs
+                        )
+                    elif itemInValue0.kind == ContentKind.Directory:
+                        additional_type = "Dataset"
 
             formal_parameter = cast(
                 "Optional[FormalParameter]", self.crate.dereference(formal_parameter_id)
@@ -1524,7 +1525,7 @@ you can find here an almost complete list of the possible ones:
             )
             # We don't, so let's populate it
             if crate_coll is None:
-                if len(in_item.values) > 1:
+                if in_item.values is not None and len(in_item.values) > 1:
                     crate_coll = self._add_collection_to_crate()
 
                 if additional_type in ("File", "Dataset", "Collection"):
@@ -1681,14 +1682,16 @@ you can find here an almost complete list of the possible ones:
                 else:
                     # Detecting nullified values
                     some_not_null = False
-                    for itemInAtomicValues in cast(
-                        "Sequence[Union[bool,str,float,int]]", in_item.values
-                    ):
-                        if isinstance(itemInAtomicValues, (bool, str, float, int)):
-                            some_not_null = True
-                            break
+                    if in_item.values is not None:
+                        for itemInAtomicValues in cast(
+                            "Sequence[Union[bool,str,float,int]]", in_item.values
+                        ):
+                            if isinstance(itemInAtomicValues, (bool, str, float, int)):
+                                some_not_null = True
+                                break
 
                     if some_not_null:
+                        assert in_item.values is not None
                         if in_item.implicit and len(in_item.values) == 1:
                             the_default_value: "Union[bool,str,float,int]"
                             if isinstance(in_item.values[0], (bool, int, float)):
@@ -1728,6 +1731,7 @@ you can find here an almost complete list of the possible ones:
                                     )
                                 else:
                                     crate_coll = crate_pv
+                    # TODO:
                     # Null values are right now represented as no values
                     # At this moment there is no satisfactory way to represent it
                     # else:
@@ -2574,7 +2578,10 @@ you can find here an almost complete list of the possible ones:
                 if expected_output is not None:
                     preferred_filename = expected_output.preferredFilename
 
-                assert len(augmented_input.values) > 0
+                assert (
+                    augmented_input.values is not None
+                    and len(augmented_input.values) > 0
+                )
                 if isinstance(augmented_input.values[0], MaterializedContent):
                     kind = augmented_input.values[0].kind
                 elif isinstance(augmented_input.values[0], str):
@@ -2831,12 +2838,14 @@ you can find here an almost complete list of the possible ones:
 
             additional_type: "Optional[str]" = None
             if out_item.kind == ContentKind.File:
+                assert out_item.values is not None
                 additional_type = "Collection" if len(out_item.values) > 1 else "File"
             elif out_item.kind == ContentKind.Directory:
+                assert out_item.values is not None
                 additional_type = (
                     "Collection" if len(out_item.values) > 1 else "Dataset"
                 )
-            elif len(out_item.values) > 0:
+            elif out_item.values is not None and len(out_item.values) > 0:
                 itemOutValue0 = out_item.values[0]
                 if isinstance(itemOutValue0, bool):
                     additional_type = "Boolean"
@@ -2870,83 +2879,84 @@ you can find here an almost complete list of the possible ones:
                 self.wf_file.append_to("output", formal_parameter, compact=True)
 
             # This can happen when there is no output, like when a workflow has failed
-            if len(out_item.values) == 0:
+            if out_item.values is not None and len(out_item.values) == 0:
                 continue
 
             if additional_type in ("File", "Dataset", "Collection"):
                 crate_coll: "Union[Collection, FixedDataset, FixedFile, None]"
-                if len(out_item.values) > 1:
+                if out_item.values is not None and len(out_item.values) > 1:
                     crate_coll = self._add_collection_to_crate()
                 else:
                     crate_coll = None
-                for itemOutValues in cast(
-                    "Sequence[AbstractGeneratedContent]", out_item.values
-                ):
-                    if not isinstance(
-                        itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
+                if out_item.values is not None:
+                    for itemOutValues in cast(
+                        "Sequence[AbstractGeneratedContent]", out_item.values
                     ):
-                        self.logger.error("FIXME: elements of incorrect types")
+                        if not isinstance(
+                            itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
+                        ):
+                            self.logger.error("FIXME: elements of incorrect types")
 
-                    assert isinstance(
-                        itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
-                    )
+                        assert isinstance(
+                            itemOutValues, (GeneratedContent, GeneratedDirectoryContent)
+                        )
 
-                    itemOutLocalSource = itemOutValues.local  # local source
-                    # TODO: use exported results logs to complement this
-                    itemOutURISource = None
-                    if isinstance(
-                        itemOutValues, GeneratedDirectoryContent
-                    ):  # if directory
-                        if os.path.isdir(itemOutLocalSource):
-                            (
-                                crate_dataset,
-                                _,
-                            ) = self._add_GeneratedDirectoryContent_as_dataset(
-                                itemOutValues,
-                                job_work_dir=job_work_dir,
-                                do_attach=do_attach,
-                            )
+                        itemOutLocalSource = itemOutValues.local  # local source
+                        # TODO: use exported results logs to complement this
+                        itemOutURISource = None
+                        if isinstance(
+                            itemOutValues, GeneratedDirectoryContent
+                        ):  # if directory
+                            if os.path.isdir(itemOutLocalSource):
+                                (
+                                    crate_dataset,
+                                    _,
+                                ) = self._add_GeneratedDirectoryContent_as_dataset(
+                                    itemOutValues,
+                                    job_work_dir=job_work_dir,
+                                    do_attach=do_attach,
+                                )
 
-                            if crate_dataset is not None:
+                                if crate_dataset is not None:
+                                    if isinstance(crate_coll, Collection):
+                                        crate_coll.append_to(
+                                            "hasPart", crate_dataset, compact=True
+                                        )
+                                    else:
+                                        crate_coll = crate_dataset
+
+                            else:
+                                errmsg = (
+                                    "ERROR: The output directory %s does not exist"
+                                    % itemOutLocalSource
+                                )
+                                self.logger.error(errmsg)
+
+                        elif isinstance(itemOutValues, GeneratedContent):  # file
+                            if os.path.isfile(itemOutLocalSource):
+                                crate_file = self._add_GeneratedContent_to_crate(
+                                    itemOutValues,
+                                    job_work_dir=job_work_dir,
+                                    do_attach=do_attach,
+                                )
+
                                 if isinstance(crate_coll, Collection):
                                     crate_coll.append_to(
-                                        "hasPart", crate_dataset, compact=True
+                                        "hasPart", crate_file, compact=True
                                     )
                                 else:
-                                    crate_coll = crate_dataset
+                                    crate_coll = crate_file
 
-                        else:
-                            errmsg = (
-                                "ERROR: The output directory %s does not exist"
-                                % itemOutLocalSource
-                            )
-                            self.logger.error(errmsg)
-
-                    elif isinstance(itemOutValues, GeneratedContent):  # file
-                        if os.path.isfile(itemOutLocalSource):
-                            crate_file = self._add_GeneratedContent_to_crate(
-                                itemOutValues,
-                                job_work_dir=job_work_dir,
-                                do_attach=do_attach,
-                            )
-
-                            if isinstance(crate_coll, Collection):
-                                crate_coll.append_to(
-                                    "hasPart", crate_file, compact=True
-                                )
                             else:
-                                crate_coll = crate_file
+                                errmsg = (
+                                    "ERROR: The output file %s does not exist"
+                                    % itemOutLocalSource
+                                )
+                                self.logger.error(errmsg)
 
                         else:
-                            errmsg = (
-                                "ERROR: The output file %s does not exist"
-                                % itemOutLocalSource
-                            )
-                            self.logger.error(errmsg)
-
-                    else:
-                        pass
-                        # TODO digest other types of outputs
+                            pass
+                            # TODO digest other types of outputs
 
                 # Last rites to set all of them properly
                 if crate_coll is not None:
