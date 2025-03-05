@@ -41,8 +41,8 @@ google-cloud-core==2.4.2
 google-cloud-storage==3.1.0
 google-crc32c==1.5.0
 google-resumable-media==2.7.2
-googleapis-common-protos==1.68.0
-groovy-parser==0.1.1
+googleapis-common-protos==1.69.0
+groovy-parser==0.2.1
 gxformat2==0.20.0
 idna==3.10
 importlib-metadata==4.13.0
