@@ -68,6 +68,9 @@ from ..common import (
     GeneratedContent,
 )
 
+from .misc import (
+    DatetimeEncoder,
+)
 
 # Next methods have been borrowed from FlowMaps
 DEFAULT_DIGEST_ALGORITHM = "sha256"
@@ -142,7 +145,7 @@ def ComputeDigestFromObject(
     Accessory method used to compute the digest of an input file-like object
     """
     h = hashlib.new(digestAlgorithm)
-    h.update(json.dumps(obj, sort_keys=True).encode("utf-8"))
+    h.update(json.dumps(obj, cls=DatetimeEncoder, sort_keys=True).encode("utf-8"))
 
     return repMethod(digestAlgorithm, h.digest())
 
