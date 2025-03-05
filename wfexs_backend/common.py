@@ -38,6 +38,7 @@ if TYPE_CHECKING:
         List,
         Mapping,
         MutableMapping,
+        MutableSequence,
         NewType,
         Optional,
         Pattern,
@@ -410,6 +411,7 @@ if TYPE_CHECKING:
         Sequence[str],
         Sequence[int],
         Sequence[float],
+        None,
         Sequence[MaterializedContent],
     ]
 
@@ -454,6 +456,43 @@ class MaterializedInput(NamedTuple):
     implicit: "bool" = False
     contentWithURIs: "Optional[ContentWithURIsDesc]" = None
     disclosable: "bool" = True
+
+    @staticmethod
+    def path_tokens_2_linear_key(path_tokens: "Sequence[str]") -> "SymbolicParamName":
+        """
+        Translating a structured key into a linear input name, usable as key
+        """
+        return cast(
+            "SymbolicParamName",
+            ".".join(map(lambda p: "'" + p + "'" if "." in p else p, path_tokens)),
+        )
+
+    @staticmethod
+    def linear_key_2_path_tokens(linear_key: "str") -> "Tuple[str, ...]":
+        """
+        Translating an input name into a structured key,
+        removing quotes whenever it is needed
+        """
+        path_tokens: "MutableSequence[str]" = []
+
+        token: "str" = ""
+        for path_token in linear_key.split("."):
+            if len(token) > 0:
+                token += "." + path_token
+            elif len(path_token) > 1 and path_token[0] == "'":
+                token = path_token[1:]
+            else:
+                path_tokens.append(path_token)
+
+            if len(token) > 1 and token[-1] == "'":
+                path_tokens.append(token[0:-1])
+                token = ""
+
+        # This one should never happen
+        if len(token) > 0:
+            path_tokens.append(token)
+
+        return tuple(path_tokens)
 
 
 if TYPE_CHECKING:
@@ -598,7 +637,7 @@ class MaterializedOutput(NamedTuple):
     name: "SymbolicOutputName"
     kind: "ContentKind"
     expectedCardinality: "Tuple[int, int]"
-    values: "Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[AbstractGeneratedContent]]"
+    values: "Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], None, Sequence[AbstractGeneratedContent]]"
     syntheticOutput: "Optional[bool]" = None
     filledFrom: "Optional[str]" = None
     glob: "Optional[GlobPattern]" = None

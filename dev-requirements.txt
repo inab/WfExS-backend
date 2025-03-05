@@ -1,3 +1,4 @@
+setuptools
 wheel
 pylint < 2.14.0 ; python_version == '3.6'
 pylint >= 2.15.5 ; python_version >= '3.7'

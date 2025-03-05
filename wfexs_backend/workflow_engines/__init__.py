@@ -84,8 +84,9 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
-        MaterializedInput,
         MaterializedContent,
+        MaterializedInput,
+        MaterializedInputValues,
         ProgsMapping,
         RelPath,
         StagedSetup,
@@ -1061,7 +1062,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         if not isinstance(outputsMapping, dict):
             outputsMapping = {}
 
-        matInputHash: "Mapping[SymbolicParamName, Union[Sequence[bool], Sequence[str], Sequence[int], Sequence[float], Sequence[MaterializedContent]]]" = {
+        matInputHash: "Mapping[SymbolicParamName, MaterializedInputValues]" = {
             matInput.name: matInput.values for matInput in matInputs
         }
 

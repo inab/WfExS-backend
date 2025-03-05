@@ -91,6 +91,7 @@ if TYPE_CHECKING:
         int,
         float,
         str,
+        None,
         MutableMapping[str, Any],
         MutableSequence[bool],
         MutableSequence[int],
@@ -1349,7 +1350,10 @@ STDERR
                             # Now, the environment variables to include
                             bindable_paths: "MutableSequence[pathlib.Path]" = []
                             for mat_env in matEnvironment:
-                                if len(mat_env.values) > 0:
+                                if (
+                                    mat_env.values is not None
+                                    and len(mat_env.values) > 0
+                                ):
                                     cmd_arr.append(
                                         "--preserve-environment=" + mat_env.name
                                     )
@@ -1583,17 +1587,18 @@ STDERR
         for matInput in matInputs:
             if isinstance(matInput, MaterializedInput):  # input is a MaterializedInput
                 # numberOfInputs = len(matInput.values)  # number of inputs inside a MaterializedInput
-                for input_value in matInput.values:
-                    name = matInput.name
-                    value_types = cwlInputs.get(name, {}).get("type")
-                    if value_types is None:
-                        raise WorkflowEngineException(
-                            "ERROR: input {} not available in workflow".format(name)
-                        )
+                name = matInput.name
+                value_types = cwlInputs.get(name, {}).get("type")
+                if value_types is None:
+                    raise WorkflowEngineException(
+                        f"ERROR: input {name} not available in workflow"
+                    )
 
-                    if not isinstance(value_types, list):
-                        value_types = [value_types]
+                if not isinstance(value_types, list):
+                    value_types = [value_types]
 
+                the_values = matInput.values if matInput.values is not None else [None]
+                for input_value in the_values:
                     value = input_value
                     for value_type in value_types:
                         classType = None
