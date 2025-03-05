@@ -1663,7 +1663,9 @@ WHERE   {
             ), "Check the SPARQL code, as it should be a SELECT query"
 
             base = outputs
-            output_path = str(outputrow.name).split(".")
+            output_path = MaterializedInput.linear_key_2_path_tokens(
+                str(outputrow.name)
+            )
             output_last = output_path[-1]
 
             # Reaching the relative position
@@ -1876,7 +1878,7 @@ WHERE   {
             ), "Check the SPARQL code, as it should be a SELECT query"
 
             base = params
-            param_path = str(inputrow.name).split(".")
+            param_path = MaterializedInput.linear_key_2_path_tokens(str(inputrow.name))
             param_last = param_path[-1]
 
             # Reaching the relative position

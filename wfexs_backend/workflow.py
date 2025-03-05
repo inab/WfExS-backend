@@ -2350,10 +2350,12 @@ class WF:
             self.extrapolatedInputsDir is not None
         ), "The working directory should not be corrupted beyond basic usage"
 
-        injectable_inputs_dict: "Mapping[str, MaterializedInput]"
+        injectable_inputs_dict: "Mapping[Tuple[str, ...], MaterializedInput]"
         if injectable_inputs is not None and not ignoreCache:
             injectable_inputs_dict = {
-                injectable_input.name: injectable_input
+                MaterializedInput.linear_key_2_path_tokens(
+                    injectable_input.name
+                ): injectable_input
                 for injectable_input in injectable_inputs
             }
         else:
@@ -2628,7 +2630,9 @@ class WF:
         return return_input_uri if some_formatted else input_uri
 
     def formatParams(
-        self, params: "Optional[ParamsBlock]", prefix: "str" = ""
+        self,
+        params: "Optional[ParamsBlock]",
+        prefix_tokens: "Tuple[str, ...]" = tuple(),
     ) -> "Tuple[Optional[ParamsBlock] , Optional[Sequence[Sch_Output]]]":
         if params is None:
             return None, None
@@ -2638,7 +2642,8 @@ class WF:
         some_formatted = False
         for key, raw_inputs in params.items():
             # We are here for the
-            linearKey = prefix + key
+            path_tokens = (*prefix_tokens, key)
+            linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
             if isinstance(raw_inputs, dict):
                 inputs = cast("Sch_Param", raw_inputs)
                 inputClass = inputs.get("c-l-a-s-s")
@@ -2843,7 +2848,7 @@ class WF:
                         formatted_inputs_nested,
                         child_outputs_to_inject,
                     ) = self.formatParams(
-                        cast("ParamsBlock", inputs), prefix=linearKey + "."
+                        cast("ParamsBlock", inputs), prefix_tokens=path_tokens
                     )
                     if inputs != formatted_inputs_nested:
                         some_formatted = True
@@ -2880,7 +2885,7 @@ class WF:
     def _fetchContentWithURIs(
         self,
         inputs: "ParamsBlock",
-        linearKey: "SymbolicParamName",
+        path_tokens: "Tuple[str, ...]",
         workflowInputs_destdir: "pathlib.Path",
         workflowExtrapolatedInputs_destdir: "pathlib.Path",
         lastInput: "int" = 0,
@@ -2896,7 +2901,7 @@ class WF:
         encoding_format = ContentWithURIsMIMEs.get(config_key)
         if not isinstance(tabconf, dict) or not isinstance(encoding_format, str):
             raise WFException(
-                f"Content with uris {linearKey} must have a declaration of these types: {', '.join(ContentWithURIsMIMEs.keys())}"
+                f"Content with uris {path_tokens} must have a declaration of these types: {', '.join(ContentWithURIsMIMEs.keys())}"
             )
 
         t_newline: "str" = (
@@ -2909,7 +2914,6 @@ class WF:
         inputDestDir = pathlib.Path(workflowInputs_destdir)
         extrapolatedInputDestDir = pathlib.Path(workflowExtrapolatedInputs_destdir)
 
-        path_tokens = linearKey.split(".")
         # Filling in the defaults
         assert len(path_tokens) >= 1
         pretty_relname: "Optional[RelPath]" = cast("RelPath", path_tokens[-1])
@@ -3148,7 +3152,7 @@ class WF:
             # as a collection in the generated Workflow Run RO-Crate
             theNewInputs.append(
                 MaterializedInput(
-                    name=linearKey,
+                    name=MaterializedInput.path_tokens_2_linear_key(path_tokens),
                     values=remote_pairs,
                     secondaryInputs=secondary_remote_pairs,
                     contentWithURIs=ContentWithURIsDesc(
@@ -3212,8 +3216,8 @@ class WF:
         params: "Union[ParamsBlock, Sequence[ParamsBlock]]",
         workflowInputs_destdir: "pathlib.Path",
         workflowExtrapolatedInputs_destdir: "pathlib.Path",
-        prefix: "str" = "",
-        injectable_inputs_dict: "Mapping[str, MaterializedInput]" = {},
+        prefix_tokens: "Tuple[str, ...]" = tuple(),
+        injectable_inputs_dict: "Mapping[Tuple[str, ...], MaterializedInput]" = {},
         lastInput: "int" = 0,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
@@ -3225,11 +3229,11 @@ class WF:
         :param params: Optional params for the workflow execution.
         :param workflowInputs_destdir:
         :param workflowExtrapolatedInputs_destdir:
-        :param prefix:
+        :param prefix_tokens:
         :param lastInput:
         :param offline:
         :type params: dict
-        :type prefix: str
+        :type prefix_tokens: Tuple[str, ...]
         """
         assert (
             self.outputsDir is not None
@@ -3244,7 +3248,10 @@ class WF:
         )
         for key, inputs in paramsIter:
             # We are here for the
-            linearKey = cast("SymbolicParamName", prefix + str(key))
+            str_key = str(key)
+            path_tokens = (*prefix_tokens, str_key)
+            # This is needed for complicated cases where the key name contains a dot
+            linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
             if isinstance(inputs, dict):
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
@@ -3256,7 +3263,6 @@ class WF:
                         inputDestDir = pathlib.Path(workflowInputs_destdir)
                         globExplode = None
 
-                        path_tokens = linearKey.split(".")
                         # Filling in the defaults
                         assert len(path_tokens) >= 1
                         pretty_relname: "Optional[RelPath]" = cast(
@@ -3285,6 +3291,7 @@ class WF:
                                         rel_auto_filled = relative_dir
                                     else:
                                         rel_auto_filled = ""
+                                    the_tokens: "Sequence[str]"
                                     if preferred_name is not None:
                                         the_tokens = [preferred_name]
                                     else:
@@ -3330,10 +3337,10 @@ class WF:
                             autoFilledFile = pathlib.Path(
                                 self.outputsDir, rel_auto_filled, *the_tokens
                             )
-                            autoFilledDir = autoFilledFile.parent
+                            autoFilledFileParent = autoFilledFile.parent
                             # This is needed to assure the path exists
-                            if not autoFilledDir.samefile(self.outputsDir):
-                                autoFilledDir.mkdir(parents=True, exist_ok=True)
+                            if not autoFilledFileParent.samefile(self.outputsDir):
+                                autoFilledFileParent.mkdir(parents=True, exist_ok=True)
 
                             theInputs.append(
                                 MaterializedInput(
@@ -3402,7 +3409,7 @@ class WF:
                                 None
                             )
 
-                            injectable_input = injectable_inputs_dict.get(linearKey)
+                            injectable_input = injectable_inputs_dict.get(path_tokens)
                             # TODO: fix the case of null values declared in RO-Crate once
                             # they are properly modelled there (or I learn about)
                             if (
@@ -3539,9 +3546,7 @@ class WF:
                         else:
                             if inputClass == ContentKind.File.name:
                                 # Empty input, i.e. empty file
-                                inputDestPath = inputDestDir.joinpath(
-                                    *linearKey.split(".")
-                                )
+                                inputDestPath = inputDestDir.joinpath(*path_tokens)
                                 inputDestPath.parent.mkdir(parents=True, exist_ok=True)
                                 # Creating the empty file
                                 inputDestPath.touch()
@@ -3578,7 +3583,7 @@ class WF:
                             new_failed_uris,
                         ) = self._fetchContentWithURIs(
                             inputs,
-                            linearKey,
+                            path_tokens,
                             workflowInputs_destdir,
                             workflowExtrapolatedInputs_destdir,
                             lastInput=lastInput,
@@ -3590,10 +3595,7 @@ class WF:
                         the_failed_uris.extend(new_failed_uris)
                     elif inputClass == ContentKind.Value.name:
                         input_val = inputs.get("value")
-                        if input_val is None:
-                            raise WFException(f"Value {linearKey} cannot be null")
-
-                        if not isinstance(input_val, list):
+                        if input_val is not None and not isinstance(input_val, list):
                             input_val = [input_val]
                         theInputs.append(
                             MaterializedInput(
@@ -3614,7 +3616,7 @@ class WF:
                         inputs,
                         workflowInputs_destdir=workflowInputs_destdir,
                         workflowExtrapolatedInputs_destdir=workflowExtrapolatedInputs_destdir,
-                        prefix=linearKey + ".",
+                        prefix_tokens=path_tokens,
                         lastInput=lastInput,
                         injectable_inputs_dict=injectable_inputs_dict,
                         offline=offline,
@@ -3623,7 +3625,7 @@ class WF:
                     theInputs.extend(newInputsAndParams)
                     the_failed_uris.extend(new_failed_uris)
             else:
-                if not isinstance(inputs, list):
+                if inputs is not None and not isinstance(inputs, list):
                     inputs = [inputs]
                 theInputs.append(
                     MaterializedInput(

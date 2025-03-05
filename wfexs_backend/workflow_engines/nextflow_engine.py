@@ -1703,7 +1703,7 @@ STDERR
 
         for matInput in matInputs:
             node = nxpParams
-            splittedPath = matInput.name.split(".")
+            splittedPath = MaterializedInput.linear_key_2_path_tokens(matInput.name)
             for step in splittedPath[:-1]:
                 node = node.setdefault(step, {})
 
@@ -1757,17 +1757,18 @@ STDERR
         self,
         matHash: "Mapping[SymbolicParamName, MaterializedInput]",
         allExecutionParams: "Mapping[str, Any]",
-        prefix: "str" = "",
+        prefix_tokens: "Tuple[str, ...]" = tuple(),
     ) -> "Sequence[MaterializedInput]":
         """
         Generate additional MaterializedInput for the implicit params.
         """
         augmentedInputs = cast("MutableSequence[MaterializedInput]", [])
         for key, val in allExecutionParams.items():
-            linearKey = cast("SymbolicParamName", prefix + key)
+            path_tokens = (*prefix_tokens, key)
+            linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
             if isinstance(val, dict):
                 newAugmentedInputs = self.augmentNextflowInputs(
-                    matHash, val, prefix=linearKey + "."
+                    matHash, val, prefix_tokens=path_tokens
                 )
                 augmentedInputs.extend(newAugmentedInputs)
             else:
@@ -1776,7 +1777,7 @@ STDERR
                     # Time to create a new materialized input
                     theValues = val if isinstance(val, list) else [val]
                     augmentedInput = MaterializedInput(
-                        name=cast("SymbolicParamName", key),
+                        name=linearKey,
                         values=theValues,
                         implicit=True,
                     )
@@ -1784,7 +1785,7 @@ STDERR
                     # Time to update an existing materialized input
                     theValues = val if isinstance(val, list) else [val]
                     augmentedInput = MaterializedInput(
-                        name=augmentedInput.name,
+                        name=linearKey,
                         values=theValues,
                         autoFilled=True,
                         # What it is autofilled is probably
