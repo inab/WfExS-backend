@@ -46,7 +46,6 @@ from ..common import (
     ExecutionStatus,
     GeneratedContent,
     GeneratedDirectoryContent,
-    MaterializedInputValues,
     MaterializedOutput,
 )
 
@@ -85,8 +84,9 @@ if TYPE_CHECKING:
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
-        MaterializedInput,
         MaterializedContent,
+        MaterializedInput,
+        MaterializedInputValues,
         ProgsMapping,
         RelPath,
         StagedSetup,
