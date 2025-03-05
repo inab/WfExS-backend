@@ -25,7 +25,7 @@ pyncclient-ext >= 0.1.2
 wiktionary-term-fetcher >= 0.1.1
 funny-passphrase >= 0.2.3
 pyxdg
-groovy-parser == 0.2.0
+groovy-parser == 0.2.1
 data-url >= 1.1.1
 pgzip
 defusedxml
