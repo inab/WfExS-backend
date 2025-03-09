@@ -31,7 +31,7 @@ repos:
           - python
         exclude: "^[^/]*env/|dev-[^/]*/|docs/"
         entry: pylint
-        args: [-j , "4", --source-roots, .]
+        args: [--source-roots, .]
       - id: mypy
         name: Local MyPy
         language: system
