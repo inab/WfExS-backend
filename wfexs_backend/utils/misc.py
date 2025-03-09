@@ -362,10 +362,14 @@ def get_maximum_file_descriptors() -> "int":
     open file descriptors. If the limit is “infinity”, a default value
     of ``MAXFD`` is returned.
     """
-    (__, hard_limit) = resource.getrlimit(resource.RLIMIT_NOFILE)
+    # These two pylint annotations are needed to avoid a false positive
+    # while running using pypy
+    (__, hard_limit) = resource.getrlimit(
+        resource.RLIMIT_NOFILE  # pylint: disable=no-member
+    )
 
     result = hard_limit
-    if hard_limit == resource.RLIM_INFINITY:
+    if hard_limit == resource.RLIM_INFINITY:  # pylint: disable=no-member
         result = MAXFD
 
     return result
