@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12", "3.13" ]
+        python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "pypy3.10", "pypy3.11" ]
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@v4
@@ -35,7 +35,7 @@ jobs:
 
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
         run: |
-          pip install --upgrade pip wheel setuptools
+          pip install --upgrade pip wheel
           if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
             pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
           else
