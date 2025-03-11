@@ -107,6 +107,7 @@ class FASPFetcher(AbstractStatefulFetcher):
         remote_file: "URIType",
         cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         # Sanitizing possible ill-formed inputs
         if not isinstance(secContext, dict):

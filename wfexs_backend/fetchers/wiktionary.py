@@ -87,6 +87,7 @@ class WiktionaryFetcher(AbstractStatefulFetcher):
         remote_file: "URIType",
         cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         parsedInputURL = urllib.parse.urlparse(remote_file)
 

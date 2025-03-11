@@ -97,6 +97,7 @@ if TYPE_CHECKING:
             URIType,
             PathLikePath,
             DefaultNamedArg(Optional[SecurityContextConfig], "secContext"),
+            DefaultNamedArg(bool, "explicit_redirects"),
         ],
         ProtocolFetcherReturn,
     ]
@@ -106,6 +107,7 @@ if TYPE_CHECKING:
             URIType,
             IO[bytes],
             DefaultNamedArg(Optional[SecurityContextConfig], "secContext"),
+            DefaultNamedArg(bool, "explicit_redirects"),
         ],
         ProtocolFetcherReturn,
     ]
@@ -190,6 +192,7 @@ class AbstractStatefulFetcher(abc.ABC):
         remote_file: "URIType",
         cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         """
         This is the method to be implemented by the stateful fetcher
@@ -408,9 +411,16 @@ class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
         remote_file: "URIType",
         cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
+        # explicit_redirects might be ignored
         with open(cachedFilename, mode="wb") as dS:
-            return self.streamfetch(remote_file, dS, secContext=secContext)
+            return self.streamfetch(
+                remote_file,
+                dS,
+                secContext=secContext,
+                explicit_redirects=explicit_redirects,
+            )
 
     @abc.abstractmethod
     def streamfetch(
@@ -418,6 +428,7 @@ class AbstractStatefulStreamingFetcher(AbstractStatefulFetcher):
         remote_file: "URIType",
         dest_stream: "IO[bytes]",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         """
         This is the method to be implemented by the stateful streaming fetcher

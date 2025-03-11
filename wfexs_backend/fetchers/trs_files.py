@@ -1135,6 +1135,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         remote_file: "URIType",
         cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         """
         Method to download contents from TRS files related to a tool
