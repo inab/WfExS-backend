@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,6 +31,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 import yaml
 
 from typing import (
@@ -1394,15 +1395,23 @@ class NextflowWorkflowEngine(WorkflowEngine):
     ) -> "Optional[ContainerTaggedName]":
         this_container_url = None
         this_container_docker = None
-        url_match = self.C_URL_REGEX.search(container_tag)
-        if url_match:
-            this_container_url = url_match[0]
-            self.logger.debug(f"Found URL container {this_container_url}")
+
+        parsed_container_tag = urllib.parse.urlparse(container_tag)
+        if parsed_container_tag.scheme in ("http", "https", "ftp", "oras", "shub"):
+            this_container_url = container_tag
+            # url_match = self.C_URL_REGEX.search(container_tag)
+            # if url_match:
+            #    this_container_url = url_match[0]
+            self.logger.debug(
+                f"Found URL container {this_container_url} on {container_tag}"
+            )
 
         docker_match = self.C_DOCKER_REGEX.search(container_tag)
         if docker_match is not None and docker_match[0] != "singularity":
             this_container_docker = docker_match[0]
-            self.logger.debug(f"Found Docker container {this_container_docker}")
+            self.logger.debug(
+                f"Found Docker container {this_container_docker} on {container_tag}"
+            )
 
         if this_container_url is not None:
             return ContainerTaggedName(
@@ -1417,7 +1426,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             )
 
         self.logger.error(
-            f"Cannot parse container string {container_tag}\n\n:warning: Skipping this container image.."
+            f"Cannot parse container string {container_tag}\n\n:warning: Skipping this possible container image.."
         )
 
         return None
