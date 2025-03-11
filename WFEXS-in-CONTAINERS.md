@@ -43,6 +43,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -125,6 +126,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -205,6 +207,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -238,6 +241,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
 
    ```bash
    docker run --rm -ti \
+     -u $(id -u):$(id -g) \
      --cap-add SYS_ADMIN  \
      --device /dev/fuse \
      -v ./SING_in_DOCKER_dirs/side_caches:/.cache:ro \
@@ -309,6 +313,7 @@ OCI runtime error: crun: open /proc/sys/net/ipv4/ping_group_range: Read-only fil
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -398,6 +403,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -505,6 +511,7 @@ permission denied while trying to connect to the Docker daemon socket at unix://
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -590,6 +597,7 @@ Otherwise the executions fail.
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
