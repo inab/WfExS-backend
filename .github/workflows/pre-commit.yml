@@ -56,11 +56,6 @@ jobs:
       - name: 'Install development requirements'
         run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
-      - name: pre-commit cache
-        uses: actions/cache@v4
-        with:
-          path: '.cache/pre-commit'
-          key: pre-commit-${{ matrix.python-version }}
       - name: MyPy cache
         uses: actions/cache@v4
         with:
@@ -137,11 +132,6 @@ jobs:
           fi
       - run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
-      - name: pre-commit cache
-        uses: actions/cache@v4
-        with:
-          path: '.cache/pre-commit'
-          key: pre-commit-${{ matrix.python-version }}
       - name: MyPy cache
         uses: actions/cache@v4
         with:
