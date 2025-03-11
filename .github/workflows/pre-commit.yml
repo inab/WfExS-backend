@@ -27,12 +27,6 @@ jobs:
             mypy-requirements.txt
             dev-requirements.txt
           architecture: x64
-      - name: Changed requirements.txt
-        id: changed-requirements-txt
-        uses: tj-actions/changed-files@v44
-        with:
-          files: requirements.txt
-
       - name: 'Install pypy pre-conditions'
         if: matrix.python-version == 'pypy3.10' || matrix.python-version == 'pypy3.11'
         run: |
@@ -40,17 +34,33 @@ jobs:
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
         run: |
           pip install --upgrade pip wheel
-          if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
-            grep -vF git+ constraints-${{ matrix.python-version }}.txt > constraints-${{ matrix.python-version }}.txt-relaxed
-            pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
+          constraints_file="constraints-${{ matrix.python-version }}.txt"
+          regen_constraints=
+          if [ -f "$constraints_file" ] ; then
+            at="$(git --no-pager log -p -1 "--format=tformat:%at" --no-patch -- "$constraints_file")"
+            dat="$(git --no-pager log -p -1 "--format=tformat:%at" --no-patch -- "requirements.txt")"
+            if [ "$at" -lt "$dat" ] ; then
+              regen_constraints=true
+            fi
           else
+            regen_constraints=true
+          fi
+          if [ -n "$regen_constraints" ] ; then
             pip install -r requirements.txt
-            pip freeze > constraints-${{ matrix.python-version }}.txt
-            grep -vF git+ constraints-${{ matrix.python-version }}.txt > constraints-${{ matrix.python-version }}.txt-relaxed
+            pip freeze > "$constraints_file"
+            grep -vF git+ "$constraints_file" > "$constraints_file"-relaxed
+          else
+            grep -vF git+ "$constraints_file" > "$constraints_file"-relaxed
+            pip install -r requirements.txt -c "$constraints_file"-relaxed
           fi
       - name: 'Install development requirements'
         run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
+      - name: pre-commit cache
+        uses: actions/cache@v4
+        with:
+          path: '.cache/pre-commit'
+          key: pre-commit-${{ matrix.python-version }}
       - name: MyPy cache
         uses: actions/cache@v4
         with:
@@ -103,25 +113,35 @@ jobs:
             mypy-requirements.txt
             dev-requirements.txt
           architecture: x64
-      - name: Changed requirements.txt
-        id: changed-requirements-txt
-        uses: tj-actions/changed-files@v44
-        with:
-          files: requirements.txt
-
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
         run: |
-          pip install --upgrade pip wheel setuptools
-          if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
-            grep -vF git+ constraints-${{ matrix.python-version }}.txt > constraints-${{ matrix.python-version }}.txt-relaxed
-            pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
+          pip install --upgrade pip wheel
+          constraints_file="constraints-${{ matrix.python-version }}.txt"
+          regen_constraints=
+          if [ -f "$constraints_file" ] ; then
+            at="$(git --no-pager log -p -1 "--format=tformat:%at" --no-patch -- "$constraints_file")"
+            dat="$(git --no-pager log -p -1 "--format=tformat:%at" --no-patch -- "requirements.txt")"
+            if [ "$at" -lt "$dat" ] ; then
+              regen_constraints=true
+            fi
           else
+            regen_constraints=true
+          fi
+          if [ -n "$regen_constraints" ] ; then
             pip install -r requirements.txt
-            pip freeze > constraints-${{ matrix.python-version }}.txt
-            grep -vF git+ constraints-${{ matrix.python-version }}.txt > constraints-${{ matrix.python-version }}.txt-relaxed
+            pip freeze > "$constraints_file"
+            grep -vF git+ "$constraints_file" > "$constraints_file"-relaxed
+          else
+            grep -vF git+ "$constraints_file" > "$constraints_file"-relaxed
+            pip install -r requirements.txt -c "$constraints_file"-relaxed
           fi
       - run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
+      - name: pre-commit cache
+        uses: actions/cache@v4
+        with:
+          path: '.cache/pre-commit'
+          key: pre-commit-${{ matrix.python-version }}
       - name: MyPy cache
         uses: actions/cache@v4
         with:
