@@ -170,6 +170,11 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
 
 ## Singularity/Apptainer within Docker (works also for encrypted workdirs)
 
+(2025-03-11) Some new releases of docker and apptainer have tightened their security restrictions.
+So, in some execution cases with Nextflow, `--cap-add SYS_ADMIN` might be replaced by
+`--privileged`.
+
+
 1. Build the docker image following the instructions. Let's assume the tag is `inab/wfexs-backend:latest`.
 
 2. First, create and populate a side caches directory:
