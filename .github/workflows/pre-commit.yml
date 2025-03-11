@@ -36,19 +36,19 @@ jobs:
       - name: 'Install pypy pre-conditions'
         if: matrix.python-version == 'pypy3.10' || matrix.python-version == 'pypy3.11'
         run: |
-          sudo apt install -y libxml2-dev libxslt-dev
+          sudo apt install -y libxml2-dev libxslt-dev zlib1g-dev
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
         run: |
           pip install --upgrade pip wheel
           if [ ${{ steps.changed-requirements-txt.outputs.any_changed }} != 'true' ] && [ -f constraints-${{ matrix.python-version }}.txt ] ; then
-            pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
+            grep -vF git+ constraints-${{ matrix.python-version }}.txt > constraints-${{ matrix.python-version }}.txt-relaxed
+            pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
           else
             pip install -r requirements.txt
+            pip freeze > constraints-${{ matrix.python-version }}.txt
           fi
-      - name: 'Freeze Python ${{ matrix.python-version }} constraints'
+      - name: 'Install development requirements'
         run: |
-          pip freeze > constraints-${{ matrix.python-version }}.txt
-      - run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt
       - name: MyPy cache
         uses: actions/cache@v3
@@ -115,10 +115,8 @@ jobs:
             pip install -r requirements.txt -c constraints-${{ matrix.python-version }}.txt
           else
             pip install -r requirements.txt
+            pip freeze > constraints-${{ matrix.python-version }}.txt
           fi
-      - name: 'Freeze Python ${{ matrix.python-version }} constraints'
-        run: |
-          pip freeze > constraints-${{ matrix.python-version }}.txt
       - run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt
       - name: MyPy cache

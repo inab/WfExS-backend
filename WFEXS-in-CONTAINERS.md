@@ -43,6 +43,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -125,6 +126,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -166,7 +168,13 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
        staged-workdir offline-exec 'my funny jobname'
    ```
 
-## Singularity within Docker (works also for encrypted workdirs)
+## Singularity/Apptainer within Docker (works also for encrypted workdirs)
+
+(2025-03-11) Some new releases of docker and apptainer have tightened their security restrictions.
+Although `--security-opt seccomp=unconfined` and `--security-opt systempaths=unconfined` are
+currently used for workflow execution cases with Nextflow workflows, `--cap-add SYS_ADMIN` can
+be used with cwltool workflows. The worst case scenario requires using `--privileged` flag.
+
 
 1. Build the docker image following the instructions. Let's assume the tag is `inab/wfexs-backend:latest`.
 
@@ -205,6 +213,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -238,7 +247,9 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
 
    ```bash
    docker run --rm -ti \
-     --cap-add SYS_ADMIN  \
+     -u $(id -u):$(id -g) \
+     --security-opt seccomp=unconfined \
+     --security-opt systempaths=unconfined  \
      --device /dev/fuse \
      -v ./SING_in_DOCKER_dirs/side_caches:/.cache:ro \
      -v ./SING_in_DOCKER_dirs/:/WfExS-instance-dirs/:rw \
@@ -309,6 +320,7 @@ OCI runtime error: crun: open /proc/sys/net/ipv4/ping_group_range: Read-only fil
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -398,6 +410,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -505,6 +518,7 @@ permission denied while trying to connect to the Docker daemon socket at unix://
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
@@ -590,6 +604,7 @@ Otherwise the executions fail.
      engineMode: local
      gitCommand: git
      javaCommand: java
+     pythonCommand: /usr/bin/python3
      singularityCommand: singularity
      staticBashCommand: bash-linux-x86_64
    workDir: wfexs-backend-container-WORKDIR
