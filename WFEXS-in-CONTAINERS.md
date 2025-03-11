@@ -166,7 +166,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
        staged-workdir offline-exec 'my funny jobname'
    ```
 
-## Singularity within Docker (works also for encrypted workdirs)
+## Singularity/Apptainer within Docker (works also for encrypted workdirs)
 
 1. Build the docker image following the instructions. Let's assume the tag is `inab/wfexs-backend:latest`.
 
