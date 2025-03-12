@@ -164,6 +164,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN = cast("EngineVersion", "20.01.0")
     DEFAULT_NEXTFLOW_VERSION_20_04 = cast("EngineVersion", "20.04.1")
     NEXTFLOW_VERSION_DSL2_ONLY = cast("EngineVersion", "22.11.0")
+    NEXTFLOW_VERSION_DIST_INSTEAD_ALL = cast("EngineVersion", "24.07.0")
     DEFAULT_NEXTFLOW_DOCKER_IMAGE = "nextflow/nextflow"
 
     DEFAULT_NEXTFLOW_ENTRYPOINT = "main.nf"
@@ -878,11 +879,13 @@ class NextflowWorkflowEngine(WorkflowEngine):
         cachedScript = nextflow_install_dir / "nextflow"
         if not cachedScript.exists():
             nextflow_install_dir.mkdir(parents=True, exist_ok=True)
+            if nextflow_version >= self.NEXTFLOW_VERSION_DIST_INSTEAD_ALL:
+                urlpattern = "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow-{0}-dist"
+            else:
+                urlpattern = "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow-{0}-all"
             nextflow_script_url = cast(
                 "URIType",
-                "https://github.com/nextflow-io/nextflow/releases/download/v{0}/nextflow-{0}-all".format(
-                    nextflow_version
-                ),
+                urlpattern.format(nextflow_version),
             )
             self.logger.info(
                 "Downloading Nextflow {}: {} => {}".format(
