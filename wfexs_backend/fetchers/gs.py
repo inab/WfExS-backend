@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -57,6 +57,7 @@ def downloadContentFrom_gs(
     remote_file: "URIType",
     cachedFilename: "PathLikePath",
     secContext: "Optional[SecurityContextConfig]" = None,
+    explicit_redirects: "bool" = False,
 ) -> "ProtocolFetcherReturn":
     """
     Method to download contents from Google Storage.

@@ -1,0 +1,42 @@
+workflow_id: git+https://github.com/nf-core/scrnaseq.git@4.0.0
+workflow_config:
+  secure: false
+  containerType: docker
+  nextflow:
+    profile:
+      - docker
+      - test
+    maxProcesses: 16
+    maxTaskDuration: "24h"
+placeholders:
+  test_datasets: "https://raw.githubusercontent.com/nf-core/test-datasets/modules/data/"
+  igenomes_base: "s3://ngi-igenomes/igenomes/"
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  input:
+    c-l-a-s-s: ContentWithURIs
+    preferred-name: fastqs.csv
+    url: "https://github.com/nf-core/test-datasets/raw/scrnaseq/samplesheet-2-0.csv"
+    tabular:
+      uri-columns:
+        - 1
+        - 2
+      column-sep: ","
+      header-rows: 1
+  fasta:
+    c-l-a-s-s: File
+    url: "https://github.com/nf-core/test-datasets/raw/scrnaseq/reference/GRCm38.p6.genome.chr19.fa"
+  gtf:
+    c-l-a-s-s: File
+    url: "https://github.com/nf-core/test-datasets/raw/scrnaseq/reference/gencode.vM19.annotation.chr19.gtf"
+  protocol: "10XV2"
+
+  # These are only for the test profile
+  skip_cellbender: true
+  validationSchemaIgnoreParams: genomes
+
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false

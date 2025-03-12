@@ -682,6 +682,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         remote_file: "URIType",
         cachedFilename: "PathLikePath",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         parsedInputURL = parse.urlparse(remote_file)
 

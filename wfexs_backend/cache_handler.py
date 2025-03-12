@@ -1020,6 +1020,7 @@ class CacheHandler:
                                 secContext=usableSecContext
                                 if usableSecContext
                                 else None,
+                                explicit_redirects=True,
                             )
                             inputKind = pfr.kind_or_resolved
                             if (

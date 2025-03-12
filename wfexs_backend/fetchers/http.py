@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ from __future__ import absolute_import
 import http.client
 import os
 import shutil
+import string
 
 from typing import (
     cast,
@@ -63,8 +64,9 @@ if TYPE_CHECKING:
         URIType,
     )
 
-from urllib import request, parse
 import urllib.error
+import urllib.parse
+import urllib.request
 
 from . import (
     AbstractStatefulFetcher,
@@ -81,6 +83,7 @@ from ..common import (
 )
 
 from ..utils.misc import (
+    build_http_opener,
     get_opener_with_auth,
 )
 
@@ -119,6 +122,7 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
         remote_file: "URIType",
         dest_stream: "IO[bytes]",
         secContext: "Optional[SecurityContextConfig]" = None,
+        explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         """
         Method to fetch contents from http and https.
@@ -157,8 +161,8 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
 
         # Callable[[Union[str, Request], Union[bytes, SupportsRead[bytes], Iterable[bytes], None], Optional[float]], Any]
         # Callable[[Union[str, Request], Optional[Union[bytes, SupportsRead[bytes], Iterable[bytes], None]], Optional[float], DefaultNamedArg(Optional[str], 'cafile'), DefaultNamedArg(Optional[str], 'capath'), DefaultNamedArg(bool, 'cadefault'), DefaultNamedArg(Optional[SSLContext], 'context')], Any]
-        opener: "Union[Callable[[Union[str, request.Request], Union[bytes, SupportsRead[bytes], Iterable[bytes], None], Optional[float]], Any], Callable[[Union[str, request.Request], Optional[Union[bytes, SupportsRead[bytes], Iterable[bytes]]], Optional[float], DefaultNamedArg(Optional[str], 'cafile'), DefaultNamedArg(Optional[str], 'capath'), DefaultNamedArg(bool, 'cadefault'), DefaultNamedArg(Optional[SSLContext], 'context')], Any]]"
-        opener = request.urlopen
+        opener: "Union[Callable[[Union[str, urllib.request.Request], Union[bytes, SupportsRead[bytes], Iterable[bytes], None], Optional[float]], Any], Callable[[Union[str, urllib.request.Request], Optional[Union[bytes, SupportsRead[bytes], Iterable[bytes]]], Optional[float], DefaultNamedArg(Optional[str], 'cafile'), DefaultNamedArg(Optional[str], 'capath'), DefaultNamedArg(bool, 'cadefault'), DefaultNamedArg(Optional[SSLContext], 'context')], Any]]"
+        opener = build_http_opener(implicit_redirect=not explicit_redirects).open
         if token is not None:
             if token_header is not None:
                 headers[token_header] = token
@@ -168,25 +172,30 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
             if password is None:
                 password = ""
 
-            opener = get_opener_with_auth(remote_file, username, password).open
+            opener = get_opener_with_auth(
+                remote_file,
+                username,
+                password,
+                implicit_redirect=not explicit_redirects,
+            ).open
 
             # # Time to set up user and password in URL
-            # parsedInputURL = parse.urlparse(remote_file)
+            # parsedInputURL = urllib.parse.urlparse(remote_file)
             #
-            # netloc = parse.quote(username, safe='') + ':' + parse.quote(password,
+            # netloc = urllib.parse.quote(username, safe='') + ':' + urllib.parse.quote(password,
             #                                                             safe='') + '@' + parsedInputURL.hostname
             # if parsedInputURL.port is not None:
             #     netloc += ':' + str(parsedInputURL.port)
             #
             # # Now the credentials are properly set up
-            # remote_file = cast("URIType", parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
+            # remote_file = cast("URIType", urllib.parse.urlunparse((parsedInputURL.scheme, netloc, parsedInputURL.path,
             #                                 parsedInputURL.params, parsedInputURL.query, parsedInputURL.fragment)))
 
         uri_with_metadata = None
+        req_remote = urllib.request.Request(
+            remote_file, headers=headers, data=data, method=method
+        )
         try:
-            req_remote = request.Request(
-                remote_file, headers=headers, data=data, method=method
-            )
             with opener(req_remote) as url_response:
                 uri_with_metadata = URIWithMetadata(
                     uri=url_response.url, metadata=dict(url_response.headers.items())
@@ -203,9 +212,57 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
                     break
 
         except urllib.error.HTTPError as he:
+            if he.code > 300 or he.code < 400:
+                # This code is inspired on the implementation
+                # of urllib.request.HTTPRedirectHandler.http_error_302
+                redirect_url: "Optional[str]" = None
+                if "Location" in he.headers:
+                    redirect_url = he.headers["Location"]
+                elif "URI" in he.headers:
+                    redirect_url = he.headers["URI"]
+
+                if redirect_url is not None:
+                    # fix a possible malformed URL
+                    urlparts = urllib.parse.urlparse(redirect_url)
+
+                    # For security reasons we don't allow redirection to anything other
+                    # than http, https or ftp.
+
+                    if urlparts.scheme not in ("http", "https", "ftp", ""):
+                        raise FetcherException(
+                            f"Redirection from '{he.filename}' to url '{redirect_url}' is not allowed",
+                        ) from he
+
+                    if not urlparts.path and urlparts.netloc:
+                        urlparts = urlparts._replace(path="/")
+                    redirect_url = urllib.parse.urlunparse(urlparts)
+
+                    # http.client.parse_headers() decodes as ISO-8859-1.  Recover the
+                    # original bytes and percent-encode non-ASCII bytes, and any special
+                    # characters such as the space.
+                    redirect_url = urllib.parse.quote(
+                        redirect_url,
+                        encoding="iso-8859-1",
+                        safe=string.punctuation,
+                    )
+                    redirect_url = urllib.parse.urljoin(
+                        req_remote.full_url, redirect_url
+                    )
+
+                    uri_with_metadata = URIWithMetadata(
+                        uri=he.filename, metadata=dict(he.headers.items())
+                    )
+                    return ProtocolFetcherReturn(
+                        kind_or_resolved=cast("URIType", redirect_url),
+                        metadata_array=[uri_with_metadata],
+                    )
             raise FetcherException(
-                "Error fetching {} : {} {}\n{}".format(
-                    orig_remote_file, he.code, he.reason, he.read().decode()
+                "Error fetching {} ({}): {} {}\n{}".format(
+                    orig_remote_file,
+                    he.filename,
+                    he.code,
+                    he.reason,
+                    he.read().decode(),
                 ),
                 code=he.code,
                 reason=he.reason,
