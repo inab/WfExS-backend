@@ -163,6 +163,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     DEFAULT_NEXTFLOW_VERSION = cast("EngineVersion", "19.04.1")
     DEFAULT_NEXTFLOW_VERSION_WITH_PODMAN = cast("EngineVersion", "20.01.0")
     DEFAULT_NEXTFLOW_VERSION_20_04 = cast("EngineVersion", "20.04.1")
+    NEXTFLOW_VERSION_DSL2_ONLY = cast("EngineVersion", "22.11.0")
     DEFAULT_NEXTFLOW_DOCKER_IMAGE = "nextflow/nextflow"
 
     DEFAULT_NEXTFLOW_ENTRYPOINT = "main.nf"
@@ -899,7 +900,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         instEnv = dict(os.environ if runEnv is None else runEnv)
         instEnv["NXF_HOME"] = NXF_HOME.as_posix()
         # Needed for newer nextflow versions, so older workflows do not misbehave
-        instEnv["NXF_DEFAULT_DSL"] = "1"
+        if nextflow_version < self.NEXTFLOW_VERSION_DSL2_ONLY:
+            instEnv["NXF_DEFAULT_DSL"] = "1"
         instEnv["JAVA_CMD"] = self.java_cmd
         if self.unset_java_home:
             instEnv.pop("NXF_JAVA_HOME", None)
