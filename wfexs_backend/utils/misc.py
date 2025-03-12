@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ from __future__ import absolute_import
 
 import datetime
 import fnmatch
+import http.client
 import importlib.util
 import json
 import os
@@ -42,11 +43,13 @@ if TYPE_CHECKING:
         Iterator,
         Mapping,
         MutableMapping,
+        MutableSequence,
         Optional,
         Pattern,
         Sequence,
         TextIO,
         Tuple,
+        Type,
         Union,
     )
 
@@ -289,8 +292,63 @@ def iter_namespace(ns_pkg: "ModuleType") -> "Iterator[pkgutil.ModuleInfo]":
     return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
 
 
+def build_http_opener(
+    *handlers: "Union[urllib.request.BaseHandler, Type[urllib.request.BaseHandler]]",
+    implicit_redirect: "bool" = True,
+) -> "urllib.request.OpenerDirector":
+    """Create an opener object from a list of handlers.
+
+    The opener will use several default handlers only related to HTTP,
+    and when applicable HTTPS.
+
+    If any of the handlers passed as arguments are subclasses of the
+    default handlers, the default handlers will not be used.
+    """
+    opener = urllib.request.OpenerDirector()
+    default_classes: "MutableSequence[Type[urllib.request.BaseHandler]]" = [
+        urllib.request.ProxyHandler,
+        urllib.request.UnknownHandler,
+        urllib.request.HTTPHandler,
+    ]
+
+    if implicit_redirect:
+        default_classes.append(urllib.request.HTTPRedirectHandler)
+
+    default_classes.extend(
+        [
+            urllib.request.HTTPDefaultErrorHandler,
+            urllib.request.HTTPErrorProcessor,
+        ]
+    )
+    if hasattr(http.client, "HTTPSConnection"):
+        default_classes.append(urllib.request.HTTPSHandler)
+
+    skip = set()
+    for klass in default_classes:
+        for check in handlers:
+            if isinstance(check, type):
+                if issubclass(check, klass):
+                    skip.add(klass)
+            elif isinstance(check, klass):
+                skip.add(klass)
+    for klass in skip:
+        default_classes.remove(klass)
+
+    for klass in default_classes:
+        opener.add_handler(klass())
+
+    for h in handlers:
+        if isinstance(h, type):
+            h = h()
+        opener.add_handler(h)
+    return opener
+
+
 def get_opener_with_auth(
-    top_level_url: "str", username: "str", password: "str"
+    top_level_url: "str",
+    username: "str",
+    password: "str",
+    implicit_redirect: "bool" = True,
 ) -> "urllib.request.OpenerDirector":
     """
     Taken from https://stackoverflow.com/a/44239906
@@ -308,7 +366,7 @@ def get_opener_with_auth(
     handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
 
     # create "opener" (OpenerDirector instance)
-    return urllib.request.build_opener(handler)
+    return build_http_opener(handler, implicit_redirect=implicit_redirect)
 
 
 def lazy_import(name: "str") -> "ModuleType":
