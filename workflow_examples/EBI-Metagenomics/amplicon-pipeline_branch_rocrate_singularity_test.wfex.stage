@@ -1,0 +1,213 @@
+workflow_id: git+https://github.com/EBI-Metagenomics/amplicon-pipeline.git@085a6c2bff73a2062eeeb98072e8693aa733ee65
+workflow_config:
+  secure: false
+  containerType: singularity
+  nextflow:
+    version: "24.10.5"
+    profile:
+      - local
+    maxProcesses: 16
+    maxTaskDuration: "24h"
+placeholders:
+  test_datasets: "https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon"
+  igenomes_base: "s3://ngi-igenomes/igenomes"
+  genome: "R64-1-1"
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  input:
+    c-l-a-s-s: ContentWithURIs
+    preferred-name: samplesheet_test_illumina_amplicon.csv
+    value: |
+      sample,fastq_1,fastq_2,single_end
+      SAMPLE1_PE,https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon/illumina/amplicon/sample1_R1.fastq.gz,https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon/illumina/amplicon/sample1_R2.fastq.gz,false
+      SAMPLE2_PE,https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon/illumina/amplicon/sample2_R1.fastq.gz,https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon/illumina/amplicon/sample2_R2.fastq.gz,false
+      SAMPLE3_SE,https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon/illumina/amplicon/sample1_R1.fastq.gz,,true
+      SAMPLE3_SE,https://raw.githubusercontent.com/nf-core/test-datasets/viralrecon/illumina/amplicon/sample2_R1.fastq.gz,,true
+    tabular:
+      uri-columns:
+        - 1
+        - 2
+      column-sep: ","
+      header-rows: 1
+
+  ssu_db_fasta:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-ssu/silva-ssu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-SSU.fasta
+  ssu_db_tax:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-ssu/silva-ssu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-SSU-tax.txt
+  ssu_db_otu:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-ssu/silva-ssu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-SSU.otu
+  ssu_db_mscluster:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-ssu/silva-ssu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-SSU.fasta.mscluster
+
+  lsu_db_fasta:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-lsu/silva-lsu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-LSU.fasta
+  lsu_db_tax:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-lsu/silva-lsu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-LSU-tax.txt
+  lsu_db_otu:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-lsu/silva-lsu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-LSU.otu
+  lsu_db_mscluster:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/silva-lsu/silva-lsu_138.1.tar.gz"
+      member:
+        - name: ./SILVA-LSU.fasta.mscluster
+
+  unite_db_fasta:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/unite/unite_9.0.tar.gz"
+      member:
+        - name: ./UNITE.fasta
+  unite_db_tax:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/unite/unite_9.0.tar.gz"
+      member:
+        - name: ./UNITE-tax.txt
+  unite_db_otu:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/unite/unite_9.0.tar.gz"
+      member:
+        - name: ./UNITE.otu
+  unite_db_mscluster:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/unite/unite_9.0.tar.gz"
+      member:
+        - name: ./UNITE.fasta.mscluster
+
+  itsone_db_fasta:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/itsonedb/itsonedb_1.141.tar.gz"
+      member:
+        - name: ./ITSone.fasta
+  itsone_db_tax:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/itsonedb/itsonedb_1.141.tar.gz"
+      member:
+        - name: ./ITSone-tax.txt
+  itsone_db_otu:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/itsonedb/itsonedb_1.141.tar.gz"
+      member:
+        - name: ./ITSone.otu
+  itsone_db_mscluster:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/itsonedb/itsonedb_1.141.tar.gz"
+      member:
+        - name: ./ITSone.fasta.mscluster
+
+  pr2_db_fasta:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/pr2/pr2_5.0.0.tar.gz"
+      member:
+        - name: ./PR2.fasta
+  pr2_db_tax:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/pr2/pr2_5.0.0.tar.gz"
+      member:
+        - name: ./PR2-tax.txt
+  pr2_db_otu:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/pr2/pr2_5.0.0.tar.gz"
+      member:
+        - name: ./PR2.otu
+  pr2_db_mscluster:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/pr2/pr2_5.0.0.tar.gz"
+      member:
+        - name: ./PR2.fasta.mscluster
+
+  rrnas_rfam_covariance_model:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/rfam/rfam_14.10.tar.gz"
+      member:
+        - name: ./ribo.cm
+  rrnas_rfam_claninfo:
+    c-l-a-s-s: File
+    url:
+      uri: "https://ftp.ebi.ac.uk/pub/databases/metagenomics/pipelines/tool-dbs/rfam/rfam_14.10.tar.gz"
+      member:
+        - name: ./ribo.clan_info
+
+  std_primer_library:
+    c-l-a-s-s: Directory
+    url:
+      uri: git+https://github.com/EBI-Metagenomics/amplicon-pipeline.git@085a6c2bff73a2062eeeb98072e8693aa733ee65
+      member:
+        - name: data/standard_primers
+
+  genome: "{genome}"
+  igenomes_base: "{igenomes_base}"
+  genomes:
+    R64-1-1:
+      fasta:
+        c-l-a-s-s: File
+        url: "{igenomes_base}/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Sequence/WholeGenomeFasta/genome.fa"
+      bwa:
+        c-l-a-s-s: File
+        url: "{igenomes_base}/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Sequence/BWAIndex/version0.6.0/"
+      bowtie2:
+        c-l-a-s-s: Directory
+        url: "{igenomes_base}/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Sequence/Bowtie2Index/"
+      star:
+        c-l-a-s-s: Directory
+        url: "{igenomes_base}/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Sequence/STARIndex/"
+      bismark:
+        c-l-a-s-s: Directory
+        url: "{igenomes_base}/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Sequence/BismarkIndex/"
+      gtf:
+        c-l-a-s-s: File
+        url: "{igenomes_base}/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Annotation/Genes/genes.gtf"
+      bed12:
+        c-l-a-s-s: File
+        url: "{igenomes_base}/Saccharomyces_cerevisiae/Ensembl/R64-1-1/Annotation/Genes/genes.bed"
+    
+
+  # These are only for the test profile
+  skip_cellbender: true
+  validationSchemaIgnoreParams: genomes
+
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false
