@@ -165,6 +165,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
     DEFAULT_NEXTFLOW_VERSION_20_04 = cast("EngineVersion", "20.04.1")
     NEXTFLOW_VERSION_DSL2_ONLY = cast("EngineVersion", "22.11.0")
     NEXTFLOW_VERSION_DIST_INSTEAD_ALL = cast("EngineVersion", "24.07.0")
+    NEXTFLOW_VERSION_INSPECT = cast("EngineVersion", "23.09.0")
     DEFAULT_NEXTFLOW_DOCKER_IMAGE = "nextflow/nextflow"
 
     DEFAULT_NEXTFLOW_ENTRYPOINT = "main.nf"
@@ -1451,15 +1452,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
         as well as the list of containers
         """
 
-        self.inspectWorkflow(
-            matWorkflowEngine,
-            consolidatedWorkflowDir=consolidatedWorkflowDir,
-            offline=offline,
-            profiles=profiles,
-            context_inputs=context_inputs,
-            context_environment=context_environment,
-        )
-
         # Default nextflow profile is 'standard'
         # parse
         # nextflow config -flat
@@ -1510,17 +1502,36 @@ STDERR
             except:
                 self.logger.debug(f"Failed to assign registry {regMatch[1]}")
 
-        for contMatch in self.ContConfigPat.finditer(flat_stdout):
-            # Discarding local path cases
-            if contMatch[1][0] != "/" and contMatch[1] not in containerTagSet:
-                containerTagSet.add(contMatch[1])
-                tagged_container = self._genDockSingContainerTaggedName(
-                    contMatch[1], container_registries
-                )
+        perform_tag_parsing = True
+        if matWorkflowEngine.version >= self.NEXTFLOW_VERSION_INSPECT:
+            perform_tag_parsing = False
+
+            tag_mapping = self.inspectWorkflow(
+                matWorkflowEngine,
+                consolidatedWorkflowDir=consolidatedWorkflowDir,
+                registries=container_registries,
+                offline=offline,
+                profiles=profiles,
+                context_inputs=context_inputs,
+                context_environment=context_environment,
+            )
+            for tagged_container in tag_mapping.values():
                 if (tagged_container is not None) and (
                     tagged_container not in containerTags
                 ):
                     containerTags.append(tagged_container)
+        else:
+            for contMatch in self.ContConfigPat.finditer(flat_stdout):
+                # Discarding local path cases
+                if contMatch[1][0] != "/" and contMatch[1] not in containerTagSet:
+                    containerTagSet.add(contMatch[1])
+                    tagged_container = self._genDockSingContainerTaggedName(
+                        contMatch[1], container_registries
+                    )
+                    if (tagged_container is not None) and (
+                        tagged_container not in containerTags
+                    ):
+                        containerTags.append(tagged_container)
 
         # Early DSL2 detection
         dslVer: "Optional[str]" = None
@@ -1581,16 +1592,17 @@ STDERR
 
                 for processDecl in processes:
                     # Docker and Singularity
-                    for container_tag in processDecl.containers:
-                        if container_tag not in containerTagSet:
-                            containerTagSet.add(container_tag)
-                            tagged_container = self._genDockSingContainerTaggedName(
-                                container_tag, container_registries
-                            )
-                            if (tagged_container is not None) and (
-                                tagged_container not in containerTags
-                            ):
-                                containerTags.append(tagged_container)
+                    if perform_tag_parsing:
+                        for container_tag in processDecl.containers:
+                            if container_tag not in containerTagSet:
+                                containerTagSet.add(container_tag)
+                                tagged_container = self._genDockSingContainerTaggedName(
+                                    container_tag, container_registries
+                                )
+                                if (tagged_container is not None) and (
+                                    tagged_container not in containerTags
+                                ):
+                                    containerTags.append(tagged_container)
                     # Conda
                     for conda_tag in processDecl.condas:
                         if conda_tag not in containerTagSet:
@@ -2224,11 +2236,12 @@ wfexs_allParams()
         self,
         matWorkflowEngine: "MaterializedWorkflowEngine",
         consolidatedWorkflowDir: "pathlib.Path",
+        registries: "Mapping[ContainerType, str]",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
         context_inputs: "Sequence[MaterializedInput]" = [],
         context_environment: "Sequence[MaterializedInput]" = [],
-    ) -> "Sequence[ContainerTaggedName]":
+    ) -> "Mapping[str, Optional[ContainerTaggedName]]":
         # TODO: implement usage of materialized environment variables
         if len(context_inputs) == 0:  # Is list of materialized inputs empty?
             self.logger.warning("Inspection with no inputs")
@@ -2464,6 +2477,35 @@ wfexs_allParams()
         self.logger.debug(inspect_stdout)
         self.logger.debug(inspect_stderr)
 
+        if inspect_retval != 0 or inspect_stdout is None:
+            errstr = f"""Nextflow inspect failed (fingerprint {matWorkflowEngine.fingerprint}) . Retval {inspect_retval}
+======
+STDOUT
+======
+{inspect_stdout}
+
+======
+STDERR
+======
+{inspect_stderr}"""
+            raise WorkflowEngineException(errstr)
+
+        proc_cont_mapping: "MutableMapping[str, Optional[ContainerTaggedName]]" = dict()
+
+        try:
+            inspect_result = json.loads(inspect_stdout)
+            for process_decl in inspect_result.get("processes", []):
+                proc_cont_mapping[
+                    process_decl["name"]
+                ] = self._genDockSingContainerTaggedName(
+                    process_decl["container"], registries
+                )
+
+        except json.JSONDecodeError as jde:
+            raise WorkflowEngineException(
+                f"Unable to properly parse Nextflow inspect output:\n{inspect_stdout}"
+            ) from jde
+
         # Creating the augmented inputs
         if os.path.isfile(allParamsFile):
             context_inputs_hash = {}
@@ -2485,4 +2527,4 @@ wfexs_allParams()
 
         # TODO: return the list of containers
         # and maybe the discovered implicit inputs
-        return []
+        return proc_cont_mapping
