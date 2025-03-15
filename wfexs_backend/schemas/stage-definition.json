@@ -40,8 +40,8 @@
 								"type": "string",
 								"minLength": 1
 							},
-							"as": {
-								"description": "The local name to use, instead of the derived one from the name. If a glob pattern is used and more than one element matches, it is the name of the directory where all the matches are stored",
+							"place_at": {
+								"description": "The relative directory where to deposit matched contents, instead of the derived one from the URI.",
 								"type": "string",
 								"minLength": 1
 							}
@@ -280,7 +280,7 @@
 					"default": true
 				},
 				"globExplode": {
-					"description": "When this is set, and the class is directory, it helps filtering in what it should be included",
+					"description": "When this is set, and the class is directory, it helps filtering in what it should be included. With the inclusion of `member` at the LicensedURI level, this can be discontinued",
 					"type": "string"
 				},
 				"autoFill": {

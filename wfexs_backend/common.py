@@ -291,6 +291,11 @@ CC_BY_40_LicenceDescription: "Final[LicenceDescription]" = LicenceDescription(
 )
 
 
+class MemberPattern(NamedTuple):
+    glob: "str"
+    place_at: "Optional[RelPath]"
+
+
 class LicensedURI(NamedTuple):
     """
     uri: The uri
@@ -308,6 +313,7 @@ class LicensedURI(NamedTuple):
     licences: "Tuple[Union[URIType, LicenceDescription], ...]" = DefaultNoLicenceTuple
     attributions: "Sequence[Attribution]" = []
     secContext: "Optional[SecurityContextConfig]" = None
+    members: "Sequence[MemberPattern]" = []
 
 
 if TYPE_CHECKING:
