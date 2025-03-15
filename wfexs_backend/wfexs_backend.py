@@ -2672,6 +2672,7 @@ class WfExSBackend:
                 if keep_cache_licence
                 else firstURI.licences,
                 attributions=firstURI.attributions,
+                members=firstURI.members,
             )
             # The preferred name is obtained from the metadata
             for m in cached_content.metadata_array:
@@ -2691,7 +2692,13 @@ class WfExSBackend:
 
         if prettyFilename is None:
             # Default pretty filename in the worst case
-            prettyFilename = cast("RelPath", firstParsedURI.path.split("/")[-1])
+            splitted_path = firstParsedURI.path.split("/")
+            splitted_path.reverse()
+            prettyFilename = cast("RelPath", "")
+            for elem in splitted_path:
+                if len(elem) > 0:
+                    prettyFilename = cast("RelPath", elem)
+                    break
 
         return MaterializedContent(
             local=pathlib.Path(cached_content.path),
