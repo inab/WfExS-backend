@@ -1970,7 +1970,7 @@ you can find here an almost complete list of the possible ones:
     def _add_directory_as_dataset(
         self,
         the_path: "pathlib.Path",
-        the_uri: "URIType",
+        the_uri: "Optional[URIType]",
         the_id: "Optional[str]" = None,
         the_name: "Optional[RelPath]" = None,
         the_alternate_name: "Optional[RelPath]" = None,
@@ -2007,13 +2007,17 @@ you can find here an almost complete list of the possible ones:
             # properties=file_properties,
         )
         if the_uri is not None:
-            if the_uri.startswith("http") or the_uri.startswith("ftp"):
+            the_uri_parsed = urllib.parse.urlparse(the_uri)
+
+            if the_uri_parsed.scheme in ("http", "https", "ftp", "file"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
             else:
                 uri_key = "identifier"
 
             crate_dataset[uri_key] = the_uri
+        else:
+            the_uri_parsed = None
         if the_alternate_name is not None:
             crate_dataset["alternateName"] = the_alternate_name
 
@@ -2022,14 +2026,29 @@ you can find here an almost complete list of the possible ones:
             for the_file in the_dir:
                 if the_file.name[0] == ".":
                     continue
-                the_item_uri = cast(
-                    "URIType",
-                    the_uri + "/" + urllib.parse.quote(the_file.name, safe=""),
-                )
+                if the_uri_parsed is not None:
+                    if the_uri_parsed.scheme in ("http", "https", "ftp", "file", "s3"):
+                        new_path = the_uri_parsed.path
+                        if not new_path.endswith("/"):
+                            new_path += "/"
+                        new_path += urllib.parse.quote(the_file.name, safe="")
+                        the_item_uri = urllib.parse.urlunparse(
+                            the_uri_parsed._replace(path=new_path)
+                        )
+                    else:
+                        new_fragment = the_uri_parsed.fragment
+                        if len(new_fragment) > 0:
+                            new_fragment += "/"
+                        new_fragment += urllib.parse.quote(the_file.name, safe="")
+                        the_item_uri = urllib.parse.urlunparse(
+                            the_uri_parsed._replace(fragment=new_fragment)
+                        )
+                else:
+                    the_item_uri = None
                 if the_file.is_file():
                     the_file_crate = self._add_file_to_crate(
                         the_path=pathlib.Path(the_file.path),
-                        the_uri=the_item_uri,
+                        the_uri=cast("Optional[URIType]", the_item_uri),
                         the_name=None
                         if the_name is None
                         else cast("RelPath", the_name + the_file.name),
@@ -2050,7 +2069,7 @@ you can find here an almost complete list of the possible ones:
                         the_subfiles_crates,
                     ) = self._add_directory_as_dataset(
                         the_path=pathlib.Path(the_file.path),
-                        the_uri=the_item_uri,
+                        the_uri=cast("Optional[URIType]", the_item_uri),
                         the_name=None
                         if the_name is None
                         else cast("RelPath", the_name + the_file.name),
@@ -2324,7 +2343,16 @@ you can find here an almost complete list of the possible ones:
                     )
                     self.crate.add(the_entity)
                 else:
-                    rocrate_file_id = rocrate_file_id_base + "/" + rel_file
+                    rel_file_steps = rel_file.split(os.sep)
+                    rocrate_file_id = (
+                        rocrate_file_id_base
+                        + "#"
+                        + "/".join(
+                            map(
+                                lambda s: urllib.parse.quote(s, safe=""), rel_file_steps
+                            )
+                        )
+                    )
                     the_s_name = cast(
                         "RelPath", os.path.join(rocrate_wf_folder, rel_file)
                     )
