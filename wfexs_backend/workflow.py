@@ -1706,6 +1706,7 @@ class WF:
         (
             repo,
             workflow_type,
+            engine_version,
             container_type,
             params,
             profiles,
@@ -1738,6 +1739,11 @@ class WF:
                 "secure": secure,
             },
         }
+        if engine_version is not None:
+            workflow_meta["workflow_config"].setdefault(workflow_type.engineName, {})[
+                "version"
+            ] = engine_version
+
         if profiles is not None:
             workflow_meta["profile"] = profiles
         if container_type is not None:
@@ -2453,13 +2459,14 @@ class WF:
             remote_file = remote_file_f
             # The value of the attributes is superseded
             remote_url = remote_file["uri"]
-            if isinstance(remote_file["member"], list):
+            sch_members = remote_file.get("member")
+            if isinstance(sch_members, list):
                 members = [
                     MemberPattern(
                         glob=member["name"],
                         place_at=cast("Optional[RelPath]", member.get("place_at")),
                     )
-                    for member in remote_file["member"]
+                    for member in sch_members
                 ]
             licences_l = remote_file.get("licences")
             if isinstance(licences_l, list):
@@ -2606,7 +2613,10 @@ class WF:
         eligible = False
         mime_type = ""
         mime_type_uc = ""
-        if len(matContent.licensed_uri.members) > 0:
+        if (
+            matContent.licensed_uri.members is not None
+            and len(matContent.licensed_uri.members) > 0
+        ):
             if matContent.local.is_dir():
                 eligible = True
             elif matContent.local.is_file():

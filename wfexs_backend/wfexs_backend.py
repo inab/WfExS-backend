@@ -2489,7 +2489,7 @@ class WfExSBackend:
         # and the payload of the RO-Crate contains a copy of the workflow
 
         # Some RO-Crates might have this value missing or ill-built
-        repo, workflow_type, _ = self.rocrate_toolbox.extractWorkflowMetadata(
+        repo, workflow_type, _a, _b = self.rocrate_toolbox.extractWorkflowMetadata(
             g,
             matched_crate.mainentity,
             default_repo=str(matched_crate.wfhrepourl),
