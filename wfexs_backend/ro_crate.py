@@ -2012,7 +2012,7 @@ you can find here an almost complete list of the possible ones:
 
         # When the id is none and ...
         if the_id is None:
-            the_id = the_name if do_attach or (the_uri is None) else the_uri
+            the_id = the_name if the_name is not None else the_uri
 
         the_file_crate = self.crate.add_file_ext(
             identifier=the_id,
