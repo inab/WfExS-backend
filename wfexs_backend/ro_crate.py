@@ -1418,6 +1418,81 @@ you can find here an almost complete list of the possible ones:
 
         return added_containers
 
+    def _add_reference_from_MaterializedContent(
+        self, mat_content: "MaterializedContent"
+    ) -> "Optional[FixedMixin]":
+        the_ref_crate: "Optional[FixedMixin]" = None
+        if mat_content.reference_uri is not None:
+            the_uri = mat_content.reference_uri.uri
+
+            the_ref_crate = cast(
+                "Optional[FixedMixin]", self.crate.dereference(the_uri)
+            )
+            if the_ref_crate is None:
+                assert mat_content.reference_kind is not None
+                if mat_content.reference_kind == ContentKind.File:
+                    the_ref_crate = self.crate.add_file_ext(
+                        identifier=the_uri,
+                        source=None,
+                        dest_path=None,
+                        fetch_remote=False,
+                        validate_url=False,
+                        clazz=FixedFile,
+                    )
+                elif mat_content.reference_kind == ContentKind.Directory:
+                    the_ref_crate = self.crate.add_dataset_ext(
+                        identifier=the_uri,
+                        source=None,
+                        dest_path=None,
+                        fetch_remote=False,
+                        validate_url=False,
+                    )
+                else:
+                    # TODO: emit a warning or raise a exception
+                    return None
+
+                if the_uri.startswith("http") or the_uri.startswith("ftp"):
+                    # See https://github.com/ResearchObject/ro-crate/pull/259
+                    uri_key = "contentUrl"
+                else:
+                    uri_key = "identifier"
+
+                the_ref_crate[uri_key] = the_uri
+
+                if mat_content.reference_uri.licences is not None:
+                    for licence in mat_content.reference_uri.licences:
+                        matched_licence: "Optional[LicenceDescription]"
+                        if isinstance(licence, LicenceDescription):
+                            matched_licence = licence
+                        else:
+                            matched_licence = self.licence_matcher.matchLicence(licence)
+
+                        if matched_licence is not None:
+                            the_ref_crate.append_to(
+                                "license",
+                                self._process_licence(matched_licence),
+                                compact=True,
+                            )
+
+                if mat_content.reference_size is not None:
+                    the_ref_crate.append_to(
+                        "contentSize", str(mat_content.reference_size), compact=True
+                    )
+
+                if mat_content.reference_mime is not None:
+                    the_ref_crate.append_to(
+                        "encodingFormat", mat_content.reference_mime, compact=True
+                    )
+
+                if mat_content.reference_fingerprint is not None:
+                    digest, algo = extract_digest(mat_content.reference_fingerprint)
+                    if digest is not None and digest != False:
+                        assert algo is not None
+                        the_signature = hexDigest(algo, digest)
+                        the_ref_crate.append_to("sha256", the_signature, compact=True)
+
+        return the_ref_crate
+
     def addWorkflowInputs(
         self,
         inputs: "Sequence[MaterializedInput]",
@@ -1558,6 +1633,10 @@ you can find here an almost complete list of the possible ones:
                                 if matched_licence is not None:
                                     itemInURILicences.append(matched_licence)
 
+                        ref_mixin = self._add_reference_from_MaterializedContent(
+                            itemInValues
+                        )
+
                         if itemInLocalSource.is_file():
                             the_signature: "Optional[Fingerprint]" = None
                             if itemInValues.fingerprint is not None:
@@ -1582,6 +1661,10 @@ you can find here an almost complete list of the possible ones:
                                 and in_item.disclosable
                                 and itemInValues.clonable,
                             )
+                            if ref_mixin is not None:
+                                crate_file.append_to(
+                                    "isPartOf", ref_mixin, compact=True
+                                )
 
                             # An extrapolated input, which needs special handling
                             if itemInValues.extrapolated_local is not None:
@@ -1669,6 +1752,11 @@ you can find here an almost complete list of the possible ones:
                             # )
 
                             if crate_dataset is not None:
+                                if ref_mixin is not None:
+                                    crate_dataset.append_to(
+                                        "isPartOf", ref_mixin, compact=True
+                                    )
+
                                 if isinstance(crate_coll, Collection):
                                     crate_coll.append_to(
                                         "hasPart", crate_dataset, compact=True
@@ -1793,6 +1881,10 @@ you can find here an almost complete list of the possible ones:
                                     if sec_matched_licence is not None:
                                         secInputURILicences.append(sec_matched_licence)
 
+                            ref_mixin = self._add_reference_from_MaterializedContent(
+                                secInput
+                            )
+
                             if os.path.isfile(secInputLocalSource):
                                 # This is needed to avoid including the input
                                 the_sec_signature: "Optional[Fingerprint]" = None
@@ -1849,6 +1941,11 @@ you can find here an almost complete list of the possible ones:
                                 sec_crate_coll.append_to(
                                     "hasPart", sec_crate_elem, compact=True
                                 )
+
+                                if ref_mixin is not None:
+                                    sec_crate_elem.append_to(
+                                        "isPartOf", ref_mixin, compact=True
+                                    )
 
                         # Last, put it in place
                         crate_coll = sec_crate_coll

@@ -2508,6 +2508,8 @@ class WF:
         matContent: "MaterializedContent",
         matParse: "urllib.parse.ParseResult",
         rel_path: "str",
+        reference_size: "Optional[int]",
+        reference_mime: "Optional[str]",
     ) -> "MaterializedContent":
         # One entry per match
         expUri = urllib.parse.urlunparse(
@@ -2537,6 +2539,11 @@ class WF:
             else ContentKind.File,
             # Lazy evaluation of fingerprint,
             # so do not compute it here
+            reference_uri=matContent.licensed_uri,
+            reference_kind=matContent.kind,
+            reference_fingerprint=matContent.fingerprint,
+            reference_size=reference_size,
+            reference_mime=reference_mime,
         )
 
     def _fetchRemoteFile(
@@ -2612,6 +2619,12 @@ class WF:
                         eligible = True
 
         if eligible:
+            reference_mime: "Optional[str]" = None
+            reference_size: "Optional[int]" = None
+            if matContent.local.is_file():
+                reference_size = matContent.local.stat().st_size
+                reference_mime = mime_type
+
             # Selected contents go to the subdirectory
             prettyLocalPath = prettyLocal
             matParse = urllib.parse.urlparse(matContent.licensed_uri.uri)
@@ -2689,6 +2702,8 @@ class WF:
                                 matContent,
                                 matParse,
                                 rel_path.as_posix(),
+                                reference_size,
+                                reference_mime,
                             )
                             if expectedKind == ContentKind.File:
                                 # One entry per match
@@ -2738,7 +2753,12 @@ class WF:
                                         tf.extract(tarinfo, path=pretty_local_place)
 
                                     gend_mat_content = self.__gen_mat_content(
-                                        exp_resolved, matContent, matParse, tarinfo.name
+                                        exp_resolved,
+                                        matContent,
+                                        matParse,
+                                        tarinfo.name,
+                                        reference_size,
+                                        reference_mime,
                                     )
                                     if expectedKind == ContentKind.File:
                                         # One entry per match
@@ -2793,6 +2813,8 @@ class WF:
                                         matContent,
                                         matParse,
                                         zipinfo.filename,
+                                        reference_size,
+                                        reference_mime,
                                     )
                                     if expectedKind == ContentKind.File:
                                         # One entry per match
@@ -2832,10 +2854,15 @@ class WF:
                         kind=ContentKind.Directory,
                         # Lazy evaluation of fingerprint,
                         # so do not compute it here
+                        reference_uri=matContent.licensed_uri,
+                        reference_kind=matContent.kind,
+                        reference_size=reference_size,
+                        reference_mime=reference_mime,
+                        reference_fingerprint=matContent.reference_fingerprint,
                     )
                 )
 
-        # Nothing obtained
+        # Nothing filtered
         else:
             # Checking whether local name hardening is needed
             if not hardenPrettyLocal:
@@ -3511,6 +3538,11 @@ class WF:
                     kind=injectable.kind,
                     metadata_array=injectable.metadata_array,
                     fingerprint=injectable.fingerprint,
+                    reference_uri=injectable.reference_uri,
+                    reference_kind=injectable.reference_kind,
+                    reference_size=injectable.reference_size,
+                    reference_mime=injectable.reference_mime,
+                    reference_fingerprint=injectable.reference_fingerprint,
                 )
             )
 

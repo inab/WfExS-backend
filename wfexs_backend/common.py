@@ -371,11 +371,16 @@ class MaterializedContent(NamedTuple):
       needed for the provenance
     prettyFilename: The preferred filename to use in the inputs directory
       of the execution environment
+    kind: The kind of content, either file, directory, value or something more complex.
     fingerprint: If it is available, propagate the computed fingerprint
       from the cache.
     clonable: If it is true, copies of this materialized content can be
       performed. Otherwise, content should remain in the original place
       represented by "local".
+    reference_uri: This is needed to refer the fetched dataset source of
+      this content.
+    reference_kind: This is needed to declare whether the fetched dataset
+      was materialized either as a File or as a Directory.
     """
 
     local: "PathlibLike"
@@ -386,6 +391,11 @@ class MaterializedContent(NamedTuple):
     extrapolated_local: "Optional[PathlibLike]" = None
     fingerprint: "Optional[Fingerprint]" = None
     clonable: "bool" = True
+    reference_uri: "Optional[LicensedURI]" = None
+    reference_kind: "Optional[ContentKind]" = None
+    reference_size: "Optional[int]" = None
+    reference_mime: "Optional[str]" = None
+    reference_fingerprint: "Optional[Fingerprint]" = None
 
     @classmethod
     def _mapping_fixes(
