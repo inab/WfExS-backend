@@ -8,8 +8,9 @@ workflow_config:
       - test_full
     maxProcesses: 16
     maxTaskDuration: "24h"
+    serializeListAsString: true
 placeholders:
-  igenomes_base: "s3://ngi-igenomes/igenomes/"
+  igenomes_base: "s3://ngi-igenomes/igenomes"
   genome: "GATK.GRCh38"
 # All the inputs must be URLs or CURIEs from identifiers.org
 params:

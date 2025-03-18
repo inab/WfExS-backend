@@ -311,6 +311,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
             "maxTaskDuration"
         )
 
+        self.list_string: "bool" = self.engine_config.get(
+            "serializeListAsString", False
+        )
+
         # The profile to force, in case it cannot be guessed
         nxf_profile: "Union[str, Sequence[str]]" = self.engine_config.get("profile", [])
         self.nxf_profile: "Sequence[str]"
@@ -1775,7 +1779,10 @@ STDERR
             else:
                 nxfValues = [None]
 
-            node[splittedPath[-1]] = nxfValues if len(nxfValues) != 1 else nxfValues[0]
+            if self.list_string:
+                node[splittedPath[-1]] = ("{" + ",".join(nxfValues) + "}") if len(nxfValues) != 1 else nxfValues[0]
+            else:
+                node[splittedPath[-1]] = nxfValues if len(nxfValues) != 1 else nxfValues[0]
 
         return nxpParams
 
