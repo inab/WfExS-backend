@@ -1418,6 +1418,81 @@ you can find here an almost complete list of the possible ones:
 
         return added_containers
 
+    def _add_reference_from_MaterializedContent(
+        self, mat_content: "MaterializedContent"
+    ) -> "Optional[FixedMixin]":
+        the_ref_crate: "Optional[FixedMixin]" = None
+        if mat_content.reference_uri is not None:
+            the_uri = mat_content.reference_uri.uri
+
+            the_ref_crate = cast(
+                "Optional[FixedMixin]", self.crate.dereference(the_uri)
+            )
+            if the_ref_crate is None:
+                assert mat_content.reference_kind is not None
+                if mat_content.reference_kind == ContentKind.File:
+                    the_ref_crate = self.crate.add_file_ext(
+                        identifier=the_uri,
+                        source=None,
+                        dest_path=None,
+                        fetch_remote=False,
+                        validate_url=False,
+                        clazz=FixedFile,
+                    )
+                elif mat_content.reference_kind == ContentKind.Directory:
+                    the_ref_crate = self.crate.add_dataset_ext(
+                        identifier=the_uri,
+                        source=None,
+                        dest_path=None,
+                        fetch_remote=False,
+                        validate_url=False,
+                    )
+                else:
+                    # TODO: emit a warning or raise a exception
+                    return None
+
+                if the_uri.startswith("http") or the_uri.startswith("ftp"):
+                    # See https://github.com/ResearchObject/ro-crate/pull/259
+                    uri_key = "contentUrl"
+                else:
+                    uri_key = "identifier"
+
+                the_ref_crate[uri_key] = the_uri
+
+                if mat_content.reference_uri.licences is not None:
+                    for licence in mat_content.reference_uri.licences:
+                        matched_licence: "Optional[LicenceDescription]"
+                        if isinstance(licence, LicenceDescription):
+                            matched_licence = licence
+                        else:
+                            matched_licence = self.licence_matcher.matchLicence(licence)
+
+                        if matched_licence is not None:
+                            the_ref_crate.append_to(
+                                "license",
+                                self._process_licence(matched_licence),
+                                compact=True,
+                            )
+
+                if mat_content.reference_size is not None:
+                    the_ref_crate.append_to(
+                        "contentSize", str(mat_content.reference_size), compact=True
+                    )
+
+                if mat_content.reference_mime is not None:
+                    the_ref_crate.append_to(
+                        "encodingFormat", mat_content.reference_mime, compact=True
+                    )
+
+                if mat_content.reference_fingerprint is not None:
+                    digest, algo = extract_digest(mat_content.reference_fingerprint)
+                    if digest is not None and digest != False:
+                        assert algo is not None
+                        the_signature = hexDigest(algo, digest)
+                        the_ref_crate.append_to("sha256", the_signature, compact=True)
+
+        return the_ref_crate
+
     def addWorkflowInputs(
         self,
         inputs: "Sequence[MaterializedInput]",
@@ -1558,6 +1633,10 @@ you can find here an almost complete list of the possible ones:
                                 if matched_licence is not None:
                                     itemInURILicences.append(matched_licence)
 
+                        ref_mixin = self._add_reference_from_MaterializedContent(
+                            itemInValues
+                        )
+
                         if itemInLocalSource.is_file():
                             the_signature: "Optional[Fingerprint]" = None
                             if itemInValues.fingerprint is not None:
@@ -1582,6 +1661,10 @@ you can find here an almost complete list of the possible ones:
                                 and in_item.disclosable
                                 and itemInValues.clonable,
                             )
+                            if ref_mixin is not None:
+                                crate_file.append_to(
+                                    "isPartOf", ref_mixin, compact=True
+                                )
 
                             # An extrapolated input, which needs special handling
                             if itemInValues.extrapolated_local is not None:
@@ -1669,6 +1752,11 @@ you can find here an almost complete list of the possible ones:
                             # )
 
                             if crate_dataset is not None:
+                                if ref_mixin is not None:
+                                    crate_dataset.append_to(
+                                        "isPartOf", ref_mixin, compact=True
+                                    )
+
                                 if isinstance(crate_coll, Collection):
                                     crate_coll.append_to(
                                         "hasPart", crate_dataset, compact=True
@@ -1793,6 +1881,10 @@ you can find here an almost complete list of the possible ones:
                                     if sec_matched_licence is not None:
                                         secInputURILicences.append(sec_matched_licence)
 
+                            ref_mixin = self._add_reference_from_MaterializedContent(
+                                secInput
+                            )
+
                             if os.path.isfile(secInputLocalSource):
                                 # This is needed to avoid including the input
                                 the_sec_signature: "Optional[Fingerprint]" = None
@@ -1849,6 +1941,11 @@ you can find here an almost complete list of the possible ones:
                                 sec_crate_coll.append_to(
                                     "hasPart", sec_crate_elem, compact=True
                                 )
+
+                                if ref_mixin is not None:
+                                    sec_crate_elem.append_to(
+                                        "isPartOf", ref_mixin, compact=True
+                                    )
 
                         # Last, put it in place
                         crate_coll = sec_crate_coll
@@ -1915,7 +2012,7 @@ you can find here an almost complete list of the possible ones:
 
         # When the id is none and ...
         if the_id is None:
-            the_id = the_name if do_attach or (the_uri is None) else the_uri
+            the_id = the_name if the_name is not None else the_uri
 
         the_file_crate = self.crate.add_file_ext(
             identifier=the_id,
@@ -1970,7 +2067,7 @@ you can find here an almost complete list of the possible ones:
     def _add_directory_as_dataset(
         self,
         the_path: "pathlib.Path",
-        the_uri: "URIType",
+        the_uri: "Optional[URIType]",
         the_id: "Optional[str]" = None,
         the_name: "Optional[RelPath]" = None,
         the_alternate_name: "Optional[RelPath]" = None,
@@ -2007,13 +2104,17 @@ you can find here an almost complete list of the possible ones:
             # properties=file_properties,
         )
         if the_uri is not None:
-            if the_uri.startswith("http") or the_uri.startswith("ftp"):
+            the_uri_parsed = urllib.parse.urlparse(the_uri)
+
+            if the_uri_parsed.scheme in ("http", "https", "ftp", "file"):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
             else:
                 uri_key = "identifier"
 
             crate_dataset[uri_key] = the_uri
+        else:
+            the_uri_parsed = None
         if the_alternate_name is not None:
             crate_dataset["alternateName"] = the_alternate_name
 
@@ -2022,14 +2123,29 @@ you can find here an almost complete list of the possible ones:
             for the_file in the_dir:
                 if the_file.name[0] == ".":
                     continue
-                the_item_uri = cast(
-                    "URIType",
-                    the_uri + "/" + urllib.parse.quote(the_file.name, safe=""),
-                )
+                if the_uri_parsed is not None:
+                    if the_uri_parsed.scheme in ("http", "https", "ftp", "file", "s3"):
+                        new_path = the_uri_parsed.path
+                        if not new_path.endswith("/"):
+                            new_path += "/"
+                        new_path += urllib.parse.quote(the_file.name, safe="")
+                        the_item_uri = urllib.parse.urlunparse(
+                            the_uri_parsed._replace(path=new_path)
+                        )
+                    else:
+                        new_fragment = the_uri_parsed.fragment
+                        if len(new_fragment) > 0:
+                            new_fragment += "/"
+                        new_fragment += urllib.parse.quote(the_file.name, safe="")
+                        the_item_uri = urllib.parse.urlunparse(
+                            the_uri_parsed._replace(fragment=new_fragment)
+                        )
+                else:
+                    the_item_uri = None
                 if the_file.is_file():
                     the_file_crate = self._add_file_to_crate(
                         the_path=pathlib.Path(the_file.path),
-                        the_uri=the_item_uri,
+                        the_uri=cast("Optional[URIType]", the_item_uri),
                         the_name=None
                         if the_name is None
                         else cast("RelPath", the_name + the_file.name),
@@ -2050,7 +2166,7 @@ you can find here an almost complete list of the possible ones:
                         the_subfiles_crates,
                     ) = self._add_directory_as_dataset(
                         the_path=pathlib.Path(the_file.path),
-                        the_uri=the_item_uri,
+                        the_uri=cast("Optional[URIType]", the_item_uri),
                         the_name=None
                         if the_name is None
                         else cast("RelPath", the_name + the_file.name),
@@ -2324,7 +2440,16 @@ you can find here an almost complete list of the possible ones:
                     )
                     self.crate.add(the_entity)
                 else:
-                    rocrate_file_id = rocrate_file_id_base + "/" + rel_file
+                    rel_file_steps = rel_file.split(os.sep)
+                    rocrate_file_id = (
+                        rocrate_file_id_base
+                        + "#"
+                        + "/".join(
+                            map(
+                                lambda s: urllib.parse.quote(s, safe=""), rel_file_steps
+                            )
+                        )
+                    )
                     the_s_name = cast(
                         "RelPath", os.path.join(rocrate_wf_folder, rel_file)
                     )

@@ -21,6 +21,7 @@ import atexit
 import copy
 import dataclasses
 import datetime
+import fnmatch
 import inspect
 import json
 import logging
@@ -31,6 +32,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import threading
 import time
@@ -67,6 +69,13 @@ from .fetchers import (
     RepoGuessFlavor,
     RepoType,
 )
+
+from .utils.misc import (
+    lazy_import,
+)
+
+magic = lazy_import("magic")
+# import magic
 
 from .utils.orcid import (
     validate_orcid,
@@ -152,6 +161,14 @@ if TYPE_CHECKING:
 
     Sch_PlainURI = URIType
 
+    Sch_MemberPattern = TypedDict(
+        "Sch_MemberPattern",
+        {
+            "name": Required[str],
+            "place_at": NotRequired[str],
+        },
+    )
+
     Sch_LicensedURI = TypedDict(
         "Sch_LicensedURI",
         {
@@ -159,13 +176,17 @@ if TYPE_CHECKING:
             "licences": Sequence[Sch_PlainURI],
             "attributions": Sequence[Any],
             "security-context": str,
+            "member": Sequence[Sch_MemberPattern],
         },
         total=False,
     )
 
     Sch_InputURI_Elem = Union[Sch_PlainURI, Sch_LicensedURI]
     Sch_InputURI_Fetchable = Union[Sch_InputURI_Elem, Sequence[Sch_InputURI_Elem]]
-    Sch_InputURI = Union[Sch_InputURI_Fetchable, Sequence[Sequence[Sch_InputURI_Elem]]]
+    Sch_InputURI = Union[
+        Sch_InputURI_Elem,
+        Sequence[Union[Sch_InputURI_Elem, Sequence[Sch_InputURI_Elem]]],
+    ]
 
     # Remember to change this if the JSON schema is changed
     Sch_Tabular = TypedDict(
@@ -300,6 +321,7 @@ from .common import (
     MarshallingStatus,
     MaterializedContent,
     MaterializedInput,
+    MemberPattern,
     StagedSetup,
 )
 
@@ -431,6 +453,20 @@ class ExportActionException(AbstractWfExSException):
 
 class WFWarning(UserWarning):
     pass
+
+
+TAR_MIME: "Final[str]" = "application/x-tar"
+ZIP_MIME: "Final[str]" = "application/zip"
+
+ARCHIVE_MAPPING = {ZIP_MIME, TAR_MIME}
+
+TAR_COMPRESS_MIME = {
+    "application/gzip",
+    "application/x-bzip2",
+    "application/x-xz",
+    "application/x-lzma",
+    # "application/x-lzip",
+}
 
 
 class WF:
@@ -908,6 +944,9 @@ class WF:
         self.stageMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
         self.executionMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
         self.exportMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
+
+        self._magic = magic.Magic(mime=True)
+        self._magic_uc = magic.Magic(mime=True, uncompress=True)
 
     FUSE_SYSTEM_CONF = "/etc/fuse.conf"
 
@@ -1667,6 +1706,7 @@ class WF:
         (
             repo,
             workflow_type,
+            engine_version,
             container_type,
             params,
             profiles,
@@ -1699,6 +1739,11 @@ class WF:
                 "secure": secure,
             },
         }
+        if engine_version is not None:
+            workflow_meta["workflow_config"].setdefault(workflow_type.engineName, {})[
+                "version"
+            ] = engine_version
+
         if profiles is not None:
             workflow_meta["profile"] = profiles
         if container_type is not None:
@@ -2391,29 +2436,38 @@ class WF:
         contextName: "Optional[str]" = None,
         licences: "Tuple[URIType, ...]" = DefaultNoLicenceTuple,
         attributions: "Sequence[Attribution]" = [],
-    ) -> "Tuple[Union[LicensedURI, Sequence[LicensedURI]], bool]":
+        default_member_glob: "Optional[str]" = None,
+    ) -> "Tuple[Sequence[LicensedURI], bool]":
         was_simple = False
         if isinstance(remote_file_f, list):
-            retvals = []
+            retvals: "MutableSequence[LicensedURI]" = []
             for remote_url in remote_file_f:
                 retval, this_was_simple = self._buildLicensedURI(
                     remote_url,
                     contextName=contextName,
                     licences=licences,
                     attributions=attributions,
+                    default_member_glob=default_member_glob,
                 )
                 was_simple |= this_was_simple
-                if isinstance(retval, list):
-                    retvals.extend(retval)
-                else:
-                    retvals.append(retval)
+                retvals.extend(retval)
 
             return retvals, was_simple
 
+        members: "Sequence[MemberPattern]" = []
         if isinstance(remote_file_f, dict):
             remote_file = remote_file_f
             # The value of the attributes is superseded
             remote_url = remote_file["uri"]
+            sch_members = remote_file.get("member")
+            if isinstance(sch_members, list):
+                members = [
+                    MemberPattern(
+                        glob=member["name"],
+                        place_at=cast("Optional[RelPath]", member.get("place_at")),
+                    )
+                    for member in sch_members
+                ]
             licences_l = remote_file.get("licences")
             if isinstance(licences_l, list):
                 licences = tuple(licences_l)
@@ -2431,16 +2485,72 @@ class WF:
             was_simple = True
             remote_url = remote_file_f
 
+        # Backward compatibility
+        if default_member_glob is not None and len(members) == 0:
+            members = [
+                MemberPattern(
+                    glob=default_member_glob,
+                    place_at=None,
+                )
+            ]
+
         secContext = self.vault.getContext(remote_url, contextName)
 
         return (
-            LicensedURI(
-                uri=remote_url,
-                licences=licences,
-                attributions=attributions,
-                secContext=secContext,
-            ),
+            [
+                LicensedURI(
+                    uri=remote_url,
+                    licences=licences,
+                    attributions=attributions,
+                    secContext=secContext,
+                    members=members,
+                ),
+            ],
             was_simple,
+        )
+
+    @staticmethod
+    def __gen_mat_content(
+        pretty_local_exp: "pathlib.Path",
+        matContent: "MaterializedContent",
+        matParse: "urllib.parse.ParseResult",
+        rel_path: "str",
+        reference_size: "Optional[int]",
+        reference_mime: "Optional[str]",
+    ) -> "MaterializedContent":
+        # One entry per match
+        expUri = urllib.parse.urlunparse(
+            (
+                matParse.scheme,
+                matParse.netloc,
+                matParse.path,
+                matParse.params,
+                matParse.query,
+                rel_path,
+            )
+        )
+
+        # TODO: enrich outputs to add licensing features?
+        lic_expUri = LicensedURI(
+            uri=cast("URIType", expUri),
+            licences=matContent.licensed_uri.licences,
+        )
+
+        return MaterializedContent(
+            local=pretty_local_exp,
+            licensed_uri=lic_expUri,
+            prettyFilename=cast("RelPath", rel_path),
+            metadata_array=matContent.metadata_array,
+            kind=ContentKind.Directory
+            if pretty_local_exp.is_dir()
+            else ContentKind.File,
+            # Lazy evaluation of fingerprint,
+            # so do not compute it here
+            reference_uri=matContent.licensed_uri,
+            reference_kind=matContent.kind,
+            reference_fingerprint=matContent.fingerprint,
+            reference_size=reference_size,
+            reference_mime=reference_mime,
         )
 
     def _fetchRemoteFile(
@@ -2457,10 +2567,13 @@ class WF:
         prettyRelname: "Optional[RelPath]" = None,
         ignoreCache: "bool" = False,
         cloneToStore: "bool" = True,
+        expectedKind: "Optional[ContentKind]" = None,
     ) -> "Sequence[MaterializedContent]":
         # Embedding the context
         alt_remote_file, alt_is_plain = self._buildLicensedURI(
-            remote_file, contextName=contextName
+            remote_file,
+            contextName=contextName,
+            default_member_glob=globExplode,
         )
         # Trying to preserve what it is returned by the cache
         # unless we are explicitly feeding a licence
@@ -2493,51 +2606,247 @@ class WF:
         if realInputDestDir != common_path:
             prettyRelname = cast("RelPath", realPrettyLocal.name)
             prettyLocal = inputDestDir / prettyRelname
+            realPrettyLocal = prettyLocal.resolve()
 
-        # Checking whether local name hardening is needed
-        if not hardenPrettyLocal:
-            if prettyLocal.is_symlink():
-                # Path.readlink was added in Python 3.9
-                oldLocal = pathlib.Path(os.readlink(prettyLocal))
+        # Real postprocessing should happen here
+        remote_pairs: "MutableSequence[MaterializedContent]" = []
+        eligible = False
+        mime_type = ""
+        mime_type_uc = ""
+        if (
+            matContent.licensed_uri.members is not None
+            and len(matContent.licensed_uri.members) > 0
+        ):
+            if matContent.local.is_dir():
+                eligible = True
+            elif matContent.local.is_file():
+                mime_type = self._magic.from_file(matContent.local)
+                if mime_type in ARCHIVE_MAPPING:
+                    eligible = True
+                elif mime_type in TAR_COMPRESS_MIME:
+                    mime_type_uc = self._magic_uc.from_file(matContent.local)
+                    if mime_type_uc in ARCHIVE_MAPPING:
+                        eligible = True
 
-                hardenPrettyLocal = oldLocal != matContent.local
-            elif prettyLocal.exists():
-                hardenPrettyLocal = True
+        if eligible:
+            reference_mime: "Optional[str]" = None
+            reference_size: "Optional[int]" = None
+            if matContent.local.is_file():
+                reference_size = matContent.local.stat().st_size
+                reference_mime = mime_type
 
-        if hardenPrettyLocal:
-            # Trying to avoid collisions on input naming
-            prettyLocal = inputDestDir / (prefix + prettyRelname)
-
-        if not prettyLocal.exists():
-            # Are we allowed to make a copy of the input in the working directory?
-            if matContent.clonable:
-                # We are either hardlinking or copying here
-                link_or_copy_pathlib(matContent.local, prettyLocal)
-            else:
-                # We are either hardlinking or symlinking here
-                link_or_symlink_pathlib(matContent.local, prettyLocal)
-
-        remote_pairs = []
-        if globExplode is not None:
+            # Selected contents go to the subdirectory
             prettyLocalPath = prettyLocal
             matParse = urllib.parse.urlparse(matContent.licensed_uri.uri)
-            for exp in prettyLocalPath.glob(globExplode):
-                relPath = exp.relative_to(prettyLocalPath)
-                relName = cast("RelPath", str(relPath))
-                relExpPath = matParse.path
-                if relExpPath[-1] != "/":
-                    relExpPath += "/"
-                relExpPath += "/".join(
-                    map(lambda part: urllib.parse.quote_plus(part), relPath.parts)
-                )
+            resolved_local = matContent.local.resolve()
+            resolved_any = False
+            if resolved_local.is_dir():
+                for member in matContent.licensed_uri.members:
+                    got_one = False
+                    resolved_one = False
+                    for exp in resolved_local.glob(member.glob):
+                        got_one = True
+                        try:
+                            rel_path = exp.relative_to(resolved_local)
+                            if expectedKind == ContentKind.File and not exp.is_file():
+                                self.logger.warning(
+                                    f"Mismatching resource type {rel_path}: expected File vs Directory"
+                                )
+                                continue
+                        except ValueError:
+                            self.logger.warning(
+                                f"Discarding exp {exp} (from {member.glob}) as it is outside the boundaries"
+                            )
+                            continue
+
+                        # This is to assure the destination is within the limits
+                        # of the landing directory
+                        if member.place_at is not None:
+                            pretty_local_exp = (
+                                prettyLocalPath / member.place_at / rel_path
+                            )
+                        else:
+                            pretty_local_exp = prettyLocalPath / rel_path
+                        exp_resolved = pretty_local_exp.resolve()
+                        try:
+                            exp_resolved.relative_to(realPrettyLocal)
+                            resolved_one = True
+                            resolved_any = True
+
+                            # Checking whether local name hardening is needed
+                            harden_pretty_local_exp = hardenPrettyLocal
+                            if not harden_pretty_local_exp:
+                                if pretty_local_exp.is_symlink():
+                                    # Path.readlink was added in Python 3.9
+                                    old_pretty_local_exp = pathlib.Path(
+                                        os.readlink(pretty_local_exp)
+                                    )
+
+                                    harden_pretty_local_exp = (
+                                        old_pretty_local_exp != exp_resolved
+                                    )
+                                elif pretty_local_exp.exists():
+                                    harden_pretty_local_exp = True
+
+                            if harden_pretty_local_exp:
+                                # Trying to avoid collisions on input naming
+                                pretty_local_exp = pretty_local_exp.parent / (
+                                    prefix + pretty_local_exp.name
+                                )
+
+                            # Now, link or copy
+                            if not pretty_local_exp.exists():
+                                pretty_local_exp.parent.mkdir(
+                                    parents=True, exist_ok=True
+                                )
+                                # Are we allowed to make a copy of the input in the working directory?
+                                if matContent.clonable:
+                                    # We are either hardlinking or copying here
+                                    link_or_copy_pathlib(exp, pretty_local_exp)
+                                else:
+                                    # We are either hardlinking or symlinking here
+                                    link_or_symlink_pathlib(exp, pretty_local_exp)
+
+                            gend_mat_content = self.__gen_mat_content(
+                                pretty_local_exp,
+                                matContent,
+                                matParse,
+                                rel_path.as_posix(),
+                                reference_size,
+                                reference_mime,
+                            )
+                            if expectedKind == ContentKind.File:
+                                # One entry per match
+                                remote_pairs.append(gend_mat_content)
+                        except ValueError:
+                            self.logger.warning(
+                                f"Discarding exp {exp_resolved} (from {member.glob} {member.place_at}) as it is outside the boundaries"
+                            )
+            elif TAR_MIME in (mime_type, mime_type_uc):
+                with tarfile.open(
+                    resolved_local.as_posix(), mode="r:*", bufsize=1024 * 1024
+                ) as tf:
+                    # TODO: archive processing
+                    for tarinfo in tf:
+                        for member in matContent.licensed_uri.members:
+                            if fnmatch.fnmatch(tarinfo.name, member.glob):
+                                if member.place_at is not None:
+                                    pretty_local_place = (
+                                        prettyLocalPath / member.place_at
+                                    )
+                                else:
+                                    pretty_local_place = prettyLocalPath
+
+                                pretty_local_exp = pretty_local_place / tarinfo.name
+                                exp_resolved = pretty_local_exp.resolve()
+                                try:
+                                    # This is to check whether we are outside the boundaries
+                                    exp_resolved.relative_to(realPrettyLocal)
+                                    resolved_any = True
+
+                                    # Checking whether local name hardening is needed
+                                    harden_pretty_local_exp = hardenPrettyLocal
+                                    if (
+                                        not harden_pretty_local_exp
+                                        and pretty_local_exp.exists()
+                                    ):
+                                        harden_pretty_local_exp = True
+
+                                    if (
+                                        not exp_resolved.exists()
+                                        or harden_pretty_local_exp
+                                    ):
+                                        if harden_pretty_local_exp:
+                                            self.logger.warning(
+                                                f"Some overwrite can happen extracting {tarinfo.name} from {resolved_local} to working directory"
+                                            )
+                                        tf.extract(tarinfo, path=pretty_local_place)
+
+                                    gend_mat_content = self.__gen_mat_content(
+                                        exp_resolved,
+                                        matContent,
+                                        matParse,
+                                        tarinfo.name,
+                                        reference_size,
+                                        reference_mime,
+                                    )
+                                    if expectedKind == ContentKind.File:
+                                        # One entry per match
+                                        remote_pairs.append(gend_mat_content)
+
+                                except ValueError:
+                                    self.logger.exception(
+                                        f"Pattern {member.glob} (placed at {member.place_at}) matched {tarinfo.name}, but it is ignored because it would be extracted outside the boundaries"
+                                    )
+                                break
+
+            elif ZIP_MIME in (mime_type, mime_type_uc):
+                with zipfile.ZipFile(resolved_local, mode="r") as zf:
+                    # TODO: archive processing
+                    for zipinfo in zf.infolist():
+                        for member in matContent.licensed_uri.members:
+                            if fnmatch.fnmatch(zipinfo.filename, member.glob):
+                                if member.place_at is not None:
+                                    pretty_local_place = (
+                                        prettyLocalPath / member.place_at
+                                    )
+                                else:
+                                    pretty_local_place = prettyLocalPath
+
+                                pretty_local_exp = pretty_local_place / zipinfo.filename
+                                exp_resolved = pretty_local_exp.resolve()
+                                try:
+                                    # This is to check whether we are outside the boundaries
+                                    exp_resolved.relative_to(realPrettyLocal)
+                                    resolved_any = True
+
+                                    # Checking whether local name hardening is needed
+                                    harden_pretty_local_exp = hardenPrettyLocal
+                                    if (
+                                        not harden_pretty_local_exp
+                                        and pretty_local_exp.exists()
+                                    ):
+                                        harden_pretty_local_exp = True
+
+                                    if (
+                                        not exp_resolved.exists()
+                                        or harden_pretty_local_exp
+                                    ):
+                                        if harden_pretty_local_exp:
+                                            self.logger.warning(
+                                                f"Some overwrite can happen extracting {zipinfo.filename} from {resolved_local} to working directory"
+                                            )
+                                        zf.extract(zipinfo, path=pretty_local_place)
+
+                                    gend_mat_content = self.__gen_mat_content(
+                                        exp_resolved,
+                                        matContent,
+                                        matParse,
+                                        zipinfo.filename,
+                                        reference_size,
+                                        reference_mime,
+                                    )
+                                    if expectedKind == ContentKind.File:
+                                        # One entry per match
+                                        remote_pairs.append(gend_mat_content)
+
+                                except ValueError:
+                                    self.logger.warning(
+                                        f"Pattern {member.glob} (placed at {member.place_at}) matched {zipinfo.filename}, but it is ignored because it would be extracted outside the boundaries"
+                                    )
+                                break
+
+            if resolved_any and expectedKind in (None, ContentKind.Directory):
                 expUri = urllib.parse.urlunparse(
                     (
                         matParse.scheme,
                         matParse.netloc,
-                        relExpPath,
+                        matParse.path,
                         matParse.params,
                         matParse.query,
-                        matParse.fragment,
+                        ",".join(
+                            map(lambda m: m.glob, matContent.licensed_uri.members)
+                        ),
                     )
                 )
 
@@ -2548,18 +2857,46 @@ class WF:
                 )
                 remote_pairs.append(
                     MaterializedContent(
-                        local=exp,
+                        local=pretty_local_exp,
                         licensed_uri=lic_expUri,
-                        prettyFilename=relName,
+                        prettyFilename=prettyRelname,
                         metadata_array=matContent.metadata_array,
-                        kind=ContentKind.Directory
-                        if exp.is_dir()
-                        else ContentKind.File,
+                        kind=ContentKind.Directory,
                         # Lazy evaluation of fingerprint,
                         # so do not compute it here
+                        reference_uri=matContent.licensed_uri,
+                        reference_kind=matContent.kind,
+                        reference_size=reference_size,
+                        reference_mime=reference_mime,
+                        reference_fingerprint=matContent.reference_fingerprint,
                     )
                 )
+
+        # Nothing filtered
         else:
+            # Checking whether local name hardening is needed
+            if not hardenPrettyLocal:
+                if prettyLocal.is_symlink():
+                    # Path.readlink was added in Python 3.9
+                    oldLocal = pathlib.Path(os.readlink(prettyLocal))
+
+                    hardenPrettyLocal = oldLocal != matContent.local
+                elif prettyLocal.exists():
+                    hardenPrettyLocal = True
+
+            if hardenPrettyLocal:
+                # Trying to avoid collisions on input naming
+                prettyLocal = inputDestDir / (prefix + prettyRelname)
+
+            if not prettyLocal.exists():
+                # Are we allowed to make a copy of the input in the working directory?
+                if matContent.clonable:
+                    # We are either hardlinking or copying here
+                    link_or_copy_pathlib(matContent.local, prettyLocal)
+                else:
+                    # We are either hardlinking or symlinking here
+                    link_or_symlink_pathlib(matContent.local, prettyLocal)
+
             remote_pair = MaterializedContent(
                 local=prettyLocal,
                 licensed_uri=matContent.licensed_uri,
@@ -2569,6 +2906,11 @@ class WF:
                 fingerprint=matContent.fingerprint,
             )
             remote_pairs.append(remote_pair)
+
+        if len(remote_pairs) == 0:
+            self.logger.critical(
+                f"No internal elements of it were selected, from {matContent.licensed_uri.uri} {remote_file}"
+            )
 
         return remote_pairs
 
@@ -2648,12 +2990,10 @@ class WF:
                 inputs = cast("Sch_Param", raw_inputs)
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
-                    if inputClass not in (
-                        ContentKind.File.name,
-                        ContentKind.Directory.name,
-                        ContentKind.Value.name,
-                        ContentKind.ContentWithURIs.name,
-                    ):
+                    for inputKind in ContentKind:
+                        if inputClass == inputKind.name:
+                            break
+                    else:
                         raise WFException(
                             'Unrecognized input class "{}", attached to "{}"'.format(
                                 inputClass, linearKey
@@ -2665,10 +3005,10 @@ class WF:
                         None
                     )
                     formatted_reldir_conf: "Optional[Union[str, Literal[False]]]" = None
-                    if inputClass in (
-                        ContentKind.File.name,
-                        ContentKind.Directory.name,
-                        ContentKind.ContentWithURIs.name,
+                    if inputKind in (
+                        ContentKind.File,
+                        ContentKind.Directory,
+                        ContentKind.ContentWithURIs,
                     ):
                         # These parameters can be used both for input placement tuning
                         # as well for output placement
@@ -2692,9 +3032,9 @@ class WF:
                         else:
                             formatted_reldir_conf = reldir_conf
 
-                    if inputClass in (
-                        ContentKind.File.name,
-                        ContentKind.Directory.name,
+                    if inputKind in (
+                        ContentKind.File,
+                        ContentKind.Directory,
                     ):
                         # input files
                         # We have to autofill this with the outputs directory,
@@ -2726,16 +3066,16 @@ class WF:
                             )
                             continue
 
-                        if inputClass == ContentKind.Directory.name:
+                        if inputKind == ContentKind.Directory:
                             globExplode = inputs.get("globExplode")
 
                     # Processing url and secondary-urls
                     if ("url" in inputs) and (
-                        inputClass
+                        inputKind
                         in (
-                            ContentKind.File.name,
-                            ContentKind.Directory.name,
-                            ContentKind.ContentWithURIs.name,
+                            ContentKind.File,
+                            ContentKind.Directory,
+                            ContentKind.ContentWithURIs,
                         )
                     ):
                         # input files
@@ -2792,11 +3132,11 @@ class WF:
 
                     # Processing value contents
                     if ("value" in inputs) and (
-                        inputClass
+                        inputKind
                         in (
-                            ContentKind.File.name,
-                            ContentKind.Value.name,
-                            ContentKind.ContentWithURIs.name,
+                            ContentKind.File,
+                            ContentKind.Value,
+                            ContentKind.ContentWithURIs,
                         )
                     ):
                         # It could have been fixed by previous step
@@ -3016,12 +3356,14 @@ class WF:
                     prettyRelname=pretty_relname,
                     ignoreCache=this_ignoreCache,
                     cloneToStore=cloneToStore,
+                    expectedKind=ContentKind.File,
                 )
             except:
                 self.logger.exception(
                     f"Error while fetching primary content with URIs {remote_file}"
                 )
                 the_failed_uris.append(remote_file)
+                continue
 
             # Time to process each file
             these_secondary_uris: "Set[str]" = set()
@@ -3206,6 +3548,11 @@ class WF:
                     kind=injectable.kind,
                     metadata_array=injectable.metadata_array,
                     fingerprint=injectable.fingerprint,
+                    reference_uri=injectable.reference_uri,
+                    reference_kind=injectable.reference_kind,
+                    reference_size=injectable.reference_size,
+                    reference_mime=injectable.reference_mime,
+                    reference_fingerprint=injectable.reference_fingerprint,
                 )
             )
 
@@ -3255,10 +3602,20 @@ class WF:
             if isinstance(inputs, dict):
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
+                    for inputKind in ContentKind:
+                        if inputClass == inputKind.name:
+                            break
+                    else:
+                        raise WFException(
+                            'Unrecognized input class "{}", attached to "{}"'.format(
+                                inputClass, linearKey
+                            )
+                        )
+
                     clonable = inputs.get("clonable", True)
-                    if inputClass in (
-                        ContentKind.File.name,
-                        ContentKind.Directory.name,
+                    if inputKind in (
+                        ContentKind.File,
+                        ContentKind.Directory,
                     ):  # input files
                         inputDestDir = pathlib.Path(workflowInputs_destdir)
                         globExplode = None
@@ -3273,7 +3630,7 @@ class WF:
                         else:
                             relative_dir = None
 
-                        if inputClass == ContentKind.Directory.name:
+                        if inputKind == ContentKind.Directory:
                             # We have to autofill this with the outputs directory,
                             # so results are properly stored (without escaping the jail)
                             if inputs.get("autoFill", False):
@@ -3318,7 +3675,7 @@ class WF:
                                 continue
 
                             globExplode = inputs.get("globExplode")
-                        elif inputClass == ContentKind.File.name and inputs.get(
+                        elif inputKind == ContentKind.File and inputs.get(
                             "autoFill", False
                         ):
                             relative_dir = inputs.get("relative-dir")
@@ -3362,7 +3719,7 @@ class WF:
                         )
                         # It has to exist
                         if remote_files is not None or (
-                            inputClass == ContentKind.File.name
+                            inputKind == ContentKind.File
                             and (inline_values is not None)
                         ):
                             secondary_remote_files: "Optional[Sch_InputURI]"
@@ -3477,9 +3834,12 @@ class WF:
                                             prettyRelname=pretty_relname,
                                             ignoreCache=this_ignoreCache,
                                             cloneToStore=clonable,
+                                            expectedKind=inputKind
+                                            if inputKind != ContentKind.Value
+                                            else None,
                                         )
                                         remote_pairs.extend(t_remote_pairs)
-                                    except:
+                                    except Exception as e:
                                         self.logger.exception(
                                             f"Error while fetching primary URI {remote_file}"
                                         )
@@ -3544,7 +3904,7 @@ class WF:
                                 )
                             )
                         else:
-                            if inputClass == ContentKind.File.name:
+                            if inputKind == ContentKind.File:
                                 # Empty input, i.e. empty file
                                 inputDestPath = inputDestDir.joinpath(*path_tokens)
                                 inputDestPath.parent.mkdir(parents=True, exist_ok=True)
@@ -3575,7 +3935,7 @@ class WF:
                                 )
                             )
 
-                    elif inputClass == ContentKind.ContentWithURIs.name:
+                    elif inputKind == ContentKind.ContentWithURIs:
                         this_ignoreCache = False if self.paranoidMode else ignoreCache
                         (
                             theNewInputs,
@@ -3593,7 +3953,7 @@ class WF:
                         )
                         theInputs.extend(theNewInputs)
                         the_failed_uris.extend(new_failed_uris)
-                    elif inputClass == ContentKind.Value.name:
+                    elif inputKind == ContentKind.Value:
                         input_val = inputs.get("value")
                         if input_val is not None and not isinstance(input_val, list):
                             input_val = [input_val]
@@ -3606,7 +3966,7 @@ class WF:
                         )
                     else:
                         raise WFException(
-                            'Unrecognized input class "{}", attached to "{}"'.format(
+                            'Unhandled input class "{}", attached to "{}"'.format(
                                 inputClass, linearKey
                             )
                         )

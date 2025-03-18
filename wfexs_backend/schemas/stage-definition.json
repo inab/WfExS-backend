@@ -29,6 +29,29 @@
 						}
 					]
 				},
+				"member": {
+					"description": "For fetched directories and archives (zip, tar, etc...), the internal member(s) to use instead of the whole resource.",
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"name": {
+								"description": "The name of the internal resource. Both glob patterns and exact matches are accepted.",
+								"type": "string",
+								"minLength": 1
+							},
+							"place_at": {
+								"description": "The relative directory where to deposit matched contents, instead of the derived one from the URI.",
+								"type": "string",
+								"minLength": 1
+							}
+						},
+						"required": [
+							"name"
+						]
+					},
+					"minItems": 1
+				},
 				"licences": {
 					"type": "array",
 					"items": {
@@ -257,7 +280,7 @@
 					"default": true
 				},
 				"globExplode": {
-					"description": "When this is set, and the class is directory, it helps filtering in what it should be included",
+					"description": "When this is set, and the class is directory, it helps filtering in what it should be included. With the inclusion of `member` at the LicensedURI level, this can be discontinued",
 					"type": "string"
 				},
 				"autoFill": {

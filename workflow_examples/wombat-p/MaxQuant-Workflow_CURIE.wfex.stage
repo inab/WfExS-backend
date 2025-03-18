@@ -7,7 +7,7 @@ workflow_config:
 # All the inputs must be URLs or CURIEs from identifiers.org
 params:
   raws:
-    c-l-a-s-s: Directory
+    c-l-a-s-s: File
     url: pride.project:PXD001819
     globExplode: "*.raw"
   sdrf:

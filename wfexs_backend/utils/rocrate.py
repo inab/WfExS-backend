@@ -23,6 +23,7 @@ import enum
 import inspect
 import json
 import logging
+import os
 import os.path
 import pathlib
 import sys
@@ -1906,6 +1907,7 @@ WHERE   {
 
             # Is it a file or a directory?
             # Or even better, a ContentWithURIs
+            fileid_path: "MutableSequence[str]" = []
             if additional_type in ("File", "Dataset"):
                 if (
                     isinstance(inputrow.content_with_uris, rdflib.term.Literal)
@@ -1924,6 +1926,18 @@ WHERE   {
                         "c-l-a-s-s": kindobj.name,
                     },
                 )
+                assert valobj is not None
+                # Could we guess the preferred-name?
+                parsed_fileid = urllib.parse.urlparse(str(inputrow.fileid))
+                if parsed_fileid.scheme in ("", self.RELATIVE_ROCRATE_SCHEME):
+                    fileid_path = parsed_fileid.path.split("/")
+                    if len(fileid_path) > 0 and fileid_path[0] == "":
+                        fileid_path = fileid_path[1:]
+                    if len(fileid_path) > 0 and fileid_path[0] == "inputs":
+                        fileid_path = fileid_path[1:]
+                    if len(fileid_path) > 0 and fileid_path[-1] == "":
+                        fileid_path = fileid_path[0:-1]
+                    self.logger.error(f"GUESSI {inputrow.fileid} {parsed_fileid}")
 
                 # Time to transfer the additional properties
                 if kindobj == ContentKind.ContentWithURIs:
@@ -1935,7 +1949,7 @@ WHERE   {
                     encoding_format_key = RevContentWithURIsMIMEs[
                         str(inputrow.encoding_format)
                     ]
-                    base[param_last].update(
+                    valobj.update(
                         {
                             encoding_format_key: {
                                 "header-rows": inputrow.header_rows.value,
@@ -1964,6 +1978,17 @@ WHERE   {
                     self.logger.error(errmsg)
                     raise ROCrateToolboxException(errmsg)
 
+                # Getting the filtering element
+                the_glob: "Optional[str]" = None
+                if len(parsed_uri.fragment) > 0:
+                    the_uri = urllib.parse.urlunparse(parsed_uri._replace(fragment=""))
+                    the_glob = os.sep.join(
+                        map(
+                            lambda tuf: urllib.parse.unquote(tuf),
+                            parsed_uri.fragment.split("/"),
+                        )
+                    )
+
                 # Now, the licence
                 licences = self._getLicences(g, inputrow.input, public_name)
                 if len(licences) == 0:
@@ -1973,14 +1998,24 @@ WHERE   {
                     licences, default_licence=NoLicenceDescription
                 )
 
-                the_url: "Union[str, Mapping[str, Any]]"
-                if len(licences) == 0:
-                    the_url = the_uri
-                else:
-                    the_url = {
-                        "uri": the_uri,
-                        "licences": list(map(lambda el: el.uris[0], expanded_licences)),
-                    }
+                the_url: "MutableMapping[str, Any]" = {
+                    "uri": the_uri,
+                }
+                if the_glob is not None:
+                    the_url["member"] = [
+                        {
+                            "name": the_glob,
+                        },
+                    ]
+                    if len(fileid_path) > 1:
+                        valobj["preferred-name"] = os.sep.join(fileid_path[0:-1])
+                elif len(fileid_path) > 0:
+                    valobj["preferred-name"] = os.sep.join(fileid_path)
+
+                if len(licences) > 0:
+                    the_url["licences"] = list(
+                        map(lambda el: el.uris[0], expanded_licences)
+                    )
 
                 valurl = valobj.get("url")
                 if isinstance(valurl, (str, dict)):
@@ -2432,7 +2467,7 @@ WHERE   {
         default_repo: "Optional[str]",
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
-    ) -> "Tuple[RemoteRepo, WorkflowType, Optional[LocalWorkflow]]":
+    ) -> "Tuple[RemoteRepo, WorkflowType, Optional[LocalWorkflow], Optional[Union[EngineVersion, WFLangVersion]]]":
         # This query will tell us where the original workflow was located,
         # its language and version
         cached_workflow: "Optional[LocalWorkflow]" = None
@@ -2619,7 +2654,14 @@ WHERE   {
                     relPathFiles=rel_path_files,
                 )
 
-        return repo, workflow_type, cached_workflow
+        engine_version: "Optional[Union[EngineVersion, WFLangVersion]]" = None
+        if langrow.programminglanguage_version is not None:
+            engine_version = cast(
+                "Union[EngineVersion, WFLangVersion]",
+                str(langrow.programminglanguage_version),
+            )
+
+        return repo, workflow_type, cached_workflow, engine_version
 
     def generateWorkflowMetaFromJSONLD(
         self,
@@ -2629,7 +2671,7 @@ WHERE   {
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
         payload_dir: "Optional[pathlib.Path]" = None,
-    ) -> "Tuple[RemoteRepo, WorkflowType, ContainerType, ParamsBlock, Optional[Sequence[str]], EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
+    ) -> "Tuple[RemoteRepo, WorkflowType, Optional[Union[EngineVersion, WFLangVersion]], ContainerType, ParamsBlock, Optional[Sequence[str]], EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
         if matched_crate is None:
@@ -2658,7 +2700,12 @@ WHERE   {
         # The default crate licences
         crate_licences = self._getLicences(g, matched_crate.mainentity, public_name)
 
-        repo, workflow_type, cached_workflow = self.extractWorkflowMetadata(
+        (
+            repo,
+            workflow_type,
+            cached_workflow,
+            engine_version,
+        ) = self.extractWorkflowMetadata(
             g,
             matched_crate.mainentity,
             default_repo=str(matched_crate.wfhrepourl),
@@ -2838,6 +2885,7 @@ WHERE   {
         return (
             repo,
             workflow_type,
+            engine_version,
             container_type,
             params,
             profiles,
