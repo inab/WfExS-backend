@@ -17,13 +17,14 @@
 
 # These are the software versions being installed
 # in the virtual environment
-APPTAINER_VER=1.2.2
-FUSE2FS_VER=1.47.0
-GO_VER=1.20.7
+: ${APPTAINER_VER:=1.3.6}
+: ${FUSE2FS_VER:=1.47.2}
+: ${GO_VER:=1.23.4}
 
 # These are placeholders
-GO_OS=linux
-GO_ARCH=amd64
+: ${GO_OS:=linux}
+: ${GO_ARCH:=amd64}
+
 
 # Getting the installation directory
 wfexsDir="$(dirname "$0")"
