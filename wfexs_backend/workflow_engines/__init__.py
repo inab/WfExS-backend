@@ -106,6 +106,10 @@ if TYPE_CHECKING:
         ProcessorArchitecture,
     )
 
+    from ..fetchers import (
+        RemoteRepo,
+    )
+
     EngineLocalConfig: TypeAlias = Mapping[str, Any]
 
     # This is also an absolute path
@@ -368,6 +372,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         profiles: "Optional[Sequence[str]]" = None,
         context_inputs: "Sequence[MaterializedInput]" = [],
         context_environment: "Sequence[MaterializedInput]" = [],
+        remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns a
@@ -847,6 +852,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         profiles: "Optional[Sequence[str]]" = None,
         context_inputs: "Sequence[MaterializedInput]" = [],
         context_environment: "Sequence[MaterializedInput]" = [],
+        remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. It returns the
@@ -982,6 +988,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         profiles: "Optional[Sequence[str]]" = None,
         context_inputs: "Sequence[MaterializedInput]" = [],
         context_environment: "Sequence[MaterializedInput]" = [],
+        remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr, ContainerOperatingSystem, ProcessorArchitecture]":
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
             matWfEng,
@@ -990,6 +997,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             profiles=profiles,
             context_inputs=context_inputs,
             context_environment=context_environment,
+            remote_repo=remote_repo,
         )
 
         (
