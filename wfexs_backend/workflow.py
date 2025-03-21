@@ -2378,6 +2378,7 @@ class WF:
                 profiles=self.enabled_profiles,
                 context_inputs=context_inputs,
                 context_environment=context_environment,
+                remote_repo=self.remote_repo,
             )
 
     def materializeInputs(

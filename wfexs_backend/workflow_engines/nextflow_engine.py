@@ -90,6 +90,10 @@ if TYPE_CHECKING:
         ContainerFactory,
     )
 
+    from ..fetchers import (
+        RemoteRepo,
+    )
+
     from ..utils.groovy_parsing import (
         ContextAssignments,
         NfInclude,
@@ -1437,6 +1441,47 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         return None
 
+    def _findLocalPathParams(
+        self,
+        params: "ContextAssignments",
+        workflow_dir: "pathlib.Path",
+        parents: "Tuple[str, ...]" = tuple(),
+    ) -> "Mapping[Tuple[str, ...], MutableSequence[pathlib.Path]]":
+        found_params: "MutableMapping[Tuple[str, ...], MutableSequence[pathlib.Path]]" = (
+            dict()
+        )
+        for rel_key, val in params.items():
+            if isinstance(val, list):
+                for elem in val:
+                    if isinstance(elem, tuple) and len(elem) == 2:
+                        if elem[0] == "STRING_LITERAL":
+                            try:
+                                rel_path = pathlib.Path(elem[1]).relative_to(
+                                    workflow_dir
+                                )
+                                found_params.setdefault((*parents, rel_key), []).append(
+                                    rel_path
+                                )
+                            except ValueError:
+                                pass
+                    else:
+                        self.logger.warning(
+                            f"FIXME: Unhandled values on {rel_key} from {params}"
+                        )
+            elif isinstance(val, dict):
+                found_params.update(
+                    self._findLocalPathParams(
+                        cast("ContextAssignments", val),
+                        workflow_dir,
+                        parents=(*parents, rel_key),
+                    )
+                )
+            else:
+                self.logger.warning(
+                    f"FIXME: Unhandled condition on {rel_key} from {params}"
+                )
+        return found_params
+
     def materializeWorkflow(
         self,
         matWorkflowEngine: "MaterializedWorkflowEngine",
@@ -1445,6 +1490,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
         profiles: "Optional[Sequence[str]]" = None,
         context_inputs: "Sequence[MaterializedInput]" = [],
         context_environment: "Sequence[MaterializedInput]" = [],
+        remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
         Method to ensure the workflow has been materialized. In the case
@@ -1493,6 +1539,48 @@ STDERR
         containerTagSet: "Set[str]" = set()
         assert flat_stdout is not None
         self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
+
+        (
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+            params_assignment,
+        ) = analyze_nf_content(
+            flat_stdout,
+            only_names=["params"],
+            cache_path=self.groovy_cache_dir,
+            ro_cache_path=self.global_groovy_cache_dir,
+        )
+
+        if isinstance(params_assignment.get("params"), dict):
+            local_path_params = self._findLocalPathParams(
+                cast("ContextAssignments", params_assignment["params"]), localWf.dir
+            )
+            for local_path_param, rel_paths in local_path_params.items():
+                linear_local_path_param = MaterializedInput.path_tokens_2_linear_key(
+                    local_path_param
+                )
+                for context_input in context_inputs:
+                    # Is the default value of this param being overwritten?
+                    if context_input.name == linear_local_path_param:
+                        if (
+                            context_input.values is not None
+                            and len(context_input.values) > 0
+                            and not isinstance(
+                                context_input.values[0], MaterializedContent
+                            )
+                        ):
+                            self.logger.warning(
+                                f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
+                            )
+                        break
+                else:
+                    self.logger.warning(
+                        f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
+                    )
 
         # We need to learn the registries before getting the tags
         container_registries: "MutableMapping[ContainerType, str]" = {}
