@@ -30,6 +30,7 @@ jobs:
       - name: 'Install pypy pre-conditions'
         if: matrix.python-version == 'pypy3.10' || matrix.python-version == 'pypy3.11'
         run: |
+          sudo apt update
           sudo apt install -y libxml2-dev libxslt-dev zlib1g-dev
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
         run: |
