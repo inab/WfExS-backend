@@ -318,6 +318,14 @@ class NextflowWorkflowEngine(WorkflowEngine):
         self.max_cpus_per_process: "Optional[int]" = self.engine_config.get(
             "maxCPUsPerProcess"
         )
+        if (
+            self.max_cpus is not None
+            and self.max_cpus_per_process is not None
+            and self.max_cpus < self.max_cpus_per_process
+        ):
+            self.logger.warning(
+                f"Max number of CPUs should be equal or larger than max number of CPUs per process ({self.max_cpus} vs {self.max_cpus_per_process})"
+            )
 
         self.list_string: "bool" = self.engine_config.get(
             "serializeListAsString", False
