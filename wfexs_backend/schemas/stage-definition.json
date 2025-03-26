@@ -682,6 +682,19 @@
 								}
 							]
 						},
+						"maxCPUsPerProcess": {
+							"title": "Max number of CPUs per process",
+							"description": "Number of CPUs to be used by a Nextflow process. When this key has an explicit value of `null`, it depends on Nextflow criteria, which tries creating as many processes as available CPUs, spawning jobs in parallel. Not declaring it, or declaring and explicit value, imposes a limitation in the number of concurrent processes",
+							"oneOf": [
+								{
+									"type": "integer",
+									"minimum": 1
+								},
+								{
+									"type": "null"
+								}
+							]
+						},
 						"maxTaskDuration": {
 							"title": "Max task duration",
 							"description": "With this parameter it is possible to override the max task time declared for processes. This is needed for workflows which are not so customizable",

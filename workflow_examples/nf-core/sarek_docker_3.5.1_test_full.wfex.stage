@@ -8,6 +8,7 @@ workflow_config:
       - docker
       - test_full
     maxProcesses: 16
+    maxCPUsPerProcess: 8
     maxTaskDuration: "24h"
     serializeListAsString: true
 placeholders:

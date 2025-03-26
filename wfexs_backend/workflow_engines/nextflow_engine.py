@@ -315,6 +315,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
             "maxTaskDuration"
         )
 
+        self.max_cpus_per_process: "Optional[int]" = self.engine_config.get(
+            "maxCPUsPerProcess"
+        )
+
         self.list_string: "bool" = self.engine_config.get(
             "serializeListAsString", False
         )
@@ -2180,14 +2184,38 @@ executor.cpus={self.max_cpus}
                     file=fPC,
                 )
 
-            if self.max_task_duration is not None:
+            if (
+                self.max_task_duration is not None
+                or self.max_cpus_per_process is not None
+            ):
                 print(
-                    f"""
-process {{
-    withName: '.*' {{
+                    """
+process {
+    withName: '.*' {
+""",
+                    file=fPC,
+                )
+
+                if self.max_task_duration is not None:
+                    print(
+                        f"""
         time = '{self.max_task_duration}'
-    }}
-}}
+""",
+                        file=fPC,
+                    )
+
+                if self.max_cpus_per_process is not None:
+                    print(
+                        f"""
+        cpus = '{self.max_cpus_per_process}'
+""",
+                        file=fPC,
+                    )
+
+                print(
+                    """
+    }
+}
 """,
                     file=fPC,
                 )
