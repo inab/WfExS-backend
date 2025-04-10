@@ -314,7 +314,9 @@ class WfExSBackend:
 
         import socket
 
-        logger = logging.getLogger(cls.__name__)
+        logger = logging.getLogger(
+            dict(inspect.getmembers(cls))["__module__"] + "::" + cls.__name__
+        )
 
         updated = False
 
