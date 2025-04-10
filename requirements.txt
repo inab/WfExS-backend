@@ -1,6 +1,7 @@
 # These two dependencies are here to be able to install in PyPy 3.10 and 3.11
-rpds-py @ git+https://github.com/crate-py/rpds@dependabot/cargo/pyo3-0.24.0 ; python_version == '3.11' and platform_python_implementation=="PyPy"
-lxml @ git+https://github.com/lxml/lxml.git@lxml-5.3.1 ; platform_python_implementation=="PyPy"
+rpds-py >= 0.24.0 ; python_version == '3.11' and platform_python_implementation=="PyPy"
+#lxml @ git+https://github.com/lxml/lxml.git@lxml-5.3.1 ; platform_python_implementation=="PyPy"
+lxml >= 5.3.2 ; platform_python_implementation=="PyPy"
 
 # These one is needed in some python installations
 setuptools
