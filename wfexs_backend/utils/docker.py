@@ -196,7 +196,13 @@ class DockerHelper(abc.ABC):
     DEFAULT_ALIAS: "Final[str]" = "latest"
 
     def __init__(self) -> None:
-        self.logger = logging.getLogger(self.__class__.__name__)
+        from inspect import getmembers as inspect_getmembers
+
+        self.logger = logging.getLogger(
+            dict(inspect_getmembers(self))["__module__"]
+            + "::"
+            + self.__class__.__name__
+        )
         # Default credentials are no credentials
         self.creds: "MutableMapping[Optional[str], Credentials]" = {
             None: Credentials(None, None, None)

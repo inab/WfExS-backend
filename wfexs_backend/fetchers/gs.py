@@ -50,7 +50,7 @@ from ..common import (
     URIWithMetadata,
 )
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
 def downloadContentFrom_gs(
