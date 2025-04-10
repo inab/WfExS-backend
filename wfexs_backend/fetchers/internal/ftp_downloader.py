@@ -115,7 +115,13 @@ class FTPDownloader:
             self.aioSessMethod = aioftp.Client.context
 
         # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(self.__class__.__name__)
+        from inspect import getmembers as inspect_getmembers
+
+        self.logger = logging.getLogger(
+            dict(inspect_getmembers(self))["__module__"]
+            + "::"
+            + self.__class__.__name__
+        )
 
     def __enter__(self) -> "FTPDownloader":
         return self

@@ -502,7 +502,9 @@ def genParserSub(
     return ap_
 
 
-def processListFetchersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
+def processListFetchersCommand(
+    wfBackend: "WfExSBackend", logger: "logging.Logger"
+) -> "int":
     fetchable_schemes = wfBackend.describeFetchableSchemes()
     print(f"{len(fetchable_schemes)} supported fetchers")
     for fetchable_scheme, description, priority in fetchable_schemes:
@@ -511,7 +513,9 @@ def processListFetchersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "i
     return 0
 
 
-def processListPushersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
+def processListPushersCommand(
+    wfBackend: "WfExSBackend", logger: "logging.Logger"
+) -> "int":
     export_plugin_names = wfBackend.listExportPluginNames()
     print(f"{len(export_plugin_names)} supported export plugins")
     for export_plugin_name in export_plugin_names:
@@ -520,7 +524,7 @@ def processListPushersCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "in
 
 
 def processListContainerFactoriesCommand(
-    wfBackend: "WfExSBackend", logLevel: "int"
+    wfBackend: "WfExSBackend", logger: "logging.Logger"
 ) -> "int":
     container_types = wfBackend.listImplementedContainerTypes()
     print(f"{len(container_types)} supported container factories")
@@ -531,7 +535,7 @@ def processListContainerFactoriesCommand(
 
 
 def processListWorkflowEnginesCommand(
-    wfBackend: "WfExSBackend", logLevel: "int"
+    wfBackend: "WfExSBackend", logger: "logging.Logger"
 ) -> "int":
     print(f"{len(wfBackend.WORKFLOW_ENGINES)} supported workflow engines")
     for workflow_type in wfBackend.WORKFLOW_ENGINES:
@@ -542,7 +546,9 @@ def processListWorkflowEnginesCommand(
     return 0
 
 
-def processListLicencesCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "int":
+def processListLicencesCommand(
+    wfBackend: "WfExSBackend", logger: "logging.Logger"
+) -> "int":
     licence_matcher = LicenceMatcherSingleton()
     documented_licences = licence_matcher.describeDocumentedLicences()
     print(f"{len(documented_licences)} documented licences")
@@ -556,7 +562,7 @@ def processListLicencesCommand(wfBackend: "WfExSBackend", logLevel: "int") -> "i
 
 
 def processCacheCommand(
-    wfBackend: "WfExSBackend", args: "argparse.Namespace", logLevel: "int"
+    wfBackend: "WfExSBackend", args: "argparse.Namespace", logger: "logging.Logger"
 ) -> "int":
     """
     This method processes the cache subcommands, and returns the retval
@@ -569,7 +575,7 @@ def processCacheCommand(
     retval = 0
     if args.cache_command in (WfExS_Cache_Commands.List, WfExS_Cache_Commands.Status):
         the_path: "Union[AbsPath, str, URIType]"
-        if logLevel <= logging.INFO:
+        if logger.getEffectiveLevel() <= logging.INFO:
             contentsI = sorted(
                 cH.list(
                     *args.cache_command_args,
@@ -715,7 +721,7 @@ def processCacheCommand(
                             pathlib.Path(secContextFilename)
                         )
                     except:
-                        logging.exception(
+                        logger.exception(
                             f"ERROR: security context file {secContextFilename} is corrupted"
                         )
                         retval = 1
@@ -768,7 +774,7 @@ def processCacheCommand(
 
 
 def processStagedWorkdirCommand(
-    wB: "WfExSBackend", args: "argparse.Namespace", loglevel: "int"
+    wB: "WfExSBackend", args: "argparse.Namespace", logger: "logging.Logger"
 ) -> "int":
     """
     This method processes the cache subcommands, and returns the retval
@@ -945,7 +951,7 @@ def processStagedWorkdirCommand(
                             )
                         )
                     except Exception as e:
-                        logging.exception(
+                        logger.exception(
                             f"Error while executing {instance_id} ({nickname})"
                         )
                     finally:
@@ -982,7 +988,7 @@ def processStagedWorkdirCommand(
                             f"\t- Instance {wfSetup.instance_id} (nickname '{wfSetup.nickname}') job id {job_id}"
                         )
                     except Exception as e:
-                        logging.exception(
+                        logger.exception(
                             f"Error while queueing {instance_id} ({nickname})"
                         )
                     finally:
@@ -1095,7 +1101,7 @@ def processStagedWorkdirCommand(
                                 )
                                 retval = 1
                     except Exception as e:
-                        logging.exception(
+                        logger.exception(
                             f"Error while creating RO-Crate for {instance_id} ({nickname})"
                         )
                     finally:
@@ -1118,7 +1124,7 @@ def processStagedWorkdirCommand(
 
 
 def processExportCommand(
-    wfInstance: "WF", args: "argparse.Namespace", loglevel: "int"
+    wfInstance: "WF", args: "argparse.Namespace", logger: "logging.Logger"
 ) -> "int":
     """
     This method processes the export subcommands, and returns the retval
@@ -1177,25 +1183,25 @@ def _get_wfexs_argparse_internal(
     ap.add_argument(
         "-q",
         "--quiet",
-        dest="logLevel",
-        action="store_const",
-        const=logging.WARNING,
+        dest="quietLevel",
+        action="append",
+        nargs="?",
         help="Only show engine warnings and errors",
     )
     ap.add_argument(
         "-v",
         "--verbose",
-        dest="logLevel",
-        action="store_const",
-        const=logging.INFO,
+        dest="verboseLevel",
+        action="append",
+        nargs="?",
         help="Show verbose (informational) messages",
     )
     ap.add_argument(
         "-d",
         "--debug",
-        dest="logLevel",
-        action="store_const",
-        const=logging.DEBUG,
+        dest="debugLevel",
+        action="append",
+        nargs="?",
         help="Show debug messages (use with care, as it can disclose passphrases and passwords)",
     )
     ap.add_argument(
@@ -1368,6 +1374,14 @@ def _get_wfexs_argparse_internal(
     return ap, defaultLocalConfigFilename
 
 
+def set_logging_level(modules: "Sequence[Optional[str]]", log_level: "int") -> None:
+    for module in modules:
+        if module is None:
+            module = "wfexs_backend"
+
+        logging.getLogger(module).setLevel(log_level)
+
+
 def main() -> None:
     ap, defaultLocalConfigFilename = _get_wfexs_argparse_internal(docgen=False)
 
@@ -1398,27 +1412,58 @@ def main() -> None:
 
     command = WfExS_Commands(args.command)
 
-    # Setting up the log
-    logLevel = logging.INFO
-    if args.logLevel:
-        logLevel = args.logLevel
-
-    if logLevel < logging.INFO:
+    # Setting up the log format
+    if args.debugLevel is not None:
         logFormat = DEBUG_LOGGING_FORMAT
     else:
         logFormat = LOGGING_FORMAT
 
-    loggingConf: "BasicLoggingConfigDict" = {"format": logFormat, "level": logLevel}
+    loggingConf: "BasicLoggingConfigDict" = {
+        "format": logFormat,
+        "level": logging.WARNING,
+    }
 
     if args.logFilename is not None:
         loggingConf["filename"] = args.logFilename
     #    loggingConf['encoding'] = 'utf-8'
 
     logging.basicConfig(**loggingConf)
-    if logLevel >= logging.INFO:
-        logging.getLogger("crypt4gh").setLevel(
-            logLevel if logLevel > logging.WARNING else logging.WARNING
-        )
+
+    root_log_is_unset = True
+    wfexs_log_is_unset = True
+    crypt4gh_log_is_unset = True
+    if isinstance(args.quietLevel, list) and len(args.quietLevel) > 0:
+        set_logging_level(args.quietLevel, logging.WARNING)
+        if "crypt4gh" in args.quietLevel:
+            crypt4gh_log_is_unset = False
+        if "wfexs_backend" in args.quietLevel or None in args.quietLevel:
+            wfexs_log_is_unset = False
+        if "" in args.quietLevel:
+            root_log_is_unset = False
+
+    if isinstance(args.verboseLevel, list) and len(args.verboseLevel) > 0:
+        set_logging_level(args.verboseLevel, logging.INFO)
+        if "crypt4gh" in args.verboseLevel:
+            crypt4gh_log_is_unset = False
+        if "wfexs_backend" in args.verboseLevel or None in args.verboseLevel:
+            wfexs_log_is_unset = False
+        if "" in args.verboseLevel:
+            root_log_is_unset = False
+
+    if isinstance(args.debugLevel, list) and len(args.debugLevel) > 0:
+        set_logging_level(args.debugLevel, logging.DEBUG)
+        if "crypt4gh" in args.debugLevel:
+            crypt4gh_log_is_unset = False
+        if "wfexs_backend" in args.debugLevel or None in args.debugLevel:
+            wfexs_log_is_unset = False
+        if "" in args.debugLevel:
+            root_log_is_unset = False
+
+    if root_log_is_unset and wfexs_log_is_unset:
+        set_logging_level(["wfexs_backend"], logging.INFO)
+
+    if crypt4gh_log_is_unset:
+        set_logging_level(["crypt4gh"], logging.WARNING)
 
     # Very early command
     if command == WfExS_Commands.PopulateSideCaches:
@@ -1500,29 +1545,32 @@ def main() -> None:
     # Is the work already staged?
     wfBackend = WfExSBackend(local_config, config_directory)
 
+    logger = logging.getLogger(__name__)
+    logger.debug("Enabled debug level")
+
     # Cache handling commands
     print('* Command "{}".'.format(command), file=sys.stderr)
     if command == WfExS_Commands.ListFetchers:
-        sys.exit(processListFetchersCommand(wfBackend, logLevel))
+        sys.exit(processListFetchersCommand(wfBackend, logger))
 
     if command == WfExS_Commands.ListPushers:
-        sys.exit(processListPushersCommand(wfBackend, logLevel))
+        sys.exit(processListPushersCommand(wfBackend, logger))
 
     if command == WfExS_Commands.ListContainerFactories:
-        sys.exit(processListContainerFactoriesCommand(wfBackend, logLevel))
+        sys.exit(processListContainerFactoriesCommand(wfBackend, logger))
 
     if command == WfExS_Commands.ListWorkflowEngines:
-        sys.exit(processListWorkflowEnginesCommand(wfBackend, logLevel))
+        sys.exit(processListWorkflowEnginesCommand(wfBackend, logger))
 
     if command == WfExS_Commands.ListLicences:
-        sys.exit(processListLicencesCommand(wfBackend, logLevel))
+        sys.exit(processListLicencesCommand(wfBackend, logger))
 
     if command == WfExS_Commands.Cache:
-        sys.exit(processCacheCommand(wfBackend, args, logLevel))
+        sys.exit(processCacheCommand(wfBackend, args, logger))
 
     # Staged working directory handling commands
     if command == WfExS_Commands.StagedWorkDir:
-        sys.exit(processStagedWorkdirCommand(wfBackend, args, logLevel))
+        sys.exit(processStagedWorkdirCommand(wfBackend, args, logger))
 
     # These can be needed in more than one place
     if (
@@ -1688,7 +1736,7 @@ def main() -> None:
 
     # Export staged working directory contents commands
     if command == WfExS_Commands.Export:
-        sys.exit(processExportCommand(wfInstance, args, logLevel))
+        sys.exit(processExportCommand(wfInstance, args, logger))
 
     if command in (
         WfExS_Commands.Stage,
