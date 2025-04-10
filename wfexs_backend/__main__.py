@@ -42,6 +42,7 @@ from .common import (
 if TYPE_CHECKING:
     from typing import (
         Callable,
+        MutableSequence,
         Optional,
         Sequence,
         Tuple,
@@ -65,6 +66,7 @@ if TYPE_CHECKING:
 
     class BasicLoggingConfigDict(TypedDict):
         filename: NotRequired[str]
+        handlers: NotRequired[Sequence[logging.Handler]]
         format: str
         level: int
 
@@ -568,7 +570,7 @@ def processCacheCommand(
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
     """
-    print(f"\t- Subcommand {args.cache_command} {args.cache_type}")
+    logger.info(f"\t- Subcommand {args.cache_command} {args.cache_type}")
 
     cH, cPath = wfBackend.getCacheHandler(args.cache_type)
     assert cPath is not None
@@ -692,9 +694,8 @@ def processCacheCommand(
                 clonable=clonable,
             )
         else:
-            print(
+            logger.error(
                 f"ERROR: subcommand {args.cache_command} takes two required positional parameters: the URI to be injected, and the path to the local content to be associated to that URI. A third optional parameter, which is either 'true' or 'false', tells whether it is allowed to clone the injected content into the working directories.",
-                file=sys.stderr,
             )
             retval = 1
     elif args.cache_command == WfExS_Cache_Commands.Validate:
@@ -726,9 +727,8 @@ def processCacheCommand(
                         )
                         retval = 1
                 else:
-                    print(
+                    logger.error(
                         f"ERROR: security context file {secContextFilename} does not exist",
-                        file=sys.stderr,
                     )
                     retval = 1
 
@@ -736,9 +736,8 @@ def processCacheCommand(
                     # TODO: Revise and Fix this
                     secContext = vault.getContext(uri_to_fetch, secContextName)
                     if secContext is None:
-                        print(
+                        logger.error(
                             f"ERROR: security context file {secContextFilename} does not contain the security context {secContextName}",
-                            file=sys.stderr,
                         )
                         retval = 1
             else:
@@ -764,9 +763,8 @@ def processCacheCommand(
                     f"{cached_content.kind}\t{cached_content.path}\t{cached_content.licences}\t{cached_content.metadata_array}\t{cached_content.clonable}"
                 )
         else:
-            print(
+            logger.error(
                 f"ERROR: subcommand {args.cache_command} takes either one or three positional parameters: the URI to be fetched, the path to a security context file and the security context to be used for the fetch operation. An optional last parameter tells whether the fetched content should be allowed to be cloned in working directories",
-                file=sys.stderr,
             )
             retval = 1
 
@@ -780,7 +778,7 @@ def processStagedWorkdirCommand(
     This method processes the cache subcommands, and returns the retval
     to be used with sys.exit
     """
-    print(f"\t- Subcommand {args.staged_workdir_command}")
+    logger.info(f"\t- Subcommand {args.staged_workdir_command}")
 
     retval = 0
     # This is needed to be sure the encfs instance is unmounted
@@ -832,7 +830,9 @@ def processStagedWorkdirCommand(
                 private_key_passphrase=private_key_passphrase,
             ):
                 if wfSetup is not None:
-                    print(f"Mounted {instance_id} ({nickname}) at {wfSetup.work_dir}")
+                    logger.info(
+                        f"Mounted {instance_id} ({nickname}) at {wfSetup.work_dir}"
+                    )
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.List:
         contents = sorted(
             wB.listStagedWorkflows(
@@ -935,14 +935,14 @@ def processStagedWorkdirCommand(
                 if not is_damaged and (wfInstance is not None):
                     try:
                         assert wfSetup is not None
-                        print(
+                        logger.info(
                             "\t- Instance {} (nickname '{}') is being run\n".format(
                                 wfSetup.instance_id,
                                 wfSetup.nickname,
                             )
                         )
                         staged_exec = wfInstance.executeWorkflow(offline=True)
-                        print(
+                        logger.info(
                             "\t- Instance {} (nickname '{}') exit value: {} ({})\n".format(
                                 wfSetup.instance_id,
                                 wfSetup.nickname,
@@ -977,14 +977,14 @@ def processStagedWorkdirCommand(
                 if not is_damaged and (wfInstance is not None):
                     try:
                         assert wfSetup is not None
-                        print(
+                        logger.info(
                             "\t- Instance {} (nickname '{}') is being run\n".format(
                                 wfSetup.instance_id,
                                 wfSetup.nickname,
                             )
                         )
                         job_id = wfInstance.queueExecution(offline=True)
-                        print(
+                        logger.info(
                             f"\t- Instance {wfSetup.instance_id} (nickname '{wfSetup.nickname}') job id {job_id}"
                         )
                     except Exception as e:
@@ -1059,7 +1059,7 @@ def processStagedWorkdirCommand(
                             args.staged_workdir_command
                             == WfExS_Staged_WorkDir_Commands.CreateStagedROCrate
                         ):
-                            print(
+                            logger.info(
                                 "\t- Generating prospective RO-Crate provenance from instance {} (nickname '{}')\n".format(
                                     wfSetup.instance_id,
                                     wfSetup.nickname,
@@ -1078,7 +1078,7 @@ def processStagedWorkdirCommand(
                         else:
                             mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
                             if isinstance(mStatus.execution, datetime.datetime):
-                                print(
+                                logger.info(
                                     "\t- Generating retrospective provenance RO-Crate from instance {} (nickname '{}')\n".format(
                                         wfSetup.instance_id,
                                         wfSetup.nickname,
@@ -1095,9 +1095,8 @@ def processStagedWorkdirCommand(
                                     crate_pid=op_crate_pid,
                                 )
                             else:
-                                print(
+                                logger.error(
                                     f"ERROR: workflow was never executed at staged workdir {instance_id} ({nickname})",
-                                    file=sys.stderr,
                                 )
                                 retval = 1
                     except Exception as e:
@@ -1107,15 +1106,13 @@ def processStagedWorkdirCommand(
                     finally:
                         wfInstance.cleanup()
                 else:
-                    print(
-                        f"ERROR: staged workdir {instance_id} ({nickname}) is damaged",
-                        file=sys.stderr,
+                    logger.error(
+                        f"Staged workdir {instance_id} ({nickname}) is damaged",
                     )
                     retval = 1
         else:
-            print(
+            logger.error(
                 f"ERROR: subcommand {args.staged_workdir_command} takes two positional parameters: the staged workdir name or id and the path where to store the RO-Crate",
-                file=sys.stderr,
             )
             retval = 1
 
@@ -1130,7 +1127,7 @@ def processExportCommand(
     This method processes the export subcommands, and returns the retval
     to be used with sys.exit
     """
-    print(f"\t- Subcommand {args.export_contents_command}")
+    logger.info(f"\t- Subcommand {args.export_contents_command}")
 
     retval = 0
     if args.export_contents_command == WfExS_Export_Commands.List:
@@ -1418,14 +1415,17 @@ def main() -> None:
     else:
         logFormat = LOGGING_FORMAT
 
+    # Initializing log handling
+    handlers: "MutableSequence[logging.Handler]" = [logging.StreamHandler()]
+    if args.logFilename is not None:
+        handlers.append(logging.FileHandler(args.logFilename, encoding="utf-8"))
+    #    loggingConf['encoding'] = 'utf-8'
+
     loggingConf: "BasicLoggingConfigDict" = {
         "format": logFormat,
         "level": logging.WARNING,
+        "handlers": handlers,
     }
-
-    if args.logFilename is not None:
-        loggingConf["filename"] = args.logFilename
-    #    loggingConf['encoding'] = 'utf-8'
 
     logging.basicConfig(**loggingConf)
 
@@ -1465,6 +1465,9 @@ def main() -> None:
     if crypt4gh_log_is_unset:
         set_logging_level(["crypt4gh"], logging.WARNING)
 
+    logger = logging.getLogger(__name__)
+    logger.debug("Enabled debug level")
+
     # Very early command
     if command == WfExS_Commands.PopulateSideCaches:
         populate_side_caches()
@@ -1480,11 +1483,10 @@ def main() -> None:
     else:
         local_config = {}
         if localConfigFilename and not localConfigFilename.exists():
-            print(
+            logger.warning(
                 "[WARNING] Configuration file {} does not exist".format(
                     localConfigFilename
                 ),
-                file=sys.stderr,
             )
 
     # A filename is needed later, in order to initialize installation keys
@@ -1510,9 +1512,8 @@ def main() -> None:
         local_config["cacheDir"] = cacheDir
         # Assuring this temporal directory is removed at the end
         atexit.register(shutil.rmtree, cacheDir, True)
-        print(
+        logger.warning(
             f"[WARNING] Cache directory not defined. Created a temporary one at {cacheDir}",
-            file=sys.stderr,
         )
 
     # Initialize (and create config file)
@@ -1534,7 +1535,9 @@ def main() -> None:
 
         # Last, should config be saved back?
         if updated_config or not localConfigFilename.exists():
-            print("* Storing updated configuration at {}".format(localConfigFilename))
+            logger.info(
+                "* Storing updated configuration at {}".format(localConfigFilename)
+            )
             with localConfigFilename.open(mode="w", encoding="utf-8") as cf:
                 yaml.dump(local_config, cf, Dumper=YAMLDumper)
 
@@ -1545,11 +1548,8 @@ def main() -> None:
     # Is the work already staged?
     wfBackend = WfExSBackend(local_config, config_directory)
 
-    logger = logging.getLogger(__name__)
-    logger.debug("Enabled debug level")
-
     # Cache handling commands
-    print('* Command "{}".'.format(command), file=sys.stderr)
+    logger.info('* Command "{}".'.format(command))
     if command == WfExS_Commands.ListFetchers:
         sys.exit(processListFetchersCommand(wfBackend, logger))
 
@@ -1633,23 +1633,21 @@ def main() -> None:
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if is_damaged or (wfInstance is None):
-                    print(
+                    logger.error(
                         f"[ERROR] Workflow {instance_id} is corrupted! Stopping.",
-                        file=sys.stderr,
                     )
                     sys.exit(1)
                 break
         if wfInstance is None:
-            print(
+            logger.error(
                 f"[ERROR] Workflow {args.workflowWorkingDirectory} could not be found! Stopping.",
-                file=sys.stderr,
             )
             sys.exit(1)
     elif (
         command not in (WfExS_Commands.Import, WfExS_Commands.TryStage)
         and not args.workflowConfigFilename
     ):
-        print("[ERROR] Workflow config was not provided! Stopping.", file=sys.stderr)
+        logger.error("[ERROR] Workflow config was not provided! Stopping.")
         sys.exit(1)
     elif command == WfExS_Commands.ConfigValidate:
         retval = wfBackend.validateConfigFiles(
@@ -1689,9 +1687,8 @@ def main() -> None:
             retrospective_first=args.retrospective_first,
         )
     else:
-        print(
+        logger.error(
             f"[ERROR] Unimplemented command {command.value}. Stopping.",
-            file=sys.stderr,
         )
         sys.exit(1)
 
@@ -1703,16 +1700,15 @@ def main() -> None:
     if command == WfExS_Commands.ReStage:
         source_wfInstance = wfInstance
         source_wfSetup = source_wfInstance.getStagedSetup()
-        print(
+        logger.info(
             f"\t- Source working directory is {source_wfSetup.work_dir}",
-            file=sys.stderr,
         )
-        print(
+        logger.info(
             "\t  Source instance {} (nickname '{}')".format(
                 source_wfSetup.instance_id, source_wfSetup.nickname
             )
         )
-        sys.stderr.flush()
+
         wfInstance = wfBackend.fromPreviousInstanceDeclaration(
             source_wfInstance,
             securityContextsConfigFilename=args.securityContextsConfigFilename,
@@ -1731,7 +1727,7 @@ def main() -> None:
         atexit.register(wfInstance.cleanup)
 
     wfSetup = wfInstance.getStagedSetup()
-    print("\t- Working directory will be {}".format(wfSetup.work_dir), file=sys.stderr)
+    logger.info("\t- Working directory will be {}".format(wfSetup.work_dir))
     sys.stderr.flush()
 
     # Export staged working directory contents commands
@@ -1744,14 +1740,14 @@ def main() -> None:
         WfExS_Commands.ReStage,
         WfExS_Commands.Execute,
     ):
-        print(
+        logger.info(
             "\t  Instance {} (nickname '{}') (to be used with -J)".format(
                 wfSetup.instance_id, wfSetup.nickname
             )
         )
         stagedSetup = wfInstance.stageWorkDir()
         if command != WfExS_Commands.Execute:
-            print(
+            logger.info(
                 "\t- Instance {} (nickname '{}') is {} ready".format(
                     wfSetup.instance_id,
                     wfSetup.nickname,
@@ -1765,18 +1761,19 @@ def main() -> None:
                 else 0
             )
     elif command == WfExS_Commands.TryStage:
-        print(
+        logger.info(
             "\t  Instance {} (nickname '{}') (to be inspected later)".format(
                 wfSetup.instance_id, wfSetup.nickname
             )
         )
         stagedSetup = wfInstance.tryStageWorkflow()
-        print(
+        logger.log(
+            logging.ERROR if stagedSetup.is_damaged else logging.INFO,
             "\t- Instance {} (nickname '{}') is {} ready".format(
                 wfSetup.instance_id,
                 wfSetup.nickname,
                 "NOT" if stagedSetup.is_damaged else "now",
-            )
+            ),
         )
         sys.exit(
             1
@@ -1803,7 +1800,7 @@ def main() -> None:
         )
 
     if command in (WfExS_Commands.OfflineExecute, WfExS_Commands.Execute):
-        print(
+        logger.info(
             "\t- Instance {} (nickname '{}') is being run".format(
                 wfSetup.instance_id,
                 wfSetup.nickname,
@@ -1812,13 +1809,14 @@ def main() -> None:
         staged_exec = wfInstance.executeWorkflow(
             offline=command == WfExS_Commands.OfflineExecute
         )
-        print(
+        logger.log(
+            logging.ERROR if staged_exec.exitVal != 0 else logging.INFO,
             "\t- Instance {} (nickname '{}') exit value: {} ({})".format(
                 wfSetup.instance_id,
                 wfSetup.nickname,
                 staged_exec.exitVal,
                 "FAILED" if staged_exec.exitVal != 0 else "DONE",
-            )
+            ),
         )
 
     if command in (WfExS_Commands.ExportResults, WfExS_Commands.Execute):
