@@ -1396,6 +1396,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
         r"process\..*container = '(.+)'$", flags=re.MULTILINE
     )
 
+    # Fallback pattern to search for default values of parameters
+    ParamsPatQuoted: "Pattern[str]" = re.compile(
+        r"^params\.([^ \t=]+)\s*=\s*'([^']*)'$"
+    )
+    ParamsPatQuotedList: "Pattern[str]" = re.compile(
+        r"^params\.([^ \t=]+)\s*=\s*\[(?:(?:, )?'(.*)')*\]$"
+    )
+    ParamsPat: "Pattern[str]" = re.compile(r"^params\.([^ \t=]+)\s*=\s*([^']+)$")
+
     # Pattern for searching for (docker|podman)\.registry = ['"]([^'"]+)['"] in dumped config
     RegistryPat: "Pattern[str]" = re.compile(
         r"(docker|podman)\.registry = '(.+)'$", flags=re.MULTILINE
@@ -1554,49 +1563,96 @@ STDERR
         containerTagsConda: "MutableSequence[ContainerTaggedName]" = []
         containerTagSet: "Set[str]" = set()
         assert flat_stdout is not None
-        self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
+        self.logger.debug(f"{' '.join(nxf_params)} => {flat_stdout}")
 
-        (
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            params_assignment,
-        ) = analyze_nf_content(
-            flat_stdout,
-            only_names=["params"],
-            cache_path=self.groovy_cache_dir,
-            ro_cache_path=self.global_groovy_cache_dir,
-        )
-
-        if isinstance(params_assignment.get("params"), dict):
-            local_path_params = self._findLocalPathParams(
-                cast("ContextAssignments", params_assignment["params"]), localWf.dir
+        # We cannot only depend on Groovy parser because some workflows,
+        # like nf-core/sarek , have in some of their config properties
+        # strings with single quotes AND nextflow does not properly
+        # escape them.
+        try:
+            (
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+                params_assignment,
+            ) = analyze_nf_content(
+                flat_stdout,
+                only_names=["params"],
+                cache_path=self.groovy_cache_dir,
+                ro_cache_path=self.global_groovy_cache_dir,
             )
-            for local_path_param, rel_paths in local_path_params.items():
-                linear_local_path_param = MaterializedInput.path_tokens_2_linear_key(
-                    local_path_param
+
+            if isinstance(params_assignment.get("params"), dict):
+                local_path_params = self._findLocalPathParams(
+                    cast("ContextAssignments", params_assignment["params"]), localWf.dir
                 )
-                for context_input in context_inputs:
-                    # Is the default value of this param being overwritten?
-                    if context_input.name == linear_local_path_param:
-                        if (
-                            context_input.values is not None
-                            and len(context_input.values) > 0
-                            and not isinstance(
-                                context_input.values[0], MaterializedContent
-                            )
-                        ):
-                            self.logger.warning(
-                                f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
-                            )
-                        break
-                else:
-                    self.logger.warning(
-                        f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
+                for local_path_param, rel_paths in local_path_params.items():
+                    linear_local_path_param = (
+                        MaterializedInput.path_tokens_2_linear_key(local_path_param)
                     )
+                    for context_input in context_inputs:
+                        # Is the default value of this param being overwritten?
+                        if context_input.name == linear_local_path_param:
+                            if (
+                                context_input.values is not None
+                                and len(context_input.values) > 0
+                                and not isinstance(
+                                    context_input.values[0], MaterializedContent
+                                )
+                            ):
+                                self.logger.warning(
+                                    f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
+                                )
+                            break
+                    else:
+                        self.logger.warning(
+                            f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
+                        )
+        except:
+            self.logger.debug(
+                "Failed groovy parsing of config parameters, using pattern based one"
+            )
+            for flat_line in flat_stdout.split("\n"):
+                for pat in (self.ParamsPatQuotedList, self.ParamsPatQuoted):
+                    paramMatch = pat.match(flat_line)
+                    if paramMatch is not None:
+                        linear_local_path_param = cast(
+                            "SymbolicParamName", paramMatch[1]
+                        )
+                        rel_paths = []
+                        for rel_str in paramMatch.groups()[1:]:
+                            try:
+                                # Is it a relative path?
+                                rel_paths.append(
+                                    pathlib.Path(rel_str).relative_to(localWf.dir)
+                                )
+                            except ValueError:
+                                pass
+
+                        for context_input in context_inputs:
+                            # Is the default value of this param being overwritten?
+                            if context_input.name == linear_local_path_param:
+                                if (
+                                    context_input.values is not None
+                                    and len(context_input.values) > 0
+                                    and not isinstance(
+                                        context_input.values[0], MaterializedContent
+                                    )
+                                ):
+                                    self.logger.warning(
+                                        f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
+                                    )
+                                break
+                        else:
+                            self.logger.warning(
+                                f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
+                            )
+
+                        # No more patterns
+                        break
 
         # We need to learn the registries before getting the tags
         container_registries: "MutableMapping[ContainerType, str]" = {}
