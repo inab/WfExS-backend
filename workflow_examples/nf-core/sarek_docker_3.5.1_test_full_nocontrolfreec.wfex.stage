@@ -30,7 +30,7 @@ params:
   igenomes_base: "{igenomes_base}"
   split_fastq: 20000000
   # WARNING! Controlfreec bug indentified in tumor-only mode (https://github.com/nf-core/sarek/issues/1376)         
-  tools: "ngscheckmate,lofreq,strelka,mutect2,freebayes,ascat,manta,cnvkit,tiddit,controlfreec,vep,snpeff"
+  tools: "ngscheckmate,lofreq,strelka,mutect2,freebayes,ascat,manta,cnvkit,tiddit,vep,snpeff"
   wes: true 
 
   # max_time: "24h"
