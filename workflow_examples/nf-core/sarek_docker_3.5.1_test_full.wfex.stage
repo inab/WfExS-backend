@@ -1,0 +1,125 @@
+workflow_id: git+https://github.com/nf-core/sarek.git@3.5.1
+workflow_config:
+  secure: false
+  containerType: docker
+  nextflow:
+    version: 24.10.5
+    profile:
+      - docker
+      - test_full
+    maxProcesses: 16
+    maxCPUsPerProcess: 8
+    maxTaskDuration: "24h"
+    serializeListAsString: true
+placeholders:
+  igenomes_base: "s3://ngi-igenomes/igenomes"
+  genome: "GATK.GRCh38"
+# All the inputs must be URLs or CURIEs from identifiers.org
+params:
+  input:
+    c-l-a-s-s: ContentWithURIs
+    preferred-name: HCC1395_WXS_somatic_full_test.csv
+    url: "https://raw.githubusercontent.com/nf-core/test-datasets/sarek/testdata/csv/HCC1395_WXS_somatic_full_test.csv"
+    tabular:
+      uri-columns:
+        - 5
+        - 6
+      column-sep: ","
+      header-rows: 1
+  genome: "{genome}"
+  igenomes_base: "{igenomes_base}"
+  split_fastq: 20000000
+  # WARNING! Controlfreec bug indentified in tumor-only mode (https://github.com/nf-core/sarek/issues/1376)         
+  tools: "ngscheckmate,lofreq,strelka,mutect2,freebayes,ascat,manta,cnvkit,tiddit,controlfreec,vep,snpeff"
+  wes: true 
+
+  # max_time: "24h"
+
+  ascat_alleles:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/ASCAT/G1000_alleles_hg38.zip"
+  ascat_loci:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/ASCAT/G1000_loci_hg38.zip"
+  ascat_loci_gc:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/ASCAT/GC_G1000_hg38.zip"
+  ascat_loci_rt:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/ASCAT/RT_G1000_hg38.zip"
+  bwa:
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/BWAIndex/"
+  bwamem2:
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/BWAmem2Index/"
+  cf_chrom_len:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/Length/Homo_sapiens_assembly38.len"
+  chr_dir: 
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/Chromosomes"
+  dbsnp:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/dbsnp_146.hg38.vcf.gz"
+  dbsnp_tbi:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/dbsnp_146.hg38.vcf.gz.tbi"
+  dict:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.dict"
+  dragmap:
+    c-l-a-s-s: Directory
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/dragmap/"
+  fasta:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta"
+  fasta_fai:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Sequence/WholeGenomeFasta/Homo_sapiens_assembly38.fasta.fai"
+  germline_resource:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/af-only-gnomad.hg38.vcf.gz"
+  germline_resource_tbi:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/af-only-gnomad.hg38.vcf.gz.tbi"
+  intervals:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/intervals/wgs_calling_regions_noseconds.hg38.bed"
+  known_indels:
+    c-l-a-s-s: File
+    url:
+      - "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz"
+      - "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/beta/Homo_sapiens_assembly38.known_indels.vcf.gz"
+  known_indels_tbi:
+    c-l-a-s-s: File
+    url: 
+      - "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi"
+      - "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/beta/Homo_sapiens_assembly38.known_indels.vcf.gz.tbi"
+  known_snps:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/1000G_omni2.5.hg38.vcf.gz"
+  known_snps_tbi:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/1000G_omni2.5.hg38.vcf.gz.tbi"
+  mappability:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/Control-FREEC/out100m2_hg38.gem"
+  ngscheckmate_bed:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/NGSCheckMate/SNP_GRCh38_hg38_wChr.bed"
+  pon:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/1000g_pon.hg38.vcf.gz"
+  pon_tbi:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/GATKBundle/1000g_pon.hg38.vcf.gz.tbi"
+  sentieon_dnascope_model:
+    c-l-a-s-s: File
+    url: "{igenomes_base}/Homo_sapiens/GATK/GRCh38/Annotation/Sentieon/SentieonDNAscopeModel1.1.model"  
+
+  outdir:
+    c-l-a-s-s: Directory
+    # This hint tells that this parameter is the output directory
+    autoFill: true
+    autoPrefix: false

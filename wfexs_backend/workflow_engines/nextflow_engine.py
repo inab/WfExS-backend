@@ -315,6 +315,22 @@ class NextflowWorkflowEngine(WorkflowEngine):
             "maxTaskDuration"
         )
 
+        self.max_cpus_per_process: "Optional[int]" = self.engine_config.get(
+            "maxCPUsPerProcess"
+        )
+        if (
+            self.max_cpus is not None
+            and self.max_cpus_per_process is not None
+            and self.max_cpus < self.max_cpus_per_process
+        ):
+            self.logger.warning(
+                f"Max number of CPUs should be equal or larger than max number of CPUs per process ({self.max_cpus} vs {self.max_cpus_per_process})"
+            )
+
+        self.list_string: "bool" = self.engine_config.get(
+            "serializeListAsString", False
+        )
+
         # The profile to force, in case it cannot be guessed
         nxf_profile: "Union[str, Sequence[str]]" = self.engine_config.get("profile", [])
         self.nxf_profile: "Sequence[str]"
@@ -1380,6 +1396,15 @@ class NextflowWorkflowEngine(WorkflowEngine):
         r"process\..*container = '(.+)'$", flags=re.MULTILINE
     )
 
+    # Fallback pattern to search for default values of parameters
+    ParamsPatQuoted: "Pattern[str]" = re.compile(
+        r"^params\.([^ \t=]+)\s*=\s*'([^']*)'$"
+    )
+    ParamsPatQuotedList: "Pattern[str]" = re.compile(
+        r"^params\.([^ \t=]+)\s*=\s*\[(?:(?:, )?'(.*)')*\]$"
+    )
+    ParamsPat: "Pattern[str]" = re.compile(r"^params\.([^ \t=]+)\s*=\s*([^']+)$")
+
     # Pattern for searching for (docker|podman)\.registry = ['"]([^'"]+)['"] in dumped config
     RegistryPat: "Pattern[str]" = re.compile(
         r"(docker|podman)\.registry = '(.+)'$", flags=re.MULTILINE
@@ -1538,49 +1563,96 @@ STDERR
         containerTagsConda: "MutableSequence[ContainerTaggedName]" = []
         containerTagSet: "Set[str]" = set()
         assert flat_stdout is not None
-        self.logger.debug(f"nextflow config -flat {localWf.dir} => {flat_stdout}")
+        self.logger.debug(f"{' '.join(nxf_params)} => {flat_stdout}")
 
-        (
-            _,
-            _,
-            _,
-            _,
-            _,
-            _,
-            params_assignment,
-        ) = analyze_nf_content(
-            flat_stdout,
-            only_names=["params"],
-            cache_path=self.groovy_cache_dir,
-            ro_cache_path=self.global_groovy_cache_dir,
-        )
-
-        if isinstance(params_assignment.get("params"), dict):
-            local_path_params = self._findLocalPathParams(
-                cast("ContextAssignments", params_assignment["params"]), localWf.dir
+        # We cannot only depend on Groovy parser because some workflows,
+        # like nf-core/sarek , have in some of their config properties
+        # strings with single quotes AND nextflow does not properly
+        # escape them.
+        try:
+            (
+                _,
+                _,
+                _,
+                _,
+                _,
+                _,
+                params_assignment,
+            ) = analyze_nf_content(
+                flat_stdout,
+                only_names=["params"],
+                cache_path=self.groovy_cache_dir,
+                ro_cache_path=self.global_groovy_cache_dir,
             )
-            for local_path_param, rel_paths in local_path_params.items():
-                linear_local_path_param = MaterializedInput.path_tokens_2_linear_key(
-                    local_path_param
+
+            if isinstance(params_assignment.get("params"), dict):
+                local_path_params = self._findLocalPathParams(
+                    cast("ContextAssignments", params_assignment["params"]), localWf.dir
                 )
-                for context_input in context_inputs:
-                    # Is the default value of this param being overwritten?
-                    if context_input.name == linear_local_path_param:
-                        if (
-                            context_input.values is not None
-                            and len(context_input.values) > 0
-                            and not isinstance(
-                                context_input.values[0], MaterializedContent
-                            )
-                        ):
-                            self.logger.warning(
-                                f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
-                            )
-                        break
-                else:
-                    self.logger.warning(
-                        f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
+                for local_path_param, rel_paths in local_path_params.items():
+                    linear_local_path_param = (
+                        MaterializedInput.path_tokens_2_linear_key(local_path_param)
                     )
+                    for context_input in context_inputs:
+                        # Is the default value of this param being overwritten?
+                        if context_input.name == linear_local_path_param:
+                            if (
+                                context_input.values is not None
+                                and len(context_input.values) > 0
+                                and not isinstance(
+                                    context_input.values[0], MaterializedContent
+                                )
+                            ):
+                                self.logger.warning(
+                                    f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
+                                )
+                            break
+                    else:
+                        self.logger.warning(
+                            f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
+                        )
+        except:
+            self.logger.debug(
+                "Failed groovy parsing of config parameters, using pattern based one"
+            )
+            for flat_line in flat_stdout.split("\n"):
+                for pat in (self.ParamsPatQuotedList, self.ParamsPatQuoted):
+                    paramMatch = pat.match(flat_line)
+                    if paramMatch is not None:
+                        linear_local_path_param = cast(
+                            "SymbolicParamName", paramMatch[1]
+                        )
+                        rel_paths = []
+                        for rel_str in paramMatch.groups()[1:]:
+                            try:
+                                # Is it a relative path?
+                                rel_paths.append(
+                                    pathlib.Path(rel_str).relative_to(localWf.dir)
+                                )
+                            except ValueError:
+                                pass
+
+                        for context_input in context_inputs:
+                            # Is the default value of this param being overwritten?
+                            if context_input.name == linear_local_path_param:
+                                if (
+                                    context_input.values is not None
+                                    and len(context_input.values) > 0
+                                    and not isinstance(
+                                        context_input.values[0], MaterializedContent
+                                    )
+                                ):
+                                    self.logger.warning(
+                                        f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
+                                    )
+                                break
+                        else:
+                            self.logger.warning(
+                                f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
+                            )
+
+                        # No more patterns
+                        break
 
         # We need to learn the registries before getting the tags
         container_registries: "MutableMapping[ContainerType, str]" = {}
@@ -1863,7 +1935,25 @@ STDERR
             else:
                 nxfValues = [None]
 
-            node[splittedPath[-1]] = nxfValues if len(nxfValues) != 1 else nxfValues[0]
+            if len(nxfValues) == 1:
+                node[splittedPath[-1]] = nxfValues[0]
+            elif self.list_string:
+                common_path = os.path.commonpath(cast("Sequence[str]", nxfValues))
+                if not common_path.endswith("/"):
+                    common_path += "/"
+                common_path += (
+                    "{"
+                    + ",".join(
+                        map(
+                            lambda n: os.path.relpath(n, common_path),
+                            cast("Sequence[str]", nxfValues),
+                        )
+                    )
+                    + "}"
+                )
+                node[splittedPath[-1]] = common_path
+            else:
+                node[splittedPath[-1]] = nxfValues
 
         return nxpParams
 
@@ -2158,14 +2248,38 @@ executor.cpus={self.max_cpus}
                     file=fPC,
                 )
 
-            if self.max_task_duration is not None:
+            if (
+                self.max_task_duration is not None
+                or self.max_cpus_per_process is not None
+            ):
                 print(
-                    f"""
-process {{
-    withName: '.*' {{
+                    """
+process {
+    withName: '.*' {
+""",
+                    file=fPC,
+                )
+
+                if self.max_task_duration is not None:
+                    print(
+                        f"""
         time = '{self.max_task_duration}'
-    }}
-}}
+""",
+                        file=fPC,
+                    )
+
+                if self.max_cpus_per_process is not None:
+                    print(
+                        f"""
+        cpus = '{self.max_cpus_per_process}'
+""",
+                        file=fPC,
+                    )
+
+                print(
+                    """
+    }
+}
 """,
                     file=fPC,
                 )
@@ -2391,138 +2505,28 @@ wfexs_allParams()
         #             f" {volFlag} {bindable_path}:{bindable_path}:ro"
         #         )
 
-        # Corner cases of single file workflows with no nextflow.config file
-        originalConfFile: "Optional[pathlib.Path]"
-        if localWf.relPath != localWf.relPathFiles[0]:
-            originalConfFile = localWf.dir / localWf.relPathFiles[0]
-
-            # Copying the workflow directory, so an additional file
-            # can be included without changing the original one
-            wDir = outputMetaDir / "nxf_trojan"
-            shutil.copytree(localWf.dir, wDir, copy_function=copy2_nofollow)
-
-            forceParamsConfFile = wDir / self.TROJAN_CONFIG_FILENAME
-        else:
-            wDir = localWf.dir
-            # Configuration file generated by WfExS to override what it is needed
-            forceParamsConfFile = outputMetaDir / self.TROJAN_CONFIG_FILENAME
-
-            originalConfFile = None
-
-        # File where all the gathered parameters are going to be stored
-        allParamsFile = outputMetaDir / "all-params.json"
-
-        with forceParamsConfFile.open(mode="w", encoding="utf-8") as fPC:
-            # First of all, we have to replicate the contents of the
-            # original nextflow.config, so their original methods are not out
-            # of context
-            if originalConfFile is not None:
-                with originalConfFile.open(mode="r", encoding="utf-8") as oH:
-                    shutil.copyfileobj(oH, fPC)
-
-                print("\n", file=fPC)
-
-            if self.container_factory.containerType == ContainerType.Singularity:
-                print(
-                    f"""
-docker.enabled = false
-podman.enabled = false
-singularity.enabled = true
-singularity.envWhitelist = '{','.join(envWhitelist)}'
-singularity.autoMounts = true
-""",
-                    file=fPC,
-                )
-            elif self.container_factory.containerType == ContainerType.Docker:
-                print(
-                    f"""
-singularity.enabled = false
-podman.enabled = false
-docker.enabled = true
-docker.envWhitelist = '{','.join(envWhitelist)}'
-docker.fixOwnership = true
-""",
-                    file=fPC,
-                )
-            elif self.container_factory.containerType == ContainerType.Podman:
-                print(
-                    f"""
-singularity.enabled = false
-docker.enabled = false
-podman.enabled = true
-podman.envWhitelist = '{','.join(envWhitelist)}'
-""",
-                    file=fPC,
-                )
-            elif self.container_factory.containerType == ContainerType.NoContainer:
-                print(
-                    f"""
-docker.enabled = false
-singularity.enabled = false
-podman.enabled = false
-""",
-                    file=fPC,
-                )
-
-            if self.max_cpus is not None:
-                print(
-                    f"""
-executor.cpus={self.max_cpus}
-""",
-                    file=fPC,
-                )
-
-            if self.max_task_duration is not None:
-                print(
-                    f"""
-process {{
-    withName: '.*' {{
-        time = '{self.max_task_duration}'
-    }}
-}}
-""",
-                    file=fPC,
-                )
-
-            # Last, the trojan horse in the configuration file for input parameter
-            # provenance, which only works when this is done after loading the original nextflow.config
-            print(
-                """
-
-import groovy.json.JsonOutput
-def wfexs_allParams()
-{{
-    new File('{0}').write(JsonOutput.toJson(params))
-}}
-
-wfexs_allParams()
-""".format(
-                    allParamsFile.as_posix()
-                ),
-                file=fPC,
-            )
+        wDir = localWf.dir
 
         inputsFileName = outputMetaDir / self.INPUT_DECLARATIONS_FILENAME
 
         nxpParams = self.structureAsNXFParams(context_inputs, outputsDir)
-        if len(nxpParams) != 0:
-            try:
-                with inputsFileName.open(mode="w+", encoding="utf-8") as yF:
-                    yaml.safe_dump(nxpParams, yF)
-            except IOError as error:
-                raise WorkflowEngineException(
-                    "ERROR: cannot create input declarations file {}, {}".format(
-                        inputsFileName, error
-                    )
+        try:
+            with inputsFileName.open(mode="w+", encoding="utf-8") as yF:
+                yaml.safe_dump(nxpParams, yF)
+        except IOError as error:
+            raise WorkflowEngineException(
+                "ERROR: cannot create input declarations file {}, {}".format(
+                    inputsFileName, error
                 )
-        else:
-            raise WorkflowEngineException("No parameter was specified! Bailing out")
+            )
+        if len(nxpParams) == 0:
+            self.logger.warning(
+                "No parameter was specified! It is going to bail out!!!"
+            )
 
         runName = "WfExS-run_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
 
         nxf_params: "MutableSequence[str]" = [
-            "-C",
-            forceParamsConfFile.as_posix(),
             "inspect",
             "-params-file",
             inputsFileName.as_posix(),
@@ -2595,23 +2599,23 @@ STDERR
             ) from jde
 
         # Creating the augmented inputs
-        if os.path.isfile(allParamsFile):
-            context_inputs_hash = {}
-            for context_input in context_inputs:
-                context_inputs_hash[context_input.name] = context_input
+        # if os.path.isfile(allParamsFile):
+        #    context_inputs_hash = {}
+        #    for context_input in context_inputs:
+        #        context_inputs_hash[context_input.name] = context_input
 
-            with open(allParamsFile, mode="r", encoding="utf-8") as aPF:
-                allExecutionParams = json.load(aPF)
+        #    with open(allParamsFile, mode="r", encoding="utf-8") as aPF:
+        #        allExecutionParams = json.load(aPF)
 
-            augmentedInputs = self.augmentNextflowInputs(
-                context_inputs_hash, allExecutionParams
-            )
-        else:
-            augmentedInputs = context_inputs
+        #    augmentedInputs = self.augmentNextflowInputs(
+        #        context_inputs_hash, allExecutionParams
+        #    )
+        # else:
+        #    augmentedInputs = context_inputs
 
         # And it is wise to also preserve the used profiles
-        if profile_input is not None:
-            augmentedInputs = [profile_input, *augmentedInputs]
+        # if profile_input is not None:
+        #    augmentedInputs = [profile_input, *augmentedInputs]
 
         # TODO: return the list of containers
         # and maybe the discovered implicit inputs

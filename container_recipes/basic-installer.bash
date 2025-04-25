@@ -140,6 +140,8 @@ if [ -z "$is_minimal_ver" ] ; then
 fi
 
 # Is WfExS already installed??? (case of Docker)
+traps="$(trap -p)"
+trap - ERR
 set +eu
 python3 --help | grep -q '^-P '
 retval=$?
@@ -175,7 +177,7 @@ except:
 
 try:
 	import wfexs_backend
-except:
+except Exception as e:
 	sys.exit(1)
 
 sys.exit(0)
@@ -189,6 +191,7 @@ fi
 PYTHONPATH="$pythonpath_env" python3 $python_p_flag -c "$CHECKWFEXS"
 retval=$?
 set -eu
+eval "${traps}"
 if [ "$retval" -eq 0 ] ; then
 	envDir="$(PYTHONPATH="$pythonpath_env" python3 -c 'import sys; print(sys.prefix)')"
 else
