@@ -16,7 +16,7 @@ botocore==1.33.13
 CacheControl==0.13.1
 cached-property==1.5.2
 cachetools==5.5.2
-certifi==2025.1.31
+certifi==2025.4.26
 cffi==1.15.1
 charset-normalizer==3.4.1
 click==8.1.8
@@ -36,12 +36,12 @@ funny-passphrase==0.2.3
 galaxy2cwl==0.1.4
 genluhn==0.3.1
 google-api-core==2.24.2
-google-auth==2.38.0
+google-auth==2.39.0
 google-cloud-core==2.4.3
 google-cloud-storage==3.1.0
 google-crc32c==1.5.0
 google-resumable-media==2.7.2
-googleapis-common-protos==1.69.2
+googleapis-common-protos==1.70.0
 groovy-parser==0.2.1
 gxformat2==0.20.0
 idna==3.10
@@ -56,7 +56,7 @@ jsonpath-ng==1.7.0
 jsonpointer==3.0.0
 jsonschema==4.17.3
 lark==1.1.9
-lxml==5.3.2
+lxml==5.4.0
 MarkupSafe==2.1.5
 mistune==2.0.5
 msgpack==1.0.5
@@ -93,7 +93,7 @@ rfc3339-validator==0.1.4
 rfc3986-validator==0.1.1
 rfc6920==0.2.2
 rocrate==0.11.0
-rsa==4.9
+rsa==4.9.1
 ruamel.yaml==0.17.40
 ruamel.yaml.clib==0.2.8
 RWFileLock==0.2.2
