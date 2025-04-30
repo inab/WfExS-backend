@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,11 +17,11 @@
 # limitations under the License.
 
 __author__ = "José M. Fernández <https://orcid.org/0000-0002-4806-5140>, Laura Rodriguez-Navas <https://orcid.org/0000-0003-4929-1219>, Adrián Muñoz-Cívico <https://orcid.org/0000-0001-7517-5065>, Paula Iborra <https://orcid.org/0000-0003-0504-3029>"
-__copyright__ = "© 2020-2024 Barcelona Supercomputing Center (BSC), ES"
+__copyright__ = "© 2020-2025 Barcelona Supercomputing Center (BSC), ES"
 __license__ = "Apache 2.0"
 
 # https://www.python.org/dev/peps/pep-0396/
-__version__ = "1.0.0rc2"
+__version__ = "1.0.0"
 __url__ = "https://github.com/inab/WfExS-backend"
 __official_name__ = "WfExS-backend"
 
