@@ -20,10 +20,6 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	wget -O /tmp/rust-installer.sh https://sh.rustup.rs && \
 	chmod +x /tmp/rust-installer.sh && \
 	/tmp/rust-installer.sh -y && \
-	wget -nv \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}_${DPKG_ARCH}.deb \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}_${DPKG_ARCH}.deb && \
-	apt-get install -y ./*.deb && \
 	rm -f *.deb
 # Install WfExS, trusting the installers in the commit rather than the
 # one in the docker recipe
