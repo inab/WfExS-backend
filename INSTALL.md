@@ -14,7 +14,7 @@ just using next bash pattern:
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
 
 # Alternatively, you can use local copy
 WFEXS_VER=$(git rev-parse HEAD)
@@ -29,7 +29,7 @@ a local copy of the recipe, and next command line from the project root will hel
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
 
 # Alternatively, you can use local copy
 WFEXS_VER=$(git rev-parse HEAD)
@@ -54,7 +54,7 @@ just using next bash pattern:
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
 
 # Alternatively, you can use local copy
 WFEXS_VER=$(git rev-parse HEAD)
@@ -70,7 +70,7 @@ a local copy of the recipe, and next command line from the project root will hel
 
 ```bash
 # WFEXS_VER can be either a branch, a tag or a commit hash
-WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
 
 # Alternatively, you can use local copy
 WFEXS_VER=$(git rev-parse HEAD)
@@ -95,7 +95,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # WFEXS_VER can be either a branch, a tag or a commit hash
-  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+  WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
   mkdir WfExS_SIF_build
   cd WfExS_SIF_build
   curl -O https://raw.githubusercontent.com/inab/WfExS-backend/${WFEXS_VER}/container_recipes/Singularity.def
@@ -106,7 +106,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # WFEXS_VER can be either a branch, a tag or a commit hash
-  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+  WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
   
   # Alternatively, you can use local copy
   WFEXS_VER=$(git rev-parse HEAD)
@@ -122,7 +122,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
 
   ```bash
   # Remember to use the correct tag!!!
-  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+  WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
   singularity build wfexs-${WFEXS_VER}.sif docker-daemon://inab/wfexs-backend:${WFEXS_VER}
   ```
 
@@ -139,7 +139,7 @@ The precondition is having either Apptainer or Singularity properly setup. There
   cd WfExS_SIF_build
   
   # Remember to use the correct tag!!!
-  WFEXS_VER=8a0a980f1a5e69064d16f89f8ec31973b2eb0c8b
+  WFEXS_VER=4f314f46ce2c18499837947081e74a1e9eba1f31
 
   # Next command should be used if you used podman to build the local image
   podman save -o wfexs-backend-${WFEXS_VER}.tar inab/wfexs-backend:${WFEXS_VER}
