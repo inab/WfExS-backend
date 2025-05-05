@@ -18,11 +18,11 @@ cached-property==1.5.2
 cachetools==5.5.2
 certifi==2025.4.26
 cffi==1.15.1
-charset-normalizer==3.4.1
+charset-normalizer==3.4.2
 click==8.1.8
 crypt4gh==1.7
-cryptography==44.0.2
-data-url==1.1.1
+cryptography==44.0.3
+data-url==1.2.0
 defusedxml==0.7.1
 docopt==0.6.2
 dulwich==0.22.1
