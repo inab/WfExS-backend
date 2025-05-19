@@ -12,6 +12,7 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/su
 # The default images of python are based on debian
 FROM	pypy:3.11-slim AS podman_build
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
+ARG	apptainer_version=1.3.6
 # Install apptainer
 # hadolint ignore=DL3008
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
