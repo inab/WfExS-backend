@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,20 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Code from this class is an iteration of
-#
-# https://github.com/bigpe/FtpDownloader/blob/891bee35566078531b6f1ed3975627e29b935a97/ftp_downloader/FTPDownloader.py
-#
-# which was following MIT license
-#
-# https://github.com/bigpe/ftp-downloader/blob/891bee35566078531b6f1ed3975627e29b935a97/LICENSE.txt
-
-import asyncio
 import datetime
 import logging
 import os
-from pathlib import Path
-import socket
+import pathlib
 import sys
 import time
 
@@ -42,6 +32,7 @@ if TYPE_CHECKING:
         Any,
         Coroutine,
         Mapping,
+        MutableSequence,
         Sequence,
         Tuple,
         TypeVar,
@@ -54,35 +45,45 @@ if TYPE_CHECKING:
 
     CT = TypeVar("CT")
 
-import aioftp  # type: ignore[import]
+import ftplib
+import ftputil
+
+import ftputil.session
 
 
-def asyncio_run(tasks: "Tuple[asyncio.Task[CT], ...]") -> "CT":
+# This monkeypatching approach is needed to fix the cases where the FTP
+# server does not support FEAT command, or it is not allowed.
+# For instance ftp.broadinstitute.org (tested on 2025-05-19)
+def _maybe_send_opts_utf8_on_patched(session: "ftplib.FTP", encoding: "str") -> None:
     """
-    Helper method which abstracts differences from
-    Python 3.7 and before about coroutines
+    If the requested encoding is UTF-8 and the server supports the `UTF8`
+    feature, send "OPTS UTF8 ON".
+
+    See https://datatracker.ietf.org/doc/html/rfc2640.html .
     """
-    if sys.version_info >= (3, 7):
-        done, _ = asyncio.run(asyncio.wait(tasks))
-    else:
-        loop = asyncio.new_event_loop()
+    if ((encoding is None) and ftputil.path_encoding.RUNNING_UNDER_PY39_AND_UP) or (
+        encoding in ["UTF-8", "UTF8", "utf-8", "utf8"]
+    ):
+        server_supports_opts_utf8_on = False
         try:
-            done, _ = loop.run_until_complete(asyncio.wait(tasks))
-        finally:
-            loop.close()
+            feat_output = session.sendcmd("FEAT")
+            for line in feat_output.splitlines():
+                # The leading space is important. See RFC 2640.
+                if line.upper().rstrip() == " UTF8":
+                    server_supports_opts_utf8_on = True
+        except ftplib.error_perm:
+            # FEAT is not supported
+            pass
+        if server_supports_opts_utf8_on:
+            session.sendcmd("OPTS UTF8 ON")
 
-    task = done.pop()
-    retval_exception = task.exception()
 
-    if retval_exception is not None:
-        raise retval_exception
-
-    return task.result()
+ftputil.session._maybe_send_opts_utf8_on = _maybe_send_opts_utf8_on_patched  # type: ignore[attr-defined]
 
 
 class FTPDownloader:
     DEFAULT_USER: "Final[str]" = "ftp"
-    DEFAULT_PASS: "Final[str]" = "guest@"
+    DEFAULT_PASS: "Final[str]" = "guest@example.org"
     DEFAULT_FTP_PORT: "Final[int]" = 21
 
     DEFAULT_MAX_RETRIES: "Final[int]" = 5
@@ -95,24 +96,18 @@ class FTPDownloader:
         PASSWORD: "str" = DEFAULT_PASS,
         max_retries: "int" = DEFAULT_MAX_RETRIES,
     ):
-        # Due a misbehaviour in asyncio.open_connection with
-        # EPSV connection in ftp-trace.ncbi.nih.gov
-        # this only works always when HOST is an IP address
-        # instead of a hostname
-        # FIXME: Prepare it for IPv6
-        self.HOST = socket.gethostbyname(HOST)
+        self.HOST = HOST
         self.PORT = PORT
         self.USER = USER
         self.PASSWORD = PASSWORD
 
         self.max_retries = max_retries
-        # Trying to be adaptive to the aioftp implementation
-        if hasattr(aioftp, "ClientSession"):
-            # aioftp 0.16.x
-            self.aioSessMethod = aioftp.ClientSession
-        else:
-            # aioftp 0.18.x
-            self.aioSessMethod = aioftp.Client.context
+
+        self.session_factory = ftputil.session.session_factory(
+            port=self.PORT,
+            encoding="UTF-8",
+            # debug_level=2,
+        )
 
         # Getting a logger focused on specific classes
         from inspect import getmembers as inspect_getmembers
@@ -129,277 +124,150 @@ class FTPDownloader:
     def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
         pass
 
-    async def __download_file_async(
+    def _download_dir(
         self,
-        client: "aioftp.Client",
-        upload_file_path: "Path",
-        dfdPath: "Path",
-        dfdStat: "Mapping[str, Any]",
-    ) -> None:
-        if upload_file_path.exists():
-            upload_file_path.unlink()  # Remove file before append stream to file
-        upload_file_path.parent.mkdir(exist_ok=True, parents=True)  # Create dirs
-
-        downloaded_size = 0
-        # This is needed to detect reconnections
-        stream = None
-        retries = self.max_retries
-        open_mode = "wb"
-        while retries > 0:
-            try:
-                stream = await client.download_stream(dfdPath, offset=downloaded_size)
-                with upload_file_path.open(mode=open_mode, buffering=1024 * 1024) as wb:
-                    wb.seek(downloaded_size)
-                    async for block in stream.iter_by_block():
-                        wb.write(block)
-                        downloaded_size += sys.getsizeof(block)
-                        # self.logger.debug(
-                        #    f'Loading: {math.floor(downloaded_size / ftp_file_size * 100)}%...')
-                    await stream.finish()
-
-                ttuple = datetime.datetime.strptime(
-                    dfdStat["modify"], "%Y%m%d%H%M%S"
-                ).timetuple()
-                ttime = time.mktime(ttuple)
-                os.utime(upload_file_path, (ttime, ttime))
-
-                break
-            except ConnectionResetError:
-                await self._reconnect(client)
-            except Exception as e:
-                retries -= 1
-                self.logger.debug("Left {} retries".format(retries))
-                if retries == 0:
-                    raise e
-                await self._reconnect(client)
-
-            # In order to concatenate
-            open_mode = "ab"
-
-    async def _reconnect(self, client: "aioftp.Client") -> None:
-        self.logger.debug(f"Reconnecting {self.HOST}:{self.PORT}")
-        try:
-            await client.quit()
-        except:
-            pass
-        await client.connect(self.HOST, self.PORT)
-        await client.login(self.USER, self.PASSWORD)
-
-    async def _download_dir_async(
-        self,
-        client: "aioftp.Client",
-        dfdPath: "Path",
-        utdPath: "Path",
+        ftp_host: "ftputil.FTPHost",
+        download_path: "str",
+        utdPath: "pathlib.Path",
         exclude_ext: "Sequence[str]",
-    ) -> "Sequence[Path]":
+    ) -> "Sequence[pathlib.Path]":
         """
         This method mirrors a whole directory into a destination one
         dfdPath must be absolute
         """
-        self.logger.debug(f"Get files list {dfdPath}")
+        self.logger.debug(f"Get files list {download_path}")
 
+        utdPath.mkdir(parents=True, exist_ok=True)
         retries = self.max_retries
+        directories: "MutableSequence[Tuple[str, str]]" = []
+        downloaded_path: "MutableSequence[pathlib.Path]" = []
         while retries > 0:
             try:
-                files_list = list(  # Filter list, exclude extensions and directories
-                    filter(
-                        lambda f: f[1]["type"] == "file"
-                        and f[0].suffix not in exclude_ext,
-                        await client.list(path=dfdPath, recursive=True),
-                    )
-                )
-                break
+                directories = []
+                downloaded_path = []
+                names = ftp_host.listdir(download_path)
+                for name in names:
+                    full_name = ftp_host.path.join(download_path, name)
+                    if ftp_host.path.isfile(full_name):
+                        for e_ext in exclude_ext:
+                            # Discarding any file ending in any of the extensions listed
+                            if name.endswith(e_ext):
+                                break
+                        else:
+                            dest_file = utdPath / name
+                            ftp_host.download_if_newer(full_name, dest_file.as_posix())
+                            downloaded_path.append(dest_file)
+                    elif ftp_host.path.isdir(full_name):
+                        directories.append((full_name, name))
             except Exception as e:
                 retries -= 1
                 self.logger.debug("Left {} tries".format(retries))
                 if retries == 0:
                     raise e
-                await self._reconnect(client)
 
-        downloaded_path = []
-        if files_list:
-            self.logger.debug(f"({len(files_list)}) {dfdPath} -> " f"{utdPath}")
-            info: "Mapping[str, Any]"
-            for i, (path, info) in enumerate(files_list):
-                download = False
-                upload_file_path = Path.joinpath(utdPath, path.relative_to(dfdPath))
-                destination_dir = upload_file_path.parents[0]
-                file_name = path.name
+        if downloaded_path:
+            self.logger.debug(
+                f"({len(downloaded_path)}) {download_path} -> " f"{utdPath}"
+            )
 
-                if upload_file_path.exists():
-                    ftp_file_size = int(info["size"])
-                    local_file_size = upload_file_path.stat().st_size
-                    # TODO diff creation time too
-                    if ftp_file_size != local_file_size:
-                        download = True
-                else:
-                    download = True
+        for full_name, name in directories:
+            dest_dir = utdPath / name
+            fetched = self._download_dir(
+                ftp_host, full_name, dest_dir, exclude_ext=exclude_ext
+            )
+            downloaded_path.extend(fetched)
 
-                downloaded_path.append(upload_file_path)
-                self.logger.debug(
-                    f"({i + 1}/{len(files_list)}) {file_name} -> ../{path}"
-                )
-                if download:
-                    await self.__download_file_async(
-                        client, upload_file_path, path, info
-                    )
-                    self.logger.debug("Loading: Complete")
-        else:
-            self.logger.debug("Nothing new to download")
-        #                self.clear_tasks()
-        self.logger.debug(f"Files from {dfdPath} downloaded to {downloaded_path}")
+        self.logger.debug(f"Files from {download_path} downloaded to {downloaded_path}")
 
         return downloaded_path
 
-    async def _download_file_async(
-        self, client: "aioftp.Client", dfdPath: "Path", utdPath: "Path"
-    ) -> "Path":
+    def _download_file(
+        self,
+        ftp_host: "ftputil.FTPHost",
+        download_path: "str",
+        upload_file_path: "pathlib.Path",
+    ) -> "pathlib.Path":
         """
-        dfdPath must be absolute
+        download_path must be absolute
         """
 
-        self.logger.debug(f"Get file {dfdPath}")
+        self.logger.debug(f"Get file {download_path}")
 
-        file_name = dfdPath.name
-        upload_file_path = utdPath
-        destination_dir = utdPath.parent
+        downloaded = ftp_host.download_if_newer(
+            download_path, upload_file_path.as_posix()
+        )
 
-        dfdStat = await client.stat(dfdPath)
-        ftp_file_size = int(dfdStat["size"])
-        download = False
-        if upload_file_path.exists():
-            local_file_size = upload_file_path.stat().st_size
-            # TODO diff creation time too
-            if ftp_file_size != local_file_size:
-                download = True
-        else:
-            download = True
-
-        self.logger.debug(f"{dfdPath} -> " f"{upload_file_path}")
-        if download:
-            await self.__download_file_async(client, upload_file_path, dfdPath, dfdStat)
+        if downloaded:
             self.logger.debug("Loading: Complete")
         else:
             self.logger.debug("Nothing new to download")
-        #           self.clear_tasks()
-        self.logger.debug(f"File {dfdPath} downloaded to {upload_file_path}")
+
+        self.logger.debug(f"File {download_path} downloaded to {upload_file_path}")
 
         return upload_file_path
-
-    async def download_dir_async(
-        self,
-        download_from_dir: "str",
-        upload_to_dir: "str",
-        exclude_ext: "Sequence[str]",
-    ) -> "Sequence[Path]":
-        dfdPath = Path(download_from_dir)
-        destdir = os.path.abspath(upload_to_dir)
-        os.makedirs(destdir, exist_ok=True)
-        utdPath = Path(destdir)
-
-        client: aioftp.Client
-        async with self.aioSessMethod(
-            self.HOST, self.PORT, self.USER, self.PASSWORD
-        ) as client:
-            # Changing to absolute path
-            if not dfdPath.is_absolute():
-                currRemoteDir = await client.get_current_directory()
-                dfdPath = currRemoteDir.joinpath(dfdPath).resolve()
-
-            retval = await self._download_dir_async(
-                client, dfdPath, utdPath, exclude_ext
-            )
-            return retval
-
-    async def download_file_async(
-        self, download_from_file: "str", upload_to_file: "str"
-    ) -> "Path":
-        dfdPath = Path(download_from_file)
-        destfile = os.path.abspath(upload_to_file)
-        utdPath = Path(destfile)
-        async with self.aioSessMethod(
-            self.HOST, self.PORT, self.USER, self.PASSWORD
-        ) as client:
-            # Changing to absolute path
-            if not dfdPath.is_absolute():
-                currRemoteDir = await client.get_current_directory()
-                dfdPath = currRemoteDir.joinpath(dfdPath).resolve()
-
-            retval = await self._download_file_async(client, dfdPath, utdPath)
-            return retval
-
-    async def download_async(
-        self, download_from_df: "str", upload_to_df: "str", exclude_ext: "Sequence[str]"
-    ) -> "Union[Path, Sequence[Path]]":
-        """
-        This method returns a Path when a file is fetched
-        and a list of Path when it is a directory
-        """
-        dfdPath = Path(download_from_df)
-        destpath = os.path.abspath(upload_to_df)
-        utdPath = Path(destpath)
-        async with self.aioSessMethod(
-            self.HOST, self.PORT, self.USER, self.PASSWORD
-        ) as client:
-            # Changing to absolute path
-            if not dfdPath.is_absolute():
-                currRemoteDir = await client.get_current_directory()
-                dfdPath = currRemoteDir.joinpath(dfdPath).resolve()
-
-            dfdStat = await client.stat(dfdPath)
-            retval: "Union[Path, Sequence[Path]]"
-            if dfdStat["type"] == "dir":
-                os.makedirs(destpath, exist_ok=True)
-                retval = await self._download_dir_async(
-                    client, dfdPath, utdPath, exclude_ext
-                )
-            else:
-                retval = await self._download_file_async(client, dfdPath, utdPath)
-
-            return retval
 
     def download_dir(
         self,
         download_from_dir: "str",
         upload_to_dir: "str" = ".",
         exclude_ext: "Sequence[str]" = [],
-    ) -> "Sequence[Path]":
-        tasks = (
-            asyncio.create_task(
-                self.download_dir_async(download_from_dir, upload_to_dir, exclude_ext)
-            ),
-        )
-        return asyncio_run(tasks)
+    ) -> "Sequence[pathlib.Path]":
+        destpath = os.path.abspath(upload_to_dir)
+        utdPath = pathlib.Path(destpath)
+        with ftputil.FTPHost(
+            self.HOST, self.USER, self.PASSWORD, session_factory=self.session_factory
+        ) as ftp_host:
+            # Changing to absolute path
+            if not ftp_host.path.isabs(download_from_dir):
+                download_from_dir = ftp_host.path.abspath(download_from_dir)
 
-    def download_file(self, download_from_file: "str", upload_to_file: "str") -> "Path":
-        tasks = (
-            asyncio.create_task(
-                self.download_file_async(download_from_file, upload_to_file)
-            ),
-        )
-        return asyncio_run(tasks)
+            retval = self._download_dir(
+                ftp_host, download_from_dir, utdPath, exclude_ext=exclude_ext
+            )
+
+        return retval
+
+    def download_file(
+        self, download_from_file: "str", upload_to_file: "str"
+    ) -> "pathlib.Path":
+        destpath = os.path.abspath(upload_to_file)
+        utdPath = pathlib.Path(destpath)
+        with ftputil.FTPHost(
+            self.HOST, self.USER, self.PASSWORD, session_factory=self.session_factory
+        ) as ftp_host:
+            # Changing to absolute path
+            if not ftp_host.path.isabs(download_from_file):
+                download_from_file = ftp_host.path.abspath(download_from_file)
+
+            retval = self._download_file(ftp_host, download_from_file, utdPath)
+
+        return retval
 
     def download(
         self,
         download_path: "str",
         upload_path: "str",
         exclude_ext: "Sequence[str]" = [],
-    ) -> "Union[Path, Sequence[Path]]":
-        tasks = (
-            asyncio.create_task(
-                self.download_async(download_path, upload_path, exclude_ext)
-            ),
-        )
-        return asyncio_run(tasks)
+    ) -> "Union[pathlib.Path, Sequence[pathlib.Path]]":
+        """
+        This method returns a pathlib.Path when a file is fetched
+        and a list of pathlib.Path when it is a directory
+        """
+        destpath = os.path.abspath(upload_path)
+        utdPath = pathlib.Path(destpath)
+        with ftputil.FTPHost(
+            self.HOST, self.USER, self.PASSWORD, session_factory=self.session_factory
+        ) as ftp_host:
+            # Changing to absolute path
+            if not ftp_host.path.isabs(download_path):
+                download_path = ftp_host.path.abspath(download_path)
 
-    @staticmethod
-    def clear_tasks() -> None:
-        # This line should be asyncio.current_task(asyncio.get_running_loop())
-        # when it is migrated to python 3.7 and later
-        if sys.version_info >= (3, 7):
-            task = asyncio.current_task()
-        else:
-            task = asyncio.Task.current_task()  # pylint: disable=E1101
+            retval: "Union[pathlib.Path, Sequence[pathlib.Path]]"
+            if ftp_host.path.isdir(download_path):
+                retval = self._download_dir(
+                    ftp_host, download_path, utdPath, exclude_ext=exclude_ext
+                )
+            else:
+                retval = self._download_file(ftp_host, download_path, utdPath)
 
-        if task is not None:
-            task.cancel()
+        return retval

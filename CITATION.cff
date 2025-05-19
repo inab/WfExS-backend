@@ -28,5 +28,5 @@ repository-code: "https://github.com/inab/WfExS-backend"
 repository-artifact: "https://github.com/inab/WfExS-backend/pkgs/container/wfexs-backend"
 type: software
 title: "WfExS-backend"
-version: 1.0.0
-date-released: "2025-04-30"
+version: 1.0.1
+date-released: "2025-05-19"

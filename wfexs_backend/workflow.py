@@ -1882,8 +1882,13 @@ class WF:
                 # It should not happen
                 enabled_profiles = [str(profiles)]
 
-        parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
-        if parsed_workflow_id.scheme != "":
+        if isinstance(workflow_meta["workflow_id"], int):
+            parsed_workflow_id_scheme = ""
+        else:
+            parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
+            parsed_workflow_id_scheme = parsed_workflow_id.scheme
+
+        if parsed_workflow_id_scheme != "":
             trs_endpoint = workflow_meta.get("trs_endpoint")
         else:
             trs_endpoint = workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT)
@@ -1953,8 +1958,13 @@ class WF:
                 # It should not happen
                 enabled_profiles = [str(profiles)]
 
-        parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
-        if parsed_workflow_id.scheme != "":
+        if isinstance(workflow_meta["workflow_id"], int):
+            parsed_workflow_id_scheme = ""
+        else:
+            parsed_workflow_id = urllib.parse.urlparse(workflow_meta["workflow_id"])
+            parsed_workflow_id_scheme = parsed_workflow_id.scheme
+
+        if parsed_workflow_id_scheme != "":
             trs_endpoint = workflow_meta.get("trs_endpoint")
         else:
             trs_endpoint = workflow_meta.get("trs_endpoint", cls.DEFAULT_TRS_ENDPOINT)
