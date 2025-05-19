@@ -7,9 +7,8 @@ repos:
       # This one has been added to fail fast on syntax errors
       # before running expensive pylint
       - id: check-ast
-        types_or:
-          - python
-          - pyi
+        types: [file]
+        files: \.(py|pyi)$
         exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
       - id: check-json
       - id: check-yaml
