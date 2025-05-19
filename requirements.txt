@@ -17,7 +17,7 @@ paramiko[ed25519]
 certifi
 crypt4gh
 bagit
-aioftp
+ftputil
 aiohttp-client-cache[sqlite] >= 0.11.0 ; python_version >= '3.8'
 aiohttp-client-cache[sqlite] < 0.11.0 ; python_version < '3.8'
 openpyxl
