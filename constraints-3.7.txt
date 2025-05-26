@@ -20,8 +20,8 @@ cffi==1.15.1
 charset-normalizer==3.4.2
 click==8.1.8
 crypt4gh==1.7
-cryptography==45.0.2
-data-url==1.2.0
+cryptography==45.0.3
+data-url==1.2.1
 defusedxml==0.7.1
 docopt==0.6.2
 dulwich==0.22.1
@@ -36,7 +36,7 @@ funny-passphrase==0.2.3
 galaxy2cwl==0.1.4
 genluhn==0.3.1
 google-api-core==2.24.2
-google-auth==2.40.1
+google-auth==2.40.2
 google-cloud-core==2.4.3
 google-cloud-storage==3.1.0
 google-crc32c==1.5.0
