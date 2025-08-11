@@ -64,7 +64,10 @@ import urllib.request
 
 import jsonschema.validators
 
-import referencing
+# This is needed because jsonschema does not include the version variable
+# AND it breaks its backward compatibility in minor releases
+if sys.version_info >= (3, 8):
+    import referencing
 
 from ..common import AbstractWfExSException
 
@@ -278,9 +281,13 @@ def config_validate(
         with open(schemaFile, mode="r", encoding="utf-8") as sF:
             schema = json.load(sF)
 
-        jv = jsonschema.validators.validator_for(schema)(
-            schema, registry=referencing.Registry()
-        )
+        if sys.version_info >= (3, 8):
+            jv = jsonschema.validators.validator_for(schema)(
+                schema, registry=referencing.Registry()
+            )
+        else:
+            jv = jsonschema.validators.validator_for(schema)(schema)
+
         return list(jv.iter_errors(instance=configToValidate))
     except Exception as e:
         raise ConfigValidationException(
