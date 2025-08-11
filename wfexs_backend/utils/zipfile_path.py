@@ -183,14 +183,14 @@ class FastLookup(CompleteDirs):
     def namelist(self) -> "List[str]":
         self.__names: "List[str]"
         with contextlib.suppress(AttributeError):
-            return self.__names  # pylint: disable=access-member-before-definition
+            return self.__names  # type: ignore[no-any-return] # pylint: disable=access-member-before-definition
         self.__names = super(FastLookup, self).namelist()
         return self.__names
 
     def _name_set(self) -> "Set[str]":
         self.__lookup: "Set[str]"
         with contextlib.suppress(AttributeError):
-            return self.__lookup  # pylint: disable=access-member-before-definition
+            return self.__lookup  # type: ignore[no-any-return] # pylint: disable=access-member-before-definition
         self.__lookup = super(FastLookup, self)._name_set()
         return self.__lookup
 

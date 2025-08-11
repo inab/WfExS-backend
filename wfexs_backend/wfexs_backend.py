@@ -553,10 +553,10 @@ class WfExSBackend:
         # Populating paths
         for keyC, pathC in toolSect.items():
             # Skipping what this section is not going to manage and store
-            key_path: "MutableSequence[Tuple[str, str]]" = []
+            key_path: "MutableSequence[Tuple[SymbolicName, str]]" = []
             if keyC.endswith("Command"):
                 prog_key = keyC[0 : -len("Command")]
-                key_path.append((prog_key, pathC))
+                key_path.append((cast("SymbolicName", prog_key), pathC))
             elif keyC == "commands":
                 assert isinstance(pathC, list)
 
@@ -564,7 +564,12 @@ class WfExSBackend:
                     assert isinstance(command_block, dict)
 
                     if "key" in command_block and "path" in command_block:
-                        key_path.append((command_block["key"], command_block["path"]))
+                        key_path.append(
+                            (
+                                cast("SymbolicName", command_block["key"]),
+                                command_block["path"],
+                            )
+                        )
 
             for prog_key, path_val in key_path:
                 abs_cmd = shutil.which(path_val)

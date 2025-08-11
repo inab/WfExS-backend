@@ -5,6 +5,7 @@ from xml.dom.expatbuilder import (
 )
 from xml.dom.minidom import Document
 from xml.dom.xmlbuilder import Options
+from xml.parsers.expat import XMLParserType
 
 __origin__: str
 
@@ -51,10 +52,10 @@ class DefusedExpatBuilder(_ExpatBuilder):
         sysid: str | None,
         pubid: str | None,
     ) -> None: ...
-    def install(self, parser: _ExpatBuilder) -> None: ...
+    def install(self, parser: XMLParserType) -> None: ...
 
 class DefusedExpatBuilderNS(_Namespaces, DefusedExpatBuilder):
-    def install(self, parser: _ExpatBuilder) -> None: ...
+    def install(self, parser: XMLParserType) -> None: ...
     def reset(self) -> None: ...
 
 def parse(
