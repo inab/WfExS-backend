@@ -733,7 +733,8 @@ def analyze_nf_content(
         interesting_assignments = dict()
 
     return (
-        cast("Union[RuleNode, LeafNode, EmptyNode]", t_tree),
+        # cast("Union[RuleNode, LeafNode, EmptyNode]", t_tree),
+        t_tree,
         processes,
         includes,
         workflows,

@@ -3373,7 +3373,11 @@ class WF:
                 self.logger.exception(
                     f"Error while fetching primary content with URIs {remote_file}"
                 )
-                the_failed_uris.append(remote_file)
+                if isinstance(remote_file, list):
+                    the_failed_uris.extend(remote_file)
+                else:
+                    assert isinstance(remote_file, str)
+                    the_failed_uris.append(remote_file)
                 continue
 
             # Time to process each file
@@ -3854,7 +3858,11 @@ class WF:
                                         self.logger.exception(
                                             f"Error while fetching primary URI {remote_file}"
                                         )
-                                        the_failed_uris.append(remote_file)
+                                        if isinstance(remote_file, list):
+                                            the_failed_uris.extend(remote_file)
+                                        else:
+                                            assert isinstance(remote_file, str)
+                                            the_failed_uris.append(remote_file)
 
                                 if (remote_files is not None) and (
                                     secondary_remote_files is not None
@@ -3902,9 +3910,17 @@ class WF:
                                             self.logger.exception(
                                                 f"Error while fetching secondary URI {secondary_remote_file}"
                                             )
-                                            the_failed_uris.append(
-                                                secondary_remote_file
-                                            )
+                                            if isinstance(secondary_remote_file, list):
+                                                the_failed_uris.extend(
+                                                    secondary_remote_file
+                                                )
+                                            else:
+                                                assert isinstance(
+                                                    secondary_remote_file, str
+                                                )
+                                                the_failed_uris.append(
+                                                    secondary_remote_file
+                                                )
 
                             theInputs.append(
                                 MaterializedInput(

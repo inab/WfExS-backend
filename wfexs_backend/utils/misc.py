@@ -64,6 +64,8 @@ import urllib.request
 
 import jsonschema.validators
 
+import referencing
+
 from ..common import AbstractWfExSException
 
 
@@ -276,7 +278,9 @@ def config_validate(
         with open(schemaFile, mode="r", encoding="utf-8") as sF:
             schema = json.load(sF)
 
-        jv = jsonschema.validators.validator_for(schema)(schema)
+        jv = jsonschema.validators.validator_for(schema)(
+            schema, registry=referencing.Registry()
+        )
         return list(jv.iter_errors(instance=configToValidate))
     except Exception as e:
         raise ConfigValidationException(
