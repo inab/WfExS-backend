@@ -37,7 +37,7 @@ genluhn==0.3.1
 google-api-core==2.25.1
 google-auth==2.40.3
 google-cloud-core==2.4.3
-google-cloud-storage==3.2.0
+google-cloud-storage==3.3.0
 google-crc32c==1.5.0
 google-resumable-media==2.7.2
 googleapis-common-protos==1.70.0
@@ -55,7 +55,7 @@ jsonpointer==3.0.0
 jsonschema==4.23.0
 jsonschema-specifications==2023.12.1
 lark==1.2.2
-lxml==6.0.0
+lxml==6.0.1
 MarkupSafe==2.1.5
 mistune==3.0.2
 msgpack==1.1.1
@@ -95,7 +95,7 @@ rfc6920==0.2.2
 rocrate==0.11.0
 rpds-py==0.20.1
 rsa==4.9.1
-ruamel.yaml==0.18.14
+ruamel.yaml==0.18.15
 ruamel.yaml.clib==0.2.8
 RWFileLock==0.2.2
 s3transfer==0.11.5
