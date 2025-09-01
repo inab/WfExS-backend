@@ -72,6 +72,13 @@ jobs:
  #       if: ${{ matrix.python-version == '3.6' }}
  #       with:
  #         extra_args: --all -c .pre-commit-config-gh-${{ matrix.python-version }}.yaml
+      - name: Get transitive dependencies licences
+        id: license_check_print_report
+#        uses: pilosus/action-pip-license-checker@v1.0.0
+#        continue-on-error: true
+        uses: pilosus/action-pip-license-checker@v3.1.0
+        with:
+          requirements: constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
 #        uses: pilosus/action-pip-license-checker@v1.0.0
@@ -83,7 +90,7 @@ jobs:
           exclude: '(?i)^(pylint|dulwich).*'
       - name: Print licences report
         if: ${{ always() }}
-        run: echo "${{ steps.license_check_report.outputs.report }}"
+        run: echo "${{ steps.license_check_print_report.outputs.report }}"
       - uses: actions/upload-artifact@v4
         with:
           name: pre-commit-${{ matrix.python-version }}
@@ -148,6 +155,13 @@ jobs:
  #       if: ${{ matrix.python-version == '3.6' }}
  #       with:
  #         extra_args: --all -c .pre-commit-config-gh-${{ matrix.python-version }}.yaml
+      - name: Get transitive dependencies licences
+        id: license_check_print_report
+#        uses: pilosus/action-pip-license-checker@v1.0.0
+#        continue-on-error: true
+        uses: pilosus/action-pip-license-checker@v3.1.0
+        with:
+          requirements: constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
 #        uses: pilosus/action-pip-license-checker@v1.0.0
@@ -159,7 +173,7 @@ jobs:
           exclude: '(?i)^(pylint|dulwich).*'
       - name: Print licences report
         if: ${{ always() }}
-        run: echo "${{ steps.license_check_report.outputs.report }}"
+        run: echo "${{ steps.license_check_print_report.outputs.report }}"
       - uses: actions/upload-artifact@v4
         with:
           name: pre-commit-${{ matrix.python-version }}
