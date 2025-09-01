@@ -80,7 +80,7 @@ jobs:
         with:
           requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
-          exclude: 'pylint.*'
+          exclude: '(?i)^(pylint|dulwich).*'
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_report.outputs.report }}"
@@ -156,7 +156,7 @@ jobs:
         with:
           requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
-          exclude: 'pylint.*'
+          exclude: '(?i)^(pylint|dulwich).*'
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_report.outputs.report }}"
