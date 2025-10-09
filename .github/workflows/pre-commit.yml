@@ -87,7 +87,7 @@ jobs:
         with:
           requirements: constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
-          exclude: '(?i)^(pylint|dulwich).*'
+          exclude: '(?i)^(pylint|dulwich|docutils).*'
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_print_report.outputs.report }}"
