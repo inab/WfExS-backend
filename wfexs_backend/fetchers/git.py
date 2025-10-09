@@ -49,6 +49,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
+        TypeAlias,
     )
 
     from ..scheme_catalog import (
@@ -71,6 +72,11 @@ if TYPE_CHECKING:
     from . import (
         AbstractStatefulFetcher,
     )
+
+    try:
+        from dulwich.client import LsRemoteResult  # type: ignore[attr-defined]
+    except:
+        LsRemoteResult: TypeAlias = Mapping[bytes, bytes]  # type: ignore[no-redef]
 
 
 from urllib import parse, request
@@ -181,6 +187,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         the_remote_uri: "Optional[str]" = None
         b_default_repo_tag: "Optional[str]" = None
         repo_branches: "Optional[MutableSequence[RepoTag]]" = None
+        remote_refs_dict: "LsRemoteResult"
         for pos in range(len(sp_path), 0, -1):
             pre_path = "/".join(sp_path[:pos])
             if pre_path == "":
@@ -190,7 +197,6 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 reparsedInputURL._replace(path=pre_path, fragment="")
             )
 
-            remote_refs_dict: "Mapping[bytes, bytes]"
             if offline:
                 raise OfflineRepoGuessException(
                     f"Query to {remote_uri_anc} is not allowed in offline mode"
@@ -251,7 +257,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         repo_branches = []
         b_default_repo_tag = None
         b_checkout: "Optional[RepoTag]" = None
-        for remote_label, remote_ref in remote_refs_dict.items():
+        for remote_label, remote_ref in remote_refs_dict.items():  # type: ignore[operator]
             b_repo_tag: "Optional[str]" = None
             if remote_label.startswith(cls.REFS_HEADS_PREFIX):
                 b_repo_tag = remote_label[len(cls.REFS_HEADS_PREFIX) :].decode(

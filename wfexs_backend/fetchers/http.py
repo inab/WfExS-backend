@@ -250,7 +250,8 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
                     )
 
                     uri_with_metadata = URIWithMetadata(
-                        uri=he.filename, metadata=dict(he.headers.items())
+                        uri=cast("URIType", he.filename),
+                        metadata=dict(he.headers.items()),
                     )
                     return ProtocolFetcherReturn(
                         kind_or_resolved=cast("URIType", redirect_url),
