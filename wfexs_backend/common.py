@@ -32,9 +32,6 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import (
-        Buffer,
-    )
     from typing import (
         Any,
         Callable,
@@ -58,6 +55,7 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import (
+        Buffer,
         Final,
         TypeAlias,
         TypedDict,
