@@ -74,7 +74,7 @@ if TYPE_CHECKING:
     )
 
     try:
-        from dulwich.client import LsRemoteResult
+        from dulwich.client import LsRemoteResult  # type: ignore[attr-defined]
     except:
         LsRemoteResult: TypeAlias = Mapping[bytes, bytes]  # type: ignore[no-redef]
 
