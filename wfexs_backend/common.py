@@ -32,6 +32,9 @@ from typing import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Buffer,
+    )
     from typing import (
         Any,
         Callable,
@@ -69,9 +72,9 @@ import ssl
 def create_augmented_context(
     purpose: "ssl.Purpose" = ssl.Purpose.SERVER_AUTH,
     *,
-    cafile: "Optional[str]" = None,
-    capath: "Optional[str]" = None,
-    cadata: "Optional[Union[str, bytes]]" = None,
+    cafile: "Optional[Union[str, bytes, os.PathLike[str], os.PathLike[bytes]]]" = None,
+    capath: "Optional[Union[str, bytes, os.PathLike[str], os.PathLike[bytes]]]" = None,
+    cadata: "Optional[Union[str, Buffer]]" = None,
 ) -> "ssl.SSLContext":
     context = ssl.create_default_context(
         purpose=purpose, cafile=cafile, capath=capath, cadata=cadata
