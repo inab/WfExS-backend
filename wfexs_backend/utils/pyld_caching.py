@@ -193,7 +193,7 @@ def hook_pyld_cache(cache_file: "str") -> "None":
     pyld.jsonld.set_document_loader(
         aiohttp_caching_document_loader(
             cache_file=cache_file,
-            timeout=10,
+            timeout=60,
         )
     )
 
