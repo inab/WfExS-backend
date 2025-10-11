@@ -1,1 +1,1 @@
-wfexs_backend @ git+https://github.com/inab/WfExS-backend.git@1.0.1
+wfexs_backend @ git+https://github.com/inab/WfExS-backend.git@1.0.2
