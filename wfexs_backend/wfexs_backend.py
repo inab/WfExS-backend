@@ -1603,6 +1603,20 @@ class WfExSBackend:
     ) -> "Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]]":
         # Removing duplicates
         entries: "Set[str]" = set(args)
+
+        for arg in args:
+            entries.add(arg)
+
+            # As we cannot be sure whether it is a filename or a string
+            # add both the filename and the content of the file
+            if os.path.isfile(arg):
+                try:
+                    with open(arg, mode="r", encoding="utf-8") as wdH:
+                        query_id = wdH.readline().strip()
+                        entries.add(query_id)
+                except:
+                    pass
+
         if entries and acceptGlob:
             reEntries = translate_glob_args(list(entries))
         else:

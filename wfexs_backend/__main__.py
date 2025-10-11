@@ -389,6 +389,13 @@ def genParserSub(
             help="Nickname prefix to be used on staged workdir creation",
         )
 
+        ap_.add_argument(
+            "--save-workdir-id",
+            dest="workdir_id_file",
+            type=PathArgType,
+            help="File where the new working directory id is going to be saved",
+        )
+
     if (
         (preStageParams and command not in (WfExS_Commands.ConfigValidate,))
         or crateParams
@@ -461,7 +468,7 @@ def genParserSub(
             "--staged-job-dir",
             dest="workflowWorkingDirectory",
             required=True,
-            help="Already staged job directory",
+            help="Already staged job directory (or working directory id, or file containing the working directory id)",
         )
 
     if crateParams:
@@ -1600,6 +1607,11 @@ def main() -> None:
     else:
         op_crate_pid = None
 
+    if hasattr(args, "workdir_id_file") and args.workdir_id_file is not None:
+        workdir_id_file = args.workdir_id_file
+    else:
+        workdir_id_file = None
+
     wfInstance = None
     if command in (
         WfExS_Commands.MountWorkDir,
@@ -1611,6 +1623,7 @@ def main() -> None:
         WfExS_Commands.ExportCrate,
     ):
         if os.path.isdir(args.workflowWorkingDirectory):
+            query_id = args.workflowWorkingDirectory
             wfInstance = wfBackend.fromWorkDir(
                 pathlib.Path(args.workflowWorkingDirectory),
                 private_key_filename=args.private_key_file,
@@ -1618,6 +1631,13 @@ def main() -> None:
                 fail_ok=command != WfExS_Commands.MountWorkDir,
             )
         else:
+            query_id = args.workflowWorkingDirectory
+            if os.path.isfile(args.workflowWorkingDirectory):
+                with open(
+                    args.workflowWorkingDirectory, mode="r", encoding="utf-8"
+                ) as wdH:
+                    query_id = wdH.readline().strip()
+
             for (
                 instance_id,
                 nickname,
@@ -1625,7 +1645,7 @@ def main() -> None:
                 wfSetup,
                 wfInstance,
             ) in wfBackend.listStagedWorkflows(
-                args.workflowWorkingDirectory,
+                query_id,
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=True,
@@ -1640,7 +1660,7 @@ def main() -> None:
                 break
         if wfInstance is None:
             logger.error(
-                f"[ERROR] Workflow {args.workflowWorkingDirectory} could not be found! Stopping.",
+                f"[ERROR] Workflow {args.workflowWorkingDirectory} ({query_id}) could not be found! Stopping.",
             )
             sys.exit(1)
     elif (
@@ -1729,6 +1749,17 @@ def main() -> None:
     wfSetup = wfInstance.getStagedSetup()
     logger.info("\t- Working directory will be {}".format(wfSetup.work_dir))
     sys.stderr.flush()
+    if workdir_id_file is not None:
+        try:
+            logger.info(
+                f"Storing working directory id {wfSetup.instance_id} into {workdir_id_file.as_posix()}"
+            )
+            with workdir_id_file.open(mode="w", encoding="utf-8") as wiH:
+                wiH.write(wfSetup.instance_id)
+        except:
+            logger.exception(
+                f"The working directory id could not be saved into {workdir_id_file.as_posix()}"
+            )
 
     # Export staged working directory contents commands
     if command == WfExS_Commands.Export:
