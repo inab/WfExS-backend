@@ -1607,11 +1607,7 @@ def main() -> None:
     else:
         op_crate_pid = None
 
-    if (
-        hasattr(args, "workdir_id_file")
-        and args.workdir_id_file is not None
-        and len(args.workdir_id_file) > 0
-    ):
+    if hasattr(args, "workdir_id_file") and args.workdir_id_file is not None:
         workdir_id_file = args.workdir_id_file
     else:
         workdir_id_file = None
@@ -1756,13 +1752,13 @@ def main() -> None:
     if workdir_id_file is not None:
         try:
             logger.info(
-                f"Storing working directory id {wfSetup.instance_id} into {workdir_id_file}"
+                f"Storing working directory id {wfSetup.instance_id} into {workdir_id_file.as_posix()}"
             )
-            with open(workdir_id_file, mode="w", encoding="utf-8") as wiH:
+            with workdir_id_file.open(mode="w", encoding="utf-8") as wiH:
                 wiH.write(wfSetup.instance_id)
         except:
             logger.exception(
-                f"The working directory id could not be saved into {workdir_id_file}"
+                f"The working directory id could not be saved into {workdir_id_file.as_posix()}"
             )
 
     # Export staged working directory contents commands
