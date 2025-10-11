@@ -1619,13 +1619,12 @@ def main() -> None:
                 fail_ok=command != WfExS_Commands.MountWorkDir,
             )
         else:
+            query_id = args.workflowWorkingDirectory
             if os.path.isfile(args.workflowWorkingDirectory):
                 with open(
                     args.workflowWorkingDirectory, mode="r", encoding="utf-8"
                 ) as wdH:
                     query_id = wdH.readline().strip()
-            else:
-                query_id = args.workflowWorkingDirectory
 
             for (
                 instance_id,
