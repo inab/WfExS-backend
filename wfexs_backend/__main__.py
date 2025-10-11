@@ -389,6 +389,13 @@ def genParserSub(
             help="Nickname prefix to be used on staged workdir creation",
         )
 
+        ap_.add_argument(
+            "--save-workdir-id",
+            dest="workdir_id_file",
+            type=PathArgType,
+            help="File where the new working directory id is going to be saved",
+        )
+
     if (
         (preStageParams and command not in (WfExS_Commands.ConfigValidate,))
         or crateParams
@@ -1600,6 +1607,15 @@ def main() -> None:
     else:
         op_crate_pid = None
 
+    if (
+        hasattr(args, "workdir_id_file")
+        and args.workdir_id_file is not None
+        and len(args.workdir_id_file) > 0
+    ):
+        workdir_id_file = args.workdir_id_file
+    else:
+        workdir_id_file = None
+
     wfInstance = None
     if command in (
         WfExS_Commands.MountWorkDir,
@@ -1737,6 +1753,17 @@ def main() -> None:
     wfSetup = wfInstance.getStagedSetup()
     logger.info("\t- Working directory will be {}".format(wfSetup.work_dir))
     sys.stderr.flush()
+    if workdir_id_file is not None:
+        try:
+            logger.info(
+                f"Storing working directory id {wfSetup.instance_id} into {workdir_id_file}"
+            )
+            with open(workdir_id_file, mode="w", encoding="utf-8") as wiH:
+                wiH.write(wfSetup.instance_id)
+        except:
+            logger.exception(
+                f"The working directory id could not be saved into {workdir_id_file}"
+            )
 
     # Export staged working directory contents commands
     if command == WfExS_Commands.Export:
