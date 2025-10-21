@@ -86,6 +86,8 @@ from dulwich.client import get_transport_and_path
 import dulwich.porcelain
 import dulwich.repo
 
+from dulwich import __version__ as dulwich_version
+
 from . import (
     AbstractSchemeRepoFetcher,
     DocumentedStatefulProtocolFetcher,
@@ -296,9 +298,14 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             # Possible sha in repoTag
             memory_repo = dulwich.repo.MemoryRepo()
             transport, path = get_transport_and_path(remote_uri_anc)
-            fetch_pack_result = transport.fetch(
-                path, cast("dulwich.repo.Repo", memory_repo)
-            )
+            if dulwich_version < (0, 24, 6):
+                fetch_pack_result = transport.fetch(
+                    path, cast("dulwich.repo.Repo", memory_repo)  # type: ignore[arg-type]
+                )
+            else:
+                fetch_pack_result = transport.fetch(
+                    path.encode("utf-8"), cast("dulwich.repo.Repo", memory_repo)  # type: ignore[arg-type]
+                )
             try:
                 memory_repo.get_object(repoTag.encode("utf-8"))
                 b_default_repo_tag = repoTag
