@@ -11,6 +11,7 @@ repos:
         files: \.(py|pyi)$
         exclude: "/(site-packages|development-[^/]*|docs|node_modules|__pycache__|\\..*)/$"
       - id: check-json
+      - id: check-toml
       - id: check-yaml
         types: [file]
         files: \.(yaml|yml|wfex\.(stage|export|ctxt))$
