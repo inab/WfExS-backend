@@ -13,6 +13,7 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/su
 FROM	pypy:3.11-slim-trixie AS podman_build
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
 ARG	apptainer_version=1.4.3
+WORKDIR	/
 # Install apptainer
 # hadolint ignore=DL3008
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
@@ -27,8 +28,7 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	apt-get install -y --no-install-recommends ./*.deb
 # Install WfExS, trusting the installers in the commit rather than the
 # one in the docker recipe
-ARG	wfexs_checkout=70277f9708ecb338cfb192ddcbf24c7159d8f319
-WORKDIR	/
+ARG	wfexs_checkout=eb5d0f0fc95c60e545b0c96ec8da0efff0a7d74b
 # hadolint ignore=DL3003,DL3013
 RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-backend.git && \
 	cd WfExS-backend && \
