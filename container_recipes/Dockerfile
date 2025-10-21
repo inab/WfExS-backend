@@ -10,9 +10,9 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/su
 	gcc -static -o suid_entrypoint suid_entrypoint.c
 
 # The default images of python are based on debian
-FROM	pypy:3.11-slim AS podman_build
+FROM	pypy:3.11-slim-trixie AS podman_build
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
-ARG	apptainer_version=1.3.6
+ARG	apptainer_version=1.4.3
 # Install apptainer
 # hadolint ignore=DL3008
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
@@ -22,10 +22,9 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	chmod +x /tmp/rust-installer.sh && \
 	/tmp/rust-installer.sh -y && \
 	wget -nv \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}_${DPKG_ARCH}.deb \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}_${DPKG_ARCH}.deb && \
-	apt-get install -y ./*.deb && \
-	rm -f *.deb
+	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}-trixie+_${DPKG_ARCH}.deb \
+	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}-trixie+_${DPKG_ARCH}.deb && \
+	apt-get install -y ./*.deb
 # Install WfExS, trusting the installers in the commit rather than the
 # one in the docker recipe
 ARG	wfexs_checkout=70277f9708ecb338cfb192ddcbf24c7159d8f319
@@ -73,13 +72,13 @@ RUN	apt-get install -y --no-install-recommends curl libmagic1 graphviz && \
 	BUSYBOX_VER="${BUSYBOX_VER}" \
 	bash /full-installer.bash
 
-FROM	pypy:3.11-slim AS podman_image
+FROM	pypy:3.11-slim-trixie AS podman_image
 COPY	--from=podman_build /podman_containers_nokeyring.conf /etc/containers/containers.conf
 COPY	--from=podman_build /opt/pypy /opt/pypy
+COPY	--from=podman_build /*.deb ./
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
 
 # Python 3 is installed so it can be used with cwltool
-ARG	apptainer_version=1.3.6
 # hadolint ignore=DL3008
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	python -c 'import urllib.request ; urllib.request.urlretrieve("https://download.docker.com/linux/debian/gpg", "/etc/apt/keyrings/docker.asc")' && \
@@ -90,9 +89,6 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	tee /etc/apt/sources.list.d/docker.list > /dev/null && \
 	apt-get update && \
 	apt-get install -y --no-install-recommends git libmagic1 libxml2 libxslt1.1 zlib1g python3-venv podman encfs graphviz docker-ce-cli wget && \
-	wget -nv \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}_${DPKG_ARCH}.deb \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}_${DPKG_ARCH}.deb && \
 	apt-get install -y ./*.deb && \
 	rm -f *.deb /var/cache/apt/archives/*.deb 
 
