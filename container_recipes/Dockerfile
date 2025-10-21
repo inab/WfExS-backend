@@ -17,14 +17,14 @@ ARG	apptainer_version=1.4.3
 # hadolint ignore=DL3008
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	apt-get update && \
-	apt-get install -y wget build-essential git libxml2-dev libxslt-dev zlib1g-dev && \
-	wget -O /tmp/rust-installer.sh https://sh.rustup.rs && \
+	apt-get install -y --no-install-recommends wget build-essential git libxml2-dev libxslt-dev zlib1g-dev && \
+	wget -nv -O /tmp/rust-installer.sh https://sh.rustup.rs && \
 	chmod +x /tmp/rust-installer.sh && \
 	/tmp/rust-installer.sh -y && \
 	wget -nv \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer_${apptainer_version}-trixie+_${DPKG_ARCH}.deb \
-	https://github.com/apptainer/apptainer/releases/download/v${apptainer_version}/apptainer-suid_${apptainer_version}-trixie+_${DPKG_ARCH}.deb && \
-	apt-get install -y ./*.deb
+	https://github.com/apptainer/apptainer/releases/download/v"${apptainer_version}"/apptainer_"${apptainer_version}"-trixie+_"${DPKG_ARCH}".deb \
+	https://github.com/apptainer/apptainer/releases/download/v"${apptainer_version}"/apptainer-suid_"${apptainer_version}"-trixie+_"${DPKG_ARCH}".deb && \
+	apt-get install -y --no-install-recommends ./*.deb
 # Install WfExS, trusting the installers in the commit rather than the
 # one in the docker recipe
 ARG	wfexs_checkout=70277f9708ecb338cfb192ddcbf24c7159d8f319
@@ -40,9 +40,9 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-bac
 	  container_recipes/full-installer.bash && \
 	git checkout "${wfexs_checkout}" && \
 	grep -vF git+ constraints-${PYVER}.txt > constraints-${PYVER}.txt-relaxed && \
-	. ${HOME}/.cargo/env && \
+	. "${HOME}"/.cargo/env && \
 	pip install --no-cache-dir --upgrade pip wheel && \
-	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-${PYVER}.txt-relaxed && \
+	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-"${PYVER}".txt-relaxed && \
 	python -m compileall "$(python -c 'import sys; print(sys.prefix)')" && \
 	mv container_recipes/* /
 
@@ -55,7 +55,7 @@ ARG	OPENJ9_VER=0.26.0
 # Go version to compile
 ARG	GO_VER=1.20.14
 # gocryptfs version
-ARG	GOCRYPTFS_VER=v2.5.1
+ARG	GOCRYPTFS_VER=v2.6.1
 # static bash version
 ARG	STATIC_BASH_VER=5.1.004-1.2.2
 # static busybox version
@@ -75,7 +75,7 @@ RUN	apt-get install -y --no-install-recommends curl libmagic1 graphviz && \
 FROM	pypy:3.11-slim-trixie AS podman_image
 COPY	--from=podman_build /podman_containers_nokeyring.conf /etc/containers/containers.conf
 COPY	--from=podman_build /opt/pypy /opt/pypy
-COPY	--from=podman_build /*.deb ./
+COPY	--from=podman_build /*.deb /tmp/
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
 
 # Python 3 is installed so it can be used with cwltool
@@ -89,8 +89,9 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	tee /etc/apt/sources.list.d/docker.list > /dev/null && \
 	apt-get update && \
 	apt-get install -y --no-install-recommends git libmagic1 libxml2 libxslt1.1 zlib1g python3-venv podman encfs graphviz docker-ce-cli wget && \
-	apt-get install -y ./*.deb && \
-	rm -f *.deb /var/cache/apt/archives/*.deb 
+	apt-get install -y --no-install-recommends /tmp/*.deb && \
+	apt-get clean && \
+	rm -f /tmp/*.deb /var/cache/apt/archives/*.deb /var/lib/apt/lists/*
 
 CMD	["/bin/bash"]
 
