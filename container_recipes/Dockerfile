@@ -91,7 +91,8 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	apt-get install -y --no-install-recommends git libmagic1 libxml2 libxslt1.1 zlib1g python3-venv podman encfs graphviz docker-ce-cli wget && \
 	apt-get install -y --no-install-recommends /tmp/*.deb && \
 	apt-get clean && \
-	rm -f /tmp/*.deb /var/cache/apt/archives/*.deb /var/lib/apt/lists/*
+	rm -f /tmp/*.deb /var/cache/apt/archives/*.deb && \ 
+	rm -rf /var/lib/apt/lists/*
 
 CMD	["/bin/bash"]
 
