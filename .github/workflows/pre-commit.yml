@@ -91,7 +91,7 @@ jobs:
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_print_report.outputs.report }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: pre-commit-${{ matrix.python-version }}
           retention-days: 2
@@ -174,7 +174,7 @@ jobs:
       - name: Print licences report
         if: ${{ always() }}
         run: echo "${{ steps.license_check_print_report.outputs.report }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: pre-commit-${{ matrix.python-version }}
           retention-days: 2
@@ -193,7 +193,7 @@ jobs:
         id: timestamp
         run: echo "timestamp=$(date -Is)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         id: download
         with:
           pattern: pre-commit-*
