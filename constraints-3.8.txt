@@ -35,7 +35,7 @@ ftputil==5.1.0
 funny-passphrase==0.2.3
 galaxy2cwl==0.1.4
 genluhn==0.3.1
-google-api-core==2.26.0
+google-api-core==2.27.0
 google-auth==2.41.1
 google-cloud-core==2.4.3
 google-cloud-storage==3.4.1
@@ -70,7 +70,7 @@ ply==3.11
 propcache==0.2.0
 proto-plus==1.26.1
 protobuf==5.29.5
-psutil==7.1.1
+psutil==7.1.2
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.23
@@ -86,7 +86,7 @@ python-magic==0.4.27
 python-xz==0.5.0
 pyxdg==0.28
 PyYAML==6.0.3
-rdflib==7.2.1
+rdflib==7.3.0
 referencing==0.35.1
 requests==2.32.4
 requests-toolbelt==1.0.0
@@ -96,7 +96,7 @@ rfc6920==0.2.2
 rocrate==0.11.0
 rpds-py==0.20.1
 rsa==4.9.1
-ruamel.yaml==0.18.15
+ruamel.yaml==0.18.16
 ruamel.yaml.clib==0.2.8
 RWFileLock==0.2.2
 s3transfer==0.11.5
