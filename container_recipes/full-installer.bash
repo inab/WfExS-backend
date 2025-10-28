@@ -123,24 +123,25 @@ else
 	OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-upstream-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}/OpenJDK${JDK_MAJOR_VER}U-jdk-shenandoah_${platformArchJDK}_${platformOS}_${JDK_VER}_${JDK_REV}.tar.gz"
 	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${OPENJDK_URL}" )
 	tar -x -C "${envDir}" -f "${downloadDir}"/OpenJDK*.tar.gz
+	jdkreldir=jdk-${JDK_VER}_${JDK_REV}
 	for path in bin lib ; do
-		for elem in "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/${path}/* ; do
+		for elem in "${envDir}"/${jdkreldir}/${path}/* ; do
 			destelem="${envDir}/${path}/$(basename "$elem")"
 			if [ -e "$destelem" ] ; then
 				rm -rf "$destelem"
 			fi
 		done
-		mv "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/${path}/* "${envDir}/${path}"
-		rmdir "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/${path}
+		mv "${envDir}"/${jdkreldir}/${path}/* "${envDir}/${path}"
+		rmdir "${envDir}"/${jdkreldir}/${path}
 	done
 	
-	for elem in "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/* ; do
+	for elem in "${envDir}"/${jdkreldir}/* ; do
 		destelem="${envDir}/$(basename "$elem")"
 		if [ -e "$destelem" ] ; then
 			rm -rf "$destelem"
 		fi
 	done
-	mv "${envDir}"/jdk-${JDK_VER}+${JDK_REV}/* "${envDir}"
+	mv "${envDir}"/${jdkreldir}/* "${envDir}"
 fi
 
 # Checking gocryptfs is installed and the latest version
