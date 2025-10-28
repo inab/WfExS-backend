@@ -18,12 +18,12 @@
 # These are the software versions being installed
 # in the virtual environment
 : ${JDK_MAJOR_VER:=11}
-: ${JDK_VER:=${JDK_MAJOR_VER}.0.11}
-: ${JDK_REV:=9}
+: ${JDK_VER:=${JDK_MAJOR_VER}.0.16}
+: ${JDK_REV:=8}
 : ${OPENJ9_VER:=0.26.0}
 
-: ${GO_VER:=1.17.13}
-: ${GOCRYPTFS_VER:=v2.4.0}
+: ${GO_VER:=1.20.14}
+: ${GOCRYPTFS_VER:=v2.6.1}
 : ${STATIC_BASH_VER:=5.1.004-1.2.2}
 : ${BUSYBOX_VER:=1.35.0}
 
@@ -116,7 +116,11 @@ else
 	#	OPENJDK_URL="https://download.java.net/java/GA/jdk${JDK_MAJOR_VER}/${JDK_REV}/GPL/openjdk-${JDK_VER}_linux-x64_bin.tar.gz"
 	#fi
 	#OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}_openj9-${OPENJ9_VER}/OpenJDK${JDK_MAJOR_VER}U-jdk_x64_linux_openj9_${JDK_VER}_${JDK_REV}_openj9-${OPENJ9_VER}.tar.gz"
-	OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}_openj9-${OPENJ9_VER}/OpenJDK${JDK_MAJOR_VER}U-jdk_${platformArchJDK}_${platformOS}_openj9_${JDK_VER}_${JDK_REV}_openj9-${OPENJ9_VER}.tar.gz"
+	#OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}_openj9-${OPENJ9_VER}/OpenJDK${JDK_MAJOR_VER}U-jdk_${platformArchJDK}_${platformOS}_openj9_${JDK_VER}_${JDK_REV}_openj9-${OPENJ9_VER}.tar.gz"
+	
+	# As previously used OpenJDK release had execution stacks, which are banned in latest releases
+	# substitute it by latest one with no execution stack
+	OPENJDK_URL="https://github.com/AdoptOpenJDK/openjdk${JDK_MAJOR_VER}-upstream-binaries/releases/download/jdk-${JDK_VER}%2B${JDK_REV}/OpenJDK${JDK_MAJOR_VER}U-jdk-shenandoah_${platformArchJDK}_${platformOS}_${JDK_VER}_${JDK_REV}.tar.gz"
 	( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${OPENJDK_URL}" )
 	tar -x -C "${envDir}" -f "${downloadDir}"/OpenJDK*.tar.gz
 	for path in bin lib ; do

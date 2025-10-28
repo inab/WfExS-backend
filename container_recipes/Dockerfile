@@ -49,8 +49,8 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-bac
 # Install third party software
 # JDK version parameters
 ARG	JDK_MAJOR_VER=11
-ARG	JDK_VER=${JDK_MAJOR_VER}.0.11
-ARG	JDK_REV=9
+ARG	JDK_VER=${JDK_MAJOR_VER}.0.16
+ARG	JDK_REV=8
 ARG	OPENJ9_VER=0.26.0
 # Go version to compile
 ARG	GO_VER=1.20.14
