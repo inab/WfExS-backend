@@ -60,6 +60,9 @@ ARG	GOCRYPTFS_VER=v2.6.1
 ARG	STATIC_BASH_VER=5.1.004-1.2.2
 # static busybox version
 ARG	BUSYBOX_VER=1.35.0
+#
+#COPY	full-installer.bash /
+#
 # hadolint ignore=DL3008
 RUN	apt-get install -y --no-install-recommends curl libmagic1 graphviz && \
 	JDK_MAJOR_VER="${JDK_MAJOR_VER}" \
