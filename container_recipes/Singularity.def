@@ -10,8 +10,8 @@ apptainer_version=1.4.3
 # JDK version parameters
 JDK_MAJOR_VER=11
 # Nested arguments are not allowed
-JDK_VER=11.0.11
-JDK_REV=9
+JDK_VER=11.0.16
+JDK_REV=8
 OPENJ9_VER=0.26.0
 # Go version to compile
 GO_VER=1.20.14
