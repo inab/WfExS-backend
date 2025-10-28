@@ -1,4 +1,4 @@
-# Running WfExS from within a container (alpha)!
+# Running WfExS from within a container (alpha/beta)!
 
 ## Singularity/Apptainer within Singularity/Apptainer (works also for encrypted workdirs)
 
@@ -6,7 +6,9 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
 
 ### Steps
 
-1. Build the SIF image. Let's assume the file is `wfexs-backend-latest.sif`.
+1. Either build the SIF image or reuse one of the official docker images.
+   In case you have built the image by hand, let's assume the file is `wfexs-backend-latest.sif`.
+   For this example we are assuming a docker image `docker://ghrc.io/inab/wfexs-backend:1.0.4`
 
 2. First, create and populate a side caches directory:
 
@@ -15,7 +17,7 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
    singularity exec \
      -e -c \
      -B ./SING_dirs/side_caches:${HOME}/.cache \
-     wfexs-backend-latest.sif \
+     docker://ghcr.io/inab/wfexs-backend:1.0.4 \
      WfExS-backend populate-side-caches
    ```
 
@@ -56,23 +58,28 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      -e -c \
      -B ./SING_dirs/side_caches:${HOME}/.cache \
      -B ./SING_dirs/:/home/${USER}/WfExS-instance-dirs/:rw \
-     wfexs-backend-latest.sif \
+     docker://ghcr.io/inab/wfexs-backend:1.0.4 \
      WfExS-backend -L /home/${USER}/WfExS-instance-dirs/local_container_wfexs.yaml init
    ```
 
 6. Use it!
 
    ```bash
+   mkdir -p SING_dirs/side_caches/pip
+   mkdir -p SING_dirs/scratch
    singularity exec \
      -e -c \
      --add-caps SYS_ADMIN  \
      -B /dev/fuse \
      -B ./SING_dirs/side_caches/:${HOME}/.cache/:ro \
+     -B ./SING_dirs/side_caches/pip/:${HOME}/.cache/pip/:rw \
      -B ./SING_dirs/:/home/${USER}/WfExS-instance-dirs/:rw \
      -B ./workflow_examples/:/home/${USER}/workflow_examples/:ro \
-     wfexs-backend-latest.sif \
+     -W ./SING_dirs/scratch/ \
+     docker://ghcr.io/inab/wfexs-backend:1.0.4 \
      WfExS-backend -L /home/${USER}/WfExS-instance-dirs/local_container_wfexs.yaml \
-       stage -W /home/${USER}/workflow_examples/hello/hellow_cwl_singularity.wfex.stage
+       stage -W /home/${USER}/workflow_examples/hello/hellow_cwl_singularity.wfex.stage \
+       --save-workdir-id /home/${USER}/staged-workflow-id.txt
    ```
 
    ```bash
@@ -81,11 +88,12 @@ For this approach we have been using both `-e` and `-c` parameters from Singular
      --add-caps SYS_ADMIN  \
      -B /dev/fuse \
      -B ./SING_dirs/side_caches/:${HOME}/.cache/:ro \
+     -B ./SING_dirs/side_caches/pip/:${HOME}/.cache/pip/:ro \
      -B ./SING_dirs/:/home/${USER}/WfExS-instance-dirs/:rw \
-     -B ./workflow_examples/:/home/${USER}/workflow_examples/:ro \
-     wfexs-backend-latest.sif \
+     -W ./SING_dirs/scratch/ \
+     docker://ghcr.io/inab/wfexs-backend:1.0.4 \
      WfExS-backend -L /home/${USER}/WfExS-instance-dirs/local_container_wfexs.yaml \
-       staged-workdir offline-exec 'my funny jobname'
+       staged-workdir offline-exec /home/${USER}/staged-workflow-id.txt
    ```
 
 ## Singularity/Apptainer within Podman (works also for encrypted workdirs)
