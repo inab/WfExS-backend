@@ -32,7 +32,7 @@ boto3
 botocore
 google-cloud-storage
 pyncclient-ext >= 0.1.2
-wiktionary-term-fetcher >= 0.1.1
+wiktionary-term-fetcher >= 0.1.2
 funny-passphrase >= 0.2.3
 pyxdg
 groovy-parser == 0.2.2
