@@ -1,0 +1,43 @@
+{
+  "upload_type": "software",
+  "title": "WfExS-backend",
+  "publication_date": "2025-10-28",
+  "creators": [
+        {
+            "name": "Fernández, José María",
+            "orcid": "0000-0002-4806-5140",
+            "affiliation": "Barcelona Supercomputing Center",
+            "type": "ProjectLeader"
+        },
+        {
+            "name": "Rodríguez-Navas, Laura",
+            "orcid": "0000-0003-4929-1219",
+            "type": "ProjectMember"
+        },
+        {
+            "name": "Iborra, Paula",
+            "orcid": "0000-0003-0504-3029",
+            "affiliation": "Barcelona Supercomputing Center",
+            "type": "ProjectMember"
+        }
+  ],
+  "contributors": [
+        {
+            "name": "Muñoz-Cívico, Adrián",
+            "orcid": "0000-0001-7517-5065",
+            "type": "Other"
+        },
+        {
+            "name": "Lea, Daniel",
+            "orcid": "0000-0001-8152-0398",
+            "affiliation": "University of Nottingham",
+            "type": "Researcher"
+        }
+  ],
+  "description": "Workflow Execution Service Backend",
+  "access_right": "open",
+  "license": "Apache-2.0",
+  "keywords": ["workflows", "RO-Crate"],
+  "language": "eng",
+  "version": "1.0.5"
+}
