@@ -13,7 +13,7 @@ jobs:
         python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "pypy3.10", "pypy3.11" ]
     name: pip-audit python ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -84,7 +84,7 @@ jobs:
         python-version: [ "3.7" ]
     name: pip-audit python ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
@@ -155,7 +155,7 @@ jobs:
       - name: Get analysis timestamp
         id: timestamp
         run: echo "timestamp=$(date -Is)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v6
         id: download
         with:
