@@ -39,7 +39,7 @@ or
 abi <abi/4.0>,
 include <tunables/global>
 
-profile singularity-ce /usr/local/libexec/apptainer/bin/starter{,-suid} flags=(unconfined) {
+profile apptainer /usr/local/libexec/apptainer/bin/starter{,-suid} flags=(unconfined) {
   userns,
 
   # Site-specific additions and overrides.
