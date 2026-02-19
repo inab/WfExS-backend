@@ -1,5 +1,53 @@
 # Running WfExS from within a container (alpha/beta)!
 
+## Singularity/Apptainer setup details to take into account
+
+First, as it is described at https://github.com/sylabs/singularity/blob/de57924bf0c0bb922623aa0d3259a5f40ee68b59/INSTALL.md#apparmor-profile-ubuntu-2404
+Linux distributions with apparmor enabled by default (like Ubuntu 24.04 LTS and later) usually
+do not permit applications to create unprivileged user namespaces by default.
+
+Unprivileged user namespaces **is** the feature which makes Singularity
+and Apptainer possible.
+
+* If you install either SingularityCE or Apptainer from a GitHub release
+`.deb` package then any of them installs an apparmor profile that permits 
+to create unprivileged user namespaces.
+
+* If you install either SingularityCE or Apptainer from source, then you need
+to create as administrator an apparmor profile file pointing out to the right path,
+and putting the file into the `/etc/apparmor.d` directory. It should be something like:
+
+```
+# Permit unprivileged user namespace creation for SingularityCE starter
+# assuming it was installed under /usr/local
+abi <abi/4.0>,
+include <tunables/global>
+
+profile singularity-ce /usr/local/libexec/singularity/bin/starter{,-suid} flags=(unconfined) {
+  userns,
+
+  # Site-specific additions and overrides.
+  include if exists <local/singularity-ce>
+}
+```
+
+or
+
+```
+# Permit unprivileged user namespace creation for Apptainer starter
+# assuming it was installed under /usr/local
+abi <abi/4.0>,
+include <tunables/global>
+
+profile singularity-ce /usr/local/libexec/apptainer/bin/starter{,-suid} flags=(unconfined) {
+  userns,
+
+  # Site-specific additions and overrides.
+  include if exists <local/apptainer>
+}
+EOF
+```
+
 ## Singularity/Apptainer within Singularity/Apptainer (works also for encrypted workdirs)
 
 For this approach we have been using both `-e` and `-c` parameters from Singularity/Apptainer. It is also possible to use `-u`.
