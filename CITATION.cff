@@ -1,6 +1,7 @@
 authors:
   - family-names: Fernández
     given-names: José María
+    affiliation: Barcelona Supercomputing Center
     orcid: "https://orcid.org/0000-0002-4806-5140"
   - family-names: Rodríguez-Navas
     given-names: Laura
@@ -10,9 +11,11 @@ authors:
     orcid: "https://orcid.org/0000-0001-7517-5065"
   - family-names: Iborra
     given-names: Paula
+    affiliation: Barcelona Supercomputing Center
     orcid: "https://orcid.org/0000-0003-0504-3029"
   - family-names: Lea
     given-names: Daniel
+    affiliation: University of Nottingham
     orcid: "https://orcid.org/0000-0001-8152-0398"
 cff-version: 1.2.0
 identifiers:

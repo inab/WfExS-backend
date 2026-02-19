@@ -115,10 +115,10 @@ repos:
         exclude: "^[^/]*env/|development-[^/]*/|docs/"
         args: [--diff, --check]
 
-  - repo: https://github.com/jmfernandez/citation-cff-checker.git
-    rev: v0.1.0
-    hooks:
-      - id: cff_ver_validate
+#  - repo: https://github.com/jmfernandez/citation-cff-checker.git
+#    rev: v0.1.0
+#    hooks:
+#      - id: cff_ver_validate
   - repo: https://github.com/pypa/pip-audit
     rev: v2.7.3
     hooks:

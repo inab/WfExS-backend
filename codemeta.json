@@ -1,0 +1,73 @@
+{
+    "@context": "https://w3id.org/codemeta/3.0",
+    "type": "SoftwareSourceCode",
+    "applicationCategory": "Scientific",
+    "author": [
+        {
+            "id": "https://orcid.org/0000-0002-4806-5140",
+            "type": "Person",
+            "affiliation": {
+                "id": "https://ror.org/05sd8tv96",
+                "type": "Organization"
+            },
+            "familyName": "Fernández",
+            "givenName": "José María"
+        },
+        {
+            "id": "https://orcid.org/0000-0003-4929-1219",
+            "type": "Person",
+            "affiliation": {
+                "id": "https://ror.org/05sd8tv96",
+                "type": "Organization"
+            },
+            "familyName": "Rodríguez-Navas",
+            "givenName": "Laura"
+        },
+        {
+            "id": "https://orcid.org/0000-0003-0504-3029",
+            "type": "Person",
+            "affiliation": {
+                "id": "https://ror.org/05sd8tv96",
+                "type": "Organization"
+            },
+            "familyName": "Iborra",
+            "givenName": "Paula"
+        }
+    ],
+    "codeRepository": "https://github.com/inab/WfExS-backend",
+    "contributor": [
+        {
+            "id": "https://orcid.org/0000-0001-7517-5065",
+            "type": "Person",
+            "familyName": "Muñoz-Cívico",
+            "givenName": "Adrián"
+        },
+        {
+            "id": "https://orcid.org/0000-0001-8152-0398",
+            "type": "Person",
+            "affiliation": {
+                "id": "https://ror.org/01ee9ar58",
+                "type": "Organization"
+            },
+            "familyName": "Lea",
+            "givenName": "Daniel"
+        }
+    ],
+    "dateCreated": "2025-10-28",
+    "dateModified": "2025-10-28",
+    "datePublished": "2025-10-28",
+    "description": "Workflow Execution Service Backend",
+    "keywords": [
+        "workflows",
+        "RO-Crate"
+    ],
+    "license": "https://spdx.org/licenses/Apache-2.0",
+    "name": "WfExS-backend",
+    "operatingSystem": [
+        "Linux",
+        "Ubuntu"
+    ],
+    "programmingLanguage": "python",
+    "version": "1.0.5",
+    "issueTracker": "https://github.com/inab/WfExS-backend/issues"
+}

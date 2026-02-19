@@ -1,0 +1,36 @@
+name: Release on Zenodo
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  upload-to-zenodo:
+    runs-on: ubuntu-latest
+    name: A job to update metadata and push a release to Zenodo
+
+    steps:
+      # This step is not needed at the moment but I might decide to add more steps in the future
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 16
+
+      - name: Upload to Zenodo
+        id: release
+        uses: megasanjay/upload-to-zenodo@v2.0.1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          zenodo_token: ${{ secrets.ZENODO_TOKEN }}
+          zenodo_deposition_id: 6567591
+          zenodo_publish: true
+          zenodo_sandbox: false
+          commit_message: 'chore: update ${file_name} for Zenodo release'
+          update_metadata_files: true
+          codemeta_json: true
+          citation_cff: true
+          zenodo_json: true
+
+      # Get the doi from the `release` step
+      - name: Get the output doi
+        run: echo "The released doi was ${{ steps.release.outputs.doi }}"
