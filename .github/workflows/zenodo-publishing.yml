@@ -12,7 +12,7 @@ jobs:
     steps:
       # This step is not needed at the moment but I might decide to add more steps in the future
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
           node-version: 16
 
