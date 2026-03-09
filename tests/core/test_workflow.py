@@ -43,7 +43,10 @@ from tests.core.test_wfexsbackend import (
     test_wfexsbackend_stage,
     WORKFLOW_TESTBED,
 )
-from wfexs_backend.common import ExecutionStatus
+from wfexs_backend.common import (
+    CratableItem,
+    ExecutionStatus,
+)
 from wfexs_backend.workflow import WF
 
 from tests.util import get_path
@@ -87,6 +90,35 @@ def test_workflow_stage(
 
 @pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
 @WORKFLOW_TESTBED
+def test_workflow_create_staged_crate(
+    tmppath: "pathlib.Path",
+    stage_file: "str",
+    context_file: "Optional[str]",
+    should_fail: "Optional[Sequence[str]]",
+) -> "WF":
+    wfInstance = test_workflow_stage(tmppath, stage_file, context_file, should_fail)
+
+    staged_crate = tmppath / "staged_crate.zip"
+    try:
+        wfInstance.createStageResearchObject(
+            filename=staged_crate,
+            payloads=CratableItem.ProspectiveProvenance,
+        )
+
+        assert staged_crate.exists()
+        assert staged_crate.stat().st_size > 0
+    except:
+        if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
+            raise
+    else:
+        if should_fail is not None and inspect.currentframe().f_code.co_name in should_fail:  # type: ignore[union-attr]
+            raise AssertionError(f"Method {inspect.currentframe().f_code.co_name} should have failed with stage file {stage_file} and context file {context_file}")  # type: ignore[union-attr]
+
+    return wfInstance
+
+
+@pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
+@WORKFLOW_TESTBED
 def test_workflow_offline_exec(
     tmppath: "pathlib.Path",
     stage_file: "str",
@@ -100,6 +132,37 @@ def test_workflow_offline_exec(
 
         assert staged_exec.status == ExecutionStatus.Finished
         assert staged_exec.exitVal == 0
+    except:
+        if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
+            raise
+    else:
+        if should_fail is not None and inspect.currentframe().f_code.co_name in should_fail:  # type: ignore[union-attr]
+            raise AssertionError(f"Method {inspect.currentframe().f_code.co_name} should have failed with stage file {stage_file} and context file {context_file}")  # type: ignore[union-attr]
+
+    return wfInstance
+
+
+@pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
+@WORKFLOW_TESTBED
+def test_workflow_create_prov_crate(
+    tmppath: "pathlib.Path",
+    stage_file: "str",
+    context_file: "Optional[str]",
+    should_fail: "Optional[Sequence[str]]",
+) -> "WF":
+    wfInstance = test_workflow_offline_exec(
+        tmppath, stage_file, context_file, should_fail
+    )
+
+    prov_crate = tmppath / "prov_crate.zip"
+    try:
+        wfInstance.createResultsResearchObject(
+            filename=prov_crate,
+            payloads=CratableItem.RetrospectiveProvenance,
+        )
+
+        assert prov_crate.exists()
+        assert prov_crate.stat().st_size > 0
     except:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
             raise

@@ -346,6 +346,7 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
         fetch_remote: "bool" = False,
         validate_url: "bool" = False,
         properties: "Optional[Mapping[str, Any]]" = None,
+        record_size: "bool" = False,
     ):
         if properties is None:
             properties = {}
@@ -353,6 +354,7 @@ class FixedMixin(rocrate.model.file_or_dir.FileOrDir):  # type: ignore[misc]
         self.validate_url = validate_url
         self.source = source
         self.dest_path = dest_path
+        self.record_size = record_size
         if dest_path is not None:
             dest_path = pathlib.Path(dest_path)
             if dest_path.is_absolute():
@@ -1299,7 +1301,8 @@ you can find here an almost complete list of the possible ones:
                     properties=upper_properties,
                 )
                 if do_attach and container.localPath is not None:
-                    the_size = os.stat(container.localPath).st_size
+                    container_path = self.work_dir / container.localPath
+                    the_size = os.stat(container_path).st_size
                     if container.image_signature is not None:
                         digest, algo = extract_digest(container.image_signature)
                         if digest is None or digest == False:
@@ -1310,7 +1313,7 @@ you can find here an almost complete list of the possible ones:
                         the_signature = cast(
                             "Fingerprint",
                             ComputeDigestFromFile(
-                                container.localPath,
+                                container_path,
                                 "sha256",
                                 repMethod=hexDigest,
                             ),
@@ -1318,8 +1321,8 @@ you can find here an almost complete list of the possible ones:
 
                     materialized_software_container = MaterializedContainerImage(
                         self.crate,
-                        source=container.localPath,
-                        dest_path=os.path.relpath(container.localPath, self.work_dir),
+                        source=container_path,
+                        dest_path=os.path.relpath(container_path, self.work_dir),
                         container_type=container.type,
                         registry=registry,
                         name=tag_name,
@@ -1329,7 +1332,7 @@ you can find here an almost complete list of the possible ones:
                             "identifier": container.taggedName,
                             "sha256": the_signature,
                             "encodingFormat": magic.from_file(
-                                container.localPath, mime=True
+                                container_path, mime=True
                             ),
                         },
                     )
@@ -1369,13 +1372,18 @@ you can find here an almost complete list of the possible ones:
                             container.localPath.name + META_JSON_POSTFIX
                         )
 
-                    if metadataLocalPath is not None and metadataLocalPath.exists():
+                    metadataPath: "Optional[pathlib.Path]" = (
+                        None
+                        if metadataLocalPath is None
+                        else self.work_dir / metadataLocalPath
+                    )
+                    if metadataPath is not None and metadataPath.exists():
                         meta_file = self._add_file_to_crate(
-                            the_path=metadataLocalPath,
+                            the_path=metadataPath,
                             the_uri=None,
                             the_name=cast(
                                 "RelPath",
-                                os.path.relpath(metadataLocalPath, self.work_dir),
+                                os.path.relpath(metadataPath, self.work_dir),
                             ),
                         )
                         meta_file.append_to("about", software_container, compact=True)
@@ -2690,7 +2698,9 @@ you can find here an almost complete list of the possible ones:
                 ):
                     augmented_output = mat_output._replace(syntheticOutput=True)
                 else:
-                    del not_synthetic_inputs[mat_output.name]
+                    # FIXME?
+                    if mat_output.name in not_synthetic_inputs:
+                        del not_synthetic_inputs[mat_output.name]
                     augmented_output = mat_output
 
                 the_augmented_outputs.append(augmented_output)
