@@ -87,7 +87,7 @@ python-xz==0.5.0
 pytz==2025.2
 pyxdg==0.28
 PyYAML==6.0.3
-rdflib==7.4.0
+rdflib==7.5.0
 referencing==0.35.1
 requests==2.32.4
 requests-toolbelt==1.0.0
