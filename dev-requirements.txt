@@ -4,7 +4,7 @@ pylint < 2.14.0 ; python_version == '3.6'
 pylint >= 2.15.5 ; python_version >= '3.7'
 pytest
 pytest-cov
-pytest-dependency @ git+https://github.com/jmfernandez/pytest-dependency@0.6.3
+pytest-dependency @ git+https://github.com/jmfernandez/pytest-dependency@0.6.4.dev27+gc9fdad7
 pytest-env
 pytest-order
 pytest_param_files

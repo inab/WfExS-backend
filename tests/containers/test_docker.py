@@ -36,6 +36,8 @@ if TYPE_CHECKING:
         ProcessorArchitecture,
     )
 
+    import pathlib
+
 from wfexs_backend.common import (
     ContainerTaggedName,
     ContainerType,
@@ -58,18 +60,23 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def test_docker_basic(tmpdir) -> "None":  # type: ignore[no-untyped-def]
+def test_docker_basic(tmp_path: "pathlib.Path") -> "None":
     """
     Check docker container factory instantiation
     """
-    temppath = tmpdir.mkdir("TEMP")
-    cachepath = tmpdir.mkdir("CACHE")
-    stagedpath = tmpdir.mkdir("STAGED")
+    temppath = tmp_path / "TEMP"
+    cachepath = tmp_path / "CACHE"
+    stagedpath = tmp_path / "STAGED"
+
+    temppath.mkdir(parents=True, exist_ok=True)
+    cachepath.mkdir(parents=True, exist_ok=True)
+    stagedpath.mkdir(parents=True, exist_ok=True)
+
     dcf = DockerContainerFactory(
         simpleFileNameMethod=simpleTestContainerFileName,
-        containersCacheDir=cachepath.strpath,
-        stagedContainersDir=stagedpath.strpath,
-        tempDir=temppath.strpath,
+        containersCacheDir=cachepath,
+        stagedContainersDir=stagedpath,
+        tempDir=temppath,
     )
 
 
@@ -139,18 +146,25 @@ TAGGED_TESTBED = pytest.mark.parametrize(
 
 
 @TAGGED_TESTBED
-def test_docker_container_tagged_name(cont_tagged: "ContainerTaggedName", tmpdir) -> "None":  # type: ignore[no-untyped-def]
+def test_docker_container_tagged_name(
+    cont_tagged: "ContainerTaggedName", tmp_path: "pathlib.Path"
+) -> "None":
     """
     Check docker container factory instantiation
     """
-    temppath = tmpdir.mkdir("TEMP")
-    cachepath = tmpdir.mkdir("CACHE")
-    stagedpath = tmpdir.mkdir("STAGED")
+    temppath = tmp_path / "TEMP"
+    cachepath = tmp_path / "CACHE"
+    stagedpath = tmp_path / "STAGED"
+
+    temppath.mkdir(parents=True, exist_ok=True)
+    cachepath.mkdir(parents=True, exist_ok=True)
+    stagedpath.mkdir(parents=True, exist_ok=True)
+
     dcf = DockerContainerFactory(
         simpleFileNameMethod=simpleTestContainerFileName,
-        containersCacheDir=cachepath.strpath,
-        stagedContainersDir=stagedpath.strpath,
-        tempDir=temppath.strpath,
+        containersCacheDir=cachepath,
+        stagedContainersDir=stagedpath,
+        tempDir=temppath,
     )
     containers = dcf.materializeContainers(tagList=[cont_tagged])
     if isinstance(cont_tagged, Container):
@@ -170,18 +184,25 @@ def test_docker_container_tagged_name(cont_tagged: "ContainerTaggedName", tmpdir
 
 
 @TAGGED_TESTBED
-def test_docker_container_tagged_name_fail(cont_tagged: "ContainerTaggedName", tmpdir) -> "None":  # type: ignore[no-untyped-def]
+def test_docker_container_tagged_name_fail(
+    cont_tagged: "ContainerTaggedName", tmp_path: "pathlib.Path"
+) -> "None":
     """
     Check docker container factory instantiation
     """
-    temppath = tmpdir.mkdir("TEMP")
-    cachepath = tmpdir.mkdir("CACHE")
-    stagedpath = tmpdir.mkdir("STAGED")
+    temppath = tmp_path / "TEMP"
+    cachepath = tmp_path / "CACHE"
+    stagedpath = tmp_path / "STAGED"
+
+    temppath.mkdir(parents=True, exist_ok=True)
+    cachepath.mkdir(parents=True, exist_ok=True)
+    stagedpath.mkdir(parents=True, exist_ok=True)
+
     dcf = DockerContainerFactory(
         simpleFileNameMethod=simpleTestContainerFileName,
-        containersCacheDir=cachepath.strpath,
-        stagedContainersDir=stagedpath.strpath,
-        tempDir=temppath.strpath,
+        containersCacheDir=cachepath,
+        stagedContainersDir=stagedpath,
+        tempDir=temppath,
     )
     with pytest.raises(ContainerFactoryException):
         containers = dcf.materializeContainers(tagList=[cont_tagged], offline=True)
@@ -189,18 +210,25 @@ def test_docker_container_tagged_name_fail(cont_tagged: "ContainerTaggedName", t
 
 
 @TAGGED_TESTBED
-def test_docker_container_tagged_name_cached(cont_tagged: "ContainerTaggedName", tmpdir) -> "None":  # type: ignore[no-untyped-def]
+def test_docker_container_tagged_name_cached(
+    cont_tagged: "ContainerTaggedName", tmp_path: "pathlib.Path"
+) -> "None":
     """
     Check docker container factory instantiation
     """
-    temppath = tmpdir.mkdir("TEMP")
-    cachepath = tmpdir.mkdir("CACHE")
-    stagedpath = tmpdir.mkdir("STAGED")
+    temppath = tmp_path / "TEMP"
+    cachepath = tmp_path / "CACHE"
+    stagedpath = tmp_path / "STAGED"
+
+    temppath.mkdir(parents=True, exist_ok=True)
+    cachepath.mkdir(parents=True, exist_ok=True)
+    stagedpath.mkdir(parents=True, exist_ok=True)
+
     dcf = DockerContainerFactory(
         simpleFileNameMethod=simpleTestContainerFileName,
-        containersCacheDir=cachepath.strpath,
-        stagedContainersDir=stagedpath.strpath,
-        tempDir=temppath.strpath,
+        containersCacheDir=cachepath,
+        stagedContainersDir=stagedpath,
+        tempDir=temppath,
     )
     containers = dcf.materializeContainers(tagList=[cont_tagged])
     containers2 = dcf.materializeContainers(tagList=[cont_tagged], offline=True)
