@@ -1600,10 +1600,11 @@ class WfExSBackend:
         doCleanup: "bool" = True,
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        unmatched_args: "Optional[MutableSequence[str]]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[WF]]]":
         # Removing duplicates
         entries: "Set[str]" = set(args)
-
+        query_id_from_entry: "MutableMapping[str, str]" = dict()
         for arg in args:
             entries.add(arg)
 
@@ -1612,13 +1613,17 @@ class WfExSBackend:
             if os.path.isfile(arg):
                 try:
                     with open(arg, mode="r", encoding="utf-8") as wdH:
-                        query_id = wdH.readline().strip()
+                        query_id = wdH.readline(4096).strip()
                         entries.add(query_id)
+                        query_id_from_entry[query_id] = arg
                 except:
                     pass
 
+        list_entries: "Sequence[str]" = list(entries)
+        matched_entries: "Set[str]" = set()
+
         if entries and acceptGlob:
-            reEntries = translate_glob_args(list(entries))
+            reEntries = translate_glob_args(list_entries)
         else:
             reEntries = None
 
@@ -1644,16 +1649,37 @@ class WfExSBackend:
 
                     if entries:
                         if reEntries:
-                            if all(
-                                map(
-                                    lambda r: (r.match(instanceId) is None)
-                                    and (r.match(nickname) is None),
-                                    reEntries,
-                                )
-                            ):
+                            for r, list_entry in zip(reEntries, list_entries):
+                                if r.match(instanceId) is not None:
+                                    matched_entries.add(list_entry)
+                                    if list_entry in query_id_from_entry:
+                                        matched_entries.add(
+                                            query_id_from_entry[list_entry]
+                                        )
+                                    break
+                                if r.match(nickname) is not None:
+                                    matched_entries.add(list_entry)
+                                    if list_entry in query_id_from_entry:
+                                        matched_entries.add(
+                                            query_id_from_entry[list_entry]
+                                        )
+                                    break
+                            else:
                                 continue
-                        elif (instanceId not in entries) and (nickname not in entries):
-                            continue
+                        else:
+                            no_match = True
+                            if instanceId in entries:
+                                matched_entries.add(instanceId)
+                                if instanceId in query_id_from_entry:
+                                    matched_entries.add(query_id_from_entry[instanceId])
+                                no_match = False
+                            if nickname in entries:
+                                matched_entries.add(nickname)
+                                if nickname in query_id_from_entry:
+                                    matched_entries.add(query_id_from_entry[nickname])
+                                no_match = False
+                            if no_match:
+                                continue
 
                     self.logger.debug(f"{instanceId} {nickname}")
                     isDamaged = False
@@ -1687,12 +1713,22 @@ class WfExSBackend:
                         wfInstance.cleanup()
                         wfInstance = None
 
+        unmatched_entries = entries - matched_entries
+        if len(unmatched_entries) > 0:
+            if unmatched_args is not None:
+                unmatched_args.extend(unmatched_entries)
+            else:
+                self.logger.warning(
+                    f"Next files, identifiers or patterns did not match any staged working directory: {' , '.join(unmatched_entries)}"
+                )
+
     def statusStagedWorkflows(
         self,
         *args: "str",
         acceptGlob: "bool" = False,
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        unmatched_args: "Optional[MutableSequence[str]]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str, datetime.datetime, Optional[StagedSetup], Optional[MarshallingStatus]]]":
         if len(args) > 0:
             for (
@@ -1707,6 +1743,7 @@ class WfExSBackend:
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=acceptGlob,
                 doCleanup=True,
+                unmatched_args=unmatched_args,
             ):
                 self.logger.debug(f"Status {instance_id} {nickname}")
 
@@ -1725,6 +1762,7 @@ class WfExSBackend:
         acceptGlob: "bool" = False,
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        unmatched_args: "Optional[MutableSequence[str]]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str]]":
         if len(args) > 0:
             for instance_id, nickname, creation, wfSetup, _ in self.listStagedWorkflows(
@@ -1733,6 +1771,7 @@ class WfExSBackend:
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=acceptGlob,
                 doCleanup=True,
+                unmatched_args=unmatched_args,
             ):
                 if wfSetup is not None:
                     self.logger.debug(f"Removing {instance_id} {nickname}")
@@ -1749,6 +1788,7 @@ class WfExSBackend:
         firstMatch: "bool" = True,
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
+        unmatched_args: "Optional[MutableSequence[str]]" = None,
     ) -> "ExitVal":
         arg0 = []
         if len(args) > 0:
@@ -1766,6 +1806,7 @@ class WfExSBackend:
             private_key_passphrase=private_key_passphrase,
             acceptGlob=acceptGlob,
             doCleanup=False,
+            unmatched_args=unmatched_args,
         )
 
         # This is needed to implement the case of no working directory
