@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1763,20 +1763,52 @@ class WfExSBackend:
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         unmatched_args: "Optional[MutableSequence[str]]" = None,
+        running_args: "Optional[MutableSequence[str]]" = None,
     ) -> "Iterator[Tuple[WfExSInstanceId, str]]":
         if len(args) > 0:
-            for instance_id, nickname, creation, wfSetup, _ in self.listStagedWorkflows(
+            for (
+                instance_id,
+                nickname,
+                creation,
+                wfSetup,
+                wfInstance,
+            ) in self.listStagedWorkflows(
                 *args,
                 private_key_filename=private_key_filename,
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=acceptGlob,
-                doCleanup=True,
+                doCleanup=False,
                 unmatched_args=unmatched_args,
             ):
-                if wfSetup is not None:
-                    self.logger.debug(f"Removing {instance_id} {nickname}")
-                    shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
-                    yield instance_id, nickname
+                if wfSetup is not None and wfInstance is not None:
+                    mStatus = wfInstance.getMarshallingStatus(reread_stats=True)
+                    if mStatus.is_running():
+                        if running_args is not None:
+                            running_args.append(instance_id)
+                        else:
+                            self.logger.error(
+                                f"Unable to remove {instance_id} {nickname}, as there is at least a running job"
+                            )
+                        wfInstance.cleanup()
+                    else:
+                        self.logger.debug(f"Removing {instance_id} {nickname}")
+                        # Now, umount what it is needed
+                        try:
+                            wfInstance.cleanup()
+                        except:
+                            self.logger.exception(
+                                f"Exception while unmounting encrypted {instance_id} {nickname}"
+                            )
+                        finally:
+                            id_json_path = wfSetup.raw_work_dir / self.ID_JSON_FILENAME
+                            try:
+                                os.unlink(id_json_path)
+                            except:
+                                self.logger.exception(
+                                    f"Exception while removing {self.ID_JSON_FILENAME} from {instance_id} {nickname}"
+                                )
+                            shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
+                        yield instance_id, nickname
 
     def shellFirstStagedWorkflow(
         self,

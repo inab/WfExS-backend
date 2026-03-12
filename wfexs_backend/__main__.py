@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -905,6 +905,7 @@ def processStagedWorkdirCommand(
             )
 
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Remove:
+        running_args: "MutableSequence[str]" = []
         print(
             "\n".join(
                 map(
@@ -915,10 +916,15 @@ def processStagedWorkdirCommand(
                         private_key_passphrase=private_key_passphrase,
                         acceptGlob=args.filesAsGlobs,
                         unmatched_args=unmatched_args,
+                        running_args=running_args,
                     ),
                 )
             )
         )
+        if len(running_args) > 0:
+            logger.warning(
+                f"Unable to remove staged working directory for next ids, because a job is running: {running_args}"
+            )
 
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Shell:
         retval = wB.shellFirstStagedWorkflow(
