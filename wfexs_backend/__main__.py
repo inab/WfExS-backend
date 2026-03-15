@@ -850,6 +850,7 @@ def processStagedWorkdirCommand(
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=args.filesAsGlobs,
                 unmatched_args=unmatched_args,
+                doCleanup=False,
             ),
             key=lambda x: x[2],
         )
@@ -878,17 +879,21 @@ def processStagedWorkdirCommand(
             else:
                 is_damaged = wfSetup.is_damaged
                 is_encrypted = wfSetup.is_encrypted
+                containerType = wfSetup.container_type
             if wfInstance is not None:
                 # As we can need additional data, let's ask it
-                wfInstance.unmarshallStage(
-                    offline=True, fail_ok=True, do_full_setup=False
-                )
+                try:
+                    wfInstance.unmarshallStage(
+                        offline=True, fail_ok=True, do_full_setup=False
+                    )
+                    mStatus_List = wfInstance.getMarshallingStatus()
+                    engineName = mStatus_List.workflow_type
 
-                wfPID = wfInstance.getPID()
-                if wfInstance.engineDesc is not None:
-                    engineName = wfInstance.engineDesc.engineName
-                if wfInstance.engine is not None:
-                    containerType = wfInstance.engine.getConfiguredContainerType()
+                    wfPID = mStatus_List.pid
+                except:
+                    logger.exception(f"Error unmarshalling {instance_id}")
+                finally:
+                    wfInstance.cleanup()
             print(
                 "\t".join(
                     (
