@@ -51,7 +51,8 @@ from urllib import parse
 # should fallback to default implementations when C ones are not present
 import yaml
 
-import crypt4gh.lib
+# This import is needed to avoid aliasing in scrypt_supported variable
+# from the first library, which is used by the second one to take decisions
 import crypt4gh.keys.kdf
 import crypt4gh.keys.c4gh
 
@@ -74,14 +75,6 @@ from .common import (
     URIWithMetadata,
 )
 
-from .encrypted_fs import (
-    DEFAULT_ENCRYPTED_FS_CMD,
-    DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT,
-    DEFAULT_ENCRYPTED_FS_TYPE,
-    ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS,
-    EncryptedFSType,
-)
-
 
 from .scheme_catalog import (
     SchemeCatalog,
@@ -96,14 +89,13 @@ from .container_factories import (
     ContainerFactory,
 )
 
-from .workflow_engines import (
-    WORKDIR_META_RELDIR,
-    WORKDIR_PASSPHRASE_FILE,
-    WORKDIR_WORKFLOW_META_FILE,
-)
 from .ro_crate import FixedROCrate
 
 from .security_context import SecurityContextVault
+
+from .workdir import (
+    Workdir,
+)
 
 from .utils.licences import (
     AcceptableLicenceSchemes,
@@ -197,8 +189,6 @@ if TYPE_CHECKING:
         TypeAlias,
     )
 
-    from crypt4gh.header import CompoundKey
-
     from .common import (
         AbsPath,
         AnyPath,
@@ -277,8 +267,6 @@ class WfExSBackend:
     CRYPT4GH_PRIVKEY_KEY: "Final[str]" = "key"
     CRYPT4GH_PUBKEY_KEY: "Final[str]" = "pub"
     CRYPT4GH_PASSPHRASE_KEY: "Final[str]" = "passphrase"
-
-    ID_JSON_FILENAME: "Final[str]" = ".id.json"
 
     SCHEMAS_REL_DIR: "Final[str]" = "schemas"
     CONFIG_SCHEMA: "Final[RelPath]" = cast("RelPath", "config.json")
@@ -498,7 +486,7 @@ class WfExSBackend:
 
         return cls(updated_local_config, config_directory=config_directory).newSetup(
             workflow_meta["workflow_id"],
-            workflow_meta.get("version"),
+            version_id=workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
             prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
@@ -583,49 +571,6 @@ class WfExSBackend:
                     )
                     self.progs[prog_key] = cast("AbsPath", abs_cmd)
 
-        encfsSect = toolSect.get("encrypted_fs", {})
-        encfs_type_str: "Optional[str]" = encfsSect.get(
-            "type", DEFAULT_ENCRYPTED_FS_TYPE
-        )
-        assert encfs_type_str is not None
-        try:
-            encfs_type = EncryptedFSType(encfs_type_str)
-        except:
-            errmsg = f"Invalid default encryption filesystem {encfs_type_str}"
-            self.logger.error(errmsg)
-            raise WfExSBackendException(errmsg)
-        if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-            errmsg = f"FIXME: Default encryption filesystem {encfs_type} mount procedure is not implemented"
-            self.logger.fatal(errmsg)
-            raise WfExSBackendException(errmsg)
-        self.encfs_type = encfs_type
-
-        self.encfs_cmd = encfsSect.get(
-            "command", DEFAULT_ENCRYPTED_FS_CMD[self.encfs_type]
-        )
-        abs_encfs_cmd = shutil.which(self.encfs_cmd)
-        if abs_encfs_cmd is None:
-            errmsg = f"FUSE filesystem command {self.encfs_cmd}, needed by {encfs_type}, was not found. Please install it if you are going to use a secured staged workdir"
-            self.logger.error(errmsg)
-        else:
-            self.encfs_cmd = abs_encfs_cmd
-
-        self.fusermount_cmd = cast(
-            "AnyPath", encfsSect.get("fusermount_command", DEFAULT_FUSERMOUNT_CMD)
-        )
-        abs_fusermount_cmd = shutil.which(self.fusermount_cmd)
-        if abs_fusermount_cmd is None:
-            self.logger.error(
-                f"FUSE fusermount command {self.fusermount_cmd} not found"
-            )
-        else:
-            self.fusermount_cmd = cast("AbsPath", abs_fusermount_cmd)
-
-        self.progs[DEFAULT_FUSERMOUNT_CMD] = self.fusermount_cmd
-        self.encfs_idleMinutes = encfsSect.get(
-            "idle", DEFAULT_ENCRYPTED_FS_IDLE_TIMEOUT
-        )
-
         # Getting the config directory, needed for relative filenames
         if config_directory is None:
             config_directory = pathlib.Path.cwd()
@@ -649,6 +594,11 @@ class WfExSBackend:
         self.pubKey = crypt4gh.keys.get_public_key(pubKeyFilename.as_posix())
         self.privKey = crypt4gh.keys.get_private_key(
             privKeyFilename.as_posix(), lambda: passphrase
+        )
+
+        encfsSect = toolSect.get("encrypted_fs", {})
+        self.progs[DEFAULT_FUSERMOUNT_CMD] = Workdir.InitFromConfig(
+            self.privKey, self.pubKey, self.logger, encfsSect
         )
 
         # This directory will be used to cache repositories and distributable inputs
@@ -1058,7 +1008,7 @@ class WfExSBackend:
         self,
         nickname_prefix: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], pathlib.Path]":
+    ) -> "Workdir":
         """
         This method creates a new, empty, raw working directory
         """
@@ -1078,15 +1028,20 @@ class WfExSBackend:
         nickname: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
         create_ok: "bool" = False,
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], pathlib.Path]":
+    ) -> "Workdir":
         """
         This method returns the absolute path to the raw working directory
         """
         # TODO: Add some validation about the working directory
         uniqueRawWorkDir = self.baseWorkDir / instanceId
 
-        return self.parseOrCreateRawWorkDir(
-            uniqueRawWorkDir, instanceId, nickname, orcids=orcids, create_ok=create_ok
+        return Workdir(
+            self.GetPassGen(),
+            uniqueRawWorkDir,
+            instanceId=instanceId,
+            nickname=nickname,
+            orcids=orcids,
+            create_ok=create_ok,
         )
 
     def parseOrCreateRawWorkDir(
@@ -1094,86 +1049,26 @@ class WfExSBackend:
         uniqueRawWorkDir: "pathlib.Path",
         instanceId: "Optional[WfExSInstanceId]" = None,
         nickname: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
+        orcids: "Optional[Sequence[str]]" = None,
         create_ok: "bool" = False,
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], pathlib.Path]":
+    ) -> "Workdir":
         """
         This method returns the absolute path to the raw working directory
         """
-        # TODO: Add some validation about the working directory
-        id_json_path = uniqueRawWorkDir / self.ID_JSON_FILENAME
-        creation: "Optional[datetime.datetime]"
-        if not uniqueRawWorkDir.exists():
-            if not create_ok:
-                raise WfExSBackendException(
-                    f"Creation of {uniqueRawWorkDir} is not allowed by parameter"
-                )
+        workdir_instance = Workdir(
+            self.GetPassGen(),
+            uniqueRawWorkDir,
+            instanceId=instanceId,
+            nickname=nickname,
+            orcids=orcids,
+            create_ok=create_ok,
+        )
 
-            uniqueRawWorkDir.mkdir(parents=True, exist_ok=True)
-            if instanceId is None:
-                instanceId = cast("WfExSInstanceId", uniqueRawWorkDir.name)
-            if nickname is None:
-                nickname = self.GetPassGen().generate_nickname()
-            creation = datetime.datetime.now(tz=datetime.timezone.utc)
-            with id_json_path.open(mode="w", encoding="utf-8") as idF:
-                wlock = RWFileLock(idF)
-                with wlock.exclusive_lock():
-                    idNick = {
-                        "instance_id": instanceId,
-                        "nickname": nickname,
-                        "creation": creation,
-                        "orcids": orcids,
-                    }
-                    json.dump(idNick, idF, cls=DatetimeEncoder)
-            id_json_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
-        elif id_json_path.exists():
-            with id_json_path.open(mode="r", encoding="utf-8") as iH:
-                rlock = RWFileLock(iH)
-                with rlock.shared_blocking_lock():
-                    idNick = jsonFilterDecodeFromStream(iH)
-                    instanceId = cast("WfExSInstanceId", idNick["instance_id"])
-                    nickname = cast("str", idNick.get("nickname", instanceId))
-                    creation = cast(
-                        "Optional[datetime.datetime]", idNick.get("creation")
-                    )
-                    orcids = cast("Sequence[str]", idNick.get("orcids", []))
-
-            # This file should not change
-            if creation is None:
-                creation = datetime.datetime.fromtimestamp(
-                    os.path.getctime(id_json_path)
-                ).astimezone()
-        else:
-            instanceId = cast("WfExSInstanceId", uniqueRawWorkDir.name)
-            nickname = instanceId
-            creation = None
-            orcids = []
-
-        if creation is None:
-            # Just guessing
-            w_m_path = (
-                uniqueRawWorkDir / WORKDIR_META_RELDIR / WORKDIR_WORKFLOW_META_FILE
-            )
-            workdir_passphrase_file = uniqueRawWorkDir / WORKDIR_PASSPHRASE_FILE
-            if w_m_path.exists():
-                # This is valid for unencrypted working directories
-                reference_path = w_m_path
-            elif workdir_passphrase_file.exists():
-                # This is valid for encrypted working directories
-                reference_path = workdir_passphrase_file
-            else:
-                # This is the poor default
-                reference_path = uniqueRawWorkDir
-
-            creation = datetime.datetime.fromtimestamp(
-                os.path.getctime(reference_path)
-            ).astimezone()
-
-        return instanceId, nickname, creation, orcids, uniqueRawWorkDir
+        return workdir_instance
 
     def normalizeRawWorkingDirectory(
         self, uniqueRawWorkDir: "pathlib.Path"
-    ) -> "Tuple[WfExSInstanceId, str, datetime.datetime, Sequence[str], pathlib.Path]":
+    ) -> "Workdir":
         """
         This method returns the id of a working directory,
         as well as the nickname
@@ -1190,7 +1085,11 @@ class WfExSBackend:
                 "Unable to initialize, {} is not a directory".format(uniqueRawWorkDir)
             )
 
-        return self.parseOrCreateRawWorkDir(uniqueRawWorkDir, create_ok=False)
+        return Workdir(
+            self.GetPassGen(),
+            uniqueRawWorkDir,
+            create_ok=False,
+        )
 
     def fromWorkDir(
         self,
@@ -1454,145 +1353,6 @@ class WfExSBackend:
             paranoidMode=paranoidMode,
         )
 
-    def getFusermountParams(self) -> "Tuple[AnyPath, int]":
-        return self.fusermount_cmd, self.encfs_idleMinutes
-
-    def readSecuredWorkdirPassphrase(
-        self,
-        workdir_passphrase_file: "pathlib.Path",
-        private_key_filename: "Optional[pathlib.Path]" = None,
-        private_key_passphrase: "Optional[str]" = None,
-    ) -> "Tuple[EncryptedFSType, AnyPath, str]":
-        """
-        This method decrypts a crypt4gh file containing a passphrase
-        which has been encrypted with either the WfExS installation
-        public key (if the filename is not provided), or the public key
-        paired with the provided private key stored in the file.
-        """
-        clearF = io.BytesIO()
-        if private_key_filename is None:
-            private_key = self.privKey
-        else:
-            if private_key_passphrase is None:
-                private_key_passphrase_r = ""
-            else:
-                private_key_passphrase_r = private_key_passphrase
-            assert private_key_passphrase is not None
-            private_key = crypt4gh.keys.get_private_key(
-                private_key_filename, lambda: private_key_passphrase_r
-            )
-
-        with workdir_passphrase_file.open(mode="rb") as encF:
-            rplock = RWFileLock(encF)
-            with rplock.shared_blocking_lock():
-                crypt4gh.lib.decrypt(
-                    [(0, private_key, None)],
-                    encF,
-                    clearF,
-                    offset=0,
-                    span=None,
-                    sender_pubkey=None,
-                )
-
-        encfs_type_str, _, secureWorkdirPassphrase = (
-            clearF.getvalue().decode("utf-8").partition("=")
-        )
-        del clearF
-
-        if secureWorkdirPassphrase == "":
-            errmsg = "Encryption filesystem key does not follow the right format"
-            self.logger.error(errmsg)
-            raise WfExSBackendException(errmsg)
-
-        try:
-            encfs_type = EncryptedFSType(encfs_type_str)
-        except:
-            errmsg = (
-                f"Invalid encryption filesystem {encfs_type_str} in working directory"
-            )
-            raise WfExSBackendException(errmsg)
-
-        if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
-            errmsg = f"FIXME: Encryption filesystem {encfs_type_str} mount procedure is not implemented"
-            self.logger.fatal(errmsg)
-            raise WfExSBackendException(errmsg)
-
-        # If the working directory encrypted filesystem does not
-        # match the configured one, use its default executable
-        if encfs_type != self.encfs_type:
-            encfs_cmd = DEFAULT_ENCRYPTED_FS_CMD[encfs_type]
-        else:
-            encfs_cmd = self.encfs_cmd
-
-        abs_encfs_cmd = shutil.which(encfs_cmd)
-        if abs_encfs_cmd is None:
-            errmsg = f"FUSE filesystem command {encfs_cmd}, needed by {encfs_type}, was not found. Please install it in order to access the encrypted working directory"
-            self.logger.fatal(errmsg)
-            raise WfExSBackendException(errmsg)
-
-        return encfs_type, cast("AbsPath", abs_encfs_cmd), secureWorkdirPassphrase
-
-    def generateSecuredWorkdirPassphrase(
-        self,
-        workdir_passphrase_file: "pathlib.Path",
-        private_key_filename: "Optional[pathlib.Path]" = None,
-        private_key_passphrase: "Optional[str]" = None,
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
-    ) -> "Tuple[EncryptedFSType, AnyPath, str, Sequence[pathlib.Path]]":
-        """
-        This method generates a random passphrase, which is stored
-        in a crypt4gh encrypted file (along with the FUSE filesystem used)
-        using either the default WfExS-backend public key, or the public
-        keys stored in the files provided as a parameter.
-        It returns the FUSE filesystem, the command to be used to mount,
-        the generated passphrase (to be consumed in memory) and the list
-        of public keys used to encrypt the passphrase file,
-        which can be used later for some additional purposes.
-        """
-        secureWorkdirPassphrase = self.generate_passphrase()
-        clearF = io.BytesIO(
-            (self.encfs_type.value + "=" + secureWorkdirPassphrase).encode("utf-8")
-        )
-        if private_key_filename is None:
-            private_key = self.privKey
-        else:
-            if private_key_passphrase is None:
-                private_key_passphrase_r = ""
-            else:
-                private_key_passphrase_r = private_key_passphrase
-            assert private_key_passphrase is not None
-            private_key = crypt4gh.keys.get_private_key(
-                private_key_filename.as_posix(), lambda: private_key_passphrase_r
-            )
-
-        public_keys: "MutableSequence[bytes]" = []
-        if len(public_key_filenames) == 0:
-            if private_key_filename is not None:
-                raise WfExSBackendException(
-                    "When a custom private key is provided, at least the public key paired with it must also be provided"
-                )
-            public_keys = [self.pubKey]
-        else:
-            for pub_key_filename in public_key_filenames:
-                pub_key = crypt4gh.keys.get_public_key(pub_key_filename.as_posix())
-                public_keys.append(pub_key)
-
-        encrypt_keys: "MutableSequence[CompoundKey]" = []
-        for pub_key in public_keys:
-            encrypt_keys.append((0, private_key, pub_key))
-        with workdir_passphrase_file.open(mode="wb") as encF:
-            wplock = RWFileLock(encF)
-            with wplock.exclusive_lock():
-                crypt4gh.lib.encrypt(encrypt_keys, clearF, encF, offset=0, span=None)
-        del clearF
-
-        return (
-            self.encfs_type,
-            self.encfs_cmd,
-            secureWorkdirPassphrase,
-            public_key_filenames,
-        )
-
     def listStagedWorkflows(
         self,
         *args: "str",
@@ -1634,17 +1394,21 @@ class WfExSBackend:
                     "."
                 ):
                     try:
-                        (
-                            instanceId,
-                            nickname,
-                            creation,
-                            orcids,  # TODO: give some use to this
-                            instanceRawWorkdir,
-                        ) = self.parseOrCreateRawWorkDir(
-                            pathlib.Path(entry.path), create_ok=False
+                        workdir_instance = Workdir(
+                            self.GetPassGen(),
+                            pathlib.Path(entry.path),
+                            create_ok=False,
                         )
+                        instanceId = workdir_instance.instance_id
+                        nickname = workdir_instance.nickname
+                        creation = workdir_instance.creation
+                        # TODO: give some use to these ORCIDs
+                        orcids = workdir_instance.orcids
+                        instanceRawWorkdir = workdir_instance.raw_work_dir
                     except:
                         self.logger.warning(f"Skipped {entry.name} on listing")
+                        if self.logger.getEffectiveLevel() <= logging.DEBUG:
+                            self.logger.exception("DEBUG REASONS")
                         continue
 
                     if entries:
@@ -1800,14 +1564,8 @@ class WfExSBackend:
                                 f"Exception while unmounting encrypted {instance_id} {nickname}"
                             )
                         finally:
-                            id_json_path = wfSetup.raw_work_dir / self.ID_JSON_FILENAME
-                            try:
-                                os.unlink(id_json_path)
-                            except:
-                                self.logger.exception(
-                                    f"Exception while removing {self.ID_JSON_FILENAME} from {instance_id} {nickname}"
-                                )
-                            shutil.rmtree(wfSetup.raw_work_dir, ignore_errors=True)
+                            wfInstance.destroy_workdir()
+
                         yield instance_id, nickname
 
     def shellFirstStagedWorkflow(

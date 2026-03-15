@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -142,10 +142,6 @@ if TYPE_CHECKING:
         ProcessorArchitecture,
     )
 
-    from .encrypted_fs import (
-        EncryptedFSType,
-    )
-
     from .workflow_engines import (
         AbstractWorkflowEngineType,
         WorkflowEngineVersionStr,
@@ -251,6 +247,7 @@ if TYPE_CHECKING:
     OutputsBlock: TypeAlias = Mapping[str, Any]
 
     WorkflowConfigBlock: TypeAlias = Mapping[str, Any]
+    WritableWorkflowConfigBlock: TypeAlias = MutableMapping[str, Any]
 
     WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
     WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
@@ -287,6 +284,11 @@ from .utils.rocrate import (
 from .security_context import (
     SecurityContextVault,
 )
+
+from .workdir import (
+    Workdir,
+)
+
 import bagit
 
 from . import __url__ as wfexs_backend_url
@@ -325,8 +327,6 @@ from .common import (
     StagedSetup,
 )
 
-from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
-
 from .workflow_engines import (
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
@@ -339,12 +339,8 @@ from .workflow_engines import (
     WORKDIR_INPUTS_RELDIR,
     WORKDIR_EXTRAPOLATED_INPUTS_RELDIR,
     WORKDIR_INTERMEDIATE_RELDIR,
-    WORKDIR_MARSHALLED_EXECUTE_FILE,
-    WORKDIR_MARSHALLED_EXPORT_FILE,
-    WORKDIR_MARSHALLED_STAGE_FILE,
     WORKDIR_META_RELDIR,
     WORKDIR_OUTPUTS_RELDIR,
-    WORKDIR_PASSPHRASE_FILE,
     WORKDIR_STATS_RELDIR,
     WORKDIR_STDERR_FILE,
     WORKDIR_STDOUT_FILE,
@@ -427,22 +423,6 @@ class DefaultMissing(Dict[KT, VT]):
         return cast(VT, key)
 
 
-def _wakeupEncDir(
-    cond: "threading.Condition", workDir: "pathlib.Path", logger: "logging.Logger"
-) -> None:
-    """
-    This method periodically checks whether the directory is still available
-    """
-    cond.acquire()
-    try:
-        while not cond.wait(60) and workDir.is_dir():
-            pass
-    except:
-        logger.exception("Wakeup thread failed!")
-    finally:
-        cond.release()
-
-
 class WFException(AbstractWfExSException):
     pass
 
@@ -453,6 +433,16 @@ class ExportActionException(AbstractWfExSException):
 
 class WFWarning(UserWarning):
     pass
+
+
+class WFLoggerAdapter(logging.LoggerAdapter[logging.Logger]):
+    def process(
+        self, msg: "Any", kwargs: "MutableMapping[str, Any]"
+    ) -> "Tuple[Any, MutableMapping[str, Any]]":
+        if self.extra is not None:
+            return "[{}] {}".format(self.extra["instance_id"], msg), kwargs
+        else:
+            return msg, kwargs
 
 
 TAR_MIME: "Final[str]" = "application/x-tar"
@@ -486,6 +476,19 @@ class WF:
         "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
     )
 
+    # This one is commented-out, as credentials SHOULD NEVER BE SAVED
+    # WORKDIR_SECURITY_CONTEXT_FILE = cast("RelPath", 'credentials.yaml')
+
+    WORKDIR_MARSHALLED_STAGE_FILE: "Final[RelPath]" = cast(
+        "RelPath", "stage-state.yaml"
+    )
+    WORKDIR_MARSHALLED_EXECUTE_FILE: "Final[RelPath]" = cast(
+        "RelPath", "execution-state.yaml"
+    )
+    WORKDIR_MARSHALLED_EXPORT_FILE: "Final[RelPath]" = cast(
+        "RelPath", "export-state.yaml"
+    )
+
     def __init__(
         self,
         wfexs: "WfExSBackend",
@@ -505,7 +508,6 @@ class WF:
         instanceId: "Optional[WfExSInstanceId]" = None,
         nickname: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
-        creation: "Optional[datetime.datetime]" = None,
         rawWorkDir: "Optional[pathlib.Path]" = None,
         paranoid_mode: "Optional[bool]" = None,
         public_key_filenames: "Sequence[pathlib.Path]" = [],
@@ -520,6 +522,7 @@ class WF:
         preferred_operational_containers: "Sequence[Container]" = [],
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Minimal,
         strict_reproducibility_level: "bool" = False,
+        workdir_instance: "Optional[Workdir]" = None,
     ):
         """
         Init function
@@ -562,10 +565,13 @@ class WF:
             raise WFException("Unable to initialize, no WfExSBackend instance provided")
 
         # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(
+        logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
             + "::"
             + self.__class__.__name__
+        )
+        self.logger: "Union[logging.Logger, logging.LoggerAdapter[logging.Logger]]" = (
+            logger
         )
 
         self.wfexs = wfexs
@@ -584,7 +590,6 @@ class WF:
         self.reproducibility_level = reproducibility_level
         self.strict_reproducibility_level = strict_reproducibility_level
 
-        self.encWorkDir: "Optional[pathlib.Path]" = None
         self.workDir: "Optional[pathlib.Path]" = None
 
         if isinstance(paranoid_mode, bool):
@@ -616,6 +621,7 @@ class WF:
         self.version_id: "Optional[WFVersionId]"
         self.descriptor_type: "Optional[TRS_Workflow_Descriptor]"
         self.id: "Optional[Union[str, int]]"
+        self.workflow_config: "Optional[WorkflowConfigBlock]"
         if workflow_id is not None:
             workflow_meta: "WritableWorkflowMetaConfigBlock" = {
                 "workflow_id": workflow_id
@@ -712,62 +718,43 @@ class WF:
         if instanceId is not None:
             self.instanceId = instanceId
 
-        if creation is None:
-            self.workdir_creation = datetime.datetime.now(tz=datetime.timezone.utc)
-        else:
-            self.workdir_creation = creation
-
-        self.encfs_type: "Optional[EncryptedFSType]" = None
-        self.encfsCond: "Optional[threading.Condition]" = None
-        self.encfsThread: "Optional[threading.Thread]" = None
-        self.fusermount_cmd = cast("AnyPath", "")
-        self.encfs_idleMinutes: "Optional[int]" = None
-        self.doUnmount = False
-
         checkSecure = True
-        if rawWorkDir is None:
-            if instanceId is None:
-                (
-                    self.instanceId,
-                    self.nickname,
-                    self.workdir_creation,
-                    self.orcids,
-                    self.rawWorkDir,
-                ) = self.wfexs.createRawWorkDir(nickname_prefix=nickname, orcids=orcids)
-                checkSecure = False
+        if workdir_instance is None:
+            if rawWorkDir is None:
+                if instanceId is None:
+                    workdir_instance = self.wfexs.createRawWorkDir(
+                        nickname_prefix=nickname, orcids=orcids
+                    )
+                    checkSecure = False
+                else:
+                    workdir_instance = self.wfexs.getOrCreateRawWorkDirFromInstanceId(
+                        instanceId, nickname=nickname, create_ok=False
+                    )
             else:
-                (
-                    self.instanceId,
-                    self.nickname,
-                    self.workdir_creation,
-                    self.orcids,
-                    self.rawWorkDir,
-                ) = self.wfexs.getOrCreateRawWorkDirFromInstanceId(
-                    instanceId, nickname=nickname, create_ok=False
+                # FIXME: This might not be correct in some obscure corner case
+                workdir_instance = Workdir(
+                    wfexs.GetPassGen(),
+                    rawWorkDir,
+                    instanceId=instanceId,
+                    nickname=nickname if nickname is not None else instanceId,
+                    create_ok=False,
                 )
-        else:
-            self.rawWorkDir = rawWorkDir.absolute()
-            if instanceId is None:
-                (
-                    self.instanceId,
-                    self.nickname,
-                    self.workdir_creation,
-                    self.orcids,
-                    _,
-                ) = self.wfexs.parseOrCreateRawWorkDir(
-                    self.rawWorkDir, nickname=nickname, create_ok=False
-                )
-            else:
-                self.nickname = nickname if nickname is not None else instanceId
-                # FIXME: This is not correct
-                self.orcids = orcids
 
-        # TODO: enforce restrictive permissions on each raw working directory
-        self.allowOther = False
+        self.workdir_instance = workdir_instance
+
+        self.logger = WFLoggerAdapter(
+            logger,
+            extra={
+                "instance_id": workdir_instance.instance_id,
+            },
+        )
+
+        self.instanceId = workdir_instance.instance_id
+        self.nickname = workdir_instance.nickname
+        self.orcids = workdir_instance.orcids
 
         if checkSecure:
-            workdir_passphrase_file = self.rawWorkDir / WORKDIR_PASSPHRASE_FILE
-            self.secure = workdir_passphrase_file.exists()
+            self.secure = workdir_instance.isSecure()
         else:
             self.secure = (len(public_key_filenames) > 0) or workflow_config.get(
                 "secure", True
@@ -776,13 +763,15 @@ class WF:
         doSecureWorkDir = self.secure or self.paranoidMode
 
         self.tempDir: "pathlib.Path"
-        was_setup, self.tempDir = self.setupWorkdir(
+        was_setup, self.tempDir = workdir_instance.setup(
             doSecureWorkDir,
+            self.paranoidMode,
             fail_ok=fail_ok,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
         )
+        self.workDir = workdir_instance.work_dir
 
         self.configMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
         self.inputsDir: "Optional[pathlib.Path]"
@@ -896,9 +885,9 @@ class WF:
             instance_id=self.instanceId,
             container_type=container_type,
             nickname=self.nickname,
-            creation=self.workdir_creation,
+            creation=self.workdir_instance.creation,
             workflow_config=self.workflow_config,
-            raw_work_dir=self.rawWorkDir,
+            raw_work_dir=self.workdir_instance.raw_work_dir,
             work_dir=self.workDir,
             workflow_dir=self.workflowDir,
             consolidated_workflow_dir=self.consolidatedWorkflowDir,
@@ -911,7 +900,7 @@ class WF:
             meta_dir=self.metaDir,
             temp_dir=self.tempDir,
             secure_exec=self.secure or self.paranoidMode,
-            allow_other=self.allowOther,
+            allow_other=self.workdir_instance.allow_other,
             is_encrypted=doSecureWorkDir,
             is_damaged=is_damaged,
         )
@@ -947,8 +936,6 @@ class WF:
 
         self._magic = magic.Magic(mime=True)
         self._magic_uc = magic.Magic(mime=True, uncompress=True)
-
-    FUSE_SYSTEM_CONF = "/etc/fuse.conf"
 
     def getPID(self) -> "Optional[str]":
         """
@@ -990,228 +977,11 @@ class WF:
 
         return the_pid
 
-    def setupWorkdir(
-        self,
-        doSecureWorkDir: "bool",
-        fail_ok: "bool" = False,
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
-        private_key_filename: "Optional[pathlib.Path]" = None,
-        private_key_passphrase: "Optional[str]" = None,
-    ) -> "Tuple[bool, pathlib.Path]":
-        uniqueRawWorkDir = self.rawWorkDir
-
-        allowOther = False
-        uniqueEncWorkDir: "Optional[pathlib.Path]"
-        uniqueWorkDir: "pathlib.Path"
-        if doSecureWorkDir:
-            # We need to detect whether fuse has enabled user_allow_other
-            # the only way I know is parsing /etc/fuse.conf
-            if not self.paranoidMode and os.path.exists(self.FUSE_SYSTEM_CONF):
-                with open(self.FUSE_SYSTEM_CONF, mode="r") as fsc:
-                    for line in fsc:
-                        if line.startswith("user_allow_other"):
-                            allowOther = True
-                            break
-                    self.logger.debug(f"FUSE has user_allow_other: {allowOther}")
-
-            uniqueEncWorkDir = uniqueRawWorkDir / ".crypt"
-            uniqueWorkDir = uniqueRawWorkDir / "work"
-
-            # The directories should exist before calling encryption FS mount
-            uniqueEncWorkDir.mkdir(parents=True, exist_ok=True)
-            uniqueWorkDir.mkdir(parents=True, exist_ok=True)
-
-            # This is the passphrase needed to decrypt the filesystem
-            workdir_passphrase_file = uniqueRawWorkDir / WORKDIR_PASSPHRASE_FILE
-
-            used_public_key_filenames: "Sequence[pathlib.Path]"
-            if workdir_passphrase_file.exists():
-                (
-                    encfs_type,
-                    encfs_cmd,
-                    secureWorkdirPassphrase,
-                ) = self.wfexs.readSecuredWorkdirPassphrase(
-                    workdir_passphrase_file,
-                    private_key_filename=private_key_filename,
-                    private_key_passphrase=private_key_passphrase,
-                )
-                used_public_key_filenames = []
-            else:
-                (
-                    encfs_type,
-                    encfs_cmd,
-                    secureWorkdirPassphrase,
-                    used_public_key_filenames,
-                ) = self.wfexs.generateSecuredWorkdirPassphrase(
-                    workdir_passphrase_file,
-                    private_key_filename=private_key_filename,
-                    private_key_passphrase=private_key_passphrase,
-                    public_key_filenames=public_key_filenames,
-                )
-
-            self.encfs_type = encfs_type
-
-            (
-                self.fusermount_cmd,
-                self.encfs_idleMinutes,
-            ) = self.wfexs.getFusermountParams()
-            # Warn/fail earlier
-            if os.path.ismount(uniqueWorkDir):
-                # raise WFException("Destination mount point {} is already in use")
-                self.logger.warning(
-                    "Destination mount point {} is already in use".format(uniqueWorkDir)
-                )
-                was_setup = True
-            else:
-                # DANGER!
-                # We are removing leftovers in work directory
-                with os.scandir(uniqueWorkDir) as uwi:
-                    for entry in uwi:
-                        # Tainted, not empty directory. Moving...
-                        if entry.name not in (".", ".."):
-                            self.logger.warning(
-                                f"Destination mount point {uniqueWorkDir} is tainted. Moving..."
-                            )
-                            shutil.move(
-                                uniqueWorkDir.as_posix(),
-                                uniqueWorkDir.with_name(
-                                    uniqueWorkDir.name + "_tainted_" + str(time.time())
-                                ).as_posix(),
-                            )
-                            uniqueWorkDir.mkdir(parents=True, exist_ok=True)
-                            break
-
-                # We are going to unmount what we have mounted
-                self.doUnmount = True
-
-                # Now, time to mount the encrypted FS
-                try:
-                    ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](
-                        pathlib.Path(encfs_cmd),
-                        self.encfs_idleMinutes,
-                        uniqueEncWorkDir,
-                        uniqueWorkDir,
-                        uniqueRawWorkDir,
-                        secureWorkdirPassphrase,
-                        allowOther,
-                    )
-                except Exception as e:
-                    errmsg = f"Cannot FUSE mount {uniqueWorkDir} with {encfs_cmd}"
-                    self.logger.exception(errmsg)
-                    if not fail_ok:
-                        raise WFException(errmsg) from e
-                    was_setup = False
-                else:
-                    # IMPORTANT: There can be a race condition in some containerised
-                    # scenarios where the FUSE mount process goes to background, but
-                    # mounting itself has not finished. This check helps
-                    # both to detect and to avoid that corner case.
-                    if not os.path.ismount(uniqueWorkDir):
-                        errmsg = f"Corner case: cannot keep mounted FUSE mount {uniqueWorkDir} with {encfs_cmd}"
-                        self.logger.exception(errmsg)
-                        if not fail_ok:
-                            raise WFException(errmsg)
-                        was_setup = False
-
-                    was_setup = True
-                    # and start the thread which keeps the mount working
-                    self.encfsCond = threading.Condition()
-                    self.encfsThread = threading.Thread(
-                        target=_wakeupEncDir,
-                        args=(self.encfsCond, uniqueWorkDir, self.logger),
-                        daemon=True,
-                    )
-                    self.encfsThread.start()
-
-                    # Time to transfer the public keys
-                    # to be used later in the lifecycle
-                    if len(used_public_key_filenames) > 0:
-                        base_keys_dir = uniqueWorkDir / "meta" / "public_keys"
-                        base_keys_dir.mkdir(parents=True, exist_ok=True)
-                        key_fns: "MutableSequence[str]" = []
-                        manifest = {
-                            "creation": datetime.datetime.now().astimezone(),
-                            "keys": key_fns,
-                        }
-                        for i_key, key_fn in enumerate(used_public_key_filenames):
-                            dest_fn_basename = f"key_{i_key}.c4gh.public"
-                            dest_fn = base_keys_dir / dest_fn_basename
-                            shutil.copyfile(key_fn, dest_fn)
-                            key_fns.append(dest_fn_basename)
-
-                        # Last, manifest
-                        with (base_keys_dir / "manifest.json").open(
-                            mode="wt",
-                            encoding="utf-8",
-                        ) as mF:
-                            json.dump(manifest, mF, sort_keys=True)
-
-            # self.encfsPassphrase = secureWorkdirPassphrase
-            del secureWorkdirPassphrase
-        else:
-            uniqueEncWorkDir = None
-            uniqueWorkDir = uniqueRawWorkDir
-            was_setup = True
-
-        # The temporary directory is in the raw working directory as
-        # some container engine could fail
-        uniqueTempDir = uniqueRawWorkDir / ".TEMP"
-        uniqueTempDir.mkdir(parents=True, exist_ok=True)
-        uniqueTempDir.chmod(0o1777)
-
-        # Setting up working directories, one per instance
-        self.encWorkDir = uniqueEncWorkDir
-        self.workDir = uniqueWorkDir
-        self.allowOther = allowOther
-
-        return was_setup, uniqueTempDir
-
-    def unmountWorkdir(self) -> None:
-        if self.doUnmount and (self.encWorkDir is not None):
-            if self.encfsCond is not None:
-                self.encfsCond.acquire()
-                self.encfsCond.notify()
-                self.encfsThread = None
-                self.encfsCond = None
-            # Only unmount if it is needed
-            assert self.workDir is not None
-            if os.path.ismount(self.workDir):
-                with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
-                    fusermountCommand: "Sequence[str]" = [
-                        self.fusermount_cmd,
-                        "-u",  # Umount the directory
-                        "-z",  # Even if it is not possible to umount it now, hide the mount point
-                        self.workDir.as_posix(),
-                    ]
-
-                    retval = subprocess.Popen(
-                        fusermountCommand,
-                        stdout=encfs_umount_stdout,
-                        stderr=encfs_umount_stderr,
-                    ).wait()
-
-                    if retval != 0:
-                        with open(encfs_umount_stdout.name, mode="r") as c_stF:
-                            encfs_umount_stdout_v = c_stF.read()
-                        with open(encfs_umount_stderr.name, mode="r") as c_stF:
-                            encfs_umount_stderr_v = c_stF.read()
-
-                        errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                            self.encfs_type,
-                            retval,
-                            " ".join(fusermountCommand),
-                            encfs_umount_stdout_v,
-                            encfs_umount_stderr_v,
-                        )
-                        raise WFException(errstr)
-
-            # This is needed to avoid double work
-            self.doUnmount = False
-            self.encWorkDir = None
-            self.workDir = None
-
     def cleanup(self) -> None:
-        self.unmountWorkdir()
+        self.workdir_instance.unmount()
+
+    def destroy_workdir(self) -> None:
+        self.workdir_instance.destroy()
 
     def getStagedSetup(self) -> "StagedSetup":
         return self.staged_setup
@@ -1350,21 +1120,11 @@ class WF:
         if wfexs is None:
             raise WFException("Unable to initialize, no WfExSBackend instance provided")
 
-        (
-            instanceId,
-            nickname,
-            creation,
-            orcids,
-            rawWorkDir,
-        ) = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
+        workdir_instance = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
 
         return cls(
             wfexs,
-            instanceId=instanceId,
-            nickname=nickname,
-            rawWorkDir=rawWorkDir,
-            creation=creation,
-            # orcids=orcids,  # Do we need to propagate this here?
+            workdir_instance=workdir_instance,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             fail_ok=fail_ok,
@@ -1895,8 +1655,8 @@ class WF:
 
         return cls(
             wfexs,
-            workflow_meta["workflow_id"],
-            workflow_meta.get("version"),
+            workflow_id=workflow_meta["workflow_id"],
+            version_id=workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
             prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
@@ -1971,8 +1731,8 @@ class WF:
 
         return cls(
             wfexs,
-            workflow_meta["workflow_id"],
-            workflow_meta.get("version"),
+            workflow_id=workflow_meta["workflow_id"],
+            version_id=workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
             prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
@@ -4760,6 +4520,7 @@ This is an enumeration of the types of collected contents:
                 with workflow_meta_filename.open(mode="w", encoding="utf-8") as wmF:
                     wmlock = RWFileLock(wmF)
                     with wmlock.exclusive_lock():
+                        # Now, before writing
                         yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
 
             self.configMarshalled = datetime.datetime.fromtimestamp(
@@ -4940,7 +4701,7 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_stage_file = self.metaDir / WORKDIR_MARSHALLED_STAGE_FILE
+            marshalled_stage_file = self.metaDir / self.WORKDIR_MARSHALLED_STAGE_FILE
             stageAlreadyMarshalled = False
             if marshalled_stage_file.exists():
                 errmsg = "Marshalled stage file {} already exists".format(
@@ -5007,7 +4768,7 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_stage_file = self.metaDir / WORKDIR_MARSHALLED_STAGE_FILE
+            marshalled_stage_file = self.metaDir / self.WORKDIR_MARSHALLED_STAGE_FILE
             if not marshalled_stage_file.exists():
                 errmsg = f"Marshalled stage file {marshalled_stage_file} does not exists. Stage state was not stored"
                 self.logger.debug(errmsg)
@@ -5171,11 +4932,15 @@ This is an enumeration of the types of collected contents:
             # Now, time to save the late changes
             if not self.explicit_container_type and self.materializedEngine is not None:
                 self.explicit_container_type = True
-                self.workflow_config["containerType"] = self.container_type_str
+                new_workflow_config = cast(
+                    "WritableWorkflowConfigBlock", copy.copy(self.workflow_config)
+                )
+                new_workflow_config["containerType"] = self.container_type_str
+                self.workflow_config = new_workflow_config
                 self.marshallConfig(overwrite=True)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_stage_file)
+                marshalled_stage_file.stat().st_ctime
             ).astimezone()
 
         return self.stageMarshalled
@@ -5191,7 +4956,7 @@ This is an enumeration of the types of collected contents:
 
         assert self.stagedExecutions is not None
 
-        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
+        marshalled_execution_file = self.metaDir / self.WORKDIR_MARSHALLED_EXECUTE_FILE
 
         # The file contents must be kept INTACT (or created)!!!
         emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT, mode=0o666)
@@ -5278,7 +5043,7 @@ This is an enumeration of the types of collected contents:
 
         assert self.metaDir is not None, "The metadata directory should be available"
 
-        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
+        marshalled_execution_file = self.metaDir / self.WORKDIR_MARSHALLED_EXECUTE_FILE
         if not marshalled_execution_file.exists():
             errmsg = f"Marshalled execution file {marshalled_execution_file} does not exist. Execution state was not stored"
             self.logger.debug(errmsg)
@@ -5466,7 +5231,7 @@ This is an enumeration of the types of collected contents:
 
         assert self.metaDir is not None, "The metadata directory should be available"
 
-        marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
+        marshalled_export_file = self.metaDir / self.WORKDIR_MARSHALLED_EXPORT_FILE
 
         # The file contents must be kept INTACT (or created)!!!
         emF = os.open(marshalled_export_file, os.O_RDWR | os.O_CREAT, mode=0o666)
@@ -5523,7 +5288,7 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
+            marshalled_export_file = self.metaDir / self.WORKDIR_MARSHALLED_EXPORT_FILE
             if not marshalled_export_file.exists():
                 errmsg = f"Marshalled export results file {marshalled_export_file} does not exists. Export results state was not stored"
                 self.logger.debug(errmsg)
