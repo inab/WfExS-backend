@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         ClassVar,
+        IO,
         Mapping,
         MutableSequence,
         Optional,
@@ -81,7 +82,10 @@ if TYPE_CHECKING:
 import crypt4gh.lib
 import crypt4gh.keys.kdf
 
-from RWFileLock import RWFileLock
+from RWFileLock import (
+    LockError,
+    RWFileLock,
+)
 
 from .common import (
     AbstractWfExSException,
@@ -115,6 +119,7 @@ class WorkdirException(AbstractWfExSException):
 class Workdir:
     ID_JSON_FILENAME: "Final[str]" = ".id.json"
     LOCKFILE_PREFIX: "Final[str]" = "._lock_"
+    LOCKFILE_MOUNT: "Final[str]" = LOCKFILE_PREFIX + "_mount"
 
     WORKDIR_PASSPHRASE_FILE: "Final[RelPath]" = cast("RelPath", ".passphrase")
 
@@ -234,7 +239,7 @@ class Workdir:
                 wlock = RWFileLock(idL)
                 if orcids is None:
                     orcids = []
-                with wlock.exclusive_lock():
+                with wlock.exclusive_blocking_lock():
                     id_json_path_tmp = tempfile.NamedTemporaryFile(
                         mode="w+t",
                         encoding="utf-8",
@@ -311,7 +316,11 @@ class Workdir:
         self.encfs_type: "Optional[EncryptedFSType]" = None
         self.encfsCond: "Optional[threading.Condition]" = None
         self.encfsThread: "Optional[threading.Thread]" = None
+        self.lmL: "Optional[IO[bytes]]" = None
+        self.lmlock: "Optional[RWFileLock]" = None
         self.do_unmount = False
+        self.was_setup = False
+        self.was_init = False
 
     @property
     def workdir_passphrase_file(self) -> "pathlib.Path":
@@ -378,7 +387,7 @@ class Workdir:
             encrypt_keys.append((0, private_key, pub_key))
         with self.workdir_passphrase_file.open(mode="wb") as encF:
             wplock = RWFileLock(encF)
-            with wplock.exclusive_lock():
+            with wplock.exclusive_blocking_lock():
                 crypt4gh.lib.encrypt(encrypt_keys, clearF, encF, offset=0, span=None)
         del clearF
 
@@ -511,36 +520,61 @@ class Workdir:
                 uniqueEncWorkDir = uniqueRawWorkDir / ".crypt"
                 uniqueWorkDir = uniqueRawWorkDir / "work"
 
+                # This is the passphrase needed to decrypt the filesystem
+                used_public_keys: "Sequence[bytes]"
+                workdir_passphrase_file_lock = self.workdir_passphrase_file.with_name(
+                    self.LOCKFILE_PREFIX + self.workdir_passphrase_file.name
+                )
+                with workdir_passphrase_file_lock.open(mode="w+b") as wpfL:
+                    pplock = RWFileLock(wpfL)
+                    with pplock.exclusive_blocking_lock():
+                        if self.workdir_passphrase_file.exists():
+                            (
+                                encfs_type,
+                                encfs_cmd,
+                                secureWorkdirPassphrase,
+                            ) = self._readPassphrase(
+                                private_key_filename=private_key_filename,
+                                private_key_passphrase=private_key_passphrase,
+                            )
+                            used_public_keys = []
+                        else:
+                            # Time to change to an exclusive lock
+                            (
+                                encfs_type,
+                                encfs_cmd,
+                                secureWorkdirPassphrase,
+                                used_public_keys,
+                            ) = self._writePassphrase(
+                                private_key_filename=private_key_filename,
+                                private_key_passphrase=private_key_passphrase,
+                                public_key_filenames=public_key_filenames,
+                            )
+
+                self.encfs_type = encfs_type
+
+                # Initially acquire a shared mount lock
+                was_setup = False
+                was_init = False
+                lockfile_mount = self.raw_work_dir / self.LOCKFILE_MOUNT
+                self.lmL = lockfile_mount.open(mode="w+b")
+                self.lmlock = RWFileLock(self.lmL)
+
+                try:
+                    if not uniqueEncWorkDir.exists():
+                        self.lmlock.w_blocking_lock()
+                    else:
+                        self.lmlock.w_lock()
+                except LockError:
+                    self.lmlock.r_blocking_lock()
+                    was_init = True
+                    was_setup = True
+
                 # The directories should exist before calling encryption FS mount
                 uniqueEncWorkDir.mkdir(parents=True, exist_ok=True)
                 uniqueWorkDir.mkdir(parents=True, exist_ok=True)
 
-                # This is the passphrase needed to decrypt the filesystem
-                used_public_keys: "Sequence[bytes]"
-                if self.workdir_passphrase_file.exists():
-                    (
-                        encfs_type,
-                        encfs_cmd,
-                        secureWorkdirPassphrase,
-                    ) = self._readPassphrase(
-                        private_key_filename=private_key_filename,
-                        private_key_passphrase=private_key_passphrase,
-                    )
-                    used_public_keys = []
-                else:
-                    (
-                        encfs_type,
-                        encfs_cmd,
-                        secureWorkdirPassphrase,
-                        used_public_keys,
-                    ) = self._writePassphrase(
-                        private_key_filename=private_key_filename,
-                        private_key_passphrase=private_key_passphrase,
-                        public_key_filenames=public_key_filenames,
-                    )
-
-                self.encfs_type = encfs_type
-
+                # This is needed to avoid shared access
                 # Warn/fail earlier
                 if os.path.ismount(uniqueWorkDir):
                     # raise WFException("Destination mount point {} is already in use")
@@ -550,6 +584,10 @@ class Workdir:
                         )
                     )
                     was_setup = True
+                elif was_setup:
+                    raise WorkdirException(
+                        f"Unexpected concurrent state {self.instance_id} {self.nickname}"
+                    )
                 else:
                     # DANGER!
                     # We are removing leftovers in work directory
@@ -573,6 +611,7 @@ class Workdir:
 
                     # We are going to unmount what we have mounted
                     self.do_unmount = True
+                    was_init = True
 
                     # Now, time to mount the encrypted FS
                     try:
@@ -646,6 +685,7 @@ class Workdir:
             else:
                 uniqueEncWorkDir = None
                 uniqueWorkDir = uniqueRawWorkDir
+                was_init = True
                 was_setup = True
 
             # The temporary directory is in the raw working directory as
@@ -659,6 +699,7 @@ class Workdir:
             self.work_dir = uniqueWorkDir
             self.temp_dir = uniqueTempDir
             self.allow_other = allowOther
+            self.was_init = was_init
             self.was_setup = was_setup
 
         return self.was_setup, self.temp_dir
@@ -671,36 +712,50 @@ class Workdir:
                 self.encfsThread = None
                 self.encfsCond = None
             # Only unmount if it is needed
-            assert self.work_dir is not None
-            if os.path.ismount(self.work_dir):
-                with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
-                    fusermountCommand: "Sequence[str]" = [
-                        self.FusermountCmd,
-                        "-u",  # Umount the directory
-                        "-z",  # Even if it is not possible to umount it now, hide the mount point
-                        self.work_dir.as_posix(),
-                    ]
+            if self.lmlock is not None:
+                assert self.work_dir is not None
+                try:
+                    self.lmlock.w_lock()
+                    if os.path.ismount(self.work_dir):
+                        with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
+                            fusermountCommand: "Sequence[str]" = [
+                                self.FusermountCmd,
+                                "-u",  # Umount the directory
+                                "-z",  # Even if it is not possible to umount it now, hide the mount point
+                                self.work_dir.as_posix(),
+                            ]
 
-                    retval = subprocess.Popen(
-                        fusermountCommand,
-                        stdout=encfs_umount_stdout,
-                        stderr=encfs_umount_stderr,
-                    ).wait()
+                            retval = subprocess.Popen(
+                                fusermountCommand,
+                                stdout=encfs_umount_stdout,
+                                stderr=encfs_umount_stderr,
+                            ).wait()
 
-                    if retval != 0:
-                        with open(encfs_umount_stdout.name, mode="r") as c_stF:
-                            encfs_umount_stdout_v = c_stF.read()
-                        with open(encfs_umount_stderr.name, mode="r") as c_stF:
-                            encfs_umount_stderr_v = c_stF.read()
+                            if retval != 0:
+                                with open(encfs_umount_stdout.name, mode="r") as c_stF:
+                                    encfs_umount_stdout_v = c_stF.read()
+                                with open(encfs_umount_stderr.name, mode="r") as c_stF:
+                                    encfs_umount_stderr_v = c_stF.read()
 
-                        errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                            self.encfs_type,
-                            retval,
-                            " ".join(fusermountCommand),
-                            encfs_umount_stdout_v,
-                            encfs_umount_stderr_v,
-                        )
-                        raise WorkdirException(errstr)
+                                errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
+                                    self.encfs_type,
+                                    retval,
+                                    " ".join(fusermountCommand),
+                                    encfs_umount_stdout_v,
+                                    encfs_umount_stderr_v,
+                                )
+                                raise WorkdirException(errstr)
+                except LockError:
+                    self.logger.warning(
+                        f"Other processes have a lock on the mount, skipping"
+                    )
+                finally:
+                    if self.lmL is not None:
+                        self.lmL.close()
+                        self.lmL = None
+                    self.lmlock = None
+            else:
+                self.logger.warning(f"Internal lock is not available")
 
             # This is needed to avoid double work
             self.do_unmount = False
