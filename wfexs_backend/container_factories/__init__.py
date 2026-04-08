@@ -226,7 +226,7 @@ class Container(ContainerTaggedName):
         # if "image_signature" not in fields:
         #     fields["image_signature"] = fields["signature"]
 
-        return cls(**fields)  # type: ignore[misc]
+        return cls(**fields)  # type: ignore[arg-type]
 
     @classmethod
     def RegisterYAMLConstructor(cls, loader: "Type[AnyYAMLLoader]") -> None:

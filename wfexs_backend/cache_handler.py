@@ -839,7 +839,7 @@ class CacheHandler:
                             for a_licence in a_remote_file.licences
                         )
                     else:
-                        the_remote_file = a_remote_file
+                        the_remote_file = cast("URIType", a_remote_file)
 
                     # Dealing with an odd behaviour from urlparse
                     for det in ("/", "?", "#"):

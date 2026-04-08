@@ -3611,7 +3611,7 @@ class WF:
                                             ignoreCache=this_ignoreCache,
                                             cloneToStore=clonable,
                                             expectedKind=inputKind
-                                            if inputKind != ContentKind.Value
+                                            if inputKind != ContentKind.Value  # type: ignore[comparison-overlap]
                                             else None,
                                         )
                                         remote_pairs.extend(t_remote_pairs)
@@ -4585,18 +4585,23 @@ This is an enumeration of the types of collected contents:
                             mode="wt",
                             encoding="utf-8",
                             dir=self.workDir.as_posix(),
-                            delete_on_close=False,
+                            # We cannot use delete_on_close as it was introduced in Python 3.12
+                            delete=False,
                         )
-                        # Now, before writing
-                        yaml.dump(
-                            self.staging_recipe,
-                            workflow_meta_filename_tmp,
-                            Dumper=YAMLDumper,
-                        )
-                        workflow_meta_filename_tmp.close()
-                        shutil.move(
-                            workflow_meta_filename_tmp.name, workflow_meta_filename
-                        )
+                        try:
+                            # Now, before writing
+                            yaml.dump(
+                                self.staging_recipe,
+                                workflow_meta_filename_tmp,
+                                Dumper=YAMLDumper,
+                            )
+                            workflow_meta_filename_tmp.close()
+                            shutil.move(
+                                workflow_meta_filename_tmp.name, workflow_meta_filename
+                            )
+                        finally:
+                            if os.path.exists(workflow_meta_filename_tmp.name):
+                                os.unlink(workflow_meta_filename_tmp.name)
 
             self.configMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(workflow_meta_filename)
@@ -4831,20 +4836,25 @@ This is an enumeration of the types of collected contents:
                             mode="wt",
                             encoding="utf-8",
                             dir=self.workDir.as_posix(),
-                            delete_on_close=False,
+                            # We cannot use delete_on_close as it was introduced in Python 3.12
+                            delete=False,
                         )
-                        marshalled_stage = marshall_namedtuple(
-                            stage, workdir=self.workDir
-                        )
-                        yaml.dump(
-                            marshalled_stage,
-                            marshalled_stage_file_tmp,
-                            Dumper=YAMLDumper,
-                        )
-                        marshalled_stage_file_tmp.close()
-                        shutil.move(
-                            marshalled_stage_file_tmp.name, marshalled_stage_file
-                        )
+                        try:
+                            marshalled_stage = marshall_namedtuple(
+                                stage, workdir=self.workDir
+                            )
+                            yaml.dump(
+                                marshalled_stage,
+                                marshalled_stage_file_tmp,
+                                Dumper=YAMLDumper,
+                            )
+                            marshalled_stage_file_tmp.close()
+                            shutil.move(
+                                marshalled_stage_file_tmp.name, marshalled_stage_file
+                            )
+                        finally:
+                            if os.path.exists(marshalled_stage_file_tmp.name):
+                                os.unlink(marshalled_stage_file_tmp.name)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(marshalled_stage_file)
@@ -5160,26 +5170,31 @@ This is an enumeration of the types of collected contents:
                     mode="wt",
                     encoding="utf-8",
                     dir=marshalled_execution_file.parent.as_posix(),
-                    delete_on_close=False,
+                    # We cannot use delete_on_close as it was introduced in Python 3.12
+                    delete=False,
                 )
-                yaml.dump(
-                    marshall_namedtuple(executions, workdir=self.workDir),
-                    marshalled_execution_file_tmp,
-                    Dumper=YAMLDumper,
-                )
-                assert os.path.exists(
-                    marshalled_execution_file_tmp.name
-                ), f"Temporary file {marshalled_execution_file_tmp.name} does not exist yet"
-                marshalled_execution_file_tmp.close()
-                assert os.path.exists(
-                    marshalled_execution_file_tmp.name
-                ), f"Temporary file {marshalled_execution_file_tmp.name} does not exist now"
-                assert (
-                    marshalled_execution_file.exists()
-                ), f"Execution file {marshalled_execution_file.as_posix()} does not exist"
-                shutil.move(
-                    marshalled_execution_file_tmp.name, marshalled_execution_file
-                )
+                try:
+                    yaml.dump(
+                        marshall_namedtuple(executions, workdir=self.workDir),
+                        marshalled_execution_file_tmp,
+                        Dumper=YAMLDumper,
+                    )
+                    assert os.path.exists(
+                        marshalled_execution_file_tmp.name
+                    ), f"Temporary file {marshalled_execution_file_tmp.name} does not exist yet"
+                    marshalled_execution_file_tmp.close()
+                    assert os.path.exists(
+                        marshalled_execution_file_tmp.name
+                    ), f"Temporary file {marshalled_execution_file_tmp.name} does not exist now"
+                    assert (
+                        marshalled_execution_file.exists()
+                    ), f"Execution file {marshalled_execution_file.as_posix()} does not exist"
+                    shutil.move(
+                        marshalled_execution_file_tmp.name, marshalled_execution_file
+                    )
+                finally:
+                    if os.path.exists(marshalled_execution_file_tmp.name):
+                        os.unlink(marshalled_execution_file_tmp.name)
 
         self.executionMarshalled = creation_timestamp
         self.stagedExecutions = staged_executions
@@ -5433,15 +5448,20 @@ This is an enumeration of the types of collected contents:
                     mode="wt",
                     encoding="utf-8",
                     dir=self.workDir.as_posix(),
-                    delete_on_close=False,
+                    # We cannot use delete_on_close as it was introduced in Python 3.12
+                    delete=False,
                 )
-                yaml.dump(
-                    marshall_namedtuple(run_export_actions, workdir=self.workDir),
-                    marshalled_export_file_tmp,
-                    Dumper=YAMLDumper,
-                )
-                marshalled_export_file_tmp.close()
-                shutil.move(marshalled_export_file_tmp.name, marshalled_export_file)
+                try:
+                    yaml.dump(
+                        marshall_namedtuple(run_export_actions, workdir=self.workDir),
+                        marshalled_export_file_tmp,
+                        Dumper=YAMLDumper,
+                    )
+                    marshalled_export_file_tmp.close()
+                    shutil.move(marshalled_export_file_tmp.name, marshalled_export_file)
+                finally:
+                    if os.path.exists(marshalled_export_file_tmp.name):
+                        os.unlink(marshalled_export_file_tmp.name)
 
         self.exportMarshalled = creation_timestamp
         self.runExportActions = run_export_actions

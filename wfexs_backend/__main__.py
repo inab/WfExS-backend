@@ -1459,7 +1459,7 @@ def main() -> None:
         "handlers": handlers,
     }
 
-    logging.basicConfig(**loggingConf)
+    logging.basicConfig(**loggingConf)  # type: ignore[call-overload]
 
     root_log_is_unset = True
     wfexs_log_is_unset = True

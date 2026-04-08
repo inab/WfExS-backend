@@ -244,18 +244,23 @@ class Workdir:
                         mode="w+t",
                         encoding="utf-8",
                         dir=uniqueRawWorkDir.as_posix(),
-                        delete_on_close=False,
+                        # We cannot use delete_on_close as it was introduced in Python 3.12
+                        delete=False,
                     )
-                    idNick = {
-                        "instance_id": instanceId,
-                        "nickname": nickname,
-                        "creation": creation,
-                        "orcids": orcids,
-                    }
-                    json.dump(idNick, id_json_path_tmp, cls=DatetimeEncoder)
-                    id_json_path_tmp.close()
-                    shutil.move(id_json_path_tmp.name, id_json_path)
-                    id_json_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+                    try:
+                        idNick = {
+                            "instance_id": instanceId,
+                            "nickname": nickname,
+                            "creation": creation,
+                            "orcids": orcids,
+                        }
+                        json.dump(idNick, id_json_path_tmp, cls=DatetimeEncoder)
+                        id_json_path_tmp.close()
+                        shutil.move(id_json_path_tmp.name, id_json_path)
+                        id_json_path.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+                    finally:
+                        if os.path.exists(id_json_path_tmp.name):
+                            os.unlink(id_json_path_tmp.name)
         elif id_json_path.exists():
             with id_json_path_lock.open(mode="w+b") as iL:
                 rlock = RWFileLock(iL)
