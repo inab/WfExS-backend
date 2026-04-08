@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         Mapping,
         MutableMapping,
         MutableSequence,
+        NewType,
         Optional,
         Tuple,
         Type,
@@ -81,19 +82,19 @@ if TYPE_CHECKING:
     try:
         from dulwich.refs import Ref  # type: ignore[attr-defined]
     except:
-        Ref: TypeAlias = bytes  # type: ignore[no-redef]
+        Ref = NewType("Ref", bytes)  # type: ignore[no-redef, misc]
 
     try:
         from dulwich.objects import ObjectID  # type: ignore[attr-defined]
     except:
         # Hex SHA type
-        ObjectID: TypeAlias = bytes  # type: ignore[no-redef]
+        ObjectID = NewType("ObjectID", bytes)  # type: ignore[no-redef,misc]
 
     try:
         from dulwich.objects import RawObjectID  # type: ignore[attr-defined]
     except:
         # Raw SHA type
-        RawObjectID: TypeAlias = bytes  # type: ignore[no-redef]
+        RawObjectID = NewType("RawObjectID", bytes)  # type: ignore[no-redef,misc]
 
 
 from urllib import parse, request
@@ -136,7 +137,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
     GITHUB_SCHEME: "Final[str]" = "github"
     DEFAULT_GIT_CMD: "Final[SymbolicName]" = cast("SymbolicName", "git")
 
-    HEAD_LABEL: "Final[Ref]" = cast("Ref", b"HEAD")
+    HEAD_LABEL: "Final[Ref]" = cast("Ref", b"HEAD")  # type: ignore[redundant-cast]
     REFS_HEADS_PREFIX: "Final[bytes]" = b"refs/heads/"
     REFS_TAGS_PREFIX: "Final[bytes]" = b"refs/tags/"
     GIT_SCHEMES: "Final[Sequence[str]]" = ["https", "git", "ssh", "file"]

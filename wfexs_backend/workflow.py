@@ -253,6 +253,12 @@ if TYPE_CHECKING:
     WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
     WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
 
+# Recommendation from https://github.com/python/typeshed/issues/7855#issuecomment-1128857842
+if TYPE_CHECKING:
+    _LoggerAdapter = logging.LoggerAdapter[logging.Logger]
+else:
+    _LoggerAdapter = logging.LoggerAdapter
+
 
 import urllib.parse
 
@@ -436,7 +442,7 @@ class WFWarning(UserWarning):
     pass
 
 
-class WFLoggerAdapter(logging.LoggerAdapter[logging.Logger]):
+class WFLoggerAdapter(_LoggerAdapter):
     def process(
         self, msg: "Any", kwargs: "MutableMapping[str, Any]"
     ) -> "Tuple[Any, MutableMapping[str, Any]]":
