@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -140,14 +140,6 @@ WORKDIR_STDOUT_FILE = cast("RelPath", "stdout.txt")
 WORKDIR_STDERR_FILE = cast("RelPath", "stderr.txt")
 
 WORKDIR_WORKFLOW_META_FILE = cast("RelPath", "workflow_meta.yaml")
-
-# This one is commented-out, as credentials SHOULD NEVER BE SAVED
-# WORKDIR_SECURITY_CONTEXT_FILE = cast("RelPath", 'credentials.yaml')
-
-WORKDIR_MARSHALLED_STAGE_FILE = cast("RelPath", "stage-state.yaml")
-WORKDIR_MARSHALLED_EXECUTE_FILE = cast("RelPath", "execution-state.yaml")
-WORKDIR_MARSHALLED_EXPORT_FILE = cast("RelPath", "export-state.yaml")
-WORKDIR_PASSPHRASE_FILE = cast("RelPath", ".passphrase")
 
 STATS_DAG_DOT_FILE = cast("RelPath", "dag.dot")
 

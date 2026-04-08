@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -821,6 +821,7 @@ def processStagedWorkdirCommand(
     else:
         op_crate_pid = None
 
+    unmatched_args: "MutableSequence[str]" = []
     if args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Mount:
         if len(args.staged_workdir_command_args) > 0:
             for (
@@ -835,6 +836,7 @@ def processStagedWorkdirCommand(
                 doCleanup=False,
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
+                unmatched_args=unmatched_args,
             ):
                 if wfSetup is not None:
                     logger.info(
@@ -847,6 +849,8 @@ def processStagedWorkdirCommand(
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=args.filesAsGlobs,
+                unmatched_args=unmatched_args,
+                doCleanup=False,
             ),
             key=lambda x: x[2],
         )
@@ -875,17 +879,21 @@ def processStagedWorkdirCommand(
             else:
                 is_damaged = wfSetup.is_damaged
                 is_encrypted = wfSetup.is_encrypted
+                containerType = wfSetup.container_type
             if wfInstance is not None:
                 # As we can need additional data, let's ask it
-                wfInstance.unmarshallStage(
-                    offline=True, fail_ok=True, do_full_setup=False
-                )
+                try:
+                    wfInstance.unmarshallStage(
+                        offline=True, fail_ok=True, do_full_setup=False
+                    )
+                    mStatus_List = wfInstance.getMarshallingStatus()
+                    engineName = mStatus_List.workflow_type
 
-                wfPID = wfInstance.getPID()
-                if wfInstance.engineDesc is not None:
-                    engineName = wfInstance.engineDesc.engineName
-                if wfInstance.engine is not None:
-                    containerType = wfInstance.engine.getConfiguredContainerType()
+                    wfPID = mStatus_List.pid
+                except:
+                    logger.exception(f"Error unmarshalling {instance_id}")
+                finally:
+                    wfInstance.cleanup()
             print(
                 "\t".join(
                     (
@@ -902,6 +910,7 @@ def processStagedWorkdirCommand(
             )
 
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Remove:
+        running_args: "MutableSequence[str]" = []
         print(
             "\n".join(
                 map(
@@ -911,10 +920,16 @@ def processStagedWorkdirCommand(
                         private_key_filename=args.private_key_file,
                         private_key_passphrase=private_key_passphrase,
                         acceptGlob=args.filesAsGlobs,
+                        unmatched_args=unmatched_args,
+                        running_args=running_args,
                     ),
                 )
             )
         )
+        if len(running_args) > 0:
+            logger.warning(
+                f"Unable to remove staged working directory for next ids, because a job is running: {running_args}"
+            )
 
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Shell:
         retval = wB.shellFirstStagedWorkflow(
@@ -922,6 +937,7 @@ def processStagedWorkdirCommand(
             private_key_filename=args.private_key_file,
             private_key_passphrase=private_key_passphrase,
             acceptGlob=args.filesAsGlobs,
+            unmatched_args=unmatched_args,
         )
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineExecute:
         if len(args.staged_workdir_command_args) > 0:
@@ -937,6 +953,7 @@ def processStagedWorkdirCommand(
                 doCleanup=False,
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
+                unmatched_args=unmatched_args,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
@@ -979,6 +996,7 @@ def processStagedWorkdirCommand(
                 doCleanup=False,
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
+                unmatched_args=unmatched_args,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
@@ -1013,6 +1031,7 @@ def processStagedWorkdirCommand(
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=args.filesAsGlobs,
+                unmatched_args=unmatched_args,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if wfSetup is None:
@@ -1049,6 +1068,7 @@ def processStagedWorkdirCommand(
                 doCleanup=False,
                 private_key_filename=args.private_key_file,
                 private_key_passphrase=private_key_passphrase,
+                unmatched_args=unmatched_args,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if not is_damaged and (wfInstance is not None):
@@ -1122,6 +1142,11 @@ def processStagedWorkdirCommand(
                 f"ERROR: subcommand {args.staged_workdir_command} takes two positional parameters: the staged workdir name or id and the path where to store the RO-Crate",
             )
             retval = 1
+
+    if len(unmatched_args) > 0:
+        logger.warning(
+            f"Unable to match staged workdirs for next patterns, ids or files: {unmatched_args}"
+        )
 
     # Thi
     return retval
@@ -1434,7 +1459,7 @@ def main() -> None:
         "handlers": handlers,
     }
 
-    logging.basicConfig(**loggingConf)
+    logging.basicConfig(**loggingConf)  # type: ignore[call-overload]
 
     root_log_is_unset = True
     wfexs_log_is_unset = True
@@ -1636,8 +1661,11 @@ def main() -> None:
                 with open(
                     args.workflowWorkingDirectory, mode="r", encoding="utf-8"
                 ) as wdH:
-                    query_id = wdH.readline().strip()
+                    query_id = wdH.readline(4096).strip()
 
+            # It is not going to be consumed later,
+            # as an specific check is in place
+            unmatched_args: "MutableSequence[str]" = []
             for (
                 instance_id,
                 nickname,
@@ -1650,6 +1678,7 @@ def main() -> None:
                 private_key_passphrase=private_key_passphrase,
                 acceptGlob=True,
                 doCleanup=False,
+                unmatched_args=unmatched_args,
             ):
                 is_damaged = True if wfSetup is None else wfSetup.is_damaged
                 if is_damaged or (wfInstance is None):
@@ -1658,6 +1687,7 @@ def main() -> None:
                     )
                     sys.exit(1)
                 break
+
         if wfInstance is None:
             logger.error(
                 f"[ERROR] Workflow {args.workflowWorkingDirectory} ({query_id}) could not be found! Stopping.",

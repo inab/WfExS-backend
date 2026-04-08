@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,6 +23,7 @@ import dataclasses
 import datetime
 import fnmatch
 import inspect
+import io
 import json
 import logging
 import os
@@ -142,10 +143,6 @@ if TYPE_CHECKING:
         ProcessorArchitecture,
     )
 
-    from .encrypted_fs import (
-        EncryptedFSType,
-    )
-
     from .workflow_engines import (
         AbstractWorkflowEngineType,
         WorkflowEngineVersionStr,
@@ -251,9 +248,16 @@ if TYPE_CHECKING:
     OutputsBlock: TypeAlias = Mapping[str, Any]
 
     WorkflowConfigBlock: TypeAlias = Mapping[str, Any]
+    WritableWorkflowConfigBlock: TypeAlias = MutableMapping[str, Any]
 
     WorkflowMetaConfigBlock: TypeAlias = Mapping[str, Any]
     WritableWorkflowMetaConfigBlock: TypeAlias = MutableMapping[str, Any]
+
+# Recommendation from https://github.com/python/typeshed/issues/7855#issuecomment-1128857842
+if TYPE_CHECKING:
+    _LoggerAdapter = logging.LoggerAdapter[logging.Logger]
+else:
+    _LoggerAdapter = logging.LoggerAdapter
 
 
 import urllib.parse
@@ -287,6 +291,11 @@ from .utils.rocrate import (
 from .security_context import (
     SecurityContextVault,
 )
+
+from .workdir import (
+    Workdir,
+)
+
 import bagit
 
 from . import __url__ as wfexs_backend_url
@@ -325,8 +334,6 @@ from .common import (
     StagedSetup,
 )
 
-from .encrypted_fs import ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS
-
 from .workflow_engines import (
     MaterializedWorkflowEngine,
     STATS_DAG_DOT_FILE,
@@ -339,12 +346,8 @@ from .workflow_engines import (
     WORKDIR_INPUTS_RELDIR,
     WORKDIR_EXTRAPOLATED_INPUTS_RELDIR,
     WORKDIR_INTERMEDIATE_RELDIR,
-    WORKDIR_MARSHALLED_EXECUTE_FILE,
-    WORKDIR_MARSHALLED_EXPORT_FILE,
-    WORKDIR_MARSHALLED_STAGE_FILE,
     WORKDIR_META_RELDIR,
     WORKDIR_OUTPUTS_RELDIR,
-    WORKDIR_PASSPHRASE_FILE,
     WORKDIR_STATS_RELDIR,
     WORKDIR_STDERR_FILE,
     WORKDIR_STDOUT_FILE,
@@ -427,22 +430,6 @@ class DefaultMissing(Dict[KT, VT]):
         return cast(VT, key)
 
 
-def _wakeupEncDir(
-    cond: "threading.Condition", workDir: "pathlib.Path", logger: "logging.Logger"
-) -> None:
-    """
-    This method periodically checks whether the directory is still available
-    """
-    cond.acquire()
-    try:
-        while not cond.wait(60) and workDir.is_dir():
-            pass
-    except:
-        logger.exception("Wakeup thread failed!")
-    finally:
-        cond.release()
-
-
 class WFException(AbstractWfExSException):
     pass
 
@@ -453,6 +440,16 @@ class ExportActionException(AbstractWfExSException):
 
 class WFWarning(UserWarning):
     pass
+
+
+class WFLoggerAdapter(_LoggerAdapter):
+    def process(
+        self, msg: "Any", kwargs: "MutableMapping[str, Any]"
+    ) -> "Tuple[Any, MutableMapping[str, Any]]":
+        if self.extra is not None:
+            return "[{}] {}".format(self.extra["instance_id"], msg), kwargs
+        else:
+            return msg, kwargs
 
 
 TAR_MIME: "Final[str]" = "application/x-tar"
@@ -486,6 +483,19 @@ class WF:
         "https://dev.workflowhub.eu/ga4gh/trs/v2/"  # root of GA4GH TRS API
     )
 
+    # This one is commented-out, as credentials SHOULD NEVER BE SAVED
+    # WORKDIR_SECURITY_CONTEXT_FILE = cast("RelPath", 'credentials.yaml')
+
+    WORKDIR_MARSHALLED_STAGE_FILE: "Final[RelPath]" = cast(
+        "RelPath", "stage-state.yaml"
+    )
+    WORKDIR_MARSHALLED_EXECUTE_FILE: "Final[RelPath]" = cast(
+        "RelPath", "execution-state.yaml"
+    )
+    WORKDIR_MARSHALLED_EXPORT_FILE: "Final[RelPath]" = cast(
+        "RelPath", "export-state.yaml"
+    )
+
     def __init__(
         self,
         wfexs: "WfExSBackend",
@@ -505,7 +515,6 @@ class WF:
         instanceId: "Optional[WfExSInstanceId]" = None,
         nickname: "Optional[str]" = None,
         orcids: "Sequence[str]" = [],
-        creation: "Optional[datetime.datetime]" = None,
         rawWorkDir: "Optional[pathlib.Path]" = None,
         paranoid_mode: "Optional[bool]" = None,
         public_key_filenames: "Sequence[pathlib.Path]" = [],
@@ -520,6 +529,7 @@ class WF:
         preferred_operational_containers: "Sequence[Container]" = [],
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Minimal,
         strict_reproducibility_level: "bool" = False,
+        workdir_instance: "Optional[Workdir]" = None,
     ):
         """
         Init function
@@ -562,10 +572,13 @@ class WF:
             raise WFException("Unable to initialize, no WfExSBackend instance provided")
 
         # Getting a logger focused on specific classes
-        self.logger = logging.getLogger(
+        logger = logging.getLogger(
             dict(inspect.getmembers(self))["__module__"]
             + "::"
             + self.__class__.__name__
+        )
+        self.logger: "Union[logging.Logger, logging.LoggerAdapter[logging.Logger]]" = (
+            logger
         )
 
         self.wfexs = wfexs
@@ -584,7 +597,6 @@ class WF:
         self.reproducibility_level = reproducibility_level
         self.strict_reproducibility_level = strict_reproducibility_level
 
-        self.encWorkDir: "Optional[pathlib.Path]" = None
         self.workDir: "Optional[pathlib.Path]" = None
 
         if isinstance(paranoid_mode, bool):
@@ -616,6 +628,7 @@ class WF:
         self.version_id: "Optional[WFVersionId]"
         self.descriptor_type: "Optional[TRS_Workflow_Descriptor]"
         self.id: "Optional[Union[str, int]]"
+        self.workflow_config: "Optional[WorkflowConfigBlock]"
         if workflow_id is not None:
             workflow_meta: "WritableWorkflowMetaConfigBlock" = {
                 "workflow_id": workflow_id
@@ -712,62 +725,43 @@ class WF:
         if instanceId is not None:
             self.instanceId = instanceId
 
-        if creation is None:
-            self.workdir_creation = datetime.datetime.now(tz=datetime.timezone.utc)
-        else:
-            self.workdir_creation = creation
-
-        self.encfs_type: "Optional[EncryptedFSType]" = None
-        self.encfsCond: "Optional[threading.Condition]" = None
-        self.encfsThread: "Optional[threading.Thread]" = None
-        self.fusermount_cmd = cast("AnyPath", "")
-        self.encfs_idleMinutes: "Optional[int]" = None
-        self.doUnmount = False
-
         checkSecure = True
-        if rawWorkDir is None:
-            if instanceId is None:
-                (
-                    self.instanceId,
-                    self.nickname,
-                    self.workdir_creation,
-                    self.orcids,
-                    self.rawWorkDir,
-                ) = self.wfexs.createRawWorkDir(nickname_prefix=nickname, orcids=orcids)
-                checkSecure = False
+        if workdir_instance is None:
+            if rawWorkDir is None:
+                if instanceId is None:
+                    workdir_instance = self.wfexs.createRawWorkDir(
+                        nickname_prefix=nickname, orcids=orcids
+                    )
+                    checkSecure = False
+                else:
+                    workdir_instance = self.wfexs.getOrCreateRawWorkDirFromInstanceId(
+                        instanceId, nickname=nickname, create_ok=False
+                    )
             else:
-                (
-                    self.instanceId,
-                    self.nickname,
-                    self.workdir_creation,
-                    self.orcids,
-                    self.rawWorkDir,
-                ) = self.wfexs.getOrCreateRawWorkDirFromInstanceId(
-                    instanceId, nickname=nickname, create_ok=False
+                # FIXME: This might not be correct in some obscure corner case
+                workdir_instance = Workdir(
+                    wfexs.GetPassGen(),
+                    rawWorkDir,
+                    instanceId=instanceId,
+                    nickname=nickname if nickname is not None else instanceId,
+                    create_ok=False,
                 )
-        else:
-            self.rawWorkDir = rawWorkDir.absolute()
-            if instanceId is None:
-                (
-                    self.instanceId,
-                    self.nickname,
-                    self.workdir_creation,
-                    self.orcids,
-                    _,
-                ) = self.wfexs.parseOrCreateRawWorkDir(
-                    self.rawWorkDir, nickname=nickname, create_ok=False
-                )
-            else:
-                self.nickname = nickname if nickname is not None else instanceId
-                # FIXME: This is not correct
-                self.orcids = orcids
 
-        # TODO: enforce restrictive permissions on each raw working directory
-        self.allowOther = False
+        self.workdir_instance = workdir_instance
+
+        self.logger = WFLoggerAdapter(
+            logger,
+            extra={
+                "instance_id": workdir_instance.instance_id,
+            },
+        )
+
+        self.instanceId = workdir_instance.instance_id
+        self.nickname = workdir_instance.nickname
+        self.orcids = workdir_instance.orcids
 
         if checkSecure:
-            workdir_passphrase_file = self.rawWorkDir / WORKDIR_PASSPHRASE_FILE
-            self.secure = workdir_passphrase_file.exists()
+            self.secure = workdir_instance.isSecure()
         else:
             self.secure = (len(public_key_filenames) > 0) or workflow_config.get(
                 "secure", True
@@ -776,13 +770,15 @@ class WF:
         doSecureWorkDir = self.secure or self.paranoidMode
 
         self.tempDir: "pathlib.Path"
-        was_setup, self.tempDir = self.setupWorkdir(
+        was_setup, self.tempDir = workdir_instance.setup(
             doSecureWorkDir,
+            self.paranoidMode,
             fail_ok=fail_ok,
             public_key_filenames=public_key_filenames,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
         )
+        self.workDir = workdir_instance.work_dir
 
         self.configMarshalled: "Optional[Union[bool, datetime.datetime]]" = None
         self.inputsDir: "Optional[pathlib.Path]"
@@ -896,9 +892,9 @@ class WF:
             instance_id=self.instanceId,
             container_type=container_type,
             nickname=self.nickname,
-            creation=self.workdir_creation,
+            creation=self.workdir_instance.creation,
             workflow_config=self.workflow_config,
-            raw_work_dir=self.rawWorkDir,
+            raw_work_dir=self.workdir_instance.raw_work_dir,
             work_dir=self.workDir,
             workflow_dir=self.workflowDir,
             consolidated_workflow_dir=self.consolidatedWorkflowDir,
@@ -911,7 +907,7 @@ class WF:
             meta_dir=self.metaDir,
             temp_dir=self.tempDir,
             secure_exec=self.secure or self.paranoidMode,
-            allow_other=self.allowOther,
+            allow_other=self.workdir_instance.allow_other,
             is_encrypted=doSecureWorkDir,
             is_damaged=is_damaged,
         )
@@ -947,8 +943,6 @@ class WF:
 
         self._magic = magic.Magic(mime=True)
         self._magic_uc = magic.Magic(mime=True, uncompress=True)
-
-    FUSE_SYSTEM_CONF = "/etc/fuse.conf"
 
     def getPID(self) -> "Optional[str]":
         """
@@ -990,228 +984,11 @@ class WF:
 
         return the_pid
 
-    def setupWorkdir(
-        self,
-        doSecureWorkDir: "bool",
-        fail_ok: "bool" = False,
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
-        private_key_filename: "Optional[pathlib.Path]" = None,
-        private_key_passphrase: "Optional[str]" = None,
-    ) -> "Tuple[bool, pathlib.Path]":
-        uniqueRawWorkDir = self.rawWorkDir
-
-        allowOther = False
-        uniqueEncWorkDir: "Optional[pathlib.Path]"
-        uniqueWorkDir: "pathlib.Path"
-        if doSecureWorkDir:
-            # We need to detect whether fuse has enabled user_allow_other
-            # the only way I know is parsing /etc/fuse.conf
-            if not self.paranoidMode and os.path.exists(self.FUSE_SYSTEM_CONF):
-                with open(self.FUSE_SYSTEM_CONF, mode="r") as fsc:
-                    for line in fsc:
-                        if line.startswith("user_allow_other"):
-                            allowOther = True
-                            break
-                    self.logger.debug(f"FUSE has user_allow_other: {allowOther}")
-
-            uniqueEncWorkDir = uniqueRawWorkDir / ".crypt"
-            uniqueWorkDir = uniqueRawWorkDir / "work"
-
-            # The directories should exist before calling encryption FS mount
-            uniqueEncWorkDir.mkdir(parents=True, exist_ok=True)
-            uniqueWorkDir.mkdir(parents=True, exist_ok=True)
-
-            # This is the passphrase needed to decrypt the filesystem
-            workdir_passphrase_file = uniqueRawWorkDir / WORKDIR_PASSPHRASE_FILE
-
-            used_public_key_filenames: "Sequence[pathlib.Path]"
-            if workdir_passphrase_file.exists():
-                (
-                    encfs_type,
-                    encfs_cmd,
-                    secureWorkdirPassphrase,
-                ) = self.wfexs.readSecuredWorkdirPassphrase(
-                    workdir_passphrase_file,
-                    private_key_filename=private_key_filename,
-                    private_key_passphrase=private_key_passphrase,
-                )
-                used_public_key_filenames = []
-            else:
-                (
-                    encfs_type,
-                    encfs_cmd,
-                    secureWorkdirPassphrase,
-                    used_public_key_filenames,
-                ) = self.wfexs.generateSecuredWorkdirPassphrase(
-                    workdir_passphrase_file,
-                    private_key_filename=private_key_filename,
-                    private_key_passphrase=private_key_passphrase,
-                    public_key_filenames=public_key_filenames,
-                )
-
-            self.encfs_type = encfs_type
-
-            (
-                self.fusermount_cmd,
-                self.encfs_idleMinutes,
-            ) = self.wfexs.getFusermountParams()
-            # Warn/fail earlier
-            if os.path.ismount(uniqueWorkDir):
-                # raise WFException("Destination mount point {} is already in use")
-                self.logger.warning(
-                    "Destination mount point {} is already in use".format(uniqueWorkDir)
-                )
-                was_setup = True
-            else:
-                # DANGER!
-                # We are removing leftovers in work directory
-                with os.scandir(uniqueWorkDir) as uwi:
-                    for entry in uwi:
-                        # Tainted, not empty directory. Moving...
-                        if entry.name not in (".", ".."):
-                            self.logger.warning(
-                                f"Destination mount point {uniqueWorkDir} is tainted. Moving..."
-                            )
-                            shutil.move(
-                                uniqueWorkDir.as_posix(),
-                                uniqueWorkDir.with_name(
-                                    uniqueWorkDir.name + "_tainted_" + str(time.time())
-                                ).as_posix(),
-                            )
-                            uniqueWorkDir.mkdir(parents=True, exist_ok=True)
-                            break
-
-                # We are going to unmount what we have mounted
-                self.doUnmount = True
-
-                # Now, time to mount the encrypted FS
-                try:
-                    ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS[encfs_type](
-                        pathlib.Path(encfs_cmd),
-                        self.encfs_idleMinutes,
-                        uniqueEncWorkDir,
-                        uniqueWorkDir,
-                        uniqueRawWorkDir,
-                        secureWorkdirPassphrase,
-                        allowOther,
-                    )
-                except Exception as e:
-                    errmsg = f"Cannot FUSE mount {uniqueWorkDir} with {encfs_cmd}"
-                    self.logger.exception(errmsg)
-                    if not fail_ok:
-                        raise WFException(errmsg) from e
-                    was_setup = False
-                else:
-                    # IMPORTANT: There can be a race condition in some containerised
-                    # scenarios where the FUSE mount process goes to background, but
-                    # mounting itself has not finished. This check helps
-                    # both to detect and to avoid that corner case.
-                    if not os.path.ismount(uniqueWorkDir):
-                        errmsg = f"Corner case: cannot keep mounted FUSE mount {uniqueWorkDir} with {encfs_cmd}"
-                        self.logger.exception(errmsg)
-                        if not fail_ok:
-                            raise WFException(errmsg)
-                        was_setup = False
-
-                    was_setup = True
-                    # and start the thread which keeps the mount working
-                    self.encfsCond = threading.Condition()
-                    self.encfsThread = threading.Thread(
-                        target=_wakeupEncDir,
-                        args=(self.encfsCond, uniqueWorkDir, self.logger),
-                        daemon=True,
-                    )
-                    self.encfsThread.start()
-
-                    # Time to transfer the public keys
-                    # to be used later in the lifecycle
-                    if len(used_public_key_filenames) > 0:
-                        base_keys_dir = uniqueWorkDir / "meta" / "public_keys"
-                        base_keys_dir.mkdir(parents=True, exist_ok=True)
-                        key_fns: "MutableSequence[str]" = []
-                        manifest = {
-                            "creation": datetime.datetime.now().astimezone(),
-                            "keys": key_fns,
-                        }
-                        for i_key, key_fn in enumerate(used_public_key_filenames):
-                            dest_fn_basename = f"key_{i_key}.c4gh.public"
-                            dest_fn = base_keys_dir / dest_fn_basename
-                            shutil.copyfile(key_fn, dest_fn)
-                            key_fns.append(dest_fn_basename)
-
-                        # Last, manifest
-                        with (base_keys_dir / "manifest.json").open(
-                            mode="wt",
-                            encoding="utf-8",
-                        ) as mF:
-                            json.dump(manifest, mF, sort_keys=True)
-
-            # self.encfsPassphrase = secureWorkdirPassphrase
-            del secureWorkdirPassphrase
-        else:
-            uniqueEncWorkDir = None
-            uniqueWorkDir = uniqueRawWorkDir
-            was_setup = True
-
-        # The temporary directory is in the raw working directory as
-        # some container engine could fail
-        uniqueTempDir = uniqueRawWorkDir / ".TEMP"
-        uniqueTempDir.mkdir(parents=True, exist_ok=True)
-        uniqueTempDir.chmod(0o1777)
-
-        # Setting up working directories, one per instance
-        self.encWorkDir = uniqueEncWorkDir
-        self.workDir = uniqueWorkDir
-        self.allowOther = allowOther
-
-        return was_setup, uniqueTempDir
-
-    def unmountWorkdir(self) -> None:
-        if self.doUnmount and (self.encWorkDir is not None):
-            if self.encfsCond is not None:
-                self.encfsCond.acquire()
-                self.encfsCond.notify()
-                self.encfsThread = None
-                self.encfsCond = None
-            # Only unmount if it is needed
-            assert self.workDir is not None
-            if os.path.ismount(self.workDir):
-                with tempfile.NamedTemporaryFile() as encfs_umount_stdout, tempfile.NamedTemporaryFile() as encfs_umount_stderr:
-                    fusermountCommand: "Sequence[str]" = [
-                        self.fusermount_cmd,
-                        "-u",  # Umount the directory
-                        "-z",  # Even if it is not possible to umount it now, hide the mount point
-                        self.workDir.as_posix(),
-                    ]
-
-                    retval = subprocess.Popen(
-                        fusermountCommand,
-                        stdout=encfs_umount_stdout,
-                        stderr=encfs_umount_stderr,
-                    ).wait()
-
-                    if retval != 0:
-                        with open(encfs_umount_stdout.name, mode="r") as c_stF:
-                            encfs_umount_stdout_v = c_stF.read()
-                        with open(encfs_umount_stderr.name, mode="r") as c_stF:
-                            encfs_umount_stderr_v = c_stF.read()
-
-                        errstr = "Could not umount {} (retval {})\nCommand: {}\n======\nSTDOUT\n======\n{}\n======\nSTDERR\n======\n{}".format(
-                            self.encfs_type,
-                            retval,
-                            " ".join(fusermountCommand),
-                            encfs_umount_stdout_v,
-                            encfs_umount_stderr_v,
-                        )
-                        raise WFException(errstr)
-
-            # This is needed to avoid double work
-            self.doUnmount = False
-            self.encWorkDir = None
-            self.workDir = None
-
     def cleanup(self) -> None:
-        self.unmountWorkdir()
+        self.workdir_instance.unmount()
+
+    def destroy_workdir(self) -> None:
+        self.workdir_instance.destroy()
 
     def getStagedSetup(self) -> "StagedSetup":
         return self.staged_setup
@@ -1350,21 +1127,11 @@ class WF:
         if wfexs is None:
             raise WFException("Unable to initialize, no WfExSBackend instance provided")
 
-        (
-            instanceId,
-            nickname,
-            creation,
-            orcids,
-            rawWorkDir,
-        ) = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
+        workdir_instance = wfexs.normalizeRawWorkingDirectory(workflowWorkingDirectory)
 
         return cls(
             wfexs,
-            instanceId=instanceId,
-            nickname=nickname,
-            rawWorkDir=rawWorkDir,
-            creation=creation,
-            # orcids=orcids,  # Do we need to propagate this here?
+            workdir_instance=workdir_instance,
             private_key_filename=private_key_filename,
             private_key_passphrase=private_key_passphrase,
             fail_ok=fail_ok,
@@ -1895,8 +1662,8 @@ class WF:
 
         return cls(
             wfexs,
-            workflow_meta["workflow_id"],
-            workflow_meta.get("version"),
+            workflow_id=workflow_meta["workflow_id"],
+            version_id=workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
             prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
@@ -1971,8 +1738,8 @@ class WF:
 
         return cls(
             wfexs,
-            workflow_meta["workflow_id"],
-            workflow_meta.get("version"),
+            workflow_id=workflow_meta["workflow_id"],
+            version_id=workflow_meta.get("version"),
             descriptor_type=workflow_meta.get("workflow_type"),
             trs_endpoint=trs_endpoint,
             prefer_upstream_source=workflow_meta.get("prefer_upstream_source"),
@@ -3850,7 +3617,7 @@ class WF:
                                             ignoreCache=this_ignoreCache,
                                             cloneToStore=clonable,
                                             expectedKind=inputKind
-                                            if inputKind != ContentKind.Value
+                                            if inputKind != ContentKind.Value  # type: ignore[comparison-overlap]
                                             else None,
                                         )
                                         remote_pairs.extend(t_remote_pairs)
@@ -4330,24 +4097,76 @@ class WF:
         assert self.materializedEnvironment is not None
         assert self.expected_outputs is not None
         assert self.outputsDir is not None
+        assert self.metaDir is not None
 
         if self.stagedExecutions is None:
             self.stagedExecutions = []
 
         # And once deployed, let's run the workflow in background!
         job_id = os.fork()
+        the_child = False
         if job_id == 0:
             os.setsid()
-            os.closerange(0, get_maximum_file_descriptors())
+            the_child = True
 
-            # This is the child
-            # First, the child tries to add itself to the list ASAP
+            # Closing stdin, stdout and stderr
+            try:
+                nullfd = os.open(os.devnull, os.O_RDONLY)
+                stdin_fileno = sys.stdin.fileno()
+                sys.stdin.close()
+                os.dup2(nullfd, stdin_fileno)
+                try:
+                    sys.stdin = open(stdin_fileno, encoding="utf-8", closefd=False)
+                finally:
+                    os.close(nullfd)
+            except (OSError, ValueError):
+                pass
+
             job_id = os.getpid()
             queued = datetime.datetime.fromtimestamp(
                 psutil.Process(job_id).create_time()
             ).astimezone()
+            stdout_stderr_path = (
+                self.metaDir
+                / WORKDIR_OUTPUTS_RELDIR
+                / f"_{int(queued.timestamp())}_{job_id}_queue_log.txt"
+            )
+
+            try:
+                logfd = os.open(
+                    stdout_stderr_path.as_posix(), os.O_WRONLY | os.O_CREAT, mode=0o644
+                )
+
+                stdout_fileno = sys.stdout.fileno()
+                sys.stdout.close()
+                os.dup2(logfd, stdout_fileno)
+                try:
+                    sys.stdout = io.TextIOWrapper(
+                        os.fdopen(stdout_fileno, "wb"), encoding="utf-8"
+                    )
+                except:
+                    os.close(logfd)
+                    raise
+
+                stderr_fileno = sys.stderr.fileno()
+                sys.stderr.close()
+                os.dup2(logfd, stderr_fileno)
+                try:
+                    sys.stderr = io.TextIOWrapper(
+                        os.fdopen(stderr_fileno, "wb"), encoding="utf-8"
+                    )
+                except:
+                    os.close(logfd)
+                    raise
+                os.close(logfd)
+            except (OSError, ValueError):
+                pass
+
+            # This is the child
+            # First, the child tries to add itself to the list ASAP
+            exit_val = cast("ExitVal", -1)
             initial_staged_exec = StagedExecution(
-                exitVal=cast("ExitVal", -1),
+                exitVal=exit_val,
                 augmentedInputs=[],
                 matCheckOutputs=[],
                 outputsDir=self.outputsDir,
@@ -4368,15 +4187,20 @@ class WF:
                 self.expected_outputs,
                 self.enabled_profiles,
             ):
+                exit_val = staged_exec.exitVal
                 # TODO: store only the last update
                 # Store serialized version of exitVal, augmentedInputs and matCheckOutputs
                 self.marshallExecute(staged_exec)
+
+            # Let's mimic the exit value of the job
+            sys.exit(exit_val)
         elif job_id > 0:
             # This is the parent
             # As a redundancy, add the child to the list
             queued = datetime.datetime.fromtimestamp(
                 psutil.Process(job_id).create_time()
             ).astimezone()
+            job_id_str = str(job_id)
             initial_staged_exec = StagedExecution(
                 exitVal=cast("ExitVal", -1),
                 augmentedInputs=[],
@@ -4386,13 +4210,13 @@ class WF:
                 started=datetime.datetime.min,
                 ended=datetime.datetime.min,
                 status=ExecutionStatus.Queued,
-                job_id=str(job_id),
+                job_id=job_id_str,
             )
             self.marshallExecute(initial_staged_exec)
-            return str(job_id)
+            return job_id_str
 
         raise WFException(
-            f"Unable to create a background jobs for {self.instanceId} ({self.nickname})"
+            f"Unable to create a background jobs for {self.instanceId} ({self.nickname}) {the_child}"
         )
 
     def listMaterializedExportActions(self) -> "Sequence[MaterializedExportAction]":
@@ -4743,6 +4567,7 @@ This is an enumeration of the types of collected contents:
     def marshallConfig(
         self, overwrite: "bool" = False
     ) -> "Union[bool, datetime.datetime]":
+        assert self.workDir is not None, "Working directory should exist"
         assert (
             self.metaDir is not None
         ), "Working directory should not be corrupted beyond basic usage"
@@ -4751,16 +4576,38 @@ This is an enumeration of the types of collected contents:
         # Now, the config itself
         if overwrite or (self.configMarshalled is None):
             workflow_meta_filename = self.metaDir / WORKDIR_WORKFLOW_META_FILE
+            workflow_meta_filename_lock = workflow_meta_filename.with_name(
+                Workdir.LOCKFILE_PREFIX + workflow_meta_filename.name
+            )
             if (
                 overwrite
                 or not workflow_meta_filename.exists()
                 or os.path.getsize(workflow_meta_filename) == 0
             ):
-                staging_recipe = self.staging_recipe
-                with workflow_meta_filename.open(mode="w", encoding="utf-8") as wmF:
-                    wmlock = RWFileLock(wmF)
-                    with wmlock.exclusive_lock():
-                        yaml.dump(staging_recipe, wmF, Dumper=YAMLDumper)
+                with workflow_meta_filename_lock.open(mode="w+b") as wmL:
+                    wlock = RWFileLock(wmL)
+                    with wlock.exclusive_blocking_lock():
+                        workflow_meta_filename_tmp = tempfile.NamedTemporaryFile(
+                            mode="wt",
+                            encoding="utf-8",
+                            dir=self.workDir.as_posix(),
+                            # We cannot use delete_on_close as it was introduced in Python 3.12
+                            delete=False,
+                        )
+                        try:
+                            # Now, before writing
+                            yaml.dump(
+                                self.staging_recipe,
+                                workflow_meta_filename_tmp,
+                                Dumper=YAMLDumper,
+                            )
+                            workflow_meta_filename_tmp.close()
+                            shutil.move(
+                                workflow_meta_filename_tmp.name, workflow_meta_filename
+                            )
+                        finally:
+                            if os.path.exists(workflow_meta_filename_tmp.name):
+                                os.unlink(workflow_meta_filename_tmp.name)
 
             self.configMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(workflow_meta_filename)
@@ -4794,6 +4641,9 @@ This is an enumeration of the types of collected contents:
         if self.configMarshalled is None:
             config_unmarshalled = True
             workflow_meta_filename = self.metaDir / WORKDIR_WORKFLOW_META_FILE
+            workflow_meta_filename_lock = workflow_meta_filename.with_name(
+                Workdir.LOCKFILE_PREFIX + workflow_meta_filename.name
+            )
             # If the file does not exist, fail fast
             if (
                 not workflow_meta_filename.is_file()
@@ -4806,9 +4656,11 @@ This is an enumeration of the types of collected contents:
 
             workflow_meta = None
             try:
-                with workflow_meta_filename.open(mode="r", encoding="utf-8") as wcf:
-                    rmlock = RWFileLock(wcf)
-                    with rmlock.shared_blocking_lock():
+                with workflow_meta_filename_lock.open(mode="w+b") as wmL:
+                    rmlock = RWFileLock(wmL)
+                    with rmlock.shared_blocking_lock(), workflow_meta_filename.open(
+                        mode="rt", encoding="utf-8"
+                    ) as wcf:
                         workflow_meta = unmarshall_namedtuple(
                             yaml.safe_load(wcf), workdir=self.workDir
                         )
@@ -4936,52 +4788,79 @@ This is an enumeration of the types of collected contents:
             if self.marshallConfig() is None:
                 return None
 
+            assert self.workDir is not None, "Working directory should exist"
             assert (
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_stage_file = self.metaDir / WORKDIR_MARSHALLED_STAGE_FILE
+            marshalled_stage_file = self.metaDir / self.WORKDIR_MARSHALLED_STAGE_FILE
+            marshalled_stage_file_lock = marshalled_stage_file.with_name(
+                Workdir.LOCKFILE_PREFIX + marshalled_stage_file.name
+            )
             stageAlreadyMarshalled = False
-            if marshalled_stage_file.exists():
-                errmsg = "Marshalled stage file {} already exists".format(
-                    marshalled_stage_file
-                )
-                if not overwrite and not exist_ok:
-                    raise WFException(errmsg)
-                self.logger.debug(errmsg)
-                stageAlreadyMarshalled = True
+            with marshalled_stage_file_lock.open(mode="w+b") as msL:
+                swlock = RWFileLock(msL)
+                with swlock.exclusive_blocking_lock():
+                    if marshalled_stage_file.exists():
+                        errmsg = "Marshalled stage file {} already exists".format(
+                            marshalled_stage_file
+                        )
+                        if not overwrite and not exist_ok:
+                            raise WFException(errmsg)
+                        self.logger.debug(errmsg)
+                        stageAlreadyMarshalled = True
 
-            if not stageAlreadyMarshalled or overwrite:
-                assert (
-                    self.materializedEngine is not None
-                ), "The engine should have already been materialized at this point"
-                stage = {
-                    "remote_repo": self.remote_repo,
-                    "repoURL": self.repoURL,
-                    "repoTag": self.repoTag,
-                    "repoRelPath": self.repoRelPath,
-                    "repoEffectiveCheckout": self.repoEffectiveCheckout,
-                    "engineDesc": self.engineDesc,
-                    "engineVer": self.engineVer,
-                    "materializedEngine": self.materializedEngine,
-                    "containers": self.materializedEngine.containers,
-                    "containerEngineVersion": self.containerEngineVersion,
-                    "containerEngineOs": self.containerEngineOs,
-                    "arch": self.arch,
-                    "workflowEngineVersion": self.workflowEngineVersion,
-                    "materializedParams": self.materializedParams,
-                    "materializedEnvironment": self.materializedEnvironment,
-                    # TODO: check nothing essential was left
-                }
+                    if not stageAlreadyMarshalled or overwrite:
+                        assert (
+                            self.materializedEngine is not None
+                        ), "The engine should have already been materialized at this point"
+                        stage = {
+                            "remote_repo": self.remote_repo,
+                            "repoURL": self.repoURL,
+                            "repoTag": self.repoTag,
+                            "repoRelPath": self.repoRelPath,
+                            "repoEffectiveCheckout": self.repoEffectiveCheckout,
+                            "engineDesc": self.engineDesc,
+                            "engineVer": self.engineVer,
+                            "materializedEngine": self.materializedEngine,
+                            "containers": self.materializedEngine.containers,
+                            "containerEngineVersion": self.containerEngineVersion,
+                            "containerEngineOs": self.containerEngineOs,
+                            "arch": self.arch,
+                            "workflowEngineVersion": self.workflowEngineVersion,
+                            "materializedParams": self.materializedParams,
+                            "materializedEnvironment": self.materializedEnvironment,
+                            # TODO: check nothing essential was left
+                        }
 
-                self.logger.debug(
-                    "Creating marshalled stage file {}".format(marshalled_stage_file)
-                )
-                with marshalled_stage_file.open(mode="w", encoding="utf-8") as msF:
-                    marshalled_stage = marshall_namedtuple(stage, workdir=self.workDir)
-                    swlock = RWFileLock(msF)
-                    with swlock.exclusive_lock():
-                        yaml.dump(marshalled_stage, msF, Dumper=YAMLDumper)
+                        self.logger.debug(
+                            "Creating marshalled stage file {}".format(
+                                marshalled_stage_file
+                            )
+                        )
+                        marshalled_stage_file_tmp = tempfile.NamedTemporaryFile(
+                            mode="wt",
+                            encoding="utf-8",
+                            dir=self.workDir.as_posix(),
+                            # We cannot use delete_on_close as it was introduced in Python 3.12
+                            delete=False,
+                        )
+                        try:
+                            marshalled_stage = marshall_namedtuple(
+                                stage, workdir=self.workDir
+                            )
+                            yaml.dump(
+                                marshalled_stage,
+                                marshalled_stage_file_tmp,
+                                Dumper=YAMLDumper,
+                            )
+                            marshalled_stage_file_tmp.close()
+                            shutil.move(
+                                marshalled_stage_file_tmp.name, marshalled_stage_file
+                            )
+                        finally:
+                            if os.path.exists(marshalled_stage_file_tmp.name):
+                                os.unlink(marshalled_stage_file_tmp.name)
 
             self.stageMarshalled = datetime.datetime.fromtimestamp(
                 os.path.getctime(marshalled_stage_file)
@@ -5007,176 +4886,204 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_stage_file = self.metaDir / WORKDIR_MARSHALLED_STAGE_FILE
-            if not marshalled_stage_file.exists():
-                errmsg = f"Marshalled stage file {marshalled_stage_file} does not exists. Stage state was not stored"
-                self.logger.debug(errmsg)
-                self.stageMarshalled = False
-                if fail_ok:
-                    return self.stageMarshalled
-                raise WFException(errmsg)
-
-            self.logger.debug(
-                "Parsing marshalled stage state file {}".format(marshalled_stage_file)
+            marshalled_stage_file = self.metaDir / self.WORKDIR_MARSHALLED_STAGE_FILE
+            marshalled_stage_file_lock = marshalled_stage_file.with_name(
+                Workdir.LOCKFILE_PREFIX + marshalled_stage_file.name
             )
-            try:
-                # These symbols are needed to properly deserialize the yaml
-                with marshalled_stage_file.open(mode="r", encoding="utf-8") as msF:
-                    srlock = RWFileLock(msF)
-                    with srlock.shared_blocking_lock():
-                        marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
+            with marshalled_stage_file_lock.open(mode="w+b") as msL:
+                srlock = RWFileLock(msL)
+                with srlock.shared_blocking_lock():
+                    if not marshalled_stage_file.exists():
+                        errmsg = f"Marshalled stage file {marshalled_stage_file} does not exists. Stage state was not stored"
+                        self.logger.debug(errmsg)
+                        self.stageMarshalled = False
+                        if fail_ok:
+                            return self.stageMarshalled
+                        raise WFException(errmsg)
 
-                    combined_globals = self.__get_combined_globals()
-                    stage = unmarshall_namedtuple(
-                        marshalled_stage,
-                        myglobals=combined_globals,
-                        workdir=self.workDir,
-                    )
-                    self.remote_repo = stage.get("remote_repo")
-                    # This one takes precedence
-                    if self.remote_repo is not None:
-                        self.repoURL = self.remote_repo.repo_url
-                        self.repoTag = self.remote_repo.tag
-                        self.repoRelPath = self.remote_repo.rel_path
-                    else:
-                        self.repoURL = stage["repoURL"]
-                        self.repoTag = stage["repoTag"]
-                        self.repoRelPath = stage["repoRelPath"]
-                        assert self.repoURL is not None
-                        self.remote_repo = RemoteRepo(
-                            repo_url=self.repoURL,
-                            tag=self.repoTag,
-                            rel_path=self.repoRelPath,
+                    self.logger.debug(
+                        "Parsing marshalled stage state file {}".format(
+                            marshalled_stage_file
                         )
-                    self.repoEffectiveCheckout = stage["repoEffectiveCheckout"]
-                    self.engineDesc = stage["engineDesc"]
-                    self.engineVer = stage["engineVer"]
-                    self.materializedEngine = stage["materializedEngine"]
-                    if (
-                        self.materializedEngine is not None
-                        and stage["containers"] is not None
-                        and self.materializedEngine.containers is None
-                    ):
-                        self.materializedEngine = self.materializedEngine._replace(
-                            containers=stage["containers"]
-                        )
-                    self.materializedParams = stage["materializedParams"]
-                    self.materializedEnvironment = stage.get(
-                        "materializedEnvironment", []
                     )
+                    try:
+                        # These symbols are needed to properly deserialize the yaml
+                        with marshalled_stage_file.open(
+                            mode="rt", encoding="utf-8"
+                        ) as msF:
+                            marshalled_stage = yaml.load(msF, Loader=YAMLLoader)
 
-                    # Trying to identify the right container type
-                    # for old staged directories
+                        combined_globals = self.__get_combined_globals()
+                        stage = unmarshall_namedtuple(
+                            marshalled_stage,
+                            myglobals=combined_globals,
+                            workdir=self.workDir,
+                        )
+                        self.remote_repo = stage.get("remote_repo")
+                        # This one takes precedence
+                        if self.remote_repo is not None:
+                            self.repoURL = self.remote_repo.repo_url
+                            self.repoTag = self.remote_repo.tag
+                            self.repoRelPath = self.remote_repo.rel_path
+                        else:
+                            self.repoURL = stage["repoURL"]
+                            self.repoTag = stage["repoTag"]
+                            self.repoRelPath = stage["repoRelPath"]
+                            assert self.repoURL is not None
+                            self.remote_repo = RemoteRepo(
+                                repo_url=self.repoURL,
+                                tag=self.repoTag,
+                                rel_path=self.repoRelPath,
+                            )
+                        self.repoEffectiveCheckout = stage["repoEffectiveCheckout"]
+                        self.engineDesc = stage["engineDesc"]
+                        self.engineVer = stage["engineVer"]
+                        self.materializedEngine = stage["materializedEngine"]
+                        if (
+                            self.materializedEngine is not None
+                            and stage["containers"] is not None
+                            and self.materializedEngine.containers is None
+                        ):
+                            self.materializedEngine = self.materializedEngine._replace(
+                                containers=stage["containers"]
+                            )
+                        self.materializedParams = stage["materializedParams"]
+                        self.materializedEnvironment = stage.get(
+                            "materializedEnvironment", []
+                        )
+
+                        # Trying to identify the right container type
+                        # for old staged directories
+                        if (
+                            not self.explicit_container_type
+                            and self.materializedEngine is not None
+                        ):
+                            guessed_container_type: "ContainerType"
+                            if (
+                                self.materializedEngine.containers is None
+                                or len(self.materializedEngine.containers) == 0
+                            ):
+                                if (
+                                    self.materializedEngine.operational_containers
+                                    is None
+                                    or len(
+                                        self.materializedEngine.operational_containers
+                                    )
+                                    == 0
+                                ):
+                                    guessed_container_type = ContainerType.NoContainer
+                                else:
+                                    guessed_container_type = (
+                                        self.materializedEngine.operational_containers[
+                                            0
+                                        ].type
+                                    )
+                            else:
+                                guessed_container_type = (
+                                    self.materializedEngine.containers[0].type
+                                )
+
+                            self.container_type_str = guessed_container_type.value
+                            self.staged_setup = self.staged_setup._replace(
+                                container_type=guessed_container_type
+                            )
+
+                        self.containerEngineVersion = stage.get(
+                            "containerEngineVersion"
+                        )
+                        self.containerEngineOs = stage.get("containerEngineOs")
+                        if self.containerEngineOs is None:
+                            self.containerEngineOs = cast(
+                                "ContainerOperatingSystem", platform.system().lower()
+                            )
+                        self.arch = stage.get("arch")
+                        if self.arch is None:
+                            self.arch = cast(
+                                "ProcessorArchitecture", platform.machine()
+                            )
+                        self.workflowEngineVersion = stage.get("workflowEngineVersion")
+
+                        # This is needed to properly set up the materializedEngine
+                        if do_full_setup:
+                            self.setupEngine(offline=True)
+                        elif self.engineDesc is not None:
+                            enabled_profiles: "Optional[Sequence[str]]" = None
+                            if self.enabled_profiles is not None:
+                                enabled_profiles = self.enabled_profiles
+                            elif self.staged_setup.workflow_config is not None:
+                                profiles: "Optional[Union[str, Sequence[str]]]" = (
+                                    self.staged_setup.workflow_config.get(
+                                        self.engineDesc.engineName, {}
+                                    ).get("profile")
+                                )
+                                if profiles is not None:
+                                    if isinstance(profiles, list):
+                                        enabled_profiles = profiles
+                                    elif isinstance(profiles, str):
+                                        split_by_comma = re.compile(r"[ \t]*,[ \t]*")
+                                        enabled_profiles = split_by_comma.split(
+                                            profiles
+                                        )
+                                    else:
+                                        # It should not happen
+                                        enabled_profiles = [str(profiles)]
+
+                                    # Backward <=> forward compatibility
+                                    self.enabled_profiles = enabled_profiles
+
+                            self.engine = self.wfexs.instantiateEngine(
+                                self.engineDesc, self.staged_setup
+                            )
+
+                        # Process outputs now we have an engine
+                        if isinstance(self.outputs, dict):
+                            assert self.engine is not None
+                            assert self.outputs_to_inject is not None
+                            outputs = list(self.outputs.values())
+                            if (
+                                len(outputs) == 0 and len(self.outputs_to_inject) == 0
+                            ) or (
+                                len(outputs) > 0
+                                and isinstance(outputs[0], ExpectedOutput)
+                            ):
+                                self.expected_outputs = outputs
+                            else:
+                                self.expected_outputs = self.parseExpectedOutputs(
+                                    self.outputs_to_inject,
+                                    self.outputs,
+                                    default_synthetic_output=not self.engine.HasExplicitOutputs(),
+                                )
+                        else:
+                            self.expected_outputs = None
+                    except Exception as e:
+                        errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(
+                            marshalled_stage_file, e
+                        )
+                        self.stageMarshalled = False
+                        self.logger.exception(errmsg)
+                        if fail_ok:
+                            self.logger.debug(errmsg)
+                            return self.stageMarshalled
+                        self.logger.exception(errmsg)
+                        raise WFException(errmsg) from e
+
+                    # Now, time to save the late changes
                     if (
                         not self.explicit_container_type
                         and self.materializedEngine is not None
                     ):
-                        guessed_container_type: "ContainerType"
-                        if (
-                            self.materializedEngine.containers is None
-                            or len(self.materializedEngine.containers) == 0
-                        ):
-                            if (
-                                self.materializedEngine.operational_containers is None
-                                or len(self.materializedEngine.operational_containers)
-                                == 0
-                            ):
-                                guessed_container_type = ContainerType.NoContainer
-                            else:
-                                guessed_container_type = (
-                                    self.materializedEngine.operational_containers[
-                                        0
-                                    ].type
-                                )
-                        else:
-                            guessed_container_type = self.materializedEngine.containers[
-                                0
-                            ].type
-
-                        self.container_type_str = guessed_container_type.value
-                        self.staged_setup = self.staged_setup._replace(
-                            container_type=guessed_container_type
+                        self.explicit_container_type = True
+                        new_workflow_config = cast(
+                            "WritableWorkflowConfigBlock",
+                            copy.copy(self.workflow_config),
                         )
+                        new_workflow_config["containerType"] = self.container_type_str
+                        self.workflow_config = new_workflow_config
+                        self.marshallConfig(overwrite=True)
 
-                    self.containerEngineVersion = stage.get("containerEngineVersion")
-                    self.containerEngineOs = stage.get("containerEngineOs")
-                    if self.containerEngineOs is None:
-                        self.containerEngineOs = cast(
-                            "ContainerOperatingSystem", platform.system().lower()
-                        )
-                    self.arch = stage.get("arch")
-                    if self.arch is None:
-                        self.arch = cast("ProcessorArchitecture", platform.machine())
-                    self.workflowEngineVersion = stage.get("workflowEngineVersion")
-
-                    # This is needed to properly set up the materializedEngine
-                    if do_full_setup:
-                        self.setupEngine(offline=True)
-                    elif self.engineDesc is not None:
-                        enabled_profiles: "Optional[Sequence[str]]" = None
-                        if self.enabled_profiles is not None:
-                            enabled_profiles = self.enabled_profiles
-                        elif self.staged_setup.workflow_config is not None:
-                            profiles: "Optional[Union[str, Sequence[str]]]" = (
-                                self.staged_setup.workflow_config.get(
-                                    self.engineDesc.engineName, {}
-                                ).get("profile")
-                            )
-                            if profiles is not None:
-                                if isinstance(profiles, list):
-                                    enabled_profiles = profiles
-                                elif isinstance(profiles, str):
-                                    split_by_comma = re.compile(r"[ \t]*,[ \t]*")
-                                    enabled_profiles = split_by_comma.split(profiles)
-                                else:
-                                    # It should not happen
-                                    enabled_profiles = [str(profiles)]
-
-                                # Backward <=> forward compatibility
-                                self.enabled_profiles = enabled_profiles
-
-                        self.engine = self.wfexs.instantiateEngine(
-                            self.engineDesc, self.staged_setup
-                        )
-
-                    # Process outputs now we have an engine
-                    if isinstance(self.outputs, dict):
-                        assert self.engine is not None
-                        assert self.outputs_to_inject is not None
-                        outputs = list(self.outputs.values())
-                        if (len(outputs) == 0 and len(self.outputs_to_inject) == 0) or (
-                            len(outputs) > 0 and isinstance(outputs[0], ExpectedOutput)
-                        ):
-                            self.expected_outputs = outputs
-                        else:
-                            self.expected_outputs = self.parseExpectedOutputs(
-                                self.outputs_to_inject,
-                                self.outputs,
-                                default_synthetic_output=not self.engine.HasExplicitOutputs(),
-                            )
-                    else:
-                        self.expected_outputs = None
-            except Exception as e:
-                errmsg = "Error while unmarshalling content from stage state file {}. Reason: {}".format(
-                    marshalled_stage_file, e
-                )
-                self.stageMarshalled = False
-                self.logger.exception(errmsg)
-                if fail_ok:
-                    self.logger.debug(errmsg)
-                    return self.stageMarshalled
-                self.logger.exception(errmsg)
-                raise WFException(errmsg) from e
-
-            # Now, time to save the late changes
-            if not self.explicit_container_type and self.materializedEngine is not None:
-                self.explicit_container_type = True
-                self.workflow_config["containerType"] = self.container_type_str
-                self.marshallConfig(overwrite=True)
-
-            self.stageMarshalled = datetime.datetime.fromtimestamp(
-                os.path.getctime(marshalled_stage_file)
-            ).astimezone()
+                    self.stageMarshalled = datetime.datetime.fromtimestamp(
+                        marshalled_stage_file.stat().st_ctime
+                    ).astimezone()
 
         return self.stageMarshalled
 
@@ -5187,81 +5094,113 @@ This is an enumeration of the types of collected contents:
         if self.marshallStage() is None:
             return None
 
+        assert self.workDir is not None, "Working directory should exist"
         assert self.metaDir is not None, "The metadata directory should be available"
 
         assert self.stagedExecutions is not None
 
-        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
+        marshalled_execution_file = self.metaDir / self.WORKDIR_MARSHALLED_EXECUTE_FILE
+        marshalled_execution_file_lock = marshalled_execution_file.with_name(
+            Workdir.LOCKFILE_PREFIX + marshalled_execution_file.name
+        )
 
         # The file contents must be kept INTACT (or created)!!!
-        emF = os.open(marshalled_execution_file, os.O_RDWR | os.O_CREAT, mode=0o666)
-        ewlock = RWFileLock(emF)
-        with ewlock.exclusive_blocking_lock(), os.fdopen(
-            emF, mode="r+", encoding="utf-8"
-        ) as msF:
-            staged_executions: "MutableSequence[StagedExecution]" = []
-            creation_timestamp = datetime.datetime.fromtimestamp(
-                os.fstat(emF).st_ctime
-            ).astimezone()
-            if os.fstat(emF).st_size > 0:
-                try:
-                    (
-                        staged_executions,
-                        creation_timestamp,
-                    ) = self._unmarshallExecuteFH(msF, os.fstat(emF).st_ctime)
-                except:
-                    self.logger.error(
-                        f"Unable to unmarshall executions metadata file {marshalled_execution_file}"
-                    )
-
-            # Overwrite previous versions of the very same staged execution
-            for candidate_stage_pos, candidate_stage in enumerate(staged_executions):
+        with marshalled_execution_file_lock.open(mode="w+b") as meL:
+            ewlock = RWFileLock(meL)
+            with ewlock.exclusive_blocking_lock():
+                staged_executions: "MutableSequence[StagedExecution]" = []
+                creation_timestamp = datetime.datetime.fromtimestamp(
+                    os.fstat(meL.fileno()).st_ctime
+                ).astimezone()
                 if (
-                    candidate_stage.outputsDir == self.outputsDir
-                    and candidate_stage.job_id == staged_exec.job_id
-                ) or (
-                    candidate_stage.outputsDir != self.outputsDir
-                    and staged_exec.outputsDir != self.outputsDir
-                    and candidate_stage.outputsDir == staged_exec.outputsDir
+                    marshalled_execution_file.exists()
+                    and marshalled_execution_file.stat().st_size > 0
                 ):
-                    staged_executions[candidate_stage_pos] = staged_exec
-                    break
-            else:
-                staged_executions.append(staged_exec)
+                    try:
+                        with marshalled_execution_file.open(
+                            mode="rt", encoding="utf-8"
+                        ) as emF:
+                            (
+                                staged_executions,
+                                creation_timestamp,
+                            ) = self._unmarshallExecuteFH(emF)
+                    except:
+                        self.logger.error(
+                            f"Unable to unmarshall executions metadata file {marshalled_execution_file}"
+                        )
+                # Overwrite previous versions of the very same staged execution
+                for candidate_stage_pos, candidate_stage in enumerate(
+                    staged_executions
+                ):
+                    if (
+                        candidate_stage.outputsDir == self.outputsDir
+                        and candidate_stage.job_id == staged_exec.job_id
+                    ) or (
+                        candidate_stage.outputsDir != self.outputsDir
+                        and staged_exec.outputsDir != self.outputsDir
+                        and candidate_stage.outputsDir == staged_exec.outputsDir
+                    ):
+                        staged_executions[candidate_stage_pos] = staged_exec
+                        break
+                else:
+                    staged_executions.append(staged_exec)
 
-            # And now, store!
-            executions = []
-            for stagedExec in staged_executions:
-                execution = {
-                    "exitVal": stagedExec.exitVal,
-                    "augmentedInputs": stagedExec.augmentedInputs,
-                    "matCheckOutputs": stagedExec.matCheckOutputs,
-                    "outputsDir": stagedExec.outputsDir,
-                    "started": stagedExec.started,
-                    "ended": stagedExec.ended,
-                    "environment": stagedExec.environment,
-                    "outputMetaDir": stagedExec.outputMetaDir,
-                    "diagram": stagedExec.diagram,
-                    "logfile": stagedExec.logfile,
-                    "profiles": stagedExec.profiles,
-                    "queued": stagedExec.queued,
-                    "status": stagedExec.status,
-                    "job_id": stagedExec.job_id,
-                }
-                executions.append(execution)
+                # And now, store!
+                executions = []
+                for stagedExec in staged_executions:
+                    execution = {
+                        "exitVal": stagedExec.exitVal,
+                        "augmentedInputs": stagedExec.augmentedInputs,
+                        "matCheckOutputs": stagedExec.matCheckOutputs,
+                        "outputsDir": stagedExec.outputsDir,
+                        "started": stagedExec.started,
+                        "ended": stagedExec.ended,
+                        "environment": stagedExec.environment,
+                        "outputMetaDir": stagedExec.outputMetaDir,
+                        "diagram": stagedExec.diagram,
+                        "logfile": stagedExec.logfile,
+                        "profiles": stagedExec.profiles,
+                        "queued": stagedExec.queued,
+                        "status": stagedExec.status,
+                        "job_id": stagedExec.job_id,
+                    }
+                    executions.append(execution)
 
-            self.logger.debug(
-                "Writing marshalled execution file {}".format(marshalled_execution_file)
-            )
+                self.logger.debug(
+                    "Writing marshalled execution file {}".format(
+                        marshalled_execution_file
+                    )
+                )
 
-            msF.seek(0)
-            yaml.dump(
-                marshall_namedtuple(executions, workdir=self.workDir),
-                msF,
-                Dumper=YAMLDumper,
-            )
-            # Last, remove possible last bytes
-            msF.truncate(msF.tell())
+                marshalled_execution_file_tmp = tempfile.NamedTemporaryFile(
+                    mode="wt",
+                    encoding="utf-8",
+                    dir=marshalled_execution_file.parent.as_posix(),
+                    # We cannot use delete_on_close as it was introduced in Python 3.12
+                    delete=False,
+                )
+                try:
+                    yaml.dump(
+                        marshall_namedtuple(executions, workdir=self.workDir),
+                        marshalled_execution_file_tmp,
+                        Dumper=YAMLDumper,
+                    )
+                    assert os.path.exists(
+                        marshalled_execution_file_tmp.name
+                    ), f"Temporary file {marshalled_execution_file_tmp.name} does not exist yet"
+                    marshalled_execution_file_tmp.close()
+                    assert os.path.exists(
+                        marshalled_execution_file_tmp.name
+                    ), f"Temporary file {marshalled_execution_file_tmp.name} does not exist now"
+                    assert (
+                        marshalled_execution_file.exists()
+                    ), f"Execution file {marshalled_execution_file.as_posix()} does not exist"
+                    shutil.move(
+                        marshalled_execution_file_tmp.name, marshalled_execution_file
+                    )
+                finally:
+                    if os.path.exists(marshalled_execution_file_tmp.name):
+                        os.unlink(marshalled_execution_file_tmp.name)
 
         self.executionMarshalled = creation_timestamp
         self.stagedExecutions = staged_executions
@@ -5278,42 +5217,48 @@ This is an enumeration of the types of collected contents:
 
         assert self.metaDir is not None, "The metadata directory should be available"
 
-        marshalled_execution_file = self.metaDir / WORKDIR_MARSHALLED_EXECUTE_FILE
-        if not marshalled_execution_file.exists():
-            errmsg = f"Marshalled execution file {marshalled_execution_file} does not exist. Execution state was not stored"
-            self.logger.debug(errmsg)
-            self.executionMarshalled = False
-            if fail_ok:
-                return self.executionMarshalled, []
-            raise WFException(errmsg)
-
-        self.logger.debug(
-            "Parsing marshalled execution state file {}".format(
-                marshalled_execution_file
-            )
+        marshalled_execution_file = self.metaDir / self.WORKDIR_MARSHALLED_EXECUTE_FILE
+        marshalled_execution_file_lock = marshalled_execution_file.with_name(
+            Workdir.LOCKFILE_PREFIX + marshalled_execution_file.name
         )
+        with marshalled_execution_file_lock.open(mode="w+b") as meL:
+            srlock = RWFileLock(meL)
+            with srlock.shared_blocking_lock():
+                if not marshalled_execution_file.exists():
+                    errmsg = f"Marshalled execution file {marshalled_execution_file} does not exist. Execution state was not stored"
+                    self.logger.debug(errmsg)
+                    self.executionMarshalled = False
+                    if fail_ok:
+                        return self.executionMarshalled, []
+                    raise WFException(errmsg)
 
-        try:
-            with marshalled_execution_file.open(mode="r", encoding="utf-8") as meF:
-                erlock = RWFileLock(meF)
-                with erlock.shared_blocking_lock():
-                    (
-                        self.stagedExecutions,
-                        creation_timestamp,
-                    ) = self._unmarshallExecuteFH(meF)
-                self.executionMarshalled = creation_timestamp
+                self.logger.debug(
+                    "Parsing marshalled execution state file {}".format(
+                        marshalled_execution_file
+                    )
+                )
 
-                return self.executionMarshalled, self.stagedExecutions
-        except Exception as e:
-            errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
-                marshalled_execution_file, e
-            )
-            self.executionMarshalled = False
-            if fail_ok:
-                self.logger.exception(errmsg)
-                return self.executionMarshalled, []
-            self.logger.exception(errmsg)
-            raise WFException(errmsg) from e
+                try:
+                    with marshalled_execution_file.open(
+                        mode="rt", encoding="utf-8"
+                    ) as meF:
+                        (
+                            self.stagedExecutions,
+                            creation_timestamp,
+                        ) = self._unmarshallExecuteFH(meF)
+                        self.executionMarshalled = creation_timestamp
+
+                        return self.executionMarshalled, self.stagedExecutions
+                except Exception as e:
+                    errmsg = "Error while unmarshalling content from execution state file {}. Reason: {}".format(
+                        marshalled_execution_file, e
+                    )
+                    self.executionMarshalled = False
+                    if fail_ok:
+                        self.logger.exception(errmsg)
+                        return self.executionMarshalled, []
+                    self.logger.exception(errmsg)
+                    raise WFException(errmsg) from e
 
     def _unmarshallExecuteFH(
         self, meF: "IO[str]", creation_time: "Optional[float]" = None
@@ -5464,46 +5409,65 @@ This is an enumeration of the types of collected contents:
         if self.marshallStage() is None:
             return None
 
+        assert self.workDir is not None, "Working directory should exist"
         assert self.metaDir is not None, "The metadata directory should be available"
 
-        marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
+        marshalled_export_file = self.metaDir / self.WORKDIR_MARSHALLED_EXPORT_FILE
+        marshalled_export_file_lock = marshalled_export_file.with_name(
+            Workdir.LOCKFILE_PREFIX + marshalled_export_file.name
+        )
 
         # The file contents must be kept INTACT (or created)!!!
-        emF = os.open(marshalled_export_file, os.O_RDWR | os.O_CREAT, mode=0o666)
-        ewlock = RWFileLock(emF)
-        with ewlock.exclusive_blocking_lock(), os.fdopen(
-            emF, mode="r+", encoding="utf-8"
-        ) as msF:
-            run_export_actions: "MutableSequence[MaterializedExportAction]" = []
-            creation_timestamp = datetime.datetime.fromtimestamp(
-                os.fstat(emF).st_ctime
-            ).astimezone()
-            if os.fstat(emF).st_size > 0:
-                try:
-                    (
-                        run_export_actions,
-                        creation_timestamp,
-                    ) = self._unmarshallExportFH(msF, os.fstat(emF).st_ctime)
-                except:
-                    self.logger.error(
-                        f"Unable to unmarshall exports metadata file {marshalled_export_file}"
+        with marshalled_export_file_lock.open(mode="w+b") as mexL:
+            exwlock = RWFileLock(mexL)
+            with exwlock.exclusive_blocking_lock():
+                run_export_actions: "MutableSequence[MaterializedExportAction]" = []
+                creation_timestamp = datetime.datetime.fromtimestamp(
+                    os.fstat(mexL.fileno()).st_ctime
+                ).astimezone()
+                if (
+                    marshalled_export_file.exists()
+                    and marshalled_export_file.stat().st_size > 0
+                ):
+                    try:
+                        with marshalled_export_file.open(
+                            mode="rt", encoding="utf-8"
+                        ) as emF:
+                            (
+                                run_export_actions,
+                                creation_timestamp,
+                            ) = self._unmarshallExportFH(emF)
+                    except:
+                        self.logger.error(
+                            f"Unable to unmarshall exports metadata file {marshalled_export_file}"
+                        )
+
+                run_export_actions.extend(new_mat_actions)
+
+                self.logger.debug(
+                    "Writing marshalled export results file {}".format(
+                        marshalled_export_file
                     )
-
-            run_export_actions.extend(new_mat_actions)
-
-            self.logger.debug(
-                "Writing marshalled export results file {}".format(
-                    marshalled_export_file
                 )
-            )
-            msF.seek(0)
-            yaml.dump(
-                marshall_namedtuple(run_export_actions, workdir=self.workDir),
-                msF,
-                Dumper=YAMLDumper,
-            )
-            # Last, remove possible last bytes
-            msF.truncate(msF.tell())
+
+                marshalled_export_file_tmp = tempfile.NamedTemporaryFile(
+                    mode="wt",
+                    encoding="utf-8",
+                    dir=self.workDir.as_posix(),
+                    # We cannot use delete_on_close as it was introduced in Python 3.12
+                    delete=False,
+                )
+                try:
+                    yaml.dump(
+                        marshall_namedtuple(run_export_actions, workdir=self.workDir),
+                        marshalled_export_file_tmp,
+                        Dumper=YAMLDumper,
+                    )
+                    marshalled_export_file_tmp.close()
+                    shutil.move(marshalled_export_file_tmp.name, marshalled_export_file)
+                finally:
+                    if os.path.exists(marshalled_export_file_tmp.name):
+                        os.unlink(marshalled_export_file_tmp.name)
 
         self.exportMarshalled = creation_timestamp
         self.runExportActions = run_export_actions
@@ -5523,38 +5487,44 @@ This is an enumeration of the types of collected contents:
                 self.metaDir is not None
             ), "The metadata directory should be available"
 
-            marshalled_export_file = self.metaDir / WORKDIR_MARSHALLED_EXPORT_FILE
-            if not marshalled_export_file.exists():
-                errmsg = f"Marshalled export results file {marshalled_export_file} does not exists. Export results state was not stored"
-                self.logger.debug(errmsg)
-                self.exportMarshalled = False
-                if fail_ok:
-                    return self.exportMarshalled
-                raise WFException(errmsg)
-
-            self.logger.debug(
-                "Parsing marshalled export results state file {}".format(
-                    marshalled_export_file
-                )
+            marshalled_export_file = self.metaDir / self.WORKDIR_MARSHALLED_EXPORT_FILE
+            marshalled_export_file_lock = marshalled_export_file.with_name(
+                Workdir.LOCKFILE_PREFIX + marshalled_export_file.name
             )
-            try:
-                with marshalled_export_file.open(mode="r", encoding="utf-8") as meF:
-                    erlock = RWFileLock(meF)
-                    with erlock.shared_blocking_lock():
-                        (
-                            self.runExportActions,
-                            self.exportMarshalled,
-                        ) = self._unmarshallExportFH(meF)
+            with marshalled_export_file_lock.open(mode="w+b") as mexL:
+                srlock = RWFileLock(mexL)
+                with srlock.shared_blocking_lock():
+                    if not marshalled_export_file.exists():
+                        errmsg = f"Marshalled export results file {marshalled_export_file} does not exists. Export results state was not stored"
+                        self.logger.debug(errmsg)
+                        self.exportMarshalled = False
+                        if fail_ok:
+                            return self.exportMarshalled
+                        raise WFException(errmsg)
 
-            except Exception as e:
-                errmsg = f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}"
-                self.exportMarshalled = False
-                if fail_ok:
-                    self.logger.debug(errmsg)
-                    return self.exportMarshalled
-                else:
-                    self.logger.exception(errmsg)
-                raise WFException(errmsg) from e
+                    self.logger.debug(
+                        "Parsing marshalled export results state file {}".format(
+                            marshalled_export_file
+                        )
+                    )
+                    try:
+                        with marshalled_export_file.open(
+                            mode="r", encoding="utf-8"
+                        ) as meF:
+                            (
+                                self.runExportActions,
+                                self.exportMarshalled,
+                            ) = self._unmarshallExportFH(meF)
+
+                    except Exception as e:
+                        errmsg = f"Error while unmarshalling content from export results state file {marshalled_export_file}. Reason: {e}"
+                        self.exportMarshalled = False
+                        if fail_ok:
+                            self.logger.debug(errmsg)
+                            return self.exportMarshalled
+                        else:
+                            self.logger.exception(errmsg)
+                        raise WFException(errmsg) from e
 
         return self.exportMarshalled
 

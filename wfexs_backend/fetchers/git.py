@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         Mapping,
         MutableMapping,
         MutableSequence,
+        NewType,
         Optional,
         Tuple,
         Type,
@@ -77,6 +78,23 @@ if TYPE_CHECKING:
         from dulwich.client import LsRemoteResult  # type: ignore[attr-defined]
     except:
         LsRemoteResult: TypeAlias = Mapping[bytes, bytes]  # type: ignore[no-redef]
+
+    try:
+        from dulwich.refs import Ref  # type: ignore[attr-defined]
+    except:
+        Ref = NewType("Ref", bytes)  # type: ignore[no-redef, misc]
+
+    try:
+        from dulwich.objects import ObjectID  # type: ignore[attr-defined]
+    except:
+        # Hex SHA type
+        ObjectID = NewType("ObjectID", bytes)  # type: ignore[no-redef,misc]
+
+    try:
+        from dulwich.objects import RawObjectID  # type: ignore[attr-defined]
+    except:
+        # Raw SHA type
+        RawObjectID = NewType("RawObjectID", bytes)  # type: ignore[no-redef,misc]
 
 
 from urllib import parse, request
@@ -119,7 +137,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
     GITHUB_SCHEME: "Final[str]" = "github"
     DEFAULT_GIT_CMD: "Final[SymbolicName]" = cast("SymbolicName", "git")
 
-    HEAD_LABEL: "Final[bytes]" = b"HEAD"
+    HEAD_LABEL: "Final[Ref]" = cast("Ref", b"HEAD")  # type: ignore[redundant-cast]
     REFS_HEADS_PREFIX: "Final[bytes]" = b"refs/heads/"
     REFS_TAGS_PREFIX: "Final[bytes]" = b"refs/tags/"
     GIT_SCHEMES: "Final[Sequence[str]]" = ["https", "git", "ssh", "file"]
@@ -307,7 +325,9 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                     path.encode("utf-8"), cast("dulwich.repo.Repo", memory_repo)  # type: ignore[arg-type]
                 )
             try:
-                memory_repo.get_object(repoTag.encode("utf-8"))
+                memory_repo.get_object(
+                    cast("Union[ObjectID, RawObjectID]", repoTag.encode("utf-8"))
+                )
                 b_default_repo_tag = repoTag
                 b_checkout = cast("RepoTag", repoTag)
             except (Exception, ValueError) as e:

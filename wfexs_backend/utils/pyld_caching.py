@@ -36,6 +36,7 @@ from aiohttp_client_cache.session import CachedSession
 from aiohttp_client_cache.backends.sqlite import SQLiteBackend
 import os.path
 import pyld  # type: ignore[import, import-untyped]
+from pyld.documentloader.aiohttp import _ensure_background_loop  # type: ignore[import, import-untyped]
 import re
 import string
 import urllib.parse
@@ -49,28 +50,26 @@ def aiohttp_caching_document_loader(
     **kwargs: "Any",
 ) -> "Callable[[str, Mapping[str, Mapping[str, str]]], Mapping[str, Any]]":
     """
-    This code is based on aiohttp_document_loader from https://raw.githubusercontent.com/digitalbazaar/pyld/2c6b0a65bee700b42c8d0806364f4fc4ebddcc52/lib/pyld/documentloader/aiohttp.py
+    This code is based on aiohttp_document_loader from https://raw.githubusercontent.com/digitalbazaar/pyld/refs/tags/v3.0.0/lib/pyld/documentloader/aiohttp.py
     """
     """
     Create an Asynchronous document loader using aiohttp.
 
-    :param loop: the event loop used for processing HTTP requests.
+    :param loop: deprecated / ignored (kept for backward compatibility).
     :param secure: require all requests to use HTTPS (default: False).
     :param **kwargs: extra keyword args for the aiohttp request get() call.
 
     :return: the RemoteDocument loader function.
     """
 
-    if loop is None:
-        loop = asyncio.get_event_loop()
-
-    async def async_caching_loader(
+    async def async_loader(
         url: "str", headers: "Mapping[str, str]"
     ) -> "Mapping[str, Any]":
         """
         Retrieves JSON-LD at the given URL asynchronously.
 
         :param url: the URL to retrieve.
+        :param headers: the request headers.
 
         :return: the RemoteDocument.
         """
@@ -108,9 +107,6 @@ def aiohttp_caching_document_loader(
                     headers=headers,
                     **kwargs,
                 ) as response:
-                    # Allow any content_type in trying to parse json
-                    # similar to requests library
-                    json_body = await response.json(content_type=None)
                     content_type = response.headers.get("content-type")
                     if not content_type:
                         content_type = "application/octet-stream"
@@ -118,7 +114,6 @@ def aiohttp_caching_document_loader(
                         "contentType": content_type,
                         "contextUrl": None,
                         "documentUrl": response.url.human_repr(),
-                        "document": json_body,
                     }
                     link_header = response.headers.get("link")
                     if link_header:
@@ -149,10 +144,11 @@ def aiohttp_caching_document_loader(
                             )
                         ):
                             doc["contentType"] = "application/ld+json"
-                            doc["documentUrl"] = pyld.jsonld.prepend_base(
-                                url, linked_alternate["target"]
+                            doc["documentUrl"] = pyld.iri_resolver.resolve(
+                                linked_alternate["target"], url
                             )
-
+                            return await async_loader(doc["documentUrl"], headers)
+                    doc["document"] = await response.json(content_type=None)
                     return doc
         except pyld.jsonld.JsonLdError as e:
             raise e
@@ -161,30 +157,41 @@ def aiohttp_caching_document_loader(
                 "Could not retrieve a JSON-LD document from the URL.",
                 "jsonld.LoadDocumentError",
                 code="loading document failed",
-                cause=cause,
-            )
+            ) from cause
 
     def loader(
         url: "str", options: "Mapping[str, Mapping[str, str]]" = {}
     ) -> "Mapping[str, Any]":
         """
-        Retrieves JSON-LD at the given URL.
+        Retrieves JSON-LD at the given URL synchronously.
+
+        Works safely in both synchronous and asynchronous environments.
 
         :param url: the URL to retrieve.
+        :param options: the request options.
 
         :return: the RemoteDocument.
         """
-        return loop.run_until_complete(
-            async_caching_loader(
-                url,
-                options.get(
-                    "headers",
-                    {
-                        "Accept": "application/ld+json, application/json",
-                    },
-                ),
-            )
+        if options is None:
+            options = {}
+        headers = options.get(
+            "headers", {"Accept": "application/ld+json, application/json"}
         )
+
+        # Detect whether we're already in an async environment
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
+        # Sync environment
+        if not running_loop or not running_loop.is_running():
+            return asyncio.run(async_loader(url, headers))
+
+        # Inside async environment: use background event loop
+        loop = _ensure_background_loop()
+        future = asyncio.run_coroutine_threadsafe(async_loader(url, headers), loop)
+        return future.result()
 
     return loader
 

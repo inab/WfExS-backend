@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -753,6 +753,21 @@ class MarshallingStatus(NamedTuple):
 * Exported at:
 {'  (none)' if self.export_stamps is None or len(self.export_stamps) == 0 else chr(10).join(map(lambda ea: '  - ' + ea.isoformat(), self.export_stamps))}\
 """
+
+    def is_running(self) -> "bool":
+        if self.execution_stats is not None and len(self.execution_stats) > 0:
+            for (
+                job_id,
+                job_status,
+                queue_stamp,
+                start_stamp,
+                end_stamp,
+                exit_val,
+            ) in self.execution_stats:
+                if job_status in (ExecutionStatus.Queued, ExecutionStatus.Running):
+                    return True
+
+        return False
 
 
 DEFAULT_CONTAINER_TYPE = ContainerType.Singularity
