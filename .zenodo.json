@@ -1,7 +1,7 @@
 {
   "upload_type": "software",
   "title": "WfExS-backend",
-  "publication_date": "2025-10-28",
+  "publication_date": "2026-04-17",
   "creators": [
         {
             "name": "Fernández, José María",
@@ -39,5 +39,5 @@
   "license": "Apache-2.0",
   "keywords": ["workflows", "RO-Crate"],
   "language": "eng",
-  "version": "1.0.5"
+  "version": "1.0.8"
 }

@@ -198,7 +198,7 @@ for binName in ps ; do
 		static_bin_url="https://busybox.net/downloads/binaries/${BUSYBOX_VER}-${platformSuffixRev}-musl/busybox_${binName^^}"
 		echo "Installing busybox ${binName} ${BUSYBOX_VER} from ${static_bin_url}"
 		set +e
-		( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -o "${staticBin}" "${static_bin_url}" )
+		( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L --insecure -o "${staticBin}" "${static_bin_url}" )
 		retval=$?
 		set -e
 		if [ "$retval" -eq 0 ] ; then

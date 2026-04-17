@@ -53,9 +53,9 @@
             "givenName": "Daniel"
         }
     ],
-    "dateCreated": "2025-10-28",
-    "dateModified": "2025-10-28",
-    "datePublished": "2025-10-28",
+    "dateCreated": "2026-04-17",
+    "dateModified": "2026-04-17",
+    "datePublished": "2026-04-17",
     "description": "Workflow Execution Service Backend",
     "keywords": [
         "workflows",
@@ -68,6 +68,6 @@
         "Ubuntu"
     ],
     "programmingLanguage": "python",
-    "version": "1.0.5",
+    "version": "1.0.8",
     "issueTracker": "https://github.com/inab/WfExS-backend/issues"
 }
