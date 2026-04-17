@@ -501,7 +501,11 @@ WHERE {
                 )
             jsonld_obj_ser = {
                 "@graph": pyld.jsonld.expand(
-                    jsonld_obj, {"keepFreeFloatingNodes": True}
+                    jsonld_obj,
+                    {
+                        "keepFreeFloatingNodes": True,
+                        "base": self.RELATIVE_ROCRATE_SPARQL_BASE,
+                    },
                 )
             }
         jsonld_str = json.dumps(jsonld_obj_ser)
