@@ -36,7 +36,7 @@ funny-passphrase==0.2.3
 galaxy2cwl==0.1.4
 genluhn==0.3.1
 google-api-core==2.29.0
-google-auth==2.49.2
+google-auth==2.50.0
 google-cloud-core==2.5.0
 google-cloud-storage==3.9.0
 google-crc32c==1.5.0
@@ -83,7 +83,7 @@ python-dateutil==2.9.0.post0
 python-dxf==12.1.1
 python-magic==0.4.27
 python-xz==0.5.0
-pytz==2026.1.post1
+pytz==2026.2
 pyxdg==0.28
 PyYAML==6.0.3
 rdflib==7.6.0
