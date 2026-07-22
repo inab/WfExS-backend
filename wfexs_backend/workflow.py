@@ -37,6 +37,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import uuid
 import warnings
 import zipfile
 
@@ -61,6 +62,7 @@ from .common import (
     ExecutionStatus,
     NoCratableItem,
     ResolvedORCID,
+    SingleExecutionStats,
 )
 
 from .fetchers import (
@@ -1012,13 +1014,15 @@ class WF:
             export=self.exportMarshalled,
             execution_stats=list(
                 map(
-                    lambda r: (
-                        r.outputsDir.name,
-                        r.status,
-                        r.queued,
-                        r.started,
-                        r.ended,
-                        r.exitVal,
+                    lambda r: SingleExecutionStats(
+                        execution_id=r.outputsDir.name
+                        if r.job_id is None
+                        else r.job_id,
+                        status=r.status,
+                        queued=r.queued,
+                        started=r.started,
+                        ended=r.ended,
+                        exit_value=r.exitVal,
                     ),
                     self.stagedExecutions,
                 )
@@ -4036,7 +4040,9 @@ class WF:
 
         return actions
 
-    def executeWorkflow(self, offline: "bool" = False) -> "StagedExecution":
+    def executeWorkflow(
+        self, offline: "bool" = False, job_id: "Optional[str]" = None
+    ) -> "StagedExecution":
         self.unmarshallStage(offline=offline)
         self.unmarshallExecute(offline=offline, fail_ok=True)
 
@@ -4050,9 +4056,11 @@ class WF:
             self.stagedExecutions = []
 
         # First, the job tries to add itself to the list ASAP
-        job_id = os.getpid()
+        job_pid = os.getpid()
+        if job_id is None:
+            job_id = str(uuid.uuid4())
         queued = datetime.datetime.fromtimestamp(
-            psutil.Process(job_id).create_time()
+            psutil.Process(job_pid).create_time()
         ).astimezone()
         initial_staged_exec = StagedExecution(
             exitVal=cast("ExitVal", -1),
@@ -4063,7 +4071,8 @@ class WF:
             started=datetime.datetime.min,
             ended=datetime.datetime.min,
             status=ExecutionStatus.Queued,
-            job_id=str(job_id),
+            job_id=job_id,
+            job_pid=job_pid,
         )
         self.marshallExecute(initial_staged_exec)
 
@@ -4073,7 +4082,8 @@ class WF:
             self.materializedParams,
             self.materializedEnvironment,
             self.expected_outputs,
-            self.enabled_profiles,
+            profiles=self.enabled_profiles,
+            job_id=job_id,
         ):
             self.logger.debug(staged_exec.exitVal)
             self.logger.debug(staged_exec.started)
@@ -4088,7 +4098,12 @@ class WF:
         # And last, report the last staged execution
         return staged_exec
 
-    def queueExecution(self, offline: "bool" = False) -> "str":
+    def queueExecution(
+        self, offline: "bool" = False, job_id: "Optional[str]" = None
+    ) -> "str":
+        """
+        It returns the job id of the background job
+        """
         self.unmarshallStage(offline=offline)
         self.unmarshallExecute(offline=offline, fail_ok=True)
 
@@ -4103,9 +4118,11 @@ class WF:
             self.stagedExecutions = []
 
         # And once deployed, let's run the workflow in background!
-        job_id = os.fork()
+        if job_id is None:
+            job_id = str(uuid.uuid4())
+        job_pid = os.fork()
         the_child = False
-        if job_id == 0:
+        if job_pid == 0:
             os.setsid()
             the_child = True
 
@@ -4122,14 +4139,12 @@ class WF:
             except (OSError, ValueError):
                 pass
 
-            job_id = os.getpid()
+            job_pid = os.getpid()
             queued = datetime.datetime.fromtimestamp(
-                psutil.Process(job_id).create_time()
+                psutil.Process(job_pid).create_time()
             ).astimezone()
             stdout_stderr_path = (
-                self.metaDir
-                / WORKDIR_OUTPUTS_RELDIR
-                / f"_{int(queued.timestamp())}_{job_id}_queue_log.txt"
+                self.metaDir / WORKDIR_OUTPUTS_RELDIR / f"{job_id}_queue_log.txt"
             )
 
             try:
@@ -4174,7 +4189,8 @@ class WF:
                 started=datetime.datetime.min,
                 ended=datetime.datetime.min,
                 status=ExecutionStatus.Queued,
-                job_id=str(job_id),
+                job_id=job_id,
+                job_pid=job_pid,
             )
             self.marshallExecute(initial_staged_exec)
 
@@ -4185,7 +4201,8 @@ class WF:
                 self.materializedParams,
                 self.materializedEnvironment,
                 self.expected_outputs,
-                self.enabled_profiles,
+                profiles=self.enabled_profiles,
+                job_id=job_id,
             ):
                 exit_val = staged_exec.exitVal
                 # TODO: store only the last update
@@ -4194,13 +4211,12 @@ class WF:
 
             # Let's mimic the exit value of the job
             sys.exit(exit_val)
-        elif job_id > 0:
+        elif job_pid > 0:
             # This is the parent
             # As a redundancy, add the child to the list
             queued = datetime.datetime.fromtimestamp(
-                psutil.Process(job_id).create_time()
+                psutil.Process(job_pid).create_time()
             ).astimezone()
-            job_id_str = str(job_id)
             initial_staged_exec = StagedExecution(
                 exitVal=cast("ExitVal", -1),
                 augmentedInputs=[],
@@ -4210,10 +4226,11 @@ class WF:
                 started=datetime.datetime.min,
                 ended=datetime.datetime.min,
                 status=ExecutionStatus.Queued,
-                job_id=job_id_str,
+                job_id=job_id,
+                job_pid=job_pid,
             )
             self.marshallExecute(initial_staged_exec)
-            return job_id_str
+            return job_id
 
         raise WFException(
             f"Unable to create a background jobs for {self.instanceId} ({self.nickname}) {the_child}"
@@ -5163,6 +5180,7 @@ This is an enumeration of the types of collected contents:
                         "queued": stagedExec.queued,
                         "status": stagedExec.status,
                         "job_id": stagedExec.job_id,
+                        "job_pid": stagedExec.job_pid,
                     }
                     executions.append(execution)
 
@@ -5192,12 +5210,12 @@ This is an enumeration of the types of collected contents:
                     assert os.path.exists(
                         marshalled_execution_file_tmp.name
                     ), f"Temporary file {marshalled_execution_file_tmp.name} does not exist now"
-                    assert (
-                        marshalled_execution_file.exists()
-                    ), f"Execution file {marshalled_execution_file.as_posix()} does not exist"
                     shutil.move(
                         marshalled_execution_file_tmp.name, marshalled_execution_file
                     )
+                    assert (
+                        marshalled_execution_file.exists()
+                    ), f"Execution file {marshalled_execution_file.as_posix()} does not exist"
                 finally:
                     if os.path.exists(marshalled_execution_file_tmp.name):
                         os.unlink(marshalled_execution_file_tmp.name)
@@ -5368,19 +5386,35 @@ This is an enumeration of the types of collected contents:
                 execution.get("status", ExecutionStatus.Finished),
             )
 
+            job_pid: "Optional[int]" = execution.get("job_pid")
+            job_id: "Optional[str]" = execution.get("job_id")
+            if (
+                job_pid is None
+                and job_id is not None
+                and job_id.isdecimal()
+                and job_id.isdigit()
+            ):
+                try:
+                    job_pid = int(job_id)
+                except ValueError:
+                    # TODO: better error handling
+                    pass
+
             # Let's check how "alive" are the processes
             if job_status in (ExecutionStatus.Queued, ExecutionStatus.Running):
-                try:
-                    job_id = int(execution.get("job_id", ""))
-                    queued_proc = datetime.datetime.fromtimestamp(
-                        psutil.Process(job_id).create_time()
-                    ).astimezone()
+                if job_pid is not None:
+                    try:
+                        queued_proc = datetime.datetime.fromtimestamp(
+                            psutil.Process(job_pid).create_time()
+                        ).astimezone()
 
-                    queued = execution.get("queued", datetime.datetime.min)
-                    if queued_proc != queued:
+                        queued = execution.get("queued", datetime.datetime.min)
+                        if queued_proc != queued:
+                            job_status = ExecutionStatus.Died
+                    except (psutil.NoSuchProcess, ValueError, TypeError):
                         job_status = ExecutionStatus.Died
-                except (psutil.NoSuchProcess, ValueError, TypeError):
-                    job_status = ExecutionStatus.Died
+                else:
+                    job_status = ExecutionStatus.Unknown
 
             stagedExec = StagedExecution(
                 exitVal=execution["exitVal"],
@@ -5396,7 +5430,8 @@ This is an enumeration of the types of collected contents:
                 profiles=profiles,
                 queued=execution.get("queued", datetime.datetime.min),
                 status=job_status,
-                job_id=execution.get("job_id"),
+                job_id=job_id,
+                job_pid=job_pid,
             )
             staged_executions.append(stagedExec)
 

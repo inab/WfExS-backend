@@ -1104,6 +1104,7 @@ STDERR
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
+        job_id: "Optional[str]" = None,
     ) -> "Iterator[StagedExecution]":
         """
         Method to execute the workflow
@@ -1122,11 +1123,12 @@ STDERR
         engineVersion = matWfEng.version
 
         (
+            job_id,
             outputDirPostfix,
             intermediateDir,
             outputsDir,
             outputMetaDir,
-        ) = self.create_job_directories()
+        ) = self.create_job_directories(job_id)
         outputStatsDir = outputMetaDir / WORKDIR_STATS_RELDIR
         outputStatsDir.mkdir(parents=True, exist_ok=True)
 
