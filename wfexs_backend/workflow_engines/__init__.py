@@ -240,6 +240,7 @@ class StagedExecution(NamedTuple):
     queued: "Optional[datetime.datetime]" = None
     status: "ExecutionStatus" = ExecutionStatus.Finished
     job_id: "Optional[str]" = None
+    job_pid: "Optional[int]" = None
 
     @classmethod
     def _mapping_fixes(
@@ -253,6 +254,17 @@ class StagedExecution(NamedTuple):
                 dest[keypath] = pathlib.Path(keyval)
                 if workdir is not None and not dest[keypath].is_absolute():
                     dest[keypath] = (workdir / keyval).resolve()
+
+        job_pid: "Optional[int]" = orig.get("job_pid")
+        if job_pid is None:
+            job_id: "Optional[str]" = orig.get("job_id")
+            if job_id is not None and job_id.isdecimal() and job_id.isdigit():
+                job_pid = int(job_id)
+                dest["job_pid"] = job_pid
+            # Fallback values
+            outputs_dir: "Optional[pathlib.Path]" = dest.get("outputsDir")
+            if outputs_dir is not None:
+                dest["job_id"] = outputs_dir.name
 
         for keyarrpath in ("logfile",):
             keyarrval = orig.get(keyarrpath)
@@ -383,6 +395,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
+        job_id: "Optional[str]" = None,
     ) -> "Iterator[StagedExecution]":
         pass
 
@@ -924,8 +937,17 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     def create_job_directories(
         self,
-    ) -> "Tuple[str, pathlib.Path, pathlib.Path, pathlib.Path]":
-        outputDirPostfix = "_" + str(int(time.time())) + "_" + str(os.getpid())
+        job_id: "Optional[str]" = None,
+    ) -> "Tuple[str, str, pathlib.Path, pathlib.Path, pathlib.Path]":
+        if job_id is None:
+            job_id = "_" + str(int(time.time())) + "_" + str(os.getpid())
+
+        # This is needed to avoid escaping the sandbox
+        if job_id in (os.curdir, os.pardir):
+            job_id = "___" + job_id + "___"
+        elif os.sep in job_id:
+            job_id.replace(os.sep, "__")
+        outputDirPostfix = job_id
         intermediateDir = self.intermediateDir / outputDirPostfix
         intermediateDir.mkdir(parents=True, exist_ok=True)
         outputsDir = self.outputsDir / outputDirPostfix
@@ -933,7 +955,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         outputMetaDir = self.outputMetaDir / outputDirPostfix
         outputMetaDir.mkdir(parents=True, exist_ok=True)
 
-        return outputDirPostfix, intermediateDir, outputsDir, outputMetaDir
+        return job_id, outputDirPostfix, intermediateDir, outputsDir, outputMetaDir
 
     @abc.abstractmethod
     def launchWorkflow(
@@ -943,6 +965,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
+        job_id: "Optional[str]" = None,
     ) -> "Iterator[StagedExecution]":
         pass
 
@@ -954,6 +977,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         environment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
+        job_id: "Optional[str]" = None,
     ) -> "Iterator[StagedExecution]":
         # Now, deploy the containers to the local registry (needed for Docker)
         if matWfEng.containers is not None:
@@ -971,7 +995,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
             inputs,
             environment,
             outputs,
-            profiles,
+            profiles=profiles,
+            job_id=job_id,
         )
 
     @classmethod

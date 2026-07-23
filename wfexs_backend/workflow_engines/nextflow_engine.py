@@ -2009,6 +2009,7 @@ STDERR
         matEnvironment: "Sequence[MaterializedInput]",
         outputs: "Sequence[ExpectedOutput]",
         profiles: "Optional[Sequence[str]]" = None,
+        job_id: "Optional[str]" = None,
     ) -> "Iterator[StagedExecution]":
         # TODO: implement usage of materialized environment variables
         if len(matInputs) == 0:  # Is list of materialized inputs empty?
@@ -2022,11 +2023,12 @@ STDERR
         # These declarations provide a separate metadata directory for
         # each one of the executions of Nextflow
         (
+            job_id,
             outputDirPostfix,
             intermediateDir,
             outputsDir,
             outputMetaDir,
-        ) = self.create_job_directories()
+        ) = self.create_job_directories(job_id)
         outputStatsDir = outputMetaDir / WORKDIR_STATS_RELDIR
         outputStatsDir.mkdir(parents=True, exist_ok=True)
 
@@ -2035,12 +2037,14 @@ STDERR
         traceFile = outputStatsDir / "trace.tsv"
         dagFile = outputStatsDir / STATS_DAG_DOT_FILE
 
+        job_pid = os.getpid()
         queued = datetime.datetime.fromtimestamp(
-            psutil.Process(os.getpid()).create_time()
+            psutil.Process(job_pid).create_time()
         ).astimezone()
         yield StagedExecution(
             status=ExecutionStatus.Queued,
-            job_id=str(os.getpid()),
+            job_id=job_id,
+            job_pid=job_pid,
             exitVal=cast("ExitVal", -1),
             augmentedInputs=[],
             # TODO: store the augmentedEnvironment instead
@@ -2357,7 +2361,8 @@ wfexs_allParams()
         started = datetime.datetime.now(datetime.timezone.utc)
         yield StagedExecution(
             status=ExecutionStatus.Running,
-            job_id=str(os.getpid()),
+            job_id=job_id,
+            job_pid=job_pid,
             exitVal=cast("ExitVal", -1),
             augmentedInputs=[],
             # TODO: store the augmentedEnvironment instead
@@ -2456,6 +2461,7 @@ wfexs_allParams()
         # These declarations provide a separate metadata directory for
         # each one of the executions of Nextflow
         (
+            job_id,
             outputDirPostfix,
             intermediateDir,
             outputsDir,

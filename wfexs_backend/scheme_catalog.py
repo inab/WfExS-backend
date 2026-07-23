@@ -281,7 +281,7 @@ class SchemeCatalog:
                 "Unable to instantiate something which is not a class inheriting from AbstractStatefulFetcher"
             )
 
-        return cast("StatefulFetcher", instStatefulFetcher)
+        return cast("StatefulFetcher", instStatefulFetcher)  # type: ignore[redundant-cast]
 
     def describeRegisteredSchemes(self) -> "Sequence[Tuple[str, str, int]]":
         return [

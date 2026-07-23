@@ -16,7 +16,7 @@ LANG_CHOICES: Sequence[str]
 SERVICE_CHOICES: Sequence[str]
 ENGINE_CHOICES: Sequence[str]
 
-class CSVParamType(click.ParamType):
+class CSVParamType(click.ParamType[str]):  # type: ignore[type-arg]
     name: str
     def convert(self, value: Any, param: Any, ctx: Any) -> Any: ...
 

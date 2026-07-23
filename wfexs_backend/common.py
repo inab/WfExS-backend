@@ -725,6 +725,17 @@ class ExecutionStatus(enum.Enum):
     Running = "running"
     Finished = "finished"
     Died = "died"
+    Killed = "killed"
+    Unknown = "unknown"
+
+
+class SingleExecutionStats(NamedTuple):
+    execution_id: "str"
+    status: "ExecutionStatus"
+    queued: "Optional[datetime.datetime]"
+    started: "datetime.datetime"
+    ended: "datetime.datetime"
+    exit_value: "ExitVal"
 
 
 class MarshallingStatus(NamedTuple):
@@ -735,7 +746,7 @@ class MarshallingStatus(NamedTuple):
     stage: "Optional[Union[bool, datetime.datetime]]"
     execution: "Optional[Union[bool, datetime.datetime]]"
     export: "Optional[Union[bool, datetime.datetime]]"
-    execution_stats: "Optional[Sequence[Tuple[str, ExecutionStatus, Optional[datetime.datetime], datetime.datetime, datetime.datetime, ExitVal]]]"
+    execution_stats: "Optional[Sequence[SingleExecutionStats]]"
     export_stamps: "Optional[Sequence[datetime.datetime]]"
 
     def __repr__(self) -> "str":
@@ -749,7 +760,7 @@ class MarshallingStatus(NamedTuple):
   - execution: {"(never done)" if self.execution is None  else  self.execution.isoformat()  if isinstance(self.execution, datetime.datetime)  else  "(failed/not done yet)"}
   - export: {"(never done)" if self.export is None  else  self.export.isoformat()  if isinstance(self.export, datetime.datetime)  else  "(failed/not done yet)"}
 * Execution stats:
-{'  (none)' if self.execution_stats is None or len(self.execution_stats) == 0 else chr(10).join(map(lambda ss: ' - Job ' + ss[0] + '. Status: ' + ss[1].value + ' (queued ' + (ss[2].isoformat() if ss[2] is not None else '(unknown)') + ' , started ' + ss[3].isoformat() + ' , ended ' + ss[4].isoformat() + ' ) (exit ' + str(ss[5]) + ')', self.execution_stats))}
+{'  (none)' if self.execution_stats is None or len(self.execution_stats) == 0 else chr(10).join(map(lambda ss: ' - Job ' + ss.execution_id + '. Status: ' + ss.status.value + ' (queued ' + (ss.queued.isoformat() if ss.queued is not None else '(unknown)') + ' , started ' + ss.started.isoformat() + ' , ended ' + ss.ended.isoformat() + ' ) (exit ' + str(ss.exit_value) + ')', self.execution_stats))}
 * Exported at:
 {'  (none)' if self.export_stamps is None or len(self.export_stamps) == 0 else chr(10).join(map(lambda ea: '  - ' + ea.isoformat(), self.export_stamps))}\
 """

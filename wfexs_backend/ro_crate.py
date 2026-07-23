@@ -2608,6 +2608,7 @@ you can find here an almost complete list of the possible ones:
         # TODO: Add a new CreateAction for each stagedExec
         # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
         assert self.staged_setup.inputs_dir is not None
+        assert stagedExec.job_id is not None
 
         outputsDir = cast(
             "AbsPath",
@@ -2616,7 +2617,7 @@ you can find here an almost complete list of the possible ones:
 
         crate_action = CreateAction(
             self.crate,
-            "Run " + stagedExec.outputsDir.name + " of " + self.wf_file.id,
+            "Run " + stagedExec.job_id + " of " + self.wf_file.id,
             stagedExec.started,
             stagedExec.ended,
         )
@@ -2925,7 +2926,7 @@ you can find here an almost complete list of the possible ones:
         #
         # control_action = ControlAction(
         #     self.crate,
-        #     "Orchestration of " + self.wf_file.id + " for" + stagedExec.outputsDir,
+        #     "Orchestration of " + self.wf_file.id + " for" + stagedExec.job_id,
         # )
         # self.crate.add(control_action)
         # The "instrument" should be the step itself, not the workflow
@@ -2934,7 +2935,7 @@ you can find here an almost complete list of the possible ones:
         #
         # org_action = OrganizeAction(
         #     self.crate,
-        #     "Orchestration of " + stagedExec.outputsDir + " from " + self.wf_file.id,
+        #     "Orchestration of " + stagedExec.job_id + " from " + self.wf_file.id,
         #     stagedExec.started,
         #     stagedExec.ended,
         # )
