@@ -15,10 +15,10 @@ jobs:
         python-version: [ "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14", "pypy3.11" ]
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 100
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -58,7 +58,7 @@ jobs:
         run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
       - name: MyPy cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: '.mypy_cache/[0-9]*'
           key: mypy-${{ matrix.python-version }}
@@ -104,10 +104,10 @@ jobs:
         python-version: [ "3.7" ]
     name: Pre-commit python ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 100
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
@@ -141,7 +141,7 @@ jobs:
       - run: |
           pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
       - name: MyPy cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: '.mypy_cache/[0-9]*'
           key: mypy-${{ matrix.python-version }}
@@ -192,7 +192,7 @@ jobs:
       - name: Get analysis timestamp
         id: timestamp
         run: echo "timestamp=$(date -Is)" >> "$GITHUB_OUTPUT"
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         id: download
         with:
