@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -256,7 +256,7 @@ if [ -z "$envDir" ]; then
 
 	# Checking whether the modules were already installed
 	PYVER=$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))')
-	constraintsFile="$(readlink -f "${scriptDir}"/../constraints-${PYVER}.txt)"
+	constraintsFile="$(readlink -f "${scriptDir}"/../constraints/constraints-${PYVER}.txt)"
 	echo "Installing WfExS-backend python dependencies (${PYVER})"
 	PIP_INSTALL_PARAMS=( -r "${requirementsFile}" )
 	if [ -f "$constraintsFile" ] ; then

@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths-ignore:
       - 'constraints-*.txt'
+      - 'constraints/constraints-*.txt'
 
 jobs:
   pre-commit:
@@ -33,9 +34,10 @@ jobs:
           sudo apt update
           sudo apt install -y libxml2-dev libxslt-dev zlib1g-dev
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
+        id: install_reqs
         run: |
           pip install --upgrade pip wheel
-          constraints_file="constraints-${{ matrix.python-version }}.txt"
+          constraints_file="constraints/constraints-${{ matrix.python-version }}.txt"
           regen_constraints=
           if [ -f "$constraints_file" ] ; then
             at="$(git --no-pager log -p -1 "--format=tformat:%at" --no-patch -- "$constraints_file")"
@@ -54,9 +56,10 @@ jobs:
             grep -vF git+ "$constraints_file" > "$constraints_file"-relaxed
             pip install -r requirements.txt -c "$constraints_file"-relaxed
           fi
+          echo "constraints_file_relaxed=${constraints_file}-relaxed" >> "$GITHUB_OUTPUT"
       - name: 'Install development requirements'
         run: |
-          pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
+          pip install -r dev-requirements.txt -r mypy-requirements.txt -c ${{ steps.install_reqs.outputs.constraints_file_relaxed }}
       - name: MyPy cache
         uses: actions/cache@v6
         with:
@@ -78,14 +81,14 @@ jobs:
 #        continue-on-error: true
         uses: pilosus/action-pip-license-checker@v3.1.0
         with:
-          requirements: constraints-${{ matrix.python-version }}.txt
+          requirements: constraints/constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
 #        uses: pilosus/action-pip-license-checker@v1.0.0
 #        continue-on-error: true
         uses: pilosus/action-pip-license-checker@v3.1.0
         with:
-          requirements: constraints-${{ matrix.python-version }}.txt
+          requirements: constraints/constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
           exclude: '(?i)^(pylint|dulwich|docutils).*'
       - name: Print licences report
@@ -95,7 +98,7 @@ jobs:
         with:
           name: pre-commit-${{ matrix.python-version }}
           retention-days: 2
-          path: constraints-${{ matrix.python-version }}.txt
+          path: constraints/constraints-${{ matrix.python-version }}.txt
 
   pre-commit-22_04:
     runs-on: ubuntu-22.04
@@ -117,9 +120,10 @@ jobs:
             dev-requirements.txt
           architecture: x64
       - name: 'Install requirements (standard or constraints ${{ matrix.python-version }})'
+        id: install_reqs
         run: |
           pip install --upgrade pip wheel
-          constraints_file="constraints-${{ matrix.python-version }}.txt"
+          constraints_file="constraints/constraints-${{ matrix.python-version }}.txt"
           regen_constraints=
           if [ -f "$constraints_file" ] ; then
             at="$(git --no-pager log -p -1 "--format=tformat:%at" --no-patch -- "$constraints_file")"
@@ -138,8 +142,9 @@ jobs:
             grep -vF git+ "$constraints_file" > "$constraints_file"-relaxed
             pip install -r requirements.txt -c "$constraints_file"-relaxed
           fi
+          echo "constraints_file_relaxed=${constraints_file}-relaxed" >> "$GITHUB_OUTPUT"
       - run: |
-          pip install -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${{ matrix.python-version }}.txt-relaxed
+          pip install -r dev-requirements.txt -r mypy-requirements.txt -c ${{ steps.install_reqs.outputs.constraints_file_relaxed }}
       - name: MyPy cache
         uses: actions/cache@v6
         with:
@@ -161,14 +166,14 @@ jobs:
 #        continue-on-error: true
         uses: pilosus/action-pip-license-checker@v3.1.0
         with:
-          requirements: constraints-${{ matrix.python-version }}.txt
+          requirements: constraints/constraints-${{ matrix.python-version }}.txt
       - name: Check transitive dependencies licences
         id: license_check_report
 #        uses: pilosus/action-pip-license-checker@v1.0.0
 #        continue-on-error: true
         uses: pilosus/action-pip-license-checker@v3.1.0
         with:
-          requirements: constraints-${{ matrix.python-version }}.txt
+          requirements: constraints/constraints-${{ matrix.python-version }}.txt
           fail: 'StrongCopyleft'
           exclude: '(?i)^(pylint|dulwich).*'
       - name: Print licences report
@@ -178,7 +183,7 @@ jobs:
         with:
           name: pre-commit-${{ matrix.python-version }}
           retention-days: 2
-          path: constraints-${{ matrix.python-version }}.txt
+          path: constraints/constraints-${{ matrix.python-version }}.txt
 
   pull_request_changes:
     # Do this only when it is not a pull request validation
@@ -204,13 +209,13 @@ jobs:
         run: |
           skip=true
           if [ -d "${{steps.download.outputs.download-path}}" ] ; then
-            for con in "${{steps.download.outputs.download-path}}"/constraints-*.txt ; do
+            for con in "${{steps.download.outputs.download-path}}"/constraints/constraints-*.txt ; do
               case "$con" in
                 */constraints-\*.txt)
                   break
                   ;;
                 *)
-                  cp -p "$con" .
+                  cp -p "$con" constraints
                   skip=false
                   ;;
               esac
@@ -224,7 +229,7 @@ jobs:
         with:
           title: Updated constraints (triggered on ${{ steps.timestamp.outputs.timestamp }} by ${{ github.sha }})
           branch: create-pull-request/patch-constraints
-          add-paths: constraints-*.txt
+          add-paths: constraints/constraints-*.txt
           delete-branch: true
           commit-message: "[create-pull-request] Automatically commit updated contents (constraints)"
       - name: Check outputs

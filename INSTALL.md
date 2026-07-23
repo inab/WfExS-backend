@@ -257,7 +257,7 @@ python3 -m venv .pyWEenv
 source .pyWEenv/bin/activate
 pip install --require-virtualenv --upgrade pip wheel
 pyver="$(python -c 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")')"
-pip install --require-virtualenv -r requirements.txt -r dev-requirements.txt -r mypy-requirements.txt -c constraints-${pyver}.txt
+pip install --require-virtualenv -r requirements.txt -r dev-requirements.txt -r mypy-requirements.txt -c constraints/constraints-${pyver}.txt
 ```
 
 One of these dependencies is [pre-commit](https://pre-commit.com/), whose rules are declared at [.pre-commit-config.yaml](.pre-commit-config.yaml) (there are special versions of these rules for GitHub).
