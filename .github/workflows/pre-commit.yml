@@ -81,7 +81,7 @@ jobs:
         with:
           path: |
             pilosus-report.md
-          key: pilosus-report-${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
+          key: pilosus-report-${{ matrix.python-version }}_${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
       - name: Get transitive dependencies licences
         id: license_check_print_report
         if: steps.cache-pilosus-output-restore.outputs.cache-hit != 'true'
@@ -98,7 +98,7 @@ jobs:
         with:
           path: |
             pilosus-report.md
-          key: pilosus-report-${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
+          key: pilosus-report-${{ matrix.python-version }}_${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
       - name: Check transitive dependencies licences
         id: license_check_report
         if: steps.cache-pilosus-output-restore.outputs.cache-hit != 'true'
@@ -182,7 +182,7 @@ jobs:
         with:
           path: |
             pilosus-report.md
-          key: pilosus-report-${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
+          key: pilosus-report-${{ matrix.python-version }}_${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
       - name: Get transitive dependencies licences
         id: license_check_print_report
         if: steps.cache-pilosus-output-restore.outputs.cache-hit != 'true'
@@ -199,7 +199,7 @@ jobs:
         with:
           path: |
             pilosus-report.md
-          key: pilosus-report-${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
+          key: pilosus-report-${{ matrix.python-version }}_${{ hashFiles(steps.install_reqs.outputs.constraints_file_relaxed) }}
       - name: Check transitive dependencies licences
         id: license_check_report
         if: steps.cache-pilosus-output-restore.outputs.cache-hit != 'true'
