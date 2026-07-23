@@ -34,15 +34,15 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-bac
 	cd WfExS-backend && \
 	git sparse-checkout init --cone && \
 	PYVER=$(python -c 'import sys; import platform ; print("{}{}.{}".format("pypy" if platform.python_implementation() == "PyPy" else "", sys.version_info.major, sys.version_info.minor))') && \
-	git sparse-checkout set constraints-${PYVER}.txt \
+	git sparse-checkout set constraints/constraints-${PYVER}.txt \
 	  podman_containers_nokeyring.conf \
 	  container_recipes/basic-installer.bash \
 	  container_recipes/full-installer.bash && \
 	git checkout "${wfexs_checkout}" && \
-	grep -vF git+ constraints-${PYVER}.txt > constraints-${PYVER}.txt-relaxed && \
+	grep -vF git+ constraints/constraints-${PYVER}.txt > constraints/constraints-${PYVER}.txt-relaxed && \
 	. "${HOME}"/.cargo/env && \
 	pip install --no-cache-dir --upgrade pip wheel && \
-	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints-"${PYVER}".txt-relaxed && \
+	pip install --no-cache-dir "git+https://github.com/inab/WfExS-backend.git@${wfexs_checkout}" -c constraints/constraints-"${PYVER}".txt-relaxed && \
 	python -m compileall "$(python -c 'import sys; print(sys.prefix)')" && \
 	mv container_recipes/* /
 
