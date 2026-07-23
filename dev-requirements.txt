@@ -16,6 +16,10 @@ mccabe >= 0.7.0
 mypy >= 1.1.1
 mypy != 1.19.* ; implementation_name == 'pypy'
 mypy != 1.20.* ; implementation_name == 'pypy'
+mypy != 2.0.* ; implementation_name == 'pypy'
+mypy != 2.1.* ; implementation_name == 'pypy'
+mypy != 2.2.* ; implementation_name == 'pypy'
+mypy != 2.3.* ; implementation_name == 'pypy'
 # This one is now managed by the ReadTheDocs documentation
 # json-schema-for-humans >= 0.45.1
 pre-commit >= 2.17.0
