@@ -17,7 +17,9 @@ jsonpointer
 python-magic >= 0.4.27
 paramiko[ed25519]
 certifi
-crypt4gh
+crypt4gh ; platform_python_implementation!="PyPy"
+# This is needed because the wheel package at PyPI is incomplete
+crypt4gh @ git+https://github.com/EGA-archive/crypt4gh.git ; platform_python_implementation=="PyPy"
 bagit < 1.9.0 ; python_version < '3.8'
 bagit >= 1.9.0 ; python_version >= '3.8'
 ftputil
