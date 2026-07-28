@@ -25,7 +25,7 @@ mypy != 2.3.* ; implementation_name == 'pypy'
 pre-commit >= 2.17.0
 # Now black should be run only through pre-commit
 # as it depends on the binary release of black
-binary-black @ git+https://github.com/jmfernandez/pre-commit_mirrors-binary-black.git
+binary-black @ git+https://github.com/jmfernandez/pre-commit_mirrors-binary-black.git@26.5.1
 # pip-audit, depending on the minimal versions
 pip-audit < 2.6.2 ; python_version == '3.7'
 pip-audit >= 2.6.2 ; python_version >= '3.8'
