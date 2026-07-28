@@ -164,7 +164,6 @@ from .fetchers.trs_files import (
     GA4GHTRSFetcher,
 )
 
-
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -650,9 +649,9 @@ class WfExSBackend:
         self.baseWorkDir = baseWorkDir
         self.defaultParanoidMode = False
 
-        self._sngltn_fetcher: "MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher]" = (
-            dict()
-        )
+        self._sngltn_fetcher: (
+            "MutableMapping[Type[AbstractStatefulFetcher], AbstractStatefulFetcher]"
+        ) = dict()
         # scheme_catalog is created on first use
         self.scheme_catalog = SchemeCatalog()
         # cacheHandler is created on first use
@@ -671,9 +670,9 @@ class WfExSBackend:
         )
 
         # Registry of export plugins is created here
-        self._export_plugins: "MutableMapping[SymbolicName, Type[AbstractExportPlugin]]" = (
-            dict()
-        )
+        self._export_plugins: (
+            "MutableMapping[SymbolicName, Type[AbstractExportPlugin]]"
+        ) = dict()
 
         # All the export plugins should be added here
         self.findAndAddExportPluginsFromModuleName()
@@ -689,18 +688,18 @@ class WfExSBackend:
             key=lambda clz: (-clz.priority, clz.shortname),
         )
 
-        self.RECOGNIZED_TRS_DESCRIPTORS: "Mapping[TRS_Workflow_Descriptor, WorkflowType]" = dict(
-            map(lambda t: (t.trs_descriptor, t), self.WORKFLOW_ENGINES)
-        )
+        self.RECOGNIZED_TRS_DESCRIPTORS: (
+            "Mapping[TRS_Workflow_Descriptor, WorkflowType]"
+        ) = dict(map(lambda t: (t.trs_descriptor, t), self.WORKFLOW_ENGINES))
 
-        self.RECOGNIZED_SHORTNAME_DESCRIPTORS: "Mapping[TRS_Workflow_Descriptor, WorkflowType]" = dict(
-            map(lambda t: (t.shortname, t), self.WORKFLOW_ENGINES)
-        )
+        self.RECOGNIZED_SHORTNAME_DESCRIPTORS: (
+            "Mapping[TRS_Workflow_Descriptor, WorkflowType]"
+        ) = dict(map(lambda t: (t.shortname, t), self.WORKFLOW_ENGINES))
 
         # Registry of container factories is created here
-        self._container_factories: "MutableMapping[ContainerType, Type[ContainerFactory]]" = (
-            dict()
-        )
+        self._container_factories: (
+            "MutableMapping[ContainerType, Type[ContainerFactory]]"
+        ) = dict()
 
         # All the container factories should be added here
         self.findAndAddContainerFactoriesFromModuleName()
@@ -773,9 +772,9 @@ class WfExSBackend:
                         )
 
     def addWorkflowEngine(self, workflowEngineClazz: "Type[WorkflowEngine]") -> None:
-        self._workflow_engines[
-            workflowEngineClazz.MyWorkflowType().shortname
-        ] = workflowEngineClazz
+        self._workflow_engines[workflowEngineClazz.MyWorkflowType().shortname] = (
+            workflowEngineClazz
+        )
 
     def listWorkflowEngines(self) -> "Sequence[str]":
         return list(self._workflow_engines.keys())
@@ -880,9 +879,9 @@ class WfExSBackend:
     def addContainerFactory(
         self, containerFactoryClazz: "Type[ContainerFactory]"
     ) -> None:
-        self._container_factories[
-            containerFactoryClazz.ContainerType()
-        ] = containerFactoryClazz
+        self._container_factories[containerFactoryClazz.ContainerType()] = (
+            containerFactoryClazz
+        )
 
     def listImplementedContainerTypes(self) -> "Sequence[ContainerType]":
         return list(self._container_factories.keys())
@@ -1706,9 +1705,9 @@ class WfExSBackend:
                 offline=offline,
             )
             return CachedContent(
-                kind=ContentKind.Directory
-                if workflow_dir.is_dir()
-                else ContentKind.File,
+                kind=(
+                    ContentKind.Directory if workflow_dir.is_dir() else ContentKind.File
+                ),
                 path=workflow_dir,
                 metadata_array=[],
                 licences=tuple(),
@@ -2520,9 +2519,9 @@ class WfExSBackend:
 
             firstLicensedURI = LicensedURI(
                 uri=cached_content.metadata_array[0].uri,
-                licences=cached_content.licences
-                if keep_cache_licence
-                else firstURI.licences,
+                licences=(
+                    cached_content.licences if keep_cache_licence else firstURI.licences
+                ),
                 attributions=firstURI.attributions,
                 members=firstURI.members,
             )
@@ -2536,9 +2535,9 @@ class WfExSBackend:
             # but it should not.
             # Anyway, junking the security context
             firstLicensedURI = firstURI._replace(
-                licences=cached_content.licences
-                if keep_cache_licence
-                else firstURI.licences,
+                licences=(
+                    cached_content.licences if keep_cache_licence else firstURI.licences
+                ),
                 secContext=None,
             )
 

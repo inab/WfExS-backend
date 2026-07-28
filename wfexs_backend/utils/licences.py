@@ -71,7 +71,6 @@ from ..common import (
 
 from ..fetchers.http import HTTPFetcher
 
-
 # Licences
 AcceptableLicenceSchemes: "Final[Set[str]]" = {
     "ftp",
@@ -518,7 +517,9 @@ WorkflowHubShortLicencesList: "Final[Sequence[LicenceDescription]]" = [
 class LicenceMatcher:
     DEFAULT_SPDX_VERSION: "Final[str]" = "3.23"
 
-    SPDX_JSON_URL_TEMPLATE: "Final[str]" = "https://raw.githubusercontent.com/spdx/license-list-data/v{}/json/licenses.json"
+    SPDX_JSON_URL_TEMPLATE: "Final[str]" = (
+        "https://raw.githubusercontent.com/spdx/license-list-data/v{}/json/licenses.json"
+    )
 
     def __init__(
         self,

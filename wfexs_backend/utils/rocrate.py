@@ -218,7 +218,9 @@ class ContainerImageAdditionalType(enum.Enum):
 
 
 # This is needed to match ill implementations
-StrContainerAdditionalType2ContainerImageAdditionalType: "Final[Mapping[str, ContainerImageAdditionalType]]" = {
+StrContainerAdditionalType2ContainerImageAdditionalType: (
+    "Final[Mapping[str, ContainerImageAdditionalType]]"
+) = {
     ContainerImageAdditionalType.Docker.value: ContainerImageAdditionalType.Docker,
     CONTAINER_DOCKERIMAGE_SHORT: ContainerImageAdditionalType.Docker,
     ContainerImageAdditionalType.Singularity.value: ContainerImageAdditionalType.Singularity,
@@ -226,14 +228,18 @@ StrContainerAdditionalType2ContainerImageAdditionalType: "Final[Mapping[str, Con
 }
 
 
-ContainerType2AdditionalType: "Final[Mapping[ContainerType, ContainerImageAdditionalType]]" = {
+ContainerType2AdditionalType: (
+    "Final[Mapping[ContainerType, ContainerImageAdditionalType]]"
+) = {
     ContainerType.Docker: ContainerImageAdditionalType.Docker,
     ContainerType.Singularity: ContainerImageAdditionalType.Singularity,
     ContainerType.Podman: ContainerImageAdditionalType.Docker,
     # No one is available for Conda yet
 }
 
-AdditionalType2ContainerType: "Final[Mapping[ContainerImageAdditionalType, ContainerType]]" = {
+AdditionalType2ContainerType: (
+    "Final[Mapping[ContainerImageAdditionalType, ContainerType]]"
+) = {
     ContainerImageAdditionalType.Docker: ContainerType.Docker,
     ContainerImageAdditionalType.Singularity: ContainerType.Singularity,
 }
@@ -1589,17 +1595,21 @@ WHERE   {
                             taggedName=cast("URIType", taggedName),
                             localPath=located_snapshot,
                             metadataLocalPath=located_metadata,
-                            architecture=None
-                            if containerrow.source_container_arch is None
-                            else cast(
-                                "ProcessorArchitecture",
-                                str(containerrow.source_container_arch),
+                            architecture=(
+                                None
+                                if containerrow.source_container_arch is None
+                                else cast(
+                                    "ProcessorArchitecture",
+                                    str(containerrow.source_container_arch),
+                                )
                             ),
-                            operatingSystem=None
-                            if containerrow.source_container_platform is None
-                            else cast(
-                                "ContainerOperatingSystem",
-                                str(containerrow.source_container_platform),
+                            operatingSystem=(
+                                None
+                                if containerrow.source_container_platform is None
+                                else cast(
+                                    "ContainerOperatingSystem",
+                                    str(containerrow.source_container_platform),
+                                )
                             ),
                             fingerprint=cast("Fingerprint", fingerprint),
                             source_type=source_container_type,
@@ -1734,9 +1744,11 @@ WHERE   {
                 continue
 
             sch_output: "Sch_Output" = {
-                "c-l-a-s-s": ContentKind.Directory.name
-                if additional_type == "Dataset"
-                else ContentKind.File.name,
+                "c-l-a-s-s": (
+                    ContentKind.Directory.name
+                    if additional_type == "Dataset"
+                    else ContentKind.File.name
+                ),
                 "cardinality": cardinality,
             }
 
@@ -2448,9 +2460,11 @@ WHERE   {
                     payload_dir=payload_dir,
                     kindobj=ContentKind.File,
                     entity_type="secondary workflow component",
-                    entity_name=str(part_row.part_name)
-                    if part_row.part_name is not None
-                    else "PACO",  # FIXME
+                    entity_name=(
+                        str(part_row.part_name)
+                        if part_row.part_name is not None
+                        else "PACO"
+                    ),  # FIXME
                     the_file_size=part_row.file_size,
                     the_file_sha256=part_row.file_sha256,
                 )
@@ -2597,9 +2611,9 @@ WHERE   {
                 payload_dir=payload_dir,
                 kindobj=ContentKind.File,
                 entity_type="main workflow component",
-                entity_name=str(workflow_name)
-                if workflow_name is not None
-                else "PEPE",  # FIXME
+                entity_name=(
+                    str(workflow_name) if workflow_name is not None else "PEPE"
+                ),  # FIXME
                 the_file_size=langrow.file_size,
                 the_file_sha256=langrow.file_sha256,
             )
@@ -2649,12 +2663,14 @@ WHERE   {
                     dir=base_dir,
                     relPath=cast("RelPath", main_entity_relpath),
                     effectiveCheckout=repo.tag,
-                    langVersion=cast(
-                        "Union[EngineVersion, WFLangVersion]",
-                        str(langrow.programminglanguage_version),
-                    )
-                    if langrow.programminglanguage_version is not None
-                    else None,
+                    langVersion=(
+                        cast(
+                            "Union[EngineVersion, WFLangVersion]",
+                            str(langrow.programminglanguage_version),
+                        )
+                        if langrow.programminglanguage_version is not None
+                        else None
+                    ),
                     relPathFiles=rel_path_files,
                 )
 
@@ -2714,9 +2730,11 @@ WHERE   {
             matched_crate.mainentity,
             default_repo=str(matched_crate.wfhrepourl),
             public_name=public_name,
-            payload_dir=payload_dir
-            if reproducibility_level >= ReproducibilityLevel.Full
-            else None,
+            payload_dir=(
+                payload_dir
+                if reproducibility_level >= ReproducibilityLevel.Full
+                else None
+            ),
         )
 
         # At this point we know WfExS supports the workflow engine.
@@ -2761,9 +2779,11 @@ WHERE   {
                         g,
                         execrow.execution,
                         main_entity=matched_crate.mainentity,
-                        payload_dir=payload_dir
-                        if reproducibility_level >= ReproducibilityLevel.Full
-                        else None,
+                        payload_dir=(
+                            payload_dir
+                            if reproducibility_level >= ReproducibilityLevel.Full
+                            else None
+                        ),
                     )
                     # TODO: deal with more than one execution
                     if contresult is None:
@@ -2779,9 +2799,11 @@ WHERE   {
                         main_entity=matched_crate.mainentity,
                         default_licences=crate_licences,
                         public_name=public_name,
-                        payload_dir=payload_dir
-                        if reproducibility_level >= ReproducibilityLevel.Full
-                        else None,
+                        payload_dir=(
+                            payload_dir
+                            if reproducibility_level >= ReproducibilityLevel.Full
+                            else None
+                        ),
                     )
 
                     environment, cached_environment = self._parseEnvFromExecution(
@@ -2790,9 +2812,11 @@ WHERE   {
                         main_entity=matched_crate.mainentity,
                         default_licences=crate_licences,
                         public_name=public_name,
-                        payload_dir=payload_dir
-                        if reproducibility_level >= ReproducibilityLevel.Full
-                        else None,
+                        payload_dir=(
+                            payload_dir
+                            if reproducibility_level >= ReproducibilityLevel.Full
+                            else None
+                        ),
                     )
 
                     outputs = self._parseOutputsFromExecution(
@@ -2820,9 +2844,11 @@ WHERE   {
             contresult = self._parseContainersFromWorkflow(
                 g,
                 main_entity=matched_crate.mainentity,
-                payload_dir=payload_dir
-                if reproducibility_level >= ReproducibilityLevel.Full
-                else None,
+                payload_dir=(
+                    payload_dir
+                    if reproducibility_level >= ReproducibilityLevel.Full
+                    else None
+                ),
             )
             # TODO: deal with more than one execution
             if contresult is not None:
@@ -2833,9 +2859,11 @@ WHERE   {
                 main_entity=matched_crate.mainentity,
                 default_licences=crate_licences,
                 public_name=public_name,
-                payload_dir=payload_dir
-                if reproducibility_level >= ReproducibilityLevel.Full
-                else None,
+                payload_dir=(
+                    payload_dir
+                    if reproducibility_level >= ReproducibilityLevel.Full
+                    else None
+                ),
             )
 
             environment, cached_environment = self._parseEnvFromMainEntity(
@@ -2843,9 +2871,11 @@ WHERE   {
                 main_entity=matched_crate.mainentity,
                 default_licences=crate_licences,
                 public_name=public_name,
-                payload_dir=payload_dir
-                if reproducibility_level >= ReproducibilityLevel.Full
-                else None,
+                payload_dir=(
+                    payload_dir
+                    if reproducibility_level >= ReproducibilityLevel.Full
+                    else None
+                ),
             )
 
         if len(outputs) == 0:

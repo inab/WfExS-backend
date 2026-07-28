@@ -1472,9 +1472,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
         workflow_dir: "pathlib.Path",
         parents: "Tuple[str, ...]" = tuple(),
     ) -> "Mapping[Tuple[str, ...], MutableSequence[pathlib.Path]]":
-        found_params: "MutableMapping[Tuple[str, ...], MutableSequence[pathlib.Path]]" = (
-            dict()
-        )
+        found_params: (
+            "MutableMapping[Tuple[str, ...], MutableSequence[pathlib.Path]]"
+        ) = dict()
         for rel_key, val in params.items():
             if isinstance(val, list):
                 for elem in val:
@@ -2300,9 +2300,7 @@ def wfexs_allParams()
 }}
 
 wfexs_allParams()
-""".format(
-                    allParamsFile.as_posix()
-                ),
+""".format(allParamsFile.as_posix()),
                 file=fPC,
             )
 
@@ -2593,10 +2591,10 @@ STDERR
         try:
             inspect_result = json.loads(inspect_stdout)
             for process_decl in inspect_result.get("processes", []):
-                proc_cont_mapping[
-                    process_decl["name"]
-                ] = self._genDockSingContainerTaggedName(
-                    process_decl["container"], registries
+                proc_cont_mapping[process_decl["name"]] = (
+                    self._genDockSingContainerTaggedName(
+                        process_decl["container"], registries
+                    )
                 )
 
         except json.JSONDecodeError as jde:

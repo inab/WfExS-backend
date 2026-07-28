@@ -177,7 +177,9 @@ class CWLWorkflowEngine(WorkflowEngine):
 
     PODMAN_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20210921111717")
     NO_WRAPPER_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20210921111717")
-    CWLTOOL_MAX_PYVER: "Sequence[Tuple[Optional[int], Optional[int], EngineVersion]]" = [
+    CWLTOOL_MAX_PYVER: (
+        "Sequence[Tuple[Optional[int], Optional[int], EngineVersion]]"
+    ) = [
         (3, None, NO_WRAPPER_CWLTOOL_VERSION),
         (3, 6, cast("EngineVersion", "3.1.20220116183622")),
         (None, None, DEFAULT_CWLTOOL_VERSION),
@@ -1220,9 +1222,9 @@ STDERR
                         inputId = cwl_yaml_input_id
 
                     if inputId not in cwl_dict_inputs:
-                        cwl_dict_inputs[
-                            cast("SymbolicParamName", inputId)
-                        ] = cwl_yaml_input
+                        cwl_dict_inputs[cast("SymbolicParamName", inputId)] = (
+                            cwl_yaml_input
+                        )
 
             # Create augmentedInputs properly
             augmentedInputs = self.augmentCWLInputs(matInputs, cwl_dict_inputs)
@@ -1300,9 +1302,9 @@ STDERR
                                         "--singularity",
                                     ]
                                 )
-                                instEnv[
-                                    "CWL_SINGULARITY_CACHE"
-                                ] = matWfEng.containers_path.as_posix()
+                                instEnv["CWL_SINGULARITY_CACHE"] = (
+                                    matWfEng.containers_path.as_posix()
+                                )
                                 instEnv["SINGULARITY_CONTAIN"] = "1"
                                 instEnv["APPTAINER_CONTAIN"] = "1"
                                 if self.writable_containers:
@@ -1714,9 +1716,11 @@ STDERR
                             "ERROR: Input {} has value types {} for value of type {}, and this code does not know how to handle it (check types)".format(
                                 name,
                                 value_types,
-                                value.kind
-                                if isinstance(value, MaterializedContent)
-                                else value.__class__.__name__,
+                                (
+                                    value.kind
+                                    if isinstance(value, MaterializedContent)
+                                    else value.__class__.__name__
+                                ),
                             )
                         )
 

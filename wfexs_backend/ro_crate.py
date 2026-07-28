@@ -807,23 +807,21 @@ class WorkflowRunROCrate:
         # Where should be place generated temporary files?
         self.tempdir = tempdir
 
-        self.cached_cts: "MutableMapping[ContainerType, rocrate.model.softwareapplication.SoftwareApplication]" = (
-            {}
-        )
+        self.cached_cts: "MutableMapping[ContainerType, rocrate.model.softwareapplication.SoftwareApplication]" = ({})
 
         # This is used to avoid including twice the very same value
         # in the RO-Crate
         self._item_hash: "MutableMapping[bytes, rocrate.model.entity.Entity]" = {}
         self._added_container_images: "MutableMapping[int, ContainerImage]" = {}
-        self._wf_to_containers: "MutableMapping[str, MutableSequence[ContainerImage]]" = (
-            {}
-        )
-        self._wf_to_operational_containers: "MutableMapping[str, MutableSequence[ContainerImage]]" = (
-            {}
-        )
-        self._wf_to_container_sa: "MutableMapping[str, rocrate.model.softwareapplication.SoftwareApplication]" = (
-            {}
-        )
+        self._wf_to_containers: (
+            "MutableMapping[str, MutableSequence[ContainerImage]]"
+        ) = {}
+        self._wf_to_operational_containers: (
+            "MutableMapping[str, MutableSequence[ContainerImage]]"
+        ) = {}
+        self._wf_to_container_sa: (
+            "MutableMapping[str, rocrate.model.softwareapplication.SoftwareApplication]"
+        ) = {}
 
         if len(licences) == 0:
             licences = [NoLicenceDescription]
@@ -937,9 +935,11 @@ class WorkflowRunROCrate:
             localWorkflow,
             lang=self.compLang,
             the_uri=workflow_pid,
-            the_description="Workflow Entrypoint"
-            if ran_is_original
-            else "Unconsolidated Workflow Entrypoint",
+            the_description=(
+                "Workflow Entrypoint"
+                if ran_is_original
+                else "Unconsolidated Workflow Entrypoint"
+            ),
             the_weng_crate=self.weng_crate,
             materialized_engine=materializedEngine,
             main=ran_is_original,
@@ -1062,9 +1062,9 @@ class WorkflowRunROCrate:
     def _process_licences(
         self, licdescs: "Sequence[LicenceDescription]"
     ) -> "Sequence[Union[str, rocrate.model.creativework.CreativeWork]]":
-        RO_licences: "MutableSequence[Union[str, rocrate.model.creativework.CreativeWork]]" = (
-            []
-        )
+        RO_licences: (
+            "MutableSequence[Union[str, rocrate.model.creativework.CreativeWork]]"
+        ) = []
         for licdesc in licdescs:
             RO_licences.append(self._process_licence(licdesc))
 
@@ -1092,9 +1092,9 @@ class WorkflowRunROCrate:
                     properties={
                         "identifier": licdesc.short,
                         "name": licdesc.description,
-                        "url": licdesc.uris[0]
-                        if len(licdesc.uris) == 1
-                        else licdesc.uris,
+                        "url": (
+                            licdesc.uris[0] if len(licdesc.uris) == 1 else licdesc.uris
+                        ),
                     },
                 )
             else:
@@ -1222,9 +1222,9 @@ you can find here an almost complete list of the possible ones:
                             self.crate, identifier=container_type_metadata.sa_id
                         )
                     )
-                    container_type[
-                        "applicationCategory"
-                    ] = container_type_metadata.ct_applicationCategory
+                    container_type["applicationCategory"] = (
+                        container_type_metadata.ct_applicationCategory
+                    )
                     container_type["name"] = container.type.value
                     if self.containerEngineVersion is not None:
                         container_type["softwareVersion"] = self.containerEngineVersion
@@ -1240,7 +1240,9 @@ you can find here an almost complete list of the possible ones:
                     self._wf_to_container_sa[the_workflow_crate.id] = crate_cont_type
 
                 # And the container source type
-                crate_source_cont_type: "Optional[rocrate.model.softwareapplication.SoftwareApplication]"
+                crate_source_cont_type: (
+                    "Optional[rocrate.model.softwareapplication.SoftwareApplication]"
+                )
                 if (
                     container.source_type is None
                     or container.source_type == container.type
@@ -1259,9 +1261,9 @@ you can find here an almost complete list of the possible ones:
                                 identifier=container_source_type_metadata.sa_id,
                             )
                         )
-                        container_source_type[
-                            "applicationCategory"
-                        ] = container_source_type_metadata.ct_applicationCategory
+                        container_source_type["applicationCategory"] = (
+                            container_source_type_metadata.ct_applicationCategory
+                        )
                         container_source_type["name"] = container.source_type.value
 
                         crate_source_cont_type = self.crate.add(container_source_type)
@@ -1347,9 +1349,9 @@ you can find here an almost complete list of the possible ones:
                         container_consolidate_action
                     )
                     container_consolidate_action["object"] = software_container
-                    container_consolidate_action[
-                        "result"
-                    ] = materialized_software_container
+                    container_consolidate_action["result"] = (
+                        materialized_software_container
+                    )
                     container_consolidate_action.append_to(
                         "instrument", crate_cont_type, compact=True
                     )
@@ -1403,9 +1405,9 @@ you can find here an almost complete list of the possible ones:
                     software_container["softwareRequirements"] = crate_cont_type
 
                     # Describing the the kind of container
-                    software_container[
-                        "applicationCategory"
-                    ] = container_type_metadata.applicationCategory
+                    software_container["applicationCategory"] = (
+                        container_type_metadata.applicationCategory
+                    )
 
                     crate_cont = self.crate.add(software_container)
 
@@ -1580,9 +1582,9 @@ you can find here an almost complete list of the possible ones:
                     assert in_item.contentWithURIs is not None
 
                     formal_parameter["contentWithURIs"] = True
-                    formal_parameter[
-                        "encodingFormat"
-                    ] = in_item.contentWithURIs.encodingFormat
+                    formal_parameter["encodingFormat"] = (
+                        in_item.contentWithURIs.encodingFormat
+                    )
                     formal_parameter["headerRows"] = in_item.contentWithURIs.setup[
                         "headerRows"
                     ]
@@ -1622,9 +1624,9 @@ you can find here an almost complete list of the possible ones:
                         )  # local source
                         itemInURISource = itemInValues.licensed_uri.uri  # uri source
 
-                        itemInURILicences: "Optional[MutableSequence[LicenceDescription]]" = (
-                            None
-                        )
+                        itemInURILicences: (
+                            "Optional[MutableSequence[LicenceDescription]]"
+                        ) = None
                         if itemInValues.licensed_uri.licences is not None:
                             itemInURILicences = []
                             for licence in itemInValues.licensed_uri.licences:
@@ -1691,9 +1693,9 @@ you can find here an almost complete list of the possible ones:
                                     do_attach=in_item.disclosable
                                     and itemInValues.clonable,
                                 )
-                                crate_extrapolated_file[
-                                    "description"
-                                ] = "This file is an extrapolation of other. The original file contained URIs which were fetched, and this file, where URIs where substituted by the local paths, was generated and used for workflow execution"
+                                crate_extrapolated_file["description"] = (
+                                    "This file is an extrapolation of other. The original file contained URIs which were fetched, and this file, where URIs where substituted by the local paths, was generated and used for workflow execution"
+                                )
 
                                 # Now, related the file with the extrapolated
                                 # contents to the original file
@@ -1864,14 +1866,16 @@ you can find here an almost complete list of the possible ones:
                         )
 
                         for secInput in in_item.secondaryInputs:
-                            sec_crate_elem: "Union[FixedFile, FixedDataset, Collection, None]"
+                            sec_crate_elem: (
+                                "Union[FixedFile, FixedDataset, Collection, None]"
+                            )
 
                             secInputLocalSource = secInput.local  # local source
                             secInputURISource = secInput.licensed_uri.uri  # uri source
                             # Properly curate secondary input licences
-                            secInputURILicences: "Optional[MutableSequence[LicenceDescription]]" = (
-                                None  # licences
-                            )
+                            secInputURILicences: (
+                                "Optional[MutableSequence[LicenceDescription]]"
+                            ) = None  # licences
 
                             if secInput.licensed_uri.licences is not None:
                                 secInputURILicences = []
@@ -2154,12 +2158,16 @@ you can find here an almost complete list of the possible ones:
                     the_file_crate = self._add_file_to_crate(
                         the_path=pathlib.Path(the_file.path),
                         the_uri=cast("Optional[URIType]", the_item_uri),
-                        the_name=None
-                        if the_name is None
-                        else cast("RelPath", the_name + the_file.name),
-                        the_alternate_name=None
-                        if the_alternate_name is None
-                        else cast("RelPath", the_alternate_name + the_file.name),
+                        the_name=(
+                            None
+                            if the_name is None
+                            else cast("RelPath", the_name + the_file.name)
+                        ),
+                        the_alternate_name=(
+                            None
+                            if the_alternate_name is None
+                            else cast("RelPath", the_alternate_name + the_file.name)
+                        ),
                         the_size=the_file.stat().st_size,
                         do_attach=do_attach,
                     )
@@ -2175,12 +2183,16 @@ you can find here an almost complete list of the possible ones:
                     ) = self._add_directory_as_dataset(
                         the_path=pathlib.Path(the_file.path),
                         the_uri=cast("Optional[URIType]", the_item_uri),
-                        the_name=None
-                        if the_name is None
-                        else cast("RelPath", the_name + the_file.name),
-                        the_alternate_name=None
-                        if the_alternate_name is None
-                        else cast("RelPath", the_alternate_name + the_file.name),
+                        the_name=(
+                            None
+                            if the_name is None
+                            else cast("RelPath", the_name + the_file.name)
+                        ),
+                        the_alternate_name=(
+                            None
+                            if the_alternate_name is None
+                            else cast("RelPath", the_alternate_name + the_file.name)
+                        ),
                         do_attach=do_attach,
                     )
                     if the_dir_crate is not None:
@@ -2430,9 +2442,7 @@ you can find here an almost complete list of the possible ones:
             the_workflow_crate["url"] = wf_url
 
         if the_workflow.relPathFiles:
-            rel_entities: "MutableSequence[Union[FixedFile, rocrate.model.creativework.CreativeWork, FixedDataset]]" = (
-                []
-            )
+            rel_entities: "MutableSequence[Union[FixedFile, rocrate.model.creativework.CreativeWork, FixedDataset]]" = ([])
             for rel_file in the_workflow.relPathFiles:
                 if rel_file == the_workflow.relPath:
                     # Ignore itself, so it is not overwritten

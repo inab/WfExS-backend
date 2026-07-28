@@ -140,9 +140,7 @@ STDOUT
 ======
 STDERR
 ======
-{}""".format(
-                v_retval, payload, v_stderr
-            )
+{}""".format(v_retval, payload, v_stderr)
             raise ContainerEngineException(errstr)
 
         try:
@@ -252,9 +250,9 @@ STDERR
 
         fetch_metadata = True
         trusted_copy = False
-        local_container_paths: "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]" = (
-            None
-        )
+        local_container_paths: (
+            "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]"
+        ) = None
         imageSignature: "Optional[Fingerprint]" = None
         image_id: "Optional[Fingerprint]" = None
         manifestsImageSignature: "Optional[Fingerprint]" = None
@@ -348,9 +346,7 @@ STDOUT
 ======
 STDERR
 ======
-{}""".format(
-                    dockerTag, d_retval, d_out_v, d_err_v
-                )
+{}""".format(dockerTag, d_retval, d_out_v, d_err_v)
                 self.logger.error(errstr)
                 raise ContainerEngineException(errstr)
 
@@ -384,9 +380,7 @@ STDERR
 ======
 STDERR
 ======
-{}""".format(
-                    dockerTag, d_retval, d_err_v
-                )
+{}""".format(dockerTag, d_retval, d_err_v)
 
                 # Removing partial dumps
                 if os.path.exists(tmpContainerPath):
@@ -572,9 +566,11 @@ STDERR
                         localPath=containerPath,
                         registries=container.registries,
                         metadataLocalPath=containerPathMeta,
-                        source_type=container.source_type
-                        if isinstance(container, Container)
-                        else container.type,
+                        source_type=(
+                            container.source_type
+                            if isinstance(container, Container)
+                            else container.type
+                        ),
                         image_signature=imageSignature_in_metadata,
                     )
         except Exception as e:
@@ -602,9 +598,7 @@ STDOUT
 ======
 STDERR
 ======
-{}""".format(
-                dockerTag, d_retval, d_out_v, d_err_v
-            )
+{}""".format(dockerTag, d_retval, d_out_v, d_err_v)
             raise ContainerEngineException(errstr)
 
         # Parsing the output from docker inspect
@@ -637,9 +631,7 @@ STDOUT
 ======
 STDERR
 ======
-{}""".format(
-                    dockerTag, d_retval, d_out_v, d_err_v
-                )
+{}""".format(dockerTag, d_retval, d_out_v, d_err_v)
                 self.logger.error(errstr)
                 raise ContainerEngineException(errstr)
 

@@ -52,7 +52,6 @@ from . import (
 )
 from .http import HTTPFetcher
 
-
 PRIDE_PROJECT_SCHEME = "pride.project"
 PRIDE_PROJECTS_REST = "https://www.ebi.ac.uk/pride/ws/archive/v2/projects/"
 

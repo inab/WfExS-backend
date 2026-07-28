@@ -207,9 +207,9 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
                         )
                     ),
                 ),
-                licences=tuple(licences)
-                if len(licences) > 0
-                else self.default_licences,
+                licences=(
+                    tuple(licences) if len(licences) > 0 else self.default_licences
+                ),
             )
 
             cached_uri = self.wfexs.cacheFetch(

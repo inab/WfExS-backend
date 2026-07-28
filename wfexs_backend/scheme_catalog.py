@@ -208,9 +208,11 @@ class SchemeCatalog:
             )
             the_handler = DocumentedProtocolFetcher(
                 fetcher=inst_handler.fetch,
-                description=inst_handler.description
-                if handler.description is None
-                else handler.description,
+                description=(
+                    inst_handler.description
+                    if handler.description is None
+                    else handler.description
+                ),
                 priority=handler.priority,
             )
         elif isinstance(handler, DocumentedProtocolFetcher) and isinstance(
@@ -453,9 +455,9 @@ class SchemeCatalog:
         or instantiates stateful scheme handlers (aka "stateful fetchers")
         """
         instSchemeHandlers = dict()
-        fetchers_mapping: "MutableMapping[Type[AbstractStatefulFetcher], DocumentedProtocolFetcher]" = (
-            dict()
-        )
+        fetchers_mapping: (
+            "MutableMapping[Type[AbstractStatefulFetcher], DocumentedProtocolFetcher]"
+        ) = dict()
         repo_fetchers: "MutableSequence[AbstractSchemeRepoFetcher]" = []
         if fetchers_setup_block is None:
             fetchers_setup_block = dict()
@@ -484,14 +486,16 @@ class SchemeCatalog:
                         if instSchemeInstance is not None:
                             instSchemeHandler = DocumentedProtocolFetcher(
                                 fetcher=instSchemeInstance.fetch,
-                                description=instSchemeInstance.description
-                                if schemeHandler.description is None
-                                else schemeHandler.description,
+                                description=(
+                                    instSchemeInstance.description
+                                    if schemeHandler.description is None
+                                    else schemeHandler.description
+                                ),
                                 priority=schemeHandler.priority,
                             )
-                            fetchers_mapping[
-                                schemeHandler.fetcher_class
-                            ] = instSchemeHandler
+                            fetchers_mapping[schemeHandler.fetcher_class] = (
+                                instSchemeHandler
+                            )
                             if isinstance(
                                 instSchemeInstance, AbstractSchemeRepoFetcher
                             ):

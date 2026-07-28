@@ -310,9 +310,7 @@ class RemoteRepo(NamedTuple):
         return (
             self.checkout
             if self.checkout is not None
-            else self.tag
-            if self.tag is not None
-            else cast("RepoTag", "")
+            else self.tag if self.tag is not None else cast("RepoTag", "")
         )
 
 

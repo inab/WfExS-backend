@@ -1104,9 +1104,9 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                 # Engines like Nextflow
                 iEntry = 0
                 for entry in os.scandir(outputsDir):
-                    matValuesDef: "Optional[MutableSequence[AbstractGeneratedContent]]" = (
-                        None
-                    )
+                    matValuesDef: (
+                        "Optional[MutableSequence[AbstractGeneratedContent]]"
+                    ) = None
                     guessedOutputKindDef: "ContentKind"
                     # We are avoiding to enter in loops around '.' and '..'
                     if entry.is_file():

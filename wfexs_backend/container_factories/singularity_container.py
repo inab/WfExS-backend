@@ -506,9 +506,9 @@ STDERR
 
         fetch_metadata = True
         trusted_copy = False
-        local_container_paths: "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]" = (
-            None
-        )
+        local_container_paths: (
+            "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]"
+        ) = None
         imageSignature: "Optional[Fingerprint]" = None
         fingerprint: "Optional[Fingerprint]" = None
         if not force:
@@ -950,9 +950,11 @@ STDERR
                         localPath=containerPath,
                         registries=container.registries,
                         metadataLocalPath=containerPathMeta,
-                        source_type=container.source_type
-                        if isinstance(container, Container)
-                        else container.type,
+                        source_type=(
+                            container.source_type
+                            if isinstance(container, Container)
+                            else container.type
+                        ),
                         image_signature=imageSignature_in_metadata,
                     )
 

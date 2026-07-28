@@ -84,7 +84,6 @@ from .abstract_token_sandboxed_export import (
     AbstractTokenSandboxedExportPlugin,
 )
 
-
 # These are the supported JSON Schema validators
 INTROSPECT_VALIDATOR_MAPPER: "Mapping[str, Type[jsonschema.validators._Validator]]" = {
     j_valid.META_SCHEMA["$schema"]: cast(

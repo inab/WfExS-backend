@@ -433,7 +433,7 @@ def get_maximum_file_descriptors() -> "int":
     """
     # These two pylint annotations are needed to avoid a false positive
     # while running using pypy
-    (__, hard_limit) = resource.getrlimit(
+    __, hard_limit = resource.getrlimit(
         resource.RLIMIT_NOFILE  # pylint: disable=no-member
     )
 

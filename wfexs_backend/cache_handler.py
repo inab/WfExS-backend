@@ -511,9 +511,11 @@ class CacheHandler:
                 link_or_copy(tempCachedFilename, newFinalCachedFilename)
 
         return (
-            pathlib.Path(newFinalCachedFilename)
-            if newFinalCachedFilename is not None
-            else None,
+            (
+                pathlib.Path(newFinalCachedFilename)
+                if newFinalCachedFilename is not None
+                else None
+            ),
             fingerprint,
         )
 
@@ -537,9 +539,11 @@ class CacheHandler:
         if isinstance(the_remote_file, LicensedURI):
             the_remote_uri = the_remote_file.uri
             the_licences = tuple(
-                licence.get_uri()
-                if isinstance(licence, LicenceDescription)
-                else licence
+                (
+                    licence.get_uri()
+                    if isinstance(licence, LicenceDescription)
+                    else licence
+                )
                 for licence in the_remote_file.licences
             )
         elif isinstance(the_remote_file, urllib.parse.ParseResult):
@@ -833,9 +837,11 @@ class CacheHandler:
                         the_remote_file = a_remote_file.uri
                         attachedSecContext = a_remote_file.secContext
                         the_licences = tuple(
-                            a_licence.get_uri()
-                            if isinstance(a_licence, LicenceDescription)
-                            else a_licence
+                            (
+                                a_licence.get_uri()
+                                if isinstance(a_licence, LicenceDescription)
+                                else a_licence
+                            )
                             for a_licence in a_remote_file.licences
                         )
                     else:
@@ -1017,9 +1023,9 @@ class CacheHandler:
                             pfr = schemeHandler.fetcher(
                                 the_remote_file,
                                 tempCachedFilename,
-                                secContext=usableSecContext
-                                if usableSecContext
-                                else None,
+                                secContext=(
+                                    usableSecContext if usableSecContext else None
+                                ),
                                 explicit_redirects=True,
                             )
                             inputKind = pfr.kind_or_resolved

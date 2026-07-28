@@ -108,7 +108,6 @@ from ..utils.contents import (
 
 from ..utils.digests import ComputeDigestFromFile
 
-
 # A couple of constants needed for several fixes
 DOCKER_SCHEME: "Final[str]" = "docker"
 DOCKER_URI_PREFIX: "Final[str]" = DOCKER_SCHEME + ":"
@@ -435,9 +434,9 @@ class ContainerCacheHandler:
             cast("URIType", container.origTaggedName)
         )
 
-        staged_container_filenames: "MutableSequence[Tuple[pathlib.Path, pathlib.Path]]" = (
-            []
-        )
+        staged_container_filenames: (
+            "MutableSequence[Tuple[pathlib.Path, pathlib.Path]]"
+        ) = []
         for container_filename in container_filenames:
             container_filename_meta = container_filename + META_JSON_POSTFIX
 

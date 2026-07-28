@@ -31,7 +31,7 @@ from typing import (
 
 
 import openpyxl
-import xlrd2  # type:ignore
+import xlrd2  # type: ignore
 import yaml
 
 if TYPE_CHECKING:

@@ -104,27 +104,15 @@ repos:
       - id: hadolint
         args: [ -t, warning]
 
-  - repo: local
+  - repo: https://github.com/jmfernandez/pre-commit_mirrors-binary-black.git
+    rev: "26.5.1"
     hooks:
       - id: black
         name: black_apply
-        language: system
-        types_or:
-          - python
-          - pyi
         exclude: "^[^/]*env/|development-[^/]*/|docs/"
-        require_serial: true
-        entry: black
         stages: [manual]
       - id: black
-        name: black
-        language: system
-        types_or:
-          - python
-          - pyi
         exclude: "^[^/]*env/|development-[^/]*/|docs/"
-        require_serial: true
-        entry: black
         args: [--diff, --check]
 
 #  - repo: https://github.com/jmfernandez/citation-cff-checker.git

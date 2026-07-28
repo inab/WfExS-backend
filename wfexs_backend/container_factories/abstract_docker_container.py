@@ -101,7 +101,6 @@ from . import (
 )
 from ..utils.digests import ComputeDigestFromObject
 
-
 DOCKER_PROTO = DOCKER_URI_PREFIX + "//"
 
 

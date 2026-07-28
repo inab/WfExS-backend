@@ -56,7 +56,6 @@ from wfexs_backend.common import (
     NoLicenceDescription,
 )
 
-
 nextcloud_params = pytest.mark.nextcloud_params()
 
 logger = logging.getLogger(__name__)

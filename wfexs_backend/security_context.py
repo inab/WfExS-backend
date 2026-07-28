@@ -91,9 +91,9 @@ class SecurityContextVault(abc.ABC):
         )
 
         creds_config_by_name: "MutableMapping[str, SecurityContextConfig]" = dict()
-        creds_config_by_prefix: "MutableMapping[str, MutableSequence[Tuple[str, SecurityContextConfig]]]" = (
-            dict()
-        )
+        creds_config_by_prefix: (
+            "MutableMapping[str, MutableSequence[Tuple[str, SecurityContextConfig]]]"
+        ) = dict()
 
         if creds_config is not None:
             valErrors = config_validate(creds_config, self.SECURITY_CONTEXT_SCHEMA)
