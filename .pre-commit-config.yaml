@@ -104,8 +104,8 @@ repos:
       - id: hadolint
         args: [ -t, warning]
 
-  - repo: https://github.com/ambv/black.git
-    rev: 23.3.0
+  - repo: https://github.com/jmfernandez/pre-commit_mirrors-binary-black.git
+    rev: "26.5.1"
     hooks:
       - id: black
         name: black_apply

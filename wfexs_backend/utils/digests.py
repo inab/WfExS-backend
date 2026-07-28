@@ -60,8 +60,7 @@ if TYPE_CHECKING:
     RawFingerprintMethod: TypeAlias = Callable[[str, bytes], bytes]
 
     class Hexable(Protocol):
-        def hex(self) -> "str":
-            ...
+        def hex(self) -> "str": ...
 
 
 from ..common import (

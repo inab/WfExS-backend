@@ -401,9 +401,9 @@ class GitFetcher(AbstractSchemeRepoFetcher):
 
         # These are the usual URIs which can be understood by pip
         # See https://pip.pypa.io/en/stable/cli/pip_install/#git
-        found_params: "Optional[Tuple[RemoteRepo, Sequence[str], Sequence[RepoTag]]]" = (
-            None
-        )
+        found_params: (
+            "Optional[Tuple[RemoteRepo, Sequence[str], Sequence[RepoTag]]]"
+        ) = None
         try:
             if parsed_wf_url.scheme == cls.GITHUB_SCHEME:
                 repoType = RepoType.Git

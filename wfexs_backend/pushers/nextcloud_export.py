@@ -727,9 +727,9 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
                 remote_relpath,
                 email_addresses,
                 expire_in=expire_in,
-                licences=tuple(licences)
-                if len(licences) > 0
-                else self.default_licences,
+                licences=(
+                    tuple(licences) if len(licences) > 0 else self.default_licences
+                ),
             ),
             email_addresses,
             expire_in,

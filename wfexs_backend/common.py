@@ -562,9 +562,11 @@ class ExpectedOutput(NamedTuple):
     def _unmarshall(cls, **obj: "Any") -> "ExpectedOutput":
         return cls(
             name=obj["name"],
-            kind=ContentKind(obj["c-l-a-s-s"])
-            if "c-l-a-s-s" in obj
-            else ContentKind.File,
+            kind=(
+                ContentKind(obj["c-l-a-s-s"])
+                if "c-l-a-s-s" in obj
+                else ContentKind.File
+            ),
             preferredFilename=obj.get("preferredName"),
             fillFrom=obj.get("fillFrom"),
             glob=obj.get("glob"),

@@ -665,9 +665,11 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
             upstream_repo = RemoteRepo(
                 repo_url=cast("RepoURL", origin),
                 rel_path=cast("Optional[RelPath]", res_doc["metadata"].get("path")),
-                repo_type=RepoType.Git
-                if ("git" in origin) or ("bitbucket" in origin)
-                else None,
+                repo_type=(
+                    RepoType.Git
+                    if ("git" in origin) or ("bitbucket" in origin)
+                    else None
+                ),
             )
 
         return MaterializedRepo(

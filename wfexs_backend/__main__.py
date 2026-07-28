@@ -292,9 +292,11 @@ def genParserSub(
             dest="workflowConfigFilename",
             required=not_restage,
             type=PathArgType,
-            help="Configuration file, describing workflow and inputs"
-            if not_restage
-            else "Optional configuration file, describing some inputs which will replace the base, original ones",
+            help=(
+                "Configuration file, describing workflow and inputs"
+                if not_restage
+                else "Optional configuration file, describing some inputs which will replace the base, original ones"
+            ),
         )
 
         if not not_restage:
@@ -1041,16 +1043,14 @@ def processStagedWorkdirCommand(
                     is_damaged = wfSetup.is_damaged
                     is_encrypted = wfSetup.is_encrypted
 
-                print(
-                    f"""=> Instance {instance_id} ({nickname})
+                print(f"""=> Instance {instance_id} ({nickname})
 * Id: {instance_id}
 * Nickname: {nickname}
 * Created: {creation.astimezone().isoformat()}
 * Secure (encrypted)? {is_encrypted}
 {repr(mStatus)}
 * Is damaged? {is_damaged}
-"""
-                )
+""")
     elif args.staged_workdir_command in (
         WfExS_Staged_WorkDir_Commands.CreateStagedROCrate,
         WfExS_Staged_WorkDir_Commands.CreateProvenanceROCrate,

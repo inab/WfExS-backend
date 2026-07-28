@@ -291,9 +291,11 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 )
             putative_tool_uri = cast(
                 "URIType",
-                parsed_wf_url.path[0:-1]
-                if parsed_wf_url.path.endswith("/")
-                else parsed_wf_url.path,
+                (
+                    parsed_wf_url.path[0:-1]
+                    if parsed_wf_url.path.endswith("/")
+                    else parsed_wf_url.path
+                ),
             )
 
             parsed_putative_tool_uri = urllib.parse.urlparse(putative_tool_uri)
@@ -517,7 +519,9 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         assert version_id is not None
         assert trs_tool_uri is not None
         if trs_tool_meta is None:
-            trs_tool_wfexs_meta: "MutableMapping[str, Union[URIType, Optional[Mapping[str, Any]]]]" = {
+            trs_tool_wfexs_meta: (
+                "MutableMapping[str, Union[URIType, Optional[Mapping[str, Any]]]]"
+            ) = {
                 "fetched": trs_tool_uri,
                 "payload": None,
             }

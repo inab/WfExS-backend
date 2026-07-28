@@ -32,7 +32,6 @@ from typing import (
 
 import zipfile
 
-
 if TYPE_CHECKING:
     import os
 

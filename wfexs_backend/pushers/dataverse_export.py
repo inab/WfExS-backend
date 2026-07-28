@@ -96,8 +96,7 @@ if TYPE_CHECKING:
             url: Union[str, urllib.request.Request],
             data: Union[Buffer, SupportsRead[bytes], Iterable[bytes], None] = None,
             timeout: Optional[float] = None,
-        ) -> Any:
-            ...
+        ) -> Any: ...
 
 
 from . import (
@@ -1116,9 +1115,9 @@ class DataversePublisher(AbstractTokenExportPlugin):
                             "typeName": "authorName",
                             "multiple": False,
                             "typeClass": "primitive",
-                            "value": "Unknown author"
-                            if displayName is None
-                            else displayName,
+                            "value": (
+                                "Unknown author" if displayName is None else displayName
+                            ),
                         }
                     }
                     # Covering the corner case of empty orcid

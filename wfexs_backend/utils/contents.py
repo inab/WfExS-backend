@@ -222,7 +222,7 @@ def Path2AbstractGeneratedContent(
 
 CWLClass2WfExS = {
     "Directory": ContentKind.Directory,
-    "File": ContentKind.File
+    "File": ContentKind.File,
     # '???': ContentKind.Value
 }
 
@@ -275,9 +275,9 @@ def CWLDesc2Content(
                 theValues,
                 # TODO: Generate URIs when it is advised
                 # uri=None,
-                preferredFilename=None
-                if expectedOutput is None
-                else expectedOutput.preferredFilename,
+                preferredFilename=(
+                    None if expectedOutput is None else expectedOutput.preferredFilename
+                ),
                 secondaryFiles=secondaryFiles,
                 signatureMethod=repMethod,
             )

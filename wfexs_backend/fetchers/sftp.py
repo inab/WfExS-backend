@@ -100,9 +100,9 @@ def sftpCopy(
 
     # Trios
     transTrios = []
-    recur: "MutableSequence[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]]" = (
-        []
-    )
+    recur: (
+        "MutableSequence[Tuple[AbsPath, paramiko.sftp_attr.SFTPAttributes, AbsPath]]"
+    ) = []
     kind: "Optional[ContentKind]" = None
     if sshStat.st_mode is not None:
         if stat.S_ISREG(sshStat.st_mode):

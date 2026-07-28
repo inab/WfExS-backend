@@ -1002,36 +1002,42 @@ class WF:
 
         return MarshallingStatus(
             pid=self.getPID(),
-            workflow_type=self.engineDesc.engineName
-            if self.engineDesc is not None
-            else None,
-            container_type=self.engine.getConfiguredContainerType()
-            if self.engine is not None
-            else None,
+            workflow_type=(
+                self.engineDesc.engineName if self.engineDesc is not None else None
+            ),
+            container_type=(
+                self.engine.getConfiguredContainerType()
+                if self.engine is not None
+                else None
+            ),
             config=self.configMarshalled,
             stage=self.stageMarshalled,
             execution=self.executionMarshalled,
             export=self.exportMarshalled,
-            execution_stats=list(
-                map(
-                    lambda r: SingleExecutionStats(
-                        execution_id=r.outputsDir.name
-                        if r.job_id is None
-                        else r.job_id,
-                        status=r.status,
-                        queued=r.queued,
-                        started=r.started,
-                        ended=r.ended,
-                        exit_value=r.exitVal,
-                    ),
-                    self.stagedExecutions,
+            execution_stats=(
+                list(
+                    map(
+                        lambda r: SingleExecutionStats(
+                            execution_id=(
+                                r.outputsDir.name if r.job_id is None else r.job_id
+                            ),
+                            status=r.status,
+                            queued=r.queued,
+                            started=r.started,
+                            ended=r.ended,
+                            exit_value=r.exitVal,
+                        ),
+                        self.stagedExecutions,
+                    )
                 )
-            )
-            if self.stagedExecutions is not None
-            else [],
-            export_stamps=list(map(lambda ea: ea.when, self.runExportActions))
-            if self.runExportActions is not None
-            else [],
+                if self.stagedExecutions is not None
+                else []
+            ),
+            export_stamps=(
+                list(map(lambda ea: ea.when, self.runExportActions))
+                if self.runExportActions is not None
+                else []
+            ),
         )
 
     def getMaterializedWorkflow(self) -> "Optional[LocalWorkflow]":
@@ -2323,9 +2329,9 @@ class WF:
             licensed_uri=lic_expUri,
             prettyFilename=cast("RelPath", rel_path),
             metadata_array=matContent.metadata_array,
-            kind=ContentKind.Directory
-            if pretty_local_exp.is_dir()
-            else ContentKind.File,
+            kind=(
+                ContentKind.Directory if pretty_local_exp.is_dir() else ContentKind.File
+            ),
             # Lazy evaluation of fingerprint,
             # so do not compute it here
             reference_uri=matContent.licensed_uri,
@@ -2783,9 +2789,9 @@ class WF:
                         )
 
                     prefrel_formatted = False
-                    formatted_preferred_name_conf: "Optional[Union[str, Literal[False]]]" = (
-                        None
-                    )
+                    formatted_preferred_name_conf: (
+                        "Optional[Union[str, Literal[False]]]"
+                    ) = None
                     formatted_reldir_conf: "Optional[Union[str, Literal[False]]]" = None
                     if inputKind in (
                         ContentKind.File,
@@ -2826,13 +2832,13 @@ class WF:
                                 some_formatted = True
                                 formatted_inputs = copy.copy(inputs)
                                 if formatted_preferred_name_conf is not None:
-                                    formatted_inputs[
-                                        "preferred-name"
-                                    ] = formatted_preferred_name_conf
+                                    formatted_inputs["preferred-name"] = (
+                                        formatted_preferred_name_conf
+                                    )
                                 if formatted_reldir_conf is not None:
-                                    formatted_inputs[
-                                        "relative-dir"
-                                    ] = formatted_reldir_conf
+                                    formatted_inputs["relative-dir"] = (
+                                        formatted_reldir_conf
+                                    )
                             else:
                                 formatted_inputs = inputs
                             formatted_params[key] = formatted_inputs
@@ -2898,13 +2904,13 @@ class WF:
                             formatted_inputs["url"] = formatted_remote_files
                             if "secondary-urls" in inputs:
                                 assert formatted_secondary_remote_files is not None
-                                formatted_inputs[
-                                    "secondary-urls"
-                                ] = formatted_secondary_remote_files
+                                formatted_inputs["secondary-urls"] = (
+                                    formatted_secondary_remote_files
+                                )
                             if formatted_preferred_name_conf is not None:
-                                formatted_inputs[
-                                    "preferred-name"
-                                ] = formatted_preferred_name_conf
+                                formatted_inputs["preferred-name"] = (
+                                    formatted_preferred_name_conf
+                                )
                             if formatted_reldir_conf is not None:
                                 formatted_inputs["relative-dir"] = formatted_reldir_conf
                         else:
@@ -3217,9 +3223,9 @@ class WF:
                         else:
                             mapping_key = cast("URIType", secondary_remote_file)
 
-                        secondary_uri_mapping[
-                            mapping_key
-                        ] = t_secondary_remote_pair.local
+                        secondary_uri_mapping[mapping_key] = (
+                            t_secondary_remote_pair.local
+                        )
 
                 # Now, reopen each file to replace URLs by paths
                 for i_remote_pair, remote_pair in enumerate(remote_pairs):
@@ -3548,9 +3554,9 @@ class WF:
                                     inputDestDir = newInputDestDir
 
                             remote_pairs: "MutableSequence[MaterializedContent]" = []
-                            secondary_remote_pairs: "Optional[MutableSequence[MaterializedContent]]" = (
-                                None
-                            )
+                            secondary_remote_pairs: (
+                                "Optional[MutableSequence[MaterializedContent]]"
+                            ) = None
 
                             injectable_input = injectable_inputs_dict.get(path_tokens)
                             # TODO: fix the case of null values declared in RO-Crate once
@@ -3620,9 +3626,11 @@ class WF:
                                             prettyRelname=pretty_relname,
                                             ignoreCache=this_ignoreCache,
                                             cloneToStore=clonable,
-                                            expectedKind=inputKind
-                                            if inputKind != ContentKind.Value  # type: ignore[comparison-overlap]
-                                            else None,
+                                            expectedKind=(
+                                                inputKind
+                                                if inputKind != ContentKind.Value  # type: ignore[comparison-overlap]
+                                                else None
+                                            ),
                                         )
                                         remote_pairs.extend(t_remote_pairs)
                                     except Exception as e:
@@ -3638,7 +3646,9 @@ class WF:
                                 if (remote_files is not None) and (
                                     secondary_remote_files is not None
                                 ):
-                                    secondary_remote_files_f: "Sequence[Sch_InputURI_Fetchable]"
+                                    secondary_remote_files_f: (
+                                        "Sequence[Sch_InputURI_Fetchable]"
+                                    )
                                     if isinstance(
                                         secondary_remote_files, list
                                     ):  # more than one input file
@@ -3837,9 +3847,11 @@ class WF:
             self.formatted_params,
             offline=offline,
             ignoreCache=ignoreCache,
-            injectable_inputs=self.cached_inputs
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else None,
+            injectable_inputs=(
+                self.cached_inputs
+                if self.reproducibility_level >= ReproducibilityLevel.Metadata
+                else None
+            ),
         )
 
         assert self.formatted_environment is not None
@@ -3847,9 +3859,11 @@ class WF:
             self.formatted_environment,
             offline=offline,
             ignoreCache=ignoreCache,
-            injectable_inputs=self.cached_environment
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else None,
+            injectable_inputs=(
+                self.cached_environment
+                if self.reproducibility_level >= ReproducibilityLevel.Metadata
+                else None
+            ),
         )
 
         # This method is called from within setupEngine
@@ -3859,18 +3873,26 @@ class WF:
         self.materializeWorkflowAndContainers(
             offline=offline,
             ignoreCache=ignoreCache,
-            injectable_repo=self.cached_repo
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else None,
-            injectable_workflow=self.cached_workflow
-            if self.reproducibility_level >= ReproducibilityLevel.Full
-            else None,
-            injectable_containers=self.preferred_containers
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else [],
-            injectable_operational_containers=self.preferred_operational_containers
-            if self.reproducibility_level >= ReproducibilityLevel.Metadata
-            else [],
+            injectable_repo=(
+                self.cached_repo
+                if self.reproducibility_level >= ReproducibilityLevel.Metadata
+                else None
+            ),
+            injectable_workflow=(
+                self.cached_workflow
+                if self.reproducibility_level >= ReproducibilityLevel.Full
+                else None
+            ),
+            injectable_containers=(
+                self.preferred_containers
+                if self.reproducibility_level >= ReproducibilityLevel.Metadata
+                else []
+            ),
+            injectable_operational_containers=(
+                self.preferred_operational_containers
+                if self.reproducibility_level >= ReproducibilityLevel.Metadata
+                else []
+            ),
             context_inputs=self.materializedParams,
             context_environment=self.materializedEnvironment,
         )
@@ -3962,9 +3984,11 @@ class WF:
             outputDescClass = outputDesc.get("c-l-a-s-s")
             eOutput = ExpectedOutput(
                 name=cast("SymbolicOutputName", output_name),
-                kind=ContentKind.File
-                if outputDescClass is None
-                else self.OutputClassMapping.get(outputDescClass, ContentKind.File),
+                kind=(
+                    ContentKind.File
+                    if outputDescClass is None
+                    else self.OutputClassMapping.get(outputDescClass, ContentKind.File)
+                ),
                 preferredFilename=cast(
                     "Optional[RelPath]", outputDesc.get("preferredName")
                 ),
@@ -4470,9 +4494,11 @@ class WF:
 
                 placeholders: "Mapping[str, str]" = {
                     "instance_id": self.staged_setup.instance_id,
-                    "nickname": self.staged_setup.nickname
-                    if self.staged_setup.nickname is not None
-                    else self.staged_setup.instance_id,
+                    "nickname": (
+                        self.staged_setup.nickname
+                        if self.staged_setup.nickname is not None
+                        else self.staged_setup.instance_id
+                    ),
                     "wfexs_verstr": verstr,
                     "wfexs_backend_name": wfexs_backend_name,
                     "wfexs_backend_url": wfexs_backend_url,

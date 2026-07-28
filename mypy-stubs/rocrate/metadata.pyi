@@ -15,5 +15,5 @@ def read_metadata(
     metadata_path: str | Path,
 ) -> Tuple[JSONLD_CONTEXT, Mapping[str, JSONLD_GRAPH_ITEM]]: ...
 def find_root_entity_id(
-    entities: Mapping[str, JSONLD_GRAPH_ITEM]
+    entities: Mapping[str, JSONLD_GRAPH_ITEM],
 ) -> Tuple[str, str]: ...

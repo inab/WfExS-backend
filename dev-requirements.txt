@@ -23,8 +23,9 @@ mypy != 2.3.* ; implementation_name == 'pypy'
 # This one is now managed by the ReadTheDocs documentation
 # json-schema-for-humans >= 0.45.1
 pre-commit >= 2.17.0
-# This is the last version of black supporting Python 3.7
-black == 23.3.0
+# Now black should be run only through pre-commit
+# as it depends on the binary release of black
+binary-black @ git+https://github.com/jmfernandez/pre-commit_mirrors-binary-black.git@26.5.1
 # pip-audit, depending on the minimal versions
 pip-audit < 2.6.2 ; python_version == '3.7'
 pip-audit >= 2.6.2 ; python_version >= '3.8'

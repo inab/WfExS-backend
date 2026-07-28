@@ -65,7 +65,6 @@ from wfexs_backend.common import (
     NoLicenceDescription,
 )
 
-
 # Setting up the decorators
 # if "PYTEST_WFEXS_B2SHARE" in os.environ:
 #     b2share_params = pytest.mark.param_file(os.environ.get("PYTEST_WFEXS_B2SHARE", ""), fmt="yaml")
