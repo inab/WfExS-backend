@@ -17,7 +17,7 @@ cffi==2.0.0
 charset-normalizer==3.4.9
 click==8.1.8
 crypt4gh==1.8.6
-cryptography==49.0.0
+cryptography==50.0.0
 data_url==1.3.1
 defusedxml==0.7.1
 docopt-ng==0.9.0
