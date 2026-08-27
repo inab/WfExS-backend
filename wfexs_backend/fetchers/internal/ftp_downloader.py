@@ -46,7 +46,9 @@ if TYPE_CHECKING:
     CT = TypeVar("CT")
 
 import ftplib
-import ftputil
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore::DeprecationWarning")
+    import ftputil
 
 import ftputil.session
 
