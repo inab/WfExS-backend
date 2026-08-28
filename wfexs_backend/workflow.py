@@ -2363,6 +2363,11 @@ class WF:
             contextName=contextName,
             default_member_glob=globExplode,
         )
+        # If it cannot be cached, already cached contents should also be ignored
+        if not cacheable:
+            ignoreCache = True
+            assert isinstance(storeDir, pathlib.Path)
+            cloneToStore = True
         # Trying to preserve what it is returned by the cache
         # unless we are explicitly feeding a licence
         matContent = self.wfexs.downloadContent(
@@ -3062,18 +3067,21 @@ class WF:
         contextName = inputs.get("security-context")
         # This is only for the paranoid mode
         cacheable = inputs.get("cacheable", True)
-        if self.paranoidMode:
-            ignoreCache = False
+        # If it cannot be cached, also ignore already cached contents
+        if not cacheable:
+            this_ignoreCache = True
+            cloneToStore = True
+        elif self.paranoidMode:
+            this_ignoreCache = False
+        elif remote_files is not None:
+            this_ignoreCache = ignoreCache
+        else:
+            this_ignoreCache = True
 
         if not cacheable and not cloneToStore:
             self.logger.warning(
                 "Current staging scenario can lead to unexpected errors in case of cache miss, as neither caching nor cloning are allowed"
             )
-
-        if remote_files is not None:
-            this_ignoreCache = ignoreCache
-        else:
-            this_ignoreCache = True
 
         preferred_name_conf = cast("Optional[RelPath]", inputs.get("preferred-name"))
         if isinstance(preferred_name_conf, str):
@@ -3522,9 +3530,13 @@ class WF:
 
                                 secondary_remote_files = inputs.get("secondary-urls")
                                 cacheable = inputs.get("cacheable", True)
-                                this_ignoreCache = (
-                                    False if self.paranoidMode else ignoreCache
-                                )
+                                # If it cannot be cached, then ignore already cached contents
+                                if not cacheable:
+                                    this_ignoreCache = True
+                                elif self.paranoidMode:
+                                    this_ignoreCache = False
+                                else:
+                                    this_ignoreCache = ignoreCache
                             else:
                                 contextName = None
                                 secondary_remote_files = None
