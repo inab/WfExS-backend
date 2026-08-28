@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ import os
 import pathlib
 import sys
 import time
+import warnings
 
 from typing import (
     TYPE_CHECKING,
@@ -46,8 +47,9 @@ if TYPE_CHECKING:
     CT = TypeVar("CT")
 
 import ftplib
+
 with warnings.catch_warnings():
-    warnings.simplefilter("ignore::DeprecationWarning")
+    warnings.simplefilter("ignore")
     import ftputil
 
 import ftputil.session
