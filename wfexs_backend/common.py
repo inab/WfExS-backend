@@ -16,8 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import abc
 import copy
 from dataclasses import dataclass
@@ -25,6 +23,7 @@ import datetime
 import enum
 import os
 import pathlib
+from types import MappingProxyType
 from typing import (
     cast,
     NamedTuple,
@@ -34,29 +33,21 @@ from typing import (
 if TYPE_CHECKING:
     from typing import (
         Any,
-        Callable,
         List,
         Mapping,
         MutableMapping,
         MutableSequence,
         NewType,
         Optional,
-        Pattern,
         Sequence,
-        Set,
         Tuple,
-        Type,
         Union,
-    )
-
-    # pylint: disable-next=unused-import
-    from typing import (
-        Iterator,
     )
 
     from typing_extensions import (
         Buffer,
         Final,
+        Self,
         TypeAlias,
         TypedDict,
     )
@@ -109,17 +100,20 @@ DEFAULT_FUSERMOUNT_CMD = cast("SymbolicName", "fusermount")
 DEFAULT_DOT_CMD = cast("SymbolicName", "dot")
 
 if TYPE_CHECKING:
-    ProgsMapping: TypeAlias = MutableMapping[SymbolicName, AnyPath]
+    ProgsMapping: TypeAlias = Mapping[SymbolicName, AnyPath]
+    MutableProgsMapping: TypeAlias = MutableMapping[SymbolicName, AnyPath]
 
-DEFAULT_PROGS: "ProgsMapping" = {
-    DEFAULT_DOCKER_CMD: cast("RelPath", DEFAULT_DOCKER_CMD),
-    DEFAULT_SINGULARITY_CMD: cast("RelPath", DEFAULT_SINGULARITY_CMD),
-    DEFAULT_APPTAINER_CMD: cast("RelPath", DEFAULT_APPTAINER_CMD),
-    DEFAULT_PODMAN_CMD: cast("RelPath", DEFAULT_PODMAN_CMD),
-    DEFAULT_JAVA_CMD: cast("RelPath", DEFAULT_JAVA_CMD),
-    DEFAULT_FUSERMOUNT_CMD: cast("RelPath", DEFAULT_FUSERMOUNT_CMD),
-    DEFAULT_DOT_CMD: cast("RelPath", DEFAULT_DOT_CMD),
-}
+DEFAULT_PROGS: "Final[ProgsMapping]" = MappingProxyType(
+    {
+        DEFAULT_DOCKER_CMD: cast("RelPath", DEFAULT_DOCKER_CMD),
+        DEFAULT_SINGULARITY_CMD: cast("RelPath", DEFAULT_SINGULARITY_CMD),
+        DEFAULT_APPTAINER_CMD: cast("RelPath", DEFAULT_APPTAINER_CMD),
+        DEFAULT_PODMAN_CMD: cast("RelPath", DEFAULT_PODMAN_CMD),
+        DEFAULT_JAVA_CMD: cast("RelPath", DEFAULT_JAVA_CMD),
+        DEFAULT_FUSERMOUNT_CMD: cast("RelPath", DEFAULT_FUSERMOUNT_CMD),
+        DEFAULT_DOT_CMD: cast("RelPath", DEFAULT_DOT_CMD),
+    }
+)
 
 
 class EngineMode(enum.Enum):
@@ -173,7 +167,7 @@ class ContentKind(enum.Enum):
 
 class ContainerType(enum.Enum):
     Singularity = "singularity"
-    Apptainer = "singularity"
+    Apptainer = "singularity"  # noqa: PIE796
     Docker = "docker"
     UDocker = "udocker"
     Podman = "podman"
@@ -226,20 +220,22 @@ class Attribution(NamedTuple):
     # A unique way to represent this author, either through her/his
     # ORCID or another permanent, representative link
     pid: "URIType"
-    roles: "Sequence[AttributionRole]" = []
+    roles: "Sequence[AttributionRole]" = ()
 
     @classmethod
-    def ParseRawAttribution(cls, rawAttribution: "Mapping[str, Any]") -> "Attribution":
+    def ParseRawAttribution(cls, rawAttribution: "Mapping[str, Any]") -> "Self":
         return cls(
             name=rawAttribution["name"],
             pid=rawAttribution["pid"],
-            roles=[AttributionRole(rawRole) for rawRole in rawAttribution["roles"]],
+            roles=tuple(
+                AttributionRole(rawRole) for rawRole in rawAttribution["roles"]
+            ),
         )
 
     @classmethod
     def ParseRawAttributions(
         cls, rawAttributions: "Optional[Sequence[Mapping[str, Any]]]"
-    ) -> "Sequence[Attribution]":
+    ) -> "Sequence[Self]":
         attributions = []
         if isinstance(rawAttributions, list):
             for rawAttribution in rawAttributions:
@@ -312,9 +308,9 @@ class LicensedURI(NamedTuple):
     # One or more licence URLs, either from a repository, or a site like
     # choosealicense.com or spdx.org/licenses/
     licences: "Tuple[Union[URIType, LicenceDescription], ...]" = DefaultNoLicenceTuple
-    attributions: "Sequence[Attribution]" = []
+    attributions: "Sequence[Attribution]" = ()
     secContext: "Optional[SecurityContextConfig]" = None
-    members: "Sequence[MemberPattern]" = []
+    members: "Sequence[MemberPattern]" = ()
 
 
 if TYPE_CHECKING:
@@ -803,7 +799,7 @@ class ArgTypeMixin(enum.Enum):
     def argtype(cls, s: "str") -> "enum.Enum":
         try:
             return cls(s)
-        except:
+        except BaseException:
             raise argparse.ArgumentTypeError(f"{s!r} is not a valid {cls.__name__}")
 
     def __str__(self) -> "str":
@@ -814,7 +810,7 @@ class StrDocEnum(str, ArgTypeMixin):
     # Learnt from https://docs.python.org/3.11/howto/enum.html#when-to-use-new-vs-init
     description: str
 
-    def __new__(cls, value: "Any", description: "str" = "") -> "StrDocEnum":
+    def __new__(cls, value: "Any", description: "str" = "") -> "Self":
         obj = str.__new__(cls, value)
         obj._value_ = value
         obj.description = description

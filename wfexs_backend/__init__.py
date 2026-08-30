@@ -55,7 +55,7 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
 
     if TYPE_CHECKING:
         import dulwich.repo
-        import dulwich.walk
+        import dulwich.walk  # noqa: TC004
 
     try:
         active_branch = dulwich.porcelain.active_branch(repo)  # type: ignore[no-untyped-call]
@@ -88,7 +88,7 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
             except AttributeError:
                 continue
             tags[tag] = (
-                datetime.datetime(*time.gmtime(commit.commit_time)[:6]),
+                datetime.datetime(*time.gmtime(commit.commit_time)[:6]),  # noqa: DTZ001
                 commit.id.decode("ascii"),
             )
 
@@ -107,14 +107,11 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
                 active_branch_decode,
             )
 
-        # We're now 0 commits from the top
-        commit_count = 0
-
         # Walk through all commits
         walker: "dulwich.walk.Walker"
         walker = r.get_walker()  # type: ignore[no-untyped-call]
-        skipFirst = True
-        for entry in walker:
+        # We're now 0 commits from the top
+        for commit_count, entry in enumerate(walker):
             # Check if tag
             commit_id = entry.commit.id.decode("ascii")
             for sorted_tag in sorted_tags:
@@ -133,8 +130,6 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
                             latest_commit_id_decode,
                             active_branch_decode,
                         )
-
-            commit_count += 1
 
         # Return plain commit if no parent tag can be found
         return (
@@ -160,7 +155,7 @@ def get_WfExS_version() -> "Tuple[str, Optional[str], Optional[str]]":
 
         try:
             vertuple = describeGitRepo(wfexs_dirname)
-        except dulwich.errors.NotGitRepository as de:
+        except dulwich.errors.NotGitRepository:
             # This can happen when WfExS-backend is installed using pip
             pass
 

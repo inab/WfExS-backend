@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import abc
 import copy
@@ -27,6 +26,7 @@ import os
 import os.path
 import pathlib
 import sys
+from types import MappingProxyType
 import urllib.parse
 import zipfile
 
@@ -45,7 +45,6 @@ import warnings
 if TYPE_CHECKING:
     from typing import (
         Any,
-        IO,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -57,20 +56,16 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
-        TypeAlias,
     )
 
     from ..common import (
-        AbsPath,
         EngineVersion,
         Fingerprint,
-        PathlibLike,
         RelPath,
         RepoURL,
         RepoTag,
         SymbolicParamName,
         URIType,
-        URIWithMetadata,
         WFLangVersion,
     )
 
@@ -333,40 +328,46 @@ class ROCrateToolbox(abc.ABC):
 
     SCHEMA_ORG_PREFIX: "Final[str]" = "http://schema.org/"
 
-    SPARQL_NS = {
-        "dc": "http://purl.org/dc/elements/1.1/",
-        "dcterms": "http://purl.org/dc/terms/",
-        "s": SCHEMA_ORG_PREFIX,
-        "bs": "https://bioschemas.org/",
-        "bswfprofile": "https://bioschemas.org/profiles/ComputationalWorkflow/",
-        "bsworkflow": "https://bioschemas.org/ComputationalWorkflow#",
-        "rocrate": "https://w3id.org/ro/crate/",
-        "wfcrate": "https://w3id.org/workflowhub/workflow-ro-crate/",
-        "wfhprofile": "https://about.workflowhub.eu/Workflow-RO-Crate/",
-        "wrprocess": "https://w3id.org/ro/wfrun/process/",
-        "wrwf": "https://w3id.org/ro/wfrun/workflow/",
-        "wrterm": WORKFLOW_RUN_NAMESPACE,
-        "wfexsterm": WFEXS_TERMS_NAMESPACE,
-        "wikidata": "https://www.wikidata.org/wiki/",
-        RELATIVE_ROCRATE_NS: RELATIVE_ROCRATE_SPARQL_BASE,
-    }
+    SPARQL_NS: "Final[Mapping[str, str]]" = MappingProxyType(
+        {
+            "dc": "http://purl.org/dc/elements/1.1/",
+            "dcterms": "http://purl.org/dc/terms/",
+            "s": SCHEMA_ORG_PREFIX,
+            "bs": "https://bioschemas.org/",
+            "bswfprofile": "https://bioschemas.org/profiles/ComputationalWorkflow/",
+            "bsworkflow": "https://bioschemas.org/ComputationalWorkflow#",
+            "rocrate": "https://w3id.org/ro/crate/",
+            "wfcrate": "https://w3id.org/workflowhub/workflow-ro-crate/",
+            "wfhprofile": "https://about.workflowhub.eu/Workflow-RO-Crate/",
+            "wrprocess": "https://w3id.org/ro/wfrun/process/",
+            "wrwf": "https://w3id.org/ro/wfrun/workflow/",
+            "wrterm": WORKFLOW_RUN_NAMESPACE,
+            "wfexsterm": WFEXS_TERMS_NAMESPACE,
+            "wikidata": "https://www.wikidata.org/wiki/",
+            RELATIVE_ROCRATE_NS: RELATIVE_ROCRATE_SPARQL_BASE,
+        }
+    )
 
-    LEAF_TYPE_2_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = {
-        SCHEMA_ORG_PREFIX + "Integer": "Integer",
-        SCHEMA_ORG_PREFIX + "Text": "Text",
-        SCHEMA_ORG_PREFIX + "Boolean": "Boolean",
-        SCHEMA_ORG_PREFIX + "Float": "Float",
-        SCHEMA_ORG_PREFIX + "PropertyValue": "PropertyValue",
-        SCHEMA_ORG_PREFIX + "MediaObject": "File",
-        SCHEMA_ORG_PREFIX + "Dataset": "Directory",
-    }
+    LEAF_TYPE_2_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = MappingProxyType(
+        {
+            SCHEMA_ORG_PREFIX + "Integer": "Integer",
+            SCHEMA_ORG_PREFIX + "Text": "Text",
+            SCHEMA_ORG_PREFIX + "Boolean": "Boolean",
+            SCHEMA_ORG_PREFIX + "Float": "Float",
+            SCHEMA_ORG_PREFIX + "PropertyValue": "PropertyValue",
+            SCHEMA_ORG_PREFIX + "MediaObject": "File",
+            SCHEMA_ORG_PREFIX + "Dataset": "Directory",
+        }
+    )
 
     # WfExS-backend is not able to deal with collections of atomic values
     # (yet)
-    LEAF_TYPE_2_OUTPUT_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = {
-        SCHEMA_ORG_PREFIX + "MediaObject": "File",
-        SCHEMA_ORG_PREFIX + "Dataset": "Directory",
-    }
+    LEAF_TYPE_2_OUTPUT_ADDITIONAL_TYPE: "Final[Mapping[str, str]]" = MappingProxyType(
+        {
+            SCHEMA_ORG_PREFIX + "MediaObject": "File",
+            SCHEMA_ORG_PREFIX + "Dataset": "Directory",
+        }
+    )
 
     def __init__(self, wfexs: "WfExSBackend"):
         if wfexs is None:
@@ -515,7 +516,7 @@ WHERE {
                 )
             }
         jsonld_str = json.dumps(jsonld_obj_ser)
-        parsed = g.parse(
+        parsed = g.parse(  # noqa: F841
             data=jsonld_str,
             format="json-ld",
             base=self.RELATIVE_ROCRATE_SPARQL_BASE,
@@ -1419,9 +1420,9 @@ WHERE   {
                         self.logger.warning(
                             f"Not all the containers of execution {main_entity} were labelled with {additional_container_type} factory (also found {putative_additional_container_type})"
                         )
-                except Exception as e:
+                except Exception:
                     self.logger.error(
-                        f"Unable to map additional type {str(containerrow.container_additional_type)} for {str(containerrow.container)}"
+                        f"Unable to map additional type {containerrow.container_additional_type!s} for {containerrow.container!s}"
                     )
 
             # These hints should be left by any compliant WRROC
@@ -1455,9 +1456,9 @@ WHERE   {
                         self.logger.warning(
                             f"Not all the source containers of execution {main_entity} were labelled with {additional_source_container_type} factory (also found {putative_additional_source_container_type})"
                         )
-                except Exception as e:
+                except Exception:
                     self.logger.error(
-                        f"Unable to map additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
+                        f"Unable to map additional type {containerrow.source_container_additional_type!s} for {containerrow.source_container!s}"
                     )
 
         # Assigning this, as it is going to be used later to
@@ -1508,9 +1509,9 @@ WHERE   {
                             )
                         )
                     )
-                except Exception as e:
+                except Exception:
                     self.logger.error(
-                        f"Unable to map additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
+                        f"Unable to map additional type {containerrow.source_container_additional_type!s} for {containerrow.source_container!s}"
                     )
 
             if source_container_type is None:
@@ -1536,19 +1537,19 @@ WHERE   {
                             container_identifier = "library/" + container_identifier
                         assert containerrow.source_container_tag is not None
                         if containerrow.source_container_sha256 is not None:
-                            fingerprint = f"{the_registry}/{container_identifier}@sha256:{str(containerrow.source_container_sha256)}"
+                            fingerprint = f"{the_registry}/{container_identifier}@sha256:{containerrow.source_container_sha256!s}"
                         else:
-                            fingerprint = f"{the_registry}/{container_identifier}:{str(containerrow.source_container_tag)}"
-                        origTaggedName = f"{container_identifier}:{str(containerrow.source_container_tag)}"
-                        taggedName = f"docker://{the_registry}/{container_identifier}:{str(containerrow.source_container_tag)}"
+                            fingerprint = f"{the_registry}/{container_identifier}:{containerrow.source_container_tag!s}"
+                        origTaggedName = f"{container_identifier}:{containerrow.source_container_tag!s}"
+                        taggedName = f"docker://{the_registry}/{container_identifier}:{containerrow.source_container_tag!s}"
                     elif source_container_type == ContainerType.Singularity:
                         origTaggedName = str(containerrow.source_container_name)
                         taggedName = origTaggedName
                         fingerprint = origTaggedName
 
-                    container_image_path: "Optional[str]" = None
+                    # container_image_path: "Optional[str]" = None
                     located_snapshot: "Optional[pathlib.Path]" = None
-                    metadata_container_image_path: "Optional[str]" = None
+                    # metadata_container_image_path: "Optional[str]" = None
                     located_metadata: "Optional[pathlib.Path]" = None
                     image_signature: "Optional[Fingerprint]" = None
                     if payload_dir is not None:
@@ -1563,7 +1564,7 @@ WHERE   {
                                 the_file_sha256=containerrow.container_snapshot_sha256,
                             )
                             if include_container_image is not None:
-                                container_image_path = include_container_image.rel_path
+                                # container_image_path = include_container_image.rel_path
                                 located_snapshot = include_container_image.path
                                 image_signature = include_container_image.signature
 
@@ -1579,13 +1580,13 @@ WHERE   {
                             )
 
                             if include_metadata_container_image is not None:
-                                metadata_container_image_path = (
-                                    include_metadata_container_image.rel_path
-                                )
+                                # metadata_container_image_path = (
+                                #     include_metadata_container_image.rel_path
+                                # )
                                 located_metadata = include_metadata_container_image.path
-                                computed_source_container_metadata_signature = (
-                                    include_metadata_container_image.signature
-                                )
+                                # computed_source_container_metadata_signature = (
+                                #     include_metadata_container_image.signature
+                                # )
 
                     the_containers.append(
                         Container(
@@ -1616,9 +1617,9 @@ WHERE   {
                             image_signature=image_signature,
                         )
                     )
-                except Exception as e:
+                except Exception:
                     self.logger.exception(
-                        f"Unable to assign from additional type {str(containerrow.source_container_additional_type)} for {str(containerrow.source_container)}"
+                        f"Unable to assign from additional type {containerrow.source_container_additional_type!s} for {containerrow.source_container!s}"
                     )
 
         return container_type, the_containers
@@ -1697,7 +1698,7 @@ WHERE   {
             ) or additional_type == "Collection":
                 if not hasattr(outputrow, "leaf_type"):
                     raise ROCrateToolboxException(
-                        f"Unable to handle Collections of unknown type in output {str(outputrow.name)}"
+                        f"Unable to handle Collections of unknown type in output {outputrow.name!s}"
                     )
 
                 cardinality = "+"
@@ -1707,14 +1708,14 @@ WHERE   {
                 )
                 if leaf_output_additional_type is None:
                     raise ROCrateToolboxException(
-                        f"Unable to handle contents of type {leaf_output_type} in output Collection {str(outputrow.name)}"
+                        f"Unable to handle contents of type {leaf_output_type} in output Collection {outputrow.name!s}"
                     )
                 additional_type = leaf_output_additional_type
 
             # Is it a file or a directory?
             if additional_type not in ("File", "Dataset"):
                 raise ROCrateToolboxException(
-                    f"Unable to handle contents of additional type {additional_type} in output Collection {str(outputrow.name)}"
+                    f"Unable to handle contents of additional type {additional_type} in output Collection {outputrow.name!s}"
                 )
 
             preferred_name: "Optional[str]" = (
@@ -1731,9 +1732,7 @@ WHERE   {
                     synthetic_output = bool(outputrow.synthetic_output.value)
                 else:
                     ser_val = str(outputrow.synthetic_output).lower()
-                    synthetic_output = (
-                        False if len(ser_val) == 0 or ser_val == "false" else True
-                    )
+                    synthetic_output = not (len(ser_val) == 0 or ser_val == "false")
 
             # Self generated outputs with fake names => skip it!!!!!
             if (
@@ -1840,7 +1839,6 @@ WHERE   {
         )
 
         if include_input is not None:
-            input_path = include_input.rel_path
             located_input = include_input.path
             file_signature = include_input.signature
             licences_tuple = (
@@ -1914,7 +1912,7 @@ WHERE   {
                 leaf_additional_type = self.LEAF_TYPE_2_ADDITIONAL_TYPE.get(leaf_type)
                 if leaf_additional_type is None:
                     raise ROCrateToolboxException(
-                        f"Unable to handle contents of type {leaf_type} in input Collection {str(inputrow.name)}"
+                        f"Unable to handle contents of type {leaf_type} in input Collection {inputrow.name!s}"
                     )
                 if additional_type == "Collection":
                     additional_type = leaf_additional_type
@@ -2065,7 +2063,7 @@ WHERE   {
                 if additional_type == "Integer":
                     try:
                         the_value = int(the_value)
-                    except:
+                    except BaseException:
                         self.logger.exception(
                             f"Expected type {additional_type} for value {the_value}"
                         )
@@ -2077,7 +2075,7 @@ WHERE   {
                     the_value = str(the_value)
                 else:
                     raise ROCrateToolboxException(
-                        f"Unable to handle additional type {additional_type} for input {str(inputrow.name)}"
+                        f"Unable to handle additional type {additional_type} for input {inputrow.name!s}"
                     )
 
                 if isinstance(valarr, list):
@@ -2258,7 +2256,7 @@ WHERE   {
                 if additional_type == "Integer":
                     try:
                         the_value = int(the_value)
-                    except:
+                    except BaseException:
                         self.logger.exception(
                             f"Expected type {additional_type} for value {the_value} in environment variable {env_name}"
                         )
@@ -2473,7 +2471,7 @@ WHERE   {
                 payload_entity_parts.append(included_part_entity)
             else:
                 self.logger.warning(
-                    f"Entity part {str(part_row.part_entity)} from {str(entity)} in {public_name} did not have a valid payload"
+                    f"Entity part {part_row.part_entity!s} from {entity!s} in {public_name} did not have a valid payload"
                 )
 
         return payload_entity_parts
@@ -2553,7 +2551,7 @@ WHERE   {
         # A fallback
         if repo_relpath is None:
             self.logger.warning(
-                f"Deriving relative path of workflow entry point from entry point location in RO-Crate metadata"
+                "Deriving relative path of workflow entry point from entry point location in RO-Crate metadata"
             )
             main_entity_uri = str(main_entity)
             main_entity_parsed_uri = urllib.parse.urlparse(main_entity_uri)
@@ -2742,7 +2740,6 @@ WHERE   {
         # executions as template (retrospective provenance)
         # or delegate on the prospective one.
         container_type: "Optional[ContainerType]" = None
-        additional_container_type: "Optional[ContainerType]" = None
         the_containers: "Sequence[Container]" = []
         params: "ParamsBlock" = {}
         environment: "EnvironmentBlock" = {}

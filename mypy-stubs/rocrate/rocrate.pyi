@@ -60,7 +60,7 @@ from .utils import (
     walk as walk,
 )
 
-ETYPE = TypeVar("ETYPE", bound=Entity)
+_ETYPE = TypeVar("_ETYPE", bound=Entity)
 
 def pick_type(
     json_entity: Mapping[str, Any],
@@ -158,9 +158,9 @@ class ROCrate:
     root_dataset: RootDataset
     metadata: Metadata
     @overload
-    def add(self, entity: ETYPE) -> ETYPE: ...  # type: ignore[misc]
+    def add(self, entity: _ETYPE) -> _ETYPE: ...  # type: ignore[misc]
     @overload
-    def add(self, *entities: ETYPE) -> Sequence[ETYPE]: ...
+    def add(self, *entities: _ETYPE) -> Sequence[_ETYPE]: ...
     def delete(self, *entities: Entity) -> None: ...
     def write(self, base_path: str) -> None: ...
     write_crate = write

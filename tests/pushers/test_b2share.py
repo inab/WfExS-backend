@@ -25,10 +25,7 @@ import logging
 import pathlib
 
 import os
-import sys
 import urllib.error
-
-import pytest
 
 from wfexs_backend.pushers import ExportPluginException
 from wfexs_backend.pushers.b2share_export import B2SHAREPublisher
@@ -45,7 +42,6 @@ if TYPE_CHECKING:
         MutableSequence,
     )
     from wfexs_backend.common import (
-        AbsPath,
         SecurityContextConfig,
     )
     from pytest_param_files import (  # type: ignore[import]
@@ -93,7 +89,7 @@ def test_b2share_basic_fail_notoken() -> "None":
     Check B2SHARE plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
-        bep = B2SHAREPublisher(pathlib.Path("/"), setup_block={"sandbox": True})
+        B2SHAREPublisher(pathlib.Path("/"), setup_block={"sandbox": True})
 
 
 basic_deps = [
@@ -122,7 +118,7 @@ def test_b2share_basic(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    bep = B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
+    B2SHAREPublisher(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -177,7 +173,7 @@ def test_b2share_book_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             bep.discard_booked_pid(booked_entry)
@@ -220,7 +216,7 @@ def test_b2share_book_draft_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             bep.discard_booked_pid(booked_entry)
@@ -267,7 +263,7 @@ def test_b2share_book_new_version_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             bep.discard_booked_pid(booked_entry)
@@ -317,7 +313,7 @@ def test_b2share_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             bep.discard_booked_pid(booked_entry)
@@ -370,7 +366,7 @@ def test_b2share_upload_stream_to_draft(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             bep.discard_booked_pid(booked_entry)
@@ -444,12 +440,9 @@ def test_b2share_update_record_metadata_raw(file_params: "ParamTestData") -> "No
         logger.info(f"Booked PID is {booked_entry.pid}")
 
         entry_metadata = copy.deepcopy(MINIMAL_VALID_ENTRY_METADATA)
-        entry_metadata["titles"][0]["title"] += (
-            " at " + datetime.datetime.utcnow().isoformat()
-        )
-        entry_metadata["descriptions"][0]["description"] += (
-            " at " + datetime.datetime.utcnow().isoformat()
-        )
+        now = datetime.datetime.now().astimezone()
+        entry_metadata["titles"][0]["title"] += " at " + now.isoformat()
+        entry_metadata["descriptions"][0]["description"] += " at " + now.isoformat()
 
         updated_meta = bep.update_record_metadata(
             booked_entry,
@@ -463,7 +456,7 @@ def test_b2share_update_record_metadata_raw(file_params: "ParamTestData") -> "No
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             bep.discard_booked_pid(booked_entry)
@@ -497,14 +490,16 @@ def test_b2share_update_record_metadata_facets(file_params: "ParamTestData") -> 
         assert booked_entry.metadata is not None
         logger.info(f"Booked PID is {booked_entry.pid}")
 
+        now = datetime.datetime.now().astimezone()
+
         updated_meta = bep.update_record_metadata(
             booked_entry,
             title=MINIMAL_VALID_ENTRY_METADATA["titles"][0]["title"]
             + " at "
-            + datetime.datetime.utcnow().isoformat(),
+            + now.isoformat(),
             description=MINIMAL_VALID_ENTRY_METADATA["descriptions"][0]["description"]
             + " at "
-            + datetime.datetime.utcnow().isoformat(),
+            + now.isoformat(),
             resolved_orcids=[
                 TEST_ORCID,
             ],
@@ -520,7 +515,7 @@ def test_b2share_update_record_metadata_facets(file_params: "ParamTestData") -> 
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             bep.discard_booked_pid(booked_entry)
@@ -561,12 +556,9 @@ def test_b2share_failed_update_record_metadata_raw(
                 "MutableMapping[str, MutableSequence[MutableMapping[str, Any]]]",
                 copy.deepcopy(SOME_FAILURE_ENTRY_METADATA),
             )
-            entry_metadata["titles"][0]["title"] += (
-                " at " + datetime.datetime.utcnow().isoformat()
-            )
-            entry_metadata["descriptions"][0]["description"] += (
-                " at " + datetime.datetime.utcnow().isoformat()
-            )
+            now = datetime.datetime.now().astimezone()
+            entry_metadata["titles"][0]["title"] += " at " + now.isoformat()
+            entry_metadata["descriptions"][0]["description"] += " at " + now.isoformat()
 
             updated_meta = bep.update_record_metadata(
                 booked_entry,
@@ -580,7 +572,7 @@ def test_b2share_failed_update_record_metadata_raw(
             irbytes = he.read()
             logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
             logger.error(irbytes.decode())
-            raise he
+            raise
         finally:
             if booked_entry is not None:
                 bep.discard_booked_pid(booked_entry)
@@ -618,12 +610,9 @@ def test_b2share_publish_new_pid(file_params: "ParamTestData") -> "None":
         logger.info(f"Booked PID is {booked_entry.pid}")
 
         entry_metadata = copy.deepcopy(MINIMAL_VALID_ENTRY_METADATA)
-        entry_metadata["titles"][0]["title"] += (
-            " at " + datetime.datetime.utcnow().isoformat()
-        )
-        entry_metadata["descriptions"][0]["description"] += (
-            " at " + datetime.datetime.utcnow().isoformat()
-        )
+        now = datetime.datetime.now().astimezone()
+        entry_metadata["titles"][0]["title"] += " at " + now.isoformat()
+        entry_metadata["descriptions"][0]["description"] += " at " + now.isoformat()
 
         updated_meta = bep.update_record_metadata(
             booked_entry,
@@ -645,7 +634,7 @@ def test_b2share_publish_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None and published_meta is None:
             bep.discard_booked_pid(booked_entry)

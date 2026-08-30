@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import io
 import json
 import re
@@ -29,12 +27,8 @@ import urllib.parse
 
 if TYPE_CHECKING:
     from typing import (
-        Any,
         Optional,
         Pattern,
-        Mapping,
-        Sequence,
-        Tuple,
     )
 
     from typing_extensions import (
@@ -44,7 +38,6 @@ if TYPE_CHECKING:
     from ..common import (
         ORCIDPublicRecord,
         URIType,
-        URIWithMetadata,
     )
 
 

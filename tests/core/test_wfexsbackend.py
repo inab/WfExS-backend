@@ -23,7 +23,6 @@ import os
 import pathlib
 
 from typing import (
-    cast,
     TYPE_CHECKING,
 )
 
@@ -46,12 +45,11 @@ import yaml
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
-YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
 YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
 try:
-    from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
+    from yaml import CDumper as YAMLDumper
 except ImportError:
-    from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
+    from yaml import Dumper as YAMLDumper
 
 
 from wfexs_backend.wfexs_backend import WfExSBackend

@@ -14,12 +14,13 @@ from typing import (
 
 from typing_extensions import (
     Protocol,
+    TypeAlias,
 )
 
 class ToBytesProto(Protocol):
     def to_bytes(self, value: int, encoding: str) -> bytes: ...
 
-CompoundKey = Tuple[int, bytes] | Tuple[int, bytes, Optional[bytes]]
+CompoundKey: TypeAlias = Tuple[int, bytes] | Tuple[int, bytes, Optional[bytes]]
 
 LOG: Logger
 MAGIC_NUMBER: bytes

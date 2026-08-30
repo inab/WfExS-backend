@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,9 +15,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
-import copy
 import datetime
 import json
 import logging
@@ -48,9 +46,9 @@ from ..common import (
 )
 
 if TYPE_CHECKING:
-    import pathlib
     from typing import (
         Any,
+        FrozenSet,
         Iterator,
         Mapping,
         MutableMapping,
@@ -68,13 +66,10 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
-        AnyPath,
         EngineVersion,
         ExitVal,
         ExpectedOutput,
         Fingerprint,
-        MaterializedOutput,
         ProgsMapping,
         RelPath,
         SymbolicName,
@@ -108,7 +103,6 @@ if TYPE_CHECKING:
 
     from . import (
         EngineLocalConfig,
-        EnginePath,
         WorkflowEngineVersionStr,
     )
 
@@ -179,11 +173,11 @@ class CWLWorkflowEngine(WorkflowEngine):
     NO_WRAPPER_CWLTOOL_VERSION = cast("EngineVersion", "3.1.20210921111717")
     CWLTOOL_MAX_PYVER: (
         "Sequence[Tuple[Optional[int], Optional[int], EngineVersion]]"
-    ) = [
+    ) = (
         (3, None, NO_WRAPPER_CWLTOOL_VERSION),
         (3, 6, cast("EngineVersion", "3.1.20220116183622")),
         (None, None, DEFAULT_CWLTOOL_VERSION),
-    ]
+    )
 
     INPUT_DECLARATIONS_FILENAME = "inputdeclarations.yaml"
 
@@ -193,22 +187,26 @@ class CWLWorkflowEngine(WorkflowEngine):
         origTaggedName="docker.io/node:slim",
         type=ContainerType.Docker,
     )
-    OPERATIONAL_CONTAINER_TAGS = [NODEJS_CONTAINER_TAG]
+    OPERATIONAL_CONTAINER_TAGS = (NODEJS_CONTAINER_TAG,)
 
     ENGINE_NAME = "cwl"
 
-    SUPPORTED_CONTAINER_TYPES = {
-        ContainerType.NoContainer,
-        ContainerType.Singularity,
-        ContainerType.Docker,
-        ContainerType.Podman,
-    }
+    SUPPORTED_CONTAINER_TYPES = frozenset(
+        (
+            ContainerType.NoContainer,
+            ContainerType.Singularity,
+            ContainerType.Docker,
+            ContainerType.Podman,
+        )
+    )
 
-    SUPPORTED_SECURE_EXEC_CONTAINER_TYPES = {
-        ContainerType.NoContainer,
-        ContainerType.Singularity,
-        #    ContainerType.Podman,
-    }
+    SUPPORTED_SECURE_EXEC_CONTAINER_TYPES = frozenset(
+        (
+            ContainerType.NoContainer,
+            ContainerType.Singularity,
+            #    ContainerType.Podman,
+        )
+    )
 
     def __init__(
         self,
@@ -321,11 +319,11 @@ class CWLWorkflowEngine(WorkflowEngine):
         return True
 
     @classmethod
-    def SupportedContainerTypes(cls) -> "Set[ContainerType]":
+    def SupportedContainerTypes(cls) -> "FrozenSet[ContainerType]":
         return cls.SUPPORTED_CONTAINER_TYPES
 
     @classmethod
-    def SupportedSecureExecContainerTypes(cls) -> "Set[ContainerType]":
+    def SupportedSecureExecContainerTypes(cls) -> "FrozenSet[ContainerType]":
         return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
 
     @property
@@ -455,10 +453,10 @@ class CWLWorkflowEngine(WorkflowEngine):
                         try:
                             python_version_major = int(vers[0])
                             python_version_minor = int(vers[1])
-                        except:
+                        except BaseException as be:
                             errstr = f"Could not parse python version using {python_executable}"
                             self.logger.error(errstr)
-                            raise WorkflowEngineInstallException(errstr)
+                            raise WorkflowEngineInstallException(errstr) from be
                     else:
                         # Reading the output and error for the report
                         with open(cwltool_vers_stderr.name, "r") as c_stF:
@@ -567,7 +565,7 @@ STDERR
             # But there are still some issues in Computerome, so we are
             # installing the wrapper in any case, meanwhile the issue is
             # triaged and fixed.
-            installWrapper = True
+            # installWrapper = True
             if inst_engineVersion < self.NO_WRAPPER_CWLTOOL_VERSION:
                 node_wrapper_source_path = self.payloadsDir / self.NODEJS_WRAPPER
                 node_wrapper_inst_path = cwltool_install_dir / "bin" / "node"
@@ -692,7 +690,7 @@ STDERR
                                                                 ),
                                                                 search_other=False,
                                                             )
-                                                        except:
+                                                        except BaseException:
                                                             self.logger.warning(
                                                                 f"Unable to install cwltool {version}"
                                                             )
@@ -872,8 +870,8 @@ STDERR
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
-        context_inputs: "Sequence[MaterializedInput]" = [],
-        context_environment: "Sequence[MaterializedInput]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = (),
+        context_environment: "Sequence[MaterializedInput]" = (),
         remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
@@ -1014,7 +1012,7 @@ STDERR
         list_of_containers: "MutableSequence[ContainerTaggedName]" = []
         for containerTag in containerTags:
             container_type = ContainerType.Docker
-            if containerTag.startswith("http:") or containerTag.startswith("https:"):
+            if containerTag.startswith(("http:", "https:")):
                 container_type = ContainerType.Singularity
 
             putative_container_tag = ContainerTaggedName(
@@ -1139,6 +1137,7 @@ STDERR
         queued = datetime.datetime.fromtimestamp(
             psutil.Process(os.getpid()).create_time()
         ).astimezone()
+        min_utc = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
         yield StagedExecution(
             status=ExecutionStatus.Queued,
             job_id=str(os.getpid()),
@@ -1150,8 +1149,8 @@ STDERR
             matCheckOutputs=[],
             outputsDir=outputsDir,
             queued=queued,
-            started=datetime.datetime.min,
-            ended=datetime.datetime.min,
+            started=min_utc,
+            ended=min_utc,
             logfile=[],
         )
 
@@ -1233,7 +1232,7 @@ STDERR
 
             try:
                 # Create YAML file
-                cwlizedInputs = self.createYAMLFile(
+                cwlizedInputs = self.createYAMLFile(  # noqa: F841
                     matInputs, cwl_dict_inputs, inputsFileName
                 )
                 if os.path.isfile(inputsFileName):
@@ -1261,7 +1260,6 @@ STDERR
                                     instEnv[envKey] = valToSet
                             instEnv.update(self.container_factory.environment)
 
-                            debugFlag = ""
                             if self.logger.getEffectiveLevel() <= logging.DEBUG:
                                 debugFlags = [
                                     "--debug",
@@ -1410,7 +1408,7 @@ STDERR
                                 outputsDir=outputsDir,
                                 queued=queued,
                                 started=started,
-                                ended=datetime.datetime.min,
+                                ended=min_utc,
                                 diagram=dagFile,
                                 logfile=[
                                     stdoutFilename,
@@ -1497,14 +1495,14 @@ STDERR
                         logfile=[],
                     )
 
-            except WorkflowEngineException as wfex:
-                raise wfex
+            except WorkflowEngineException:
+                raise
             except Exception as error:
                 raise WorkflowEngineException(
                     "ERROR: cannot execute the workflow {}, {}".format(
                         localWorkflowFile, error
                     )
-                )
+                ) from error
         else:
             raise WorkflowEngineException(
                 "CWL workflow {} has not been successfully materialized and packed for their execution".format(
@@ -1538,10 +1536,10 @@ STDERR
             else:
                 raise WorkflowEngineException("Dict of execution inputs is empty")
 
-        except IOError as error:
+        except OSError as error:
             raise WorkflowEngineException(
                 "ERROR: cannot create YAML file {}, {}".format(filename, error)
-            )
+            ) from error
 
     def augmentCWLInputs(
         self,

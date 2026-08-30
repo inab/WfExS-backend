@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import absolute_import
 
 import datetime
 import logging
@@ -42,7 +40,6 @@ from ..common import (
     ContentKind,
     LicensedURI,
     MaterializedContent,
-    URIWithMetadata,
 )
 
 if TYPE_CHECKING:
@@ -74,8 +71,6 @@ if TYPE_CHECKING:
         SymbolicName,
         URIType,
     )
-
-    from ..workflow import WF
 
 from . import (
     DraftEntry,
@@ -188,18 +183,17 @@ class NextcloudContentExporter:
             relretval = name
 
         retval = cast("AbsPath", self.base_directory + "/" + relretval)
-        retvalobj = None
 
         try:
             return bool(self.enc.delete(retval))
         except nextcloud_client.nextcloud_client.HTTPResponseError as nce:
             if nce.status_code == 404:
                 return False
-            raise nce
+            raise
         except urllib.error.HTTPError as he:
             if he.code == 404:
                 return False
-            raise he
+            raise
 
     def _chunked_uploader(self, fmapping: "ExportMapping") -> "DAVRequestResponse":
         local_file, uplodir, destname = fmapping
@@ -259,7 +253,7 @@ class NextcloudContentExporter:
                 "RelPath",
                 os.path.join(retval_relreldir, mapping.remote_dirname.lstrip("/")),
             )
-            remote_basename = mapping.remote_basename
+            # remote_basename = mapping.remote_basename
 
             if os.path.exists(local_filename):
                 if os.path.isfile(local_filename):
@@ -332,7 +326,10 @@ class NextcloudContentExporter:
         the_path = urllib.parse.quote(self.base_directory + "/" + relpath)
 
         if expire_in is not None:
-            expire_at_d = datetime.date.today() + datetime.timedelta(days=expire_in)
+            expire_at_d = (
+                datetime.datetime.now().astimezone().date()
+                + datetime.timedelta(days=expire_in)
+            )
             expire_at = expire_at_d.isoformat()
         else:
             expire_at = None
@@ -421,8 +418,8 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -460,8 +457,8 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Optional[DraftEntry]":
         if preferred_id is None:
             preferred_id = self.default_preferred_id
@@ -704,8 +701,8 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Mapping[str, Any]":
         # TODO: implement this (if it makes sense!)
 
@@ -714,7 +711,7 @@ class NextcloudExportPlugin(AbstractTokenExportPlugin):
     def _create_share_links(
         self,
         remote_relpath: "str",
-        licences: "Sequence[LicenceDescription]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
     ) -> "Tuple[Sequence[LicensedURI], Sequence[str], Optional[int]]":
         # Generate the share link(s) once all the contents are there
         email_addresses = self.setup_block.get("email-addresses")

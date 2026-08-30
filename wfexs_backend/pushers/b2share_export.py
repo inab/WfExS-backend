@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import absolute_import
 
 import copy
 import datetime
@@ -31,15 +29,9 @@ from typing import (
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 
 import jsonschema.validators
 import jsonpointer
-
-from ..common import (
-    MaterializedContent,
-    URIWithMetadata,
-)
 
 if TYPE_CHECKING:
     import pathlib
@@ -52,27 +44,20 @@ if TYPE_CHECKING:
         MutableSequence,
         Optional,
         Sequence,
-        Set,
         Tuple,
         Type,
         Union,
     )
-
-    from jsonschema.exceptions import ValidationError
 
     from typing_extensions import (
         Final,
     )
 
     from ..common import (
-        AbsPath,
-        AnyContent,
         LicenceDescription,
-        RelPath,
         ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
-        URIType,
     )
 
 from . import (
@@ -115,16 +100,16 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
 
     DEFAULT_B2SHARE_COMMUNITY: "Final[str]" = "EUDAT"
 
-    BANNED_SCHEMA_KEYS: "Final[Sequence[str]]" = [
+    BANNED_SCHEMA_KEYS: "Final[Sequence[str]]" = (
         "$future_doi",
         "owners",
-    ]
+    )
 
-    BANNED_PATCH_OPS_KEYS: "Final[Sequence[str]]" = [
+    BANNED_PATCH_OPS_KEYS: "Final[Sequence[str]]" = (
         "$schema",
         "community",
         *BANNED_SCHEMA_KEYS,
-    ]
+    )
 
     DEFAULT_DESCRIPTION_TYPE: "Final[str]" = "TechnicalInfo"
 
@@ -132,8 +117,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -366,7 +351,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         reported_errors = False
         for se in validator(entries_metadata_schema_json).iter_errors(entry_metadata):
             if not reported_errors:
-                self.logger.error(f"B2SHARE entry metadata could not be validated.")
+                self.logger.error("B2SHARE entry metadata could not be validated.")
                 self.logger.error(f"\tSchema is at {entries_schema_url}")
                 self.logger.error("\tMetadata:")
                 self.logger.error(json.dumps(entry_metadata, indent=4))
@@ -402,8 +387,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         do_validate: "bool" = False,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Mapping[str, Any]":
         if base_id is None:
             base_id = self.default_preferred_id
@@ -423,7 +408,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                     base_id = base_meta["id"]
             except urllib.error.HTTPError as he:
                 if he.code != 404:
-                    raise he
+                    raise
 
                 # The entry does not exist, so discard this id
                 base_id = None
@@ -446,7 +431,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             minimal_metadata = {
                 "titles": [
                     {
-                        "title": f"Draft record created at {datetime.datetime.utcnow().isoformat()}",
+                        "title": f"Draft record created at {datetime.datetime.now().astimezone().isoformat()}",
                     },
                 ],
                 "open_access": True,
@@ -540,7 +525,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                     if goto_draft_meta is not None:
                         return goto_draft_meta
 
-            raise he
+            raise
 
         return cast("Mapping[str, Any]", response)
 
@@ -583,7 +568,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                     with urllib.request.urlopen(reqdraft) as getmeta:
                         response = json.load(getmeta)
                 else:
-                    raise he
+                    raise
 
             return cast("Mapping[str, Any]", response)
         else:
@@ -616,7 +601,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                         and len(retval.get("hits", {}).get("hits", [])) > 0
                     ):
                         return cast("Mapping[str, Any]", retval["hits"]["hits"][0])
-            except:
+            except BaseException:
                 self.logger.exception(f"Unable to fetch info about {pid} B2SHARE entry")
 
         return None
@@ -628,8 +613,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Optional[DraftEntry]":
         """
         It returns the publisher internal draft id, the public DOI / link, and the draft record representation
@@ -656,7 +641,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         """
         This method can be overridden to provide more context
         """
-        return f"Unable to book a B2SHARE entry"
+        return "Unable to book a B2SHARE entry"
 
     def discard_booked_pid(self, pid_or_draft: "Union[str, DraftEntry]") -> "bool":
         if isinstance(pid_or_draft, DraftEntry):
@@ -671,7 +656,6 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
             booked_id = booked_meta.get("id")
             # Booked
             if booked_id is not None:
-                fill_in_new_entry = False
                 # Submitted
                 if booked_meta.get("metadata", {}).get("publication_state") == "draft":
                     discard_link = booked_meta.get("links", {}).get("self")
@@ -691,7 +675,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 method="DELETE",
             )
             try:
-                with urllib.request.urlopen(discardreq) as pH:
+                with urllib.request.urlopen(discardreq):
                     return True
             except Exception as e:
                 self.logger.exception(f"Failed to discard entry {pid}")
@@ -864,8 +848,8 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
         do_validate: "bool" = False,
     ) -> "Mapping[str, Any]":
         """
@@ -880,7 +864,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 f"B2SHARE draft/entry {draft_entry.draft_id} is unavailable"
             )
 
-        patch_ops: "MutableSequence[Mapping[str, Any]]"
+        metadata_patch_ops: "Sequence[Mapping[str, Any]]"
         # Do not patch when no metadata is provided
 
         updated_metadata: "Optional[MutableMapping[str, Any]]" = None
@@ -999,7 +983,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 self.logger.exception(
                     "PATCH ERROR BODY:\n" + json.dumps(json.load(he.fp), indent=4)
                 )
-                raise he
+                raise
 
             return cast("Mapping[str, Any]", updated_record)
         else:

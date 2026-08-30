@@ -8,24 +8,8 @@ from typing import (
 )
 from jsonpath_ng.jsonpath import (
     JSONPath,
-    DatumInContext,
-    AutoIdForDatum,
-    Root,
-    This,
-    Child,
-    Parent,
-    Where,
-    Descendants,
-    Union,
-    Intersect,
-    Fields,
-    Index,
-    Slice,
 )
 from jsonpath_ng.exceptions import JsonPathParserError as JsonPathParserError
-from jsonpath_ng.jsonpath import (
-    JSONPath,
-)
 from jsonpath_ng.lexer import (
     JsonPathLexer as JsonPathLexer,
 )

@@ -35,7 +35,6 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         PathLikePath,
         SecurityContextConfig,
         URIType,
@@ -101,7 +100,7 @@ def downloadContentFrom_s3(
         kind = ContentKind.File
     except botocore.exceptions.ClientError as error:
         if error.response["Error"]["Code"] != "NoSuchKey":
-            raise error
+            raise
 
         # This happens when the object is not a file
         blob_prefix = prefix
@@ -133,8 +132,8 @@ def downloadContentFrom_s3(
                         errmsg = f'Error downloading {key["Key"]} from {remote_file} to {local_blob_filename}'
                         logger.exception(errmsg)
                         raise FetcherException(errmsg) from e
-        except FetcherException as fe:
-            raise fe
+        except FetcherException:
+            raise
         except Exception as e:
             errmsg = f"Error paginating {prefix} from {remote_file} to {local_path}"
             logger.exception(errmsg)

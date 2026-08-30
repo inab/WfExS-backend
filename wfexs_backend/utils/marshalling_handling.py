@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import absolute_import
 
 import abc
 import collections.abc
@@ -72,7 +70,7 @@ def marshall_namedtuple(obj: "Any", workdir: "Optional[pathlib.Path]" = None) ->
     elif isinstance(obj, tuple) and hasattr(obj, "_fields"):  # namedtuple
         fields = zip(obj._fields, _recurse_m(obj, workdir))
         class_name = obj.__class__.__name__
-        return dict(fields, **{"_type": class_name})
+        return dict(fields, **{"_type": class_name})  # noqa: PIE804
     elif isinstance(obj, object) and hasattr(obj, "__dataclass_fields__"):  # dataclass
         fields_m = map(
             lambda field: (
@@ -82,7 +80,7 @@ def marshall_namedtuple(obj: "Any", workdir: "Optional[pathlib.Path]" = None) ->
             obj.__dataclass_fields__.keys(),
         )
         class_name = obj.__class__.__name__
-        return dict(fields_m, **{"_type": class_name})
+        return dict(fields_m, **{"_type": class_name})  # noqa: PIE804
     elif isinstance(obj, (collections.abc.Mapping, dict)):
         return type(obj)(zip(obj.keys(), _recurse_m(obj.values(), workdir)))  # type: ignore[call-arg]
     elif isinstance(obj, collections.abc.Iterable) and not isinstance(obj, str):
@@ -228,7 +226,7 @@ def unmarshall_namedtuple(
 
     if isinstance(objres, object):
         if hasattr(objres, "_value_defaults_fixes") and callable(
-            getattr(objres, "_value_defaults_fixes")
+            getattr(objres, "_value_defaults_fixes")  # noqa: B009
         ):
             objres._value_defaults_fixes()
     return objres

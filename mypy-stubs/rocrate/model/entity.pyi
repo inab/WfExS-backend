@@ -11,14 +11,12 @@ from typing import (
 from typing_extensions import (
     TypedDict,
     Required,
-    NotRequired,
 )
 
 EntityRef = TypedDict("EntityRef", {"@id": Required[str]})
 
 from .. import vocabs as vocabs
 from ..rocrate import ROCrate
-from _typeshed import Incomplete
 from collections.abc import MutableMapping
 
 class Entity(MutableMapping[str, Any]):

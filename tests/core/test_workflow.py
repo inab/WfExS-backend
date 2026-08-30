@@ -20,12 +20,10 @@ import pytest
 import datetime
 import inspect
 import logging
-import os
 import pathlib
 import time
 
 from typing import (
-    cast,
     TYPE_CHECKING,
 )
 
@@ -33,10 +31,6 @@ if TYPE_CHECKING:
     from typing import (
         Optional,
         Sequence,
-        Tuple,
-    )
-    from wfexs_backend.wfexs_backend import (
-        WfExSConfigBlock,
     )
 
 from tests.core.test_wfexsbackend import (
@@ -48,8 +42,6 @@ from wfexs_backend.common import (
     ExecutionStatus,
 )
 from wfexs_backend.workflow import WF
-
-from tests.util import get_path
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -78,7 +70,7 @@ def test_workflow_stage(
         assert not stagedSetup.is_damaged
         assert isinstance(wfInstance.stageMarshalled, datetime.datetime)
 
-    except:
+    except BaseException:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
             raise
     else:
@@ -107,7 +99,7 @@ def test_workflow_create_staged_crate(
 
         assert staged_crate.exists()
         assert staged_crate.stat().st_size > 0
-    except:
+    except BaseException:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
             raise
     else:
@@ -132,7 +124,7 @@ def test_workflow_offline_exec(
 
         assert staged_exec.status == ExecutionStatus.Finished
         assert staged_exec.exitVal == 0
-    except:
+    except BaseException:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
             raise
     else:
@@ -163,7 +155,7 @@ def test_workflow_create_prov_crate(
 
         assert prov_crate.exists()
         assert prov_crate.stat().st_size > 0
-    except:
+    except BaseException:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
             raise
     else:
@@ -202,8 +194,8 @@ def test_workflow_multiple_executions(
         creation_time, executions = wfInstance.unmarshallExecute()
         assert (
             len(executions) == NUM_PARALLEL
-        ), f"Inconsistent number of registered executions (got {len(executions)}, expected {NUM_PARALLEL})"
-    except:
+        ), f"Inconsistent number of registered executions (got {len(executions)}, expected {NUM_PARALLEL}, creation time {creation_time})"
+    except BaseException:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
             raise
     else:
@@ -235,7 +227,7 @@ def test_workflow_parallel_executions(
         ), f"Some jobs are missing (recorded {job_ids})"
         assert (
             len(executions) == NUM_PARALLEL
-        ), f"Inconsistent initial number of registered executions (got {len(executions)}, expected {NUM_PARALLEL})"
+        ), f"Inconsistent initial number of registered executions (got {len(executions)}, expected {NUM_PARALLEL}, creation time {creation_time})"
         # Wait for 10 seconds
         time.sleep(10)
         creation_time, executions = wfInstance.unmarshallExecute(offline=True)
@@ -257,8 +249,8 @@ def test_workflow_parallel_executions(
         ), f"Some jobs are missing (recorded {job_ids})"
         assert (
             len(executions) == NUM_PARALLEL
-        ), f"Inconsistent initial number of registered executions (got {len(executions)}, expected {NUM_PARALLEL})"
-    except:
+        ), f"Inconsistent initial number of registered executions (got {len(executions)}, expected {NUM_PARALLEL}, creation time {creation_time})"
+    except BaseException:
         if should_fail is None or inspect.currentframe().f_code.co_name not in should_fail:  # type: ignore[union-attr]
             raise
     else:

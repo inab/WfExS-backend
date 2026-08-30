@@ -6,6 +6,10 @@ from typing import (
     Tuple,
 )
 
+from typing_extensions import (
+    Self,
+)
+
 import ftplib
 from collections.abc import Generator
 
@@ -90,7 +94,7 @@ class FTPHost:
         followlinks: bool = False,
     ) -> Generator[Tuple[str, Sequence[str], Sequence[str]], None, None]: ...
     def chmod(self, path: str, mode: int) -> None: ...
-    def __enter__(self) -> FTPHost: ...
+    def __enter__(self) -> Self: ...
     def __exit__(
         self,
         exc_type: type[BaseException] | None,

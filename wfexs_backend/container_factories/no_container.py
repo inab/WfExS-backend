@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 from typing import (
     cast,
@@ -25,30 +24,23 @@ from typing import (
 if TYPE_CHECKING:
     import pathlib
     from typing import (
-        Any,
-        Mapping,
-        MutableMapping,
-        MutableSequence,
+        FrozenSet,
         Optional,
-        Sequence,
         Set,
         Tuple,
-        Type,
         Union,
     )
 
+    from typing_extensions import (
+        Final,
+    )
+
     from ..common import (
-        AbsPath,
-        AnyPath,
         ContainerTaggedName,
-        Fingerprint,
-        RelPath,
-        URIType,
     )
 
     from . import (
         ContainerEngineVersionStr,
-        ContainerFileNamingMethod,
     )
 
 from . import (
@@ -64,7 +56,9 @@ class NoContainerFactory(ContainerFactory):
     The 'no container approach', for development and local installed software
     """
 
-    AcceptedContainerTypes = set([common.ContainerType.NoContainer])
+    AcceptedContainerTypes: "Final[FrozenSet[common.ContainerType]]" = frozenset(
+        [common.ContainerType.NoContainer]
+    )
 
     @classmethod
     def ContainerType(cls) -> "common.ContainerType":
@@ -72,10 +66,13 @@ class NoContainerFactory(ContainerFactory):
 
     @classmethod
     def AcceptsContainerType(
-        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+        cls,
+        container_type: "Union[common.ContainerType, Set[common.ContainerType], FrozenSet[common.ContainerType]]",
     ) -> "bool":
         return not cls.AcceptedContainerTypes.isdisjoint(
-            container_type if isinstance(container_type, set) else (container_type,)
+            container_type
+            if isinstance(container_type, (set, frozenset))
+            else (container_type,)
         )
 
     def engine_version(self) -> "ContainerEngineVersionStr":

@@ -8,17 +8,17 @@ from typing import (
     Sequence,
 )
 from typing_extensions import (
-    NotRequired,
     Required,
     TypedDict,
+    TypeAlias,
 )
 
 from .dataset import Dataset as Dataset
 from .file import File as File
 from ..rocrate import ROCrate
 
-JSONLD_CONTEXT = Mapping[str, str | Mapping[str, str]]
-JSONLD_GRAPH_ITEM = Mapping[str, Any]
+JSONLD_CONTEXT: TypeAlias = Mapping[str, str | Mapping[str, str]]
+JSONLD_GRAPH_ITEM: TypeAlias = Mapping[str, Any]
 
 JSONLD = TypedDict(
     "JSONLD",

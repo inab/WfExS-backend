@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import hashlib
 import json
 import logging
 from typing import (
-    cast,
     NamedTuple,
     TYPE_CHECKING,
 )
@@ -52,8 +51,6 @@ from dxf import (
 from dxf.exceptions import (
     DXFDigestMismatchError,
 )
-
-import dxf.exceptions
 
 # Needed for proper error handling
 import requests
@@ -103,7 +100,7 @@ class DXFFat(DXF):
             r = self._request(http_method, "manifests/" + alias, headers=headersFATV2)  # type: ignore[no-untyped-call]
         except requests.exceptions.HTTPError as he:
             if he.response is None or he.response.status_code != 404:
-                raise he
+                raise
 
             headersV2 = {"Accept": DockerManifestV2MIMEType}
             r = self._request(http_method, "manifests/" + alias, headers=headersV2)  # type: ignore[no-untyped-call]
@@ -119,7 +116,7 @@ class DXFFat(DXF):
             manifest, r = self.get_manifest_and_response(alias)
         except requests.exceptions.HTTPError as he:
             if he.response is None or he.response.status_code != 404:
-                raise he
+                raise
 
             return None, None
 

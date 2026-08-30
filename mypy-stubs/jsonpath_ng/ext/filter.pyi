@@ -6,7 +6,6 @@ from typing import (
 )
 from .. import DatumInContext as DatumInContext, Index as Index, JSONPath as JSONPath
 from ..jsonpath import JSONVal
-from _typeshed import Incomplete
 
 OPERATOR_MAP: Mapping[str, Callable[[Any, Any], bool]]
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,50 +16,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import abc
 import copy
-import logging
 from typing import (
     cast,
-    NamedTuple,
     TYPE_CHECKING,
 )
-import urllib.parse
 
 if TYPE_CHECKING:
     import pathlib
     from typing import (
-        Any,
-        ClassVar,
-        Mapping,
-        MutableSequence,
         Optional,
         Sequence,
-        Tuple,
-        Union,
     )
-
-    from typing_extensions import Final
 
     from ..common import (
-        AbsPath,
-        AnyContent,
         LicenceDescription,
-        MaterializedInput,
-        MaterializedOutput,
-        RelPath,
         ResolvedORCID,
         SecurityContextConfig,
-        SymbolicName,
-        URIType,
-        URIWithMetadata,
         WritableSecurityContextConfig,
-    )
-
-    from . import (
-        DraftEntry,
     )
 
 from . import (
@@ -76,8 +51,8 @@ class AbstractTokenSandboxedExportPlugin(AbstractTokenExportPlugin):
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         if setup_block is None:

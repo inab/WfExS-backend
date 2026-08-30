@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import copy
 import datetime
 import hashlib
@@ -29,7 +27,6 @@ import os.path
 import pathlib
 import shutil
 import traceback
-import types
 import urllib.parse
 import uuid
 
@@ -44,13 +41,11 @@ if TYPE_CHECKING:
         Any,
         Iterator,
         Mapping,
-        MutableMapping,
         MutableSequence,
         Optional,
         Sequence,
         Set,
         Tuple,
-        Type,
         Union,
     )
 
@@ -63,14 +58,9 @@ if TYPE_CHECKING:
         AbsPath,
         AnyURI,
         Fingerprint,
-        ProgsMapping,
         RelPath,
         WritableSecurityContextConfig,
         URIType,
-    )
-
-    from .fetchers import (
-        StatefulFetcher,
     )
 
     from .security_context import (
@@ -118,12 +108,7 @@ from .common import (
 )
 
 from .fetchers import (
-    AbstractStatefulFetcher,
-    DocumentedProtocolFetcher,
-    DocumentedStatefulProtocolFetcher,
     FetcherException,
-    FetcherInstanceException,
-    InvalidFetcherException,
 )
 
 from .scheme_catalog import (
@@ -199,12 +184,12 @@ class CacheHandler:
         )
 
     @staticmethod
-    def getHashDir(destdir: "pathlib.Path") -> "pathlib.Path":
-        hashDir = destdir / "uri_hashes"
+    def getHashDir(cache_dir: "pathlib.Path") -> "pathlib.Path":
+        hashDir = cache_dir / "uri_hashes"
         if not hashDir.exists():
             try:
                 hashDir.mkdir(parents=True)
-            except IOError:
+            except OSError:
                 errstr = "ERROR: Unable to create directory for workflow URI hashes {}.".format(
                     hashDir
                 )
@@ -275,7 +260,7 @@ class CacheHandler:
     def list(
         self,
         *args: "str",
-        destdir: "Optional[pathlib.Path]" = None,
+        cache_dir: "Optional[pathlib.Path]" = None,
         acceptGlob: "bool" = False,
         cascade: "bool" = False,
     ) -> "Iterator[Tuple[LicensedURI, CacheMetadataDict]]":
@@ -283,8 +268,8 @@ class CacheHandler:
         This method iterates over the list of metadata entries,
         using glob patterns if requested
         """
-        if destdir is None:
-            destdir = self.cacheDir
+        if cache_dir is None:
+            cache_dir = self.cacheDir
 
         entries = set(args)
         if entries and acceptGlob:
@@ -295,7 +280,7 @@ class CacheHandler:
         cascadeEntries: "Set[URIType]" = set()
         unmatchedEntries = dict()
 
-        hashDir = self.getHashDir(destdir)
+        hashDir = self.getHashDir(cache_dir)
         with os.scandir(hashDir) as hD:
             for entry in hD:
                 # We are avoiding to enter in loops around '.' and '..'
@@ -355,7 +340,7 @@ class CacheHandler:
                                         c_resolves_to = [cast("URIType", c_resolves_to)]
 
                                     cascadeEntries.add(*c_resolves_to)
-                    except Exception as e:
+                    except Exception:
                         self.logger.debug(traceback.format_exc())
 
         # Now, the cascade passes
@@ -393,7 +378,7 @@ class CacheHandler:
     def remove(
         self,
         *args: "str",
-        destdir: "Optional[pathlib.Path]" = None,
+        cache_dir: "Optional[pathlib.Path]" = None,
         doRemoveFiles: "bool" = False,
         acceptGlob: "bool" = False,
         cascade: "bool" = False,
@@ -402,13 +387,13 @@ class CacheHandler:
         This method iterates elements from metadata entries,
         and optionally the cached value
         """
-        if destdir is None:
-            destdir = self.cacheDir
+        if cache_dir is None:
+            cache_dir = self.cacheDir
 
         if len(args) > 0:
-            hashDir = self.getHashDir(destdir)
+            hashDir = self.getHashDir(cache_dir)
             for licensed_meta_uri, metaStructure in self.list(
-                *args, destdir=destdir, acceptGlob=acceptGlob, cascade=cascade
+                *args, cache_dir=cache_dir, acceptGlob=acceptGlob, cascade=cascade
             ):
                 removeCachedCopyPath: "Optional[pathlib.Path]" = None
                 for meta in metaStructure["metadata_array"]:
@@ -468,23 +453,23 @@ class CacheHandler:
     def inject(
         self,
         the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
-        destdir: "Optional[pathlib.Path]" = None,
+        cache_dir: "Optional[pathlib.Path]" = None,
         fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
         finalCachedFilename: "Optional[pathlib.Path]" = None,
         tempCachedFilename: "Optional[pathlib.Path]" = None,
         inputKind: "Optional[ContentKind]" = None,
         clonable: "bool" = True,
     ) -> "Tuple[Optional[pathlib.Path], Optional[Fingerprint]]":
-        if destdir is None:
-            destdir = self.cacheDir
+        if cache_dir is None:
+            cache_dir = self.cacheDir
 
         # At least one of the should exist
         assert (finalCachedFilename is not None) or (tempCachedFilename is not None)
 
         newFinalCachedFilename, fingerprint = self._inject(
-            self.getHashDir(destdir),
+            self.getHashDir(cache_dir),
             the_remote_file,
-            destdir=destdir,
+            cache_dir=cache_dir,
             fetched_metadata_array=fetched_metadata_array,
             finalCachedFilename=finalCachedFilename,
             tempCachedFilename=tempCachedFilename,
@@ -523,7 +508,7 @@ class CacheHandler:
         self,
         hashDir: "pathlib.Path",
         the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
-        destdir: "pathlib.Path",
+        cache_dir: "pathlib.Path",
         fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
         finalCachedFilename: "Optional[pathlib.Path]" = None,
         tempCachedFilename: "Optional[pathlib.Path]" = None,
@@ -605,7 +590,7 @@ class CacheHandler:
                 )
 
             if finalCachedFilename is None:
-                finalCachedFilename = destdir / fingerprint
+                finalCachedFilename = cache_dir / fingerprint
         else:
             finalCachedFilename = None
 
@@ -662,18 +647,18 @@ class CacheHandler:
     def validate(
         self,
         *args: "str",
-        destdir: "Optional[pathlib.Path]" = None,
+        cache_dir: "Optional[pathlib.Path]" = None,
         acceptGlob: "bool" = False,
         cascade: "bool" = False,
     ) -> "Iterator[Tuple[LicensedURI, bool, Optional[CacheMetadataDict]]]":
-        if destdir is None:
-            destdir = self.cacheDir
+        if cache_dir is None:
+            cache_dir = self.cacheDir
 
-        hashDir = self.getHashDir(destdir)
+        hashDir = self.getHashDir(cache_dir)
 
         retMetaStructure: "Optional[Mapping[str, Any]]"
         for licensed_meta_uri, metaStructure in self.list(
-            *args, destdir=destdir, acceptGlob=acceptGlob, cascade=cascade
+            *args, cache_dir=cache_dir, acceptGlob=acceptGlob, cascade=cascade
         ):
             inputKind: "Union[Optional[str], ContentKind, Sequence[URIType]]" = (
                 metaStructure.get("kind")
@@ -749,34 +734,34 @@ class CacheHandler:
         self,
         remote_file: "Union[AnyURI, urllib.parse.ParseResult, Sequence[AnyURI], Sequence[urllib.parse.ParseResult]]",
         offline: "bool",
-        destdir: "Optional[pathlib.Path]" = None,
+        cache_dir: "Optional[pathlib.Path]" = None,
         ignoreCache: "bool" = False,
         registerInCache: "bool" = True,
         vault: "Optional[SecurityContextVault]" = None,
         sec_context_name: "Optional[str]" = None,
         default_clonable: "bool" = True,
     ) -> "CachedContent":
-        if destdir is None:
-            destdir = self.cacheDir
+        if cache_dir is None:
+            cache_dir = self.cacheDir
 
         # The directory with the content, whose name is based on sha256
-        if not destdir.exists():
+        if not cache_dir.exists():
             try:
-                destdir.mkdir(parents=True)
-            except IOError:
+                cache_dir.mkdir(parents=True)
+            except OSError:
                 errstr = (
-                    "ERROR: Unable to create directory for workflow inputs {}.".format(
-                        destdir
+                    "ERROR: Unable to create directory for fetched contents {}.".format(
+                        cache_dir
                     )
                 )
                 raise CacheHandlerException(errstr)
 
         # The directory where the symlinks derived from SHA1 obtained from URIs
         # to the content are placed
-        hashDir = self.getHashDir(destdir)
+        hashDir = self.getHashDir(cache_dir)
 
         # This filename will only be used when content is being fetched
-        tempCachedFilename = destdir / ("caching-" + str(uuid.uuid4()))
+        tempCachedFilename = cache_dir / ("caching-" + str(uuid.uuid4()))
 
         # This is an iterative process, where the URI is resolved and peeled until a basic fetching protocol is reached
         # inputKind: "Union[ContentKind, LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]]" = remote_file
@@ -886,7 +871,7 @@ class CacheHandler:
                 if not refetch:
                     try:
                         metaStructure = self._parseMetaStructure(uriMetaCachedFilename)
-                    except Exception as e:
+                    except Exception:
                         # Metadata is corrupted
                         self.logger.warning(
                             f"Metadata cache {uriMetaCachedFilename} is corrupted. Ignoring."
@@ -1053,7 +1038,7 @@ class CacheHandler:
                             finalCachedFilename, fingerprint = self._inject(
                                 hashDir,
                                 LicensedURI(uri=the_remote_file, licences=the_licences),
-                                destdir=destdir,
+                                cache_dir=cache_dir,
                                 fetched_metadata_array=pfr.metadata_array,
                                 tempCachedFilename=tempCachedFilename,
                                 inputKind=inputKind,
@@ -1093,7 +1078,7 @@ class CacheHandler:
                             if nested_exception is not None:
                                 raise che from nested_exception
                             else:
-                                raise che
+                                raise
                         except Exception as e:
                             errmsg = "Cannot download content from {} to {} (while processing {}) (temp file {}): {}".format(
                                 the_remote_file,

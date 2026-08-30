@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Parts of this module are inspired on translated-groovy3-parser.py
 # from groovy-parser module
-# Copyright (C) 2024 Barcelona Supercomputing Center, José M. Fernández
+# Copyright (C) 2026 Barcelona Supercomputing Center, José M. Fernández
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,6 @@ from typing import (
 
 if TYPE_CHECKING:
     from typing import (
-        Any,
         Iterator,
         Mapping,
         MutableMapping,
@@ -330,16 +329,16 @@ class NfWorkflow(NamedTuple):
 
 
 def extract_nextflow_workflow(node: "RuleNode") -> "NfWorkflow":
-    nodes = None
+    # nodes = None
     name = None
     if node["rule"] == W_RULE:
         assert len(node["children"]) > 1
         name = cast("LeafNode", cast("RuleNode", node["children"][0])["children"][0])[
             "value"
         ]
-        nodes = cast("RuleNode", node["children"][1])["children"]
-    elif node["rule"] == NAMELESS_W_RULE:
-        nodes = node["children"]
+        # nodes = cast("RuleNode", node["children"][1])["children"]
+    # elif node["rule"] == NAMELESS_W_RULE:
+    #     nodes = node["children"]
 
     return NfWorkflow(
         name=name,
@@ -364,7 +363,7 @@ def extract_nextflow_config_plugins(
 
 if TYPE_CHECKING:
     KeyType = TypeVar("KeyType")
-    DeepValType = TypeVar("DeepValType", contravariant=True)
+    DeepValType = TypeVar("DeepValType", contravariant=True)  # noqa: PLC0105
 
 
 def deep_update(
@@ -397,7 +396,7 @@ def deep_update(
 
 def extract_nested_assignments(
     children: "Sequence[Union[EmptyNode, LeafNode, RuleNode]]",
-    only_names: "Sequence[str]" = [],
+    only_names: "Sequence[str]" = (),
 ) -> "ContextAssignments":
     context: "ContextAssignments" = dict()
     for a_child in children:
@@ -407,7 +406,6 @@ def extract_nested_assignments(
         child = cast("RuleNode", a_child)
         child_rule = child["rule"]
 
-        unprocessed = True
         if child_rule[-len(INCLUDE_PROCESS_RULE) :] == INCLUDE_PROCESS_RULE:
             if len(child["children"]) != 2:
                 continue
@@ -686,7 +684,7 @@ def cached_parse_and_digest_groovy_content(
 
 def analyze_nf_content(
     content: "str",
-    only_names: "Sequence[str]" = [],
+    only_names: "Sequence[str]" = (),
     cache_path: "Optional[PathLikePath]" = None,
     ro_cache_path: "Optional[PathLikePath]" = None,
 ) -> "Tuple[Union[RuleNode, LeafNode, EmptyNode], Sequence[NfProcess], Sequence[NfInclude], Sequence[NfWorkflow], Sequence[NfIncludeConfig], Sequence[NfPlugin], ContextAssignments]":
@@ -786,9 +784,9 @@ if __name__ == "__main__":
                 print(f"WORKFLOW {workflows}", file=rW)
                 print(f"INCLUDECONFIG {includeconfigs}", file=rW)
                 print(f"PLUGINS {plugins}", file=rW)
-                print(f"ASSIGNMENTS:", file=rW)
+                print("ASSIGNMENTS:", file=rW)
                 json.dump(interesting_assignments, rW, indent=4)
-        except Exception as e:
+        except Exception:
             print(f"\tParse failed, see {logfile}")
-            logging.exception("Parse failed")
+            log.exception("Parse failed")
         lH.close()

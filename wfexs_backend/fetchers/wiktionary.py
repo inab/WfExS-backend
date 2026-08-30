@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,19 +16,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 from typing import (
     TYPE_CHECKING,
 )
 
 if TYPE_CHECKING:
     from typing import (
-        Any,
         Mapping,
         Optional,
         Sequence,
-        Type,
     )
 
     from typing_extensions import (
@@ -36,9 +32,7 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         PathLikePath,
-        ProgsMapping,
         SecurityContextConfig,
         SymbolicName,
         URIType,

@@ -19,8 +19,6 @@
 import pytest
 import logging
 
-from pathlib import Path
-
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -32,7 +30,6 @@ if TYPE_CHECKING:
     )
 
     from wfexs_backend.common import (
-        RelPath,
         RepoTag,
         RepoURL,
         URIType,
@@ -44,7 +41,6 @@ from wfexs_backend.scheme_catalog import (
 
 from wfexs_backend.fetchers import (
     RemoteRepo,
-    RepoGuessFlavor,
     RepoType,
 )
 

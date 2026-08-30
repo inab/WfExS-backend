@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import atexit
 import copy
@@ -23,18 +22,16 @@ import datetime
 import hashlib
 import importlib
 import inspect
-import io
 import json
 import logging
 import os
 import pathlib
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
-import types
+from types import MappingProxyType
 import urllib.parse
 import uuid
 import warnings
@@ -60,8 +57,6 @@ from .utils.misc import lazy_import
 
 magic = lazy_import("magic")
 # import magic
-
-from RWFileLock import RWFileLock
 
 from .common import (
     AbstractWfExSException,
@@ -89,8 +84,6 @@ from .container_factories import (
     ContainerFactory,
 )
 
-from .ro_crate import FixedROCrate
-
 from .security_context import SecurityContextVault
 
 from .workdir import (
@@ -98,7 +91,6 @@ from .workdir import (
 )
 
 from .utils.licences import (
-    AcceptableLicenceSchemes,
     LicenceMatcherSingleton,
 )
 
@@ -109,9 +101,7 @@ from .utils.marshalling_handling import (
 
 from .utils.misc import (
     config_validate,
-    DatetimeEncoder,
     iter_namespace,
-    jsonFilterDecodeFromStream,
     translate_glob_args,
 )
 
@@ -128,21 +118,14 @@ from .utils.rocrate import (
 from .fetchers import (
     AbstractSchemeRepoFetcher,
     AbstractStatefulFetcher,
-    DocumentedProtocolFetcher,
-    DocumentedStatefulProtocolFetcher,
-    FetcherException,
     MaterializedRepo,
     RemoteRepo,
-    RepoGuessFlavor,  # This is needed for proper unmarshalling of cached repository guesses
+    RepoGuessFlavor,  # noqa: F401 # This is needed for proper unmarshalling of cached repository guesses
     RepoType,
 )
 
 from .fetchers.git import (
     GitFetcher,
-)
-
-from .fetchers.swh import (
-    SoftwareHeritageFetcher,
 )
 
 from .pushers import AbstractExportPlugin
@@ -195,7 +178,7 @@ if TYPE_CHECKING:
         ExitVal,
         LicenceDescription,
         MarshallingStatus,
-        ProgsMapping,
+        MutableProgsMapping,
         RelPath,
         RepoTag,
         RepoURL,
@@ -210,11 +193,6 @@ if TYPE_CHECKING:
     from .workflow_engines import (
         AbstractWorkflowEngineType,
         WorkflowType,
-    )
-
-    from .fetchers import (
-        SchemeRepoFetcher,
-        StatefulFetcher,
     )
 
     from .utils.licences import (
@@ -309,7 +287,7 @@ class WfExSBackend:
 
         valErrors = config_validate(local_config_ro, cls.CONFIG_SCHEMA)
         if len(valErrors) > 0:
-            logging.error(
+            logger.error(
                 f"ERROR on incoming local configuration block for bootstrap config: {valErrors}"
             )
             sys.exit(1)
@@ -394,7 +372,7 @@ class WfExSBackend:
             comment = "WfExS crypt4gh keys {} {} {}".format(
                 socket.gethostname(),
                 config_directory,
-                datetime.datetime.now().isoformat(),
+                datetime.datetime.now().astimezone().isoformat(),
             )
 
             # This is a way to avoid encoding private keys with scrypt,
@@ -425,7 +403,7 @@ class WfExSBackend:
         if updated:
             valErrors = config_validate(local_config, cls.CONFIG_SCHEMA)
             if len(valErrors) > 0:
-                logging.error(
+                logger.error(
                     f"ERROR in bootstrapped updated local configuration block: {valErrors}"
                 )
                 sys.exit(1)
@@ -439,7 +417,7 @@ class WfExSBackend:
         local_config: "WfExSConfigBlock",
         vault: "Optional[SecurityContextVault]" = None,
         config_directory: "Optional[pathlib.Path]" = None,
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
     ) -> "WF":
@@ -534,7 +512,7 @@ class WfExSBackend:
         self.local_config = local_config
         # This is an updatable copy, as it is going to be augmented
         # through the needs of the stateful fetchers
-        self.progs: "ProgsMapping" = copy.copy(DEFAULT_PROGS)
+        self.progs: "MutableProgsMapping" = dict(DEFAULT_PROGS)
 
         toolSect = local_config.get("tools", {})
         # Populating paths
@@ -665,7 +643,7 @@ class WfExSBackend:
         self._repo_fetchers = (
             self.scheme_catalog.findAndAddSchemeHandlersFromModuleName(
                 fetchers_setup_block=fetchers_setup_block,
-                progs=self.progs,
+                progs=MappingProxyType(self.progs),
             )
         )
 
@@ -751,7 +729,7 @@ class WfExSBackend:
         for finder, module_name, ispkg in iter_namespace(the_module):
             try:
                 named_module = importlib.import_module(module_name)
-            except:
+            except BaseException:
                 self.logger.exception(
                     f"Skipping module {module_name} in order to gather workflow engines, due errors:"
                 )
@@ -856,7 +834,7 @@ class WfExSBackend:
         for finder, module_name, ispkg in iter_namespace(the_module):
             try:
                 named_module = importlib.import_module(module_name)
-            except:
+            except BaseException:
                 self.logger.exception(
                     f"Skipping module {module_name} in order to gather container factories, due errors:"
                 )
@@ -913,7 +891,7 @@ class WfExSBackend:
         for finder, module_name, ispkg in iter_namespace(the_module):
             try:
                 named_module = importlib.import_module(module_name)
-            except:
+            except BaseException:
                 self.logger.exception(
                     f"Skipping module {module_name} in order to gather export plugins, due errors:"
                 )
@@ -977,7 +955,7 @@ class WfExSBackend:
         default_actions: "Optional[Sequence[ExportActionBlock]]" = None,
         workflow_config: "Optional[WorkflowConfigBlock]" = None,
         vault: "Optional[SecurityContextVault]" = None,
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
     ) -> "WF":
@@ -1006,7 +984,7 @@ class WfExSBackend:
     def createRawWorkDir(
         self,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = (),
     ) -> "Workdir":
         """
         This method creates a new, empty, raw working directory
@@ -1025,7 +1003,7 @@ class WfExSBackend:
         self,
         instanceId: "WfExSInstanceId",
         nickname: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = (),
         create_ok: "bool" = False,
     ) -> "Workdir":
         """
@@ -1129,8 +1107,8 @@ class WfExSBackend:
         workflowMetaFilename: "pathlib.Path",
         securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
@@ -1153,8 +1131,8 @@ class WfExSBackend:
         securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         replaced_parameters_filename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
@@ -1184,8 +1162,8 @@ class WfExSBackend:
         securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         replaced_parameters_filename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
@@ -1265,7 +1243,7 @@ class WfExSBackend:
             if not isinstance(workflow_meta, dict):
                 workflow_meta = {}
         else:
-            self.logger.info(f"Validating inline configuration")
+            self.logger.info("Validating inline configuration")
             workflow_meta = workflowMetaFilename
 
         valErrors = config_validate(workflow_meta, WF.STAGE_DEFINITION_SCHEMA)
@@ -1291,8 +1269,8 @@ class WfExSBackend:
         self,
         workflow_meta: "WorkflowMetaConfigBlock",
         vault: "Optional[SecurityContextVault]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
@@ -1328,8 +1306,8 @@ class WfExSBackend:
     def fromForm(
         self,
         workflow_meta: "WorkflowMetaConfigBlock",
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         paranoidMode: "bool" = False,
     ) -> "WF":
@@ -1375,8 +1353,10 @@ class WfExSBackend:
                         query_id = wdH.readline(4096).strip()
                         entries.add(query_id)
                         query_id_from_entry[query_id] = arg
-                except:
-                    pass
+                except BaseException:
+                    self.logger.debug(
+                        f"Failures while processing staged workdir identifier from file {arg}"
+                    )
 
         list_entries: "Sequence[str]" = list(entries)
         matched_entries: "Set[str]" = set()
@@ -1402,9 +1382,9 @@ class WfExSBackend:
                         nickname = workdir_instance.nickname
                         creation = workdir_instance.creation
                         # TODO: give some use to these ORCIDs
-                        orcids = workdir_instance.orcids
+                        orcids = workdir_instance.orcids  # noqa: F841
                         instanceRawWorkdir = workdir_instance.raw_work_dir
-                    except:
+                    except BaseException:
                         self.logger.warning(f"Skipped {entry.name} on listing")
                         if self.logger.getEffectiveLevel() <= logging.DEBUG:
                             self.logger.exception("DEBUG REASONS")
@@ -1445,8 +1425,6 @@ class WfExSBackend:
                                 continue
 
                     self.logger.debug(f"{instanceId} {nickname}")
-                    isDamaged = False
-                    isEncrypted = False
                     wfSetup = None
                     wfInstance = None
                     try:
@@ -1458,12 +1436,12 @@ class WfExSBackend:
                         )
                         try:
                             wfSetup = wfInstance.getStagedSetup()
-                        except Exception as e:
+                        except Exception:
                             self.logger.exception(
                                 f"Something wrong with staged setup from {instanceId} ({nickname})"
                             )
 
-                    except:
+                    except BaseException:
                         self.logger.exception(
                             f"Something wrong with workflow {instanceId} ({nickname})"
                         )
@@ -1558,7 +1536,7 @@ class WfExSBackend:
                         # Now, umount what it is needed
                         try:
                             wfInstance.cleanup()
-                        except:
+                        except BaseException:
                             self.logger.exception(
                                 f"Exception while unmounting encrypted {instance_id} {nickname}"
                             )
@@ -1651,6 +1629,7 @@ class WfExSBackend:
                     stdout=stdout,
                     stderr=stderr,
                     env=theEnv,
+                    check=False,
                 )
                 retval = cast("ExitVal", cp.returncode)
                 wfInstance.cleanup()
@@ -1689,7 +1668,7 @@ class WfExSBackend:
         if cacheType != CacheType.Workflow:
             return self.cacheHandler.fetch(
                 remote_file,
-                destdir=self.cachePathMap[cacheType],
+                cache_dir=self.cachePathMap[cacheType],
                 offline=offline,
                 ignoreCache=ignoreCache,
                 registerInCache=registerInCache,
@@ -1719,7 +1698,7 @@ class WfExSBackend:
         return engineDesc.clazz.FromStagedSetup(
             staged_setup=stagedSetup,
             container_factory_classes=self.listContainerFactoryClasses(),
-            progs_mapping=self.progs,
+            progs_mapping=MappingProxyType(self.progs),
             cache_dir=self.cacheDir,
             cache_workflow_dir=self.cacheWorkflowDir,
             cache_workflow_inputs_dir=self.cacheWorkflowInputsDir,
@@ -1760,7 +1739,7 @@ class WfExSBackend:
                 cached_content = self.cacheHandler.fetch(
                     cast("URIType", wf_url),
                     offline=True,
-                    destdir=guess_cache,
+                    cache_dir=guess_cache,
                 )
                 # Always a cached metadata file
                 assert cached_content.kind == ContentKind.File
@@ -1810,11 +1789,11 @@ class WfExSBackend:
                             )
                         self.cacheHandler.inject(
                             cast("URIType", wf_url),
-                            destdir=guess_cache,
+                            cache_dir=guess_cache,
                             tempCachedFilename=temp_cached,
                             inputKind=ContentKind.File,
                         )
-                    except Exception as e:
+                    except Exception:
                         self.logger.exception(
                             f"Unable to register guess cache for {wf_url} (see exception trace)"
                         )
@@ -1879,7 +1858,6 @@ class WfExSBackend:
         workflow_type: "Optional[WorkflowType]" = None
         guessedRepo: "Optional[RemoteRepo]" = None
         repoDir: "Optional[pathlib.Path]" = None
-        putative: "bool" = False
         cached_putative_path: "Optional[pathlib.Path]" = None
         if parsedRepoURL.scheme == "":
             raise WFException("trs_endpoint was not provided")
@@ -1941,7 +1919,6 @@ class WfExSBackend:
                     tag=cast("RepoTag", version_id),
                     rel_path=cast("Optional[RelPath]", repoRelPath),
                 )
-                putative = True
             else:
                 # This can be incorrect, but let it be for now
                 if (
@@ -2027,8 +2004,9 @@ class WfExSBackend:
         # This is needed in case a proposed fetcher is already set
         # by the caller of this method (discouraged)
         if fetcher is None:
-            for fetcher in self.repo_fetchers:
-                if fetcher.build_pid_from_repo(repo) is not None:
+            for fetcher_i in self.repo_fetchers:
+                if fetcher_i.build_pid_from_repo(repo) is not None:
+                    fetcher = fetcher_i
                     break
             else:
                 fetcher = None
@@ -2076,7 +2054,7 @@ class WfExSBackend:
                 kind = ContentKind.Directory if repo_path.is_dir() else ContentKind.File
                 self.cacheHandler.inject(
                     cast("URIType", remote_url),
-                    destdir=self.cacheWorkflowDir,
+                    cache_dir=self.cacheWorkflowDir,
                     fetched_metadata_array=augmented_metadata_array,
                     finalCachedFilename=repo_path,
                     inputKind=kind,
@@ -2162,7 +2140,7 @@ class WfExSBackend:
                         upstream_workflow_type,
                         downstream_repos,
                     )
-                except Exception as e:
+                except Exception:  # noqa: TRY203
                     raise
                     # TODO: extract and use payload workflow from RO-Crate as a fallback
             else:
@@ -2405,7 +2383,7 @@ class WfExSBackend:
         try:
             cached_rocrate = self.cacheHandler.fetch(
                 roCrateURL,
-                destdir=self.cacheROCrateDir,
+                cache_dir=self.cacheROCrateDir,
                 offline=offline,
                 ignoreCache=ignoreCache,
             )
@@ -2493,7 +2471,7 @@ class WfExSBackend:
 
         cached_content = self.cacheHandler.fetch(
             remote_file,
-            destdir=workflowInputs_destdir,
+            cache_dir=workflowInputs_destdir,
             offline=offline,
             ignoreCache=ignoreCache,
             registerInCache=registerInCache,

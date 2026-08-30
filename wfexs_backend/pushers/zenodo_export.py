@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,29 +16,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import copy
-import datetime
 
 # import http.cookiejar
 import json
-import logging
 import os
 from typing import (
     cast,
-    NamedTuple,
     TYPE_CHECKING,
 )
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
-
-from ..common import (
-    MaterializedContent,
-    URIWithMetadata,
-)
 
 if TYPE_CHECKING:
     import pathlib
@@ -48,10 +37,8 @@ if TYPE_CHECKING:
         IO,
         Mapping,
         MutableMapping,
-        MutableSet,
         Optional,
         Sequence,
-        Set,
         Tuple,
         Union,
     )
@@ -61,17 +48,11 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
-        AnyContent,
         LicenceDescription,
-        RelPath,
         ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
-        URIType,
     )
-
-    from ..workflow import WF
 
 from . import (
     DraftEntry,
@@ -102,8 +83,8 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -161,8 +142,8 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Optional[DraftEntry]":
         draft_id, pid, draft_metadata = self._book_pid_internal(
             preferred_id=preferred_id,
@@ -188,8 +169,8 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         initially_required_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Tuple[Optional[str], Optional[str], Optional[Mapping[str, Any]]]":
         """
         We are booking a new PID, in case the default
@@ -281,7 +262,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                     modifiable_metadata["license"] = {"id": licences[0].short}
                     if len(licences) > 1:
                         self.logger.warning(
-                            f"Only the first licence was attached to record due Zenodo technical limitations"
+                            "Only the first licence was attached to record due Zenodo technical limitations"
                         )
 
                 if len(resolved_orcids) > 0:
@@ -347,7 +328,6 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             booked_id = booked_meta.get("id")
             # Booked
             if booked_id is not None:
-                fill_in_new_entry = False
                 # Submitted
                 if not booked_meta.get("submitted", False):
                     discard_link = booked_meta.get("links", {}).get("discard")
@@ -364,7 +344,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                 method="POST",
             )
             try:
-                with urllib.request.urlopen(discardreq) as pH:
+                with urllib.request.urlopen(discardreq):
                     return True
             except Exception as e:
                 self.logger.exception(f"Failed to discard entry {pid}")
@@ -384,7 +364,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                 with urllib.request.urlopen(req) as bH:
                     retval = json.load(bH)
                     return cast("Mapping[str, Any]", retval)
-            except:
+            except BaseException:
                 self.logger.exception(f"Unable to fetch info about {pid} Zenodo entry")
 
         else:
@@ -419,7 +399,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                         and len(retval.get("hits", {}).get("hits", [])) > 0
                     ):
                         return cast("Mapping[str, Any]", retval["hits"]["hits"][0])
-            except:
+            except BaseException:
                 self.logger.exception(f"Unable to fetch info about {pid} Zenodo entry")
 
         return None
@@ -508,8 +488,8 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Mapping[str, Any]":
         assert draft_entry.metadata is not None
         record = draft_entry.metadata
@@ -580,8 +560,8 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
             try:
                 with urllib.request.urlopen(metareq) as mH:
                     meta_update = cast("Mapping[str, Any]", json.load(mH))
-            except:
-                raise ExportPluginException("Failed to update metadata")
+            except BaseException as be:
+                raise ExportPluginException("Failed to update metadata") from be
         else:
             meta_update = {}
 

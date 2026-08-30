@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,24 +16,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import copy
 import datetime
 
 # import http.cookiejar
 import json
-import logging
 import os
+from types import MappingProxyType
 from typing import (
     cast,
-    NamedTuple,
     TYPE_CHECKING,
 )
 import urllib.error
 import urllib.parse
 import urllib.request
-import uuid
 import xml.etree.ElementTree
 import xml.dom
 
@@ -41,28 +37,22 @@ from defusedxml import ElementTree
 
 from ..common import (
     CC_BY_40_LicenceDescription,
-    MaterializedContent,
-    NoLicenceDescription,
     ResolvedORCID,
-    URIWithMetadata,
 )
 
 if TYPE_CHECKING:
     import pathlib
     from typing import (
         Any,
-        Callable,
         ClassVar,
         Dict,
+        FrozenSet,
         IO,
         Iterable,
         Mapping,
         MutableMapping,
-        MutableSet,
         Optional,
         Sequence,
-        Set,
-        Tuple,
         Union,
     )
 
@@ -74,21 +64,14 @@ if TYPE_CHECKING:
 
     from _typeshed import SupportsRead
 
-    import urllib.request
-
-    import xml.dom.minidom
+    import xml.dom.minidom  # noqa: TC004
 
     from ..common import (
-        AbsPath,
-        AnyContent,
         LicenceDescription,
-        RelPath,
         SecurityContextConfig,
         SymbolicName,
         URIType,
     )
-
-    from ..workflow import WF
 
     class AuthenticatedURLOpener(Protocol):
         def __call__(
@@ -141,36 +124,42 @@ class DataversePublisher(AbstractTokenExportPlugin):
     SWORD_TERMS_NAMESPACE: "Final[str]" = "http://purl.org/net/sword/terms/"
     SWORD_TERMS_PREFIX: "Final[str]" = "st"
 
-    DATAVERSE_VALID_LICENCES: "Final[Set[str]]" = {
-        "CC0 1.0",
-        "CC BY 4.0",
-        "CC BY-NC 4.0",
-        "CC BY-NC-ND 4.0",
-        "CC BY-NC-SA 4.0",
-        "CC BY-ND 4.0",
-        "CC BY-SA 4.0",
-        "PDDL-1.0",
-        "ODC-By 1.0",
-        "ODbL 1.0",
-        "OGL UK 3.0",
-    }
-    VALID_LICENCES_MAPPING: "Final[Mapping[str, str]]" = {
-        dataverse_label.replace(" ", "-"): dataverse_label
-        for dataverse_label in DATAVERSE_VALID_LICENCES
-    }
+    DATAVERSE_VALID_LICENCES: "Final[FrozenSet[str]]" = frozenset(
+        (
+            "CC0 1.0",
+            "CC BY 4.0",
+            "CC BY-NC 4.0",
+            "CC BY-NC-ND 4.0",
+            "CC BY-NC-SA 4.0",
+            "CC BY-ND 4.0",
+            "CC BY-SA 4.0",
+            "PDDL-1.0",
+            "ODC-By 1.0",
+            "ODbL 1.0",
+            "OGL UK 3.0",
+        )
+    )
+    VALID_LICENCES_MAPPING: "Final[Mapping[str, str]]" = MappingProxyType(
+        {
+            dataverse_label.replace(" ", "-"): dataverse_label
+            for dataverse_label in DATAVERSE_VALID_LICENCES
+        }
+    )
 
-    XML_NS: "Final[Dict[str, str]]" = {
-        SWORD_APP_PREFIX: SWORD_APP_NAMESPACE,
-        ATOM_PREFIX: ATOM_NAMESPACE,
-        SWORD_TERMS_PREFIX: SWORD_TERMS_NAMESPACE,
-    }
+    XML_NS: "Final[Mapping[str, str]]" = MappingProxyType(
+        {
+            SWORD_APP_PREFIX: SWORD_APP_NAMESPACE,
+            ATOM_PREFIX: ATOM_NAMESPACE,
+            SWORD_TERMS_PREFIX: SWORD_TERMS_NAMESPACE,
+        }
+    )
 
     def __init__(
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -232,12 +221,14 @@ class DataversePublisher(AbstractTokenExportPlugin):
             with self.sword_opener(req) as sH:
                 root = ElementTree.parse(sH)
                 for coll in root.findall(
-                    f".//{self.SWORD_APP_PREFIX}:collection", namespaces=self.XML_NS
+                    f".//{self.SWORD_APP_PREFIX}:collection",
+                    namespaces=cast("Dict[str, str]", self.XML_NS),
                 ):
                     colllnk = coll.attrib.get("href")
                     if colllnk is not None:
                         colldescelem = coll.find(
-                            f"./{self.ATOM_PREFIX}:title", namespaces=self.XML_NS
+                            f"./{self.ATOM_PREFIX}:title",
+                            namespaces=cast("Dict[str, str]", self.XML_NS),
                         )
                         if colldescelem is not None:
                             colldesc = colldescelem.text
@@ -247,7 +238,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                                 )
                                 dataverses[colllnk] = colldesc
 
-        except:
+        except BaseException:
             self.logger.exception(
                 f"Unable to fetch the service document from {self.sword_api_prefix}"
             )
@@ -284,7 +275,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                     retval = json.load(bH)
                     if isinstance(retval, dict) and retval.get("status") == "OK":
                         return cast("Mapping[str, Any]", retval.get("data", {}))
-            except:
+            except BaseException:
                 self.logger.exception(
                     f"Unable to fetch info about {pid} Dataverse entry at {self.api_prefix}"
                 )
@@ -305,7 +296,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                     retval = json.load(bH)
                     if isinstance(retval, dict) and retval.get("status") == "OK":
                         return cast("Mapping[str, Any]", retval.get("data", {}))
-            except:
+            except BaseException:
                 self.logger.exception(
                     f"Unable to fetch info about {pid} Dataverse entry at {self.api_prefix}"
                 )
@@ -336,14 +327,17 @@ class DataversePublisher(AbstractTokenExportPlugin):
         self,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Optional[str]":
+        now = datetime.datetime.now().astimezone()
         if title is None:
-            title = f"Draft record created at {datetime.datetime.utcnow().isoformat()}"
+            title = f"Draft record created at {now.isoformat()}"
 
         if description is None:
-            description = f"Empty draft record created by WfExS-backend at {datetime.datetime.utcnow().isoformat()}"
+            description = (
+                f"Empty draft record created by WfExS-backend at {now.isoformat()}"
+            )
 
         if len(licences) == 0:
             licences = self.default_licences
@@ -381,11 +375,11 @@ class DataversePublisher(AbstractTokenExportPlugin):
         # <?xml version="1.0"?>
         # <entry xmlns="{self.ATOM_NAMESPACE}" xmlns:dcterms="http://purl.org/dc/terms/">
         #   <!-- some embedded metadata -->
-        #   <dcterms:title>Draft record created at {datetime.datetime.utcnow().isoformat()}</dcterms:title>
+        #   <dcterms:title>Draft record created at {now.isoformat()}</dcterms:title>
         #   <dcterms:creator>WfExS-backend ghost creator</dcterms:creator>
         #   <!-- Dataverse controlled vocabulary subject term -->
         #   <dcterms:subject>Bioinformatics</dcterms:subject>
-        #   <dcterms:description>Empty draft record created by WfExS-backend at {datetime.datetime.utcnow().isoformat()}</dcterms:description>
+        #   <dcterms:description>Empty draft record created by WfExS-backend at {now.isoformat()}</dcterms:description>
         #   <!-- Producer with financial or admin responsibility of the data -->
         #   <!--
         #   <dcterms:contributor type="Contact">CaffeineForAll</dcterms:contributor>
@@ -467,7 +461,8 @@ class DataversePublisher(AbstractTokenExportPlugin):
             with self.sword_opener(req) as bH:
                 root = ElementTree.parse(bH)
                 link_elem = root.find(
-                    f".//{self.ATOM_PREFIX}:id", namespaces=self.XML_NS
+                    f".//{self.ATOM_PREFIX}:id",
+                    namespaces=cast("Dict[str, str]", self.XML_NS),
                 )
                 if link_elem is None:
                     return None
@@ -495,8 +490,8 @@ class DataversePublisher(AbstractTokenExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Optional[DraftEntry]":
         """
         This method is used to book a new PID,
@@ -520,7 +515,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
 
         booked_entry: "Optional[DraftEntry]" = None
         fill_in_new_entry = True
-        newentry_url: "Optional[str]" = None
+        # newentry_url: "Optional[str]" = None
         if preferred_id is not None:
             booked_entry = self.get_pid_draftentry(preferred_id)
             if booked_entry is not None and booked_entry.metadata is not None:
@@ -585,7 +580,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                             metadata=updated_metadata,
                         )
             # Book new entry
-            newentry_url = self.depositions_api_url
+            # newentry_url = self.depositions_api_url
 
         # TO BE FINISHED
         return booked_entry
@@ -626,7 +621,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
             with urllib.request.urlopen(req) as bH:
                 retval = json.load(bH)
                 return isinstance(retval, dict) and retval.get("status") == "OK"
-        except:
+        except BaseException:
             self.logger.exception(
                 f"Unable to fetch info about {draft_id} Dataverse entry at {self.api_prefix}"
             )
@@ -733,9 +728,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                 raise ExportPluginException()
 
             # Sorting the URLs in a list
-            upload_urls = list(
-                sorted(upload_urls_mapping.items(), key=lambda p: int(p[0]))
-            )
+            upload_urls = sorted(upload_urls_mapping.items(), key=lambda p: int(p[0]))
 
             maxreadsize: "Optional[int]" = upload_desc.get("data", {}).get("partSize")
             if not isinstance(maxreadsize, int):
@@ -775,17 +768,17 @@ class DataversePublisher(AbstractTokenExportPlugin):
                     data=json.dumps(etags).encode("utf-8"),
                     method="PUT",
                 )
-                with urllib.request.urlopen(creq) as cr:
+                with urllib.request.urlopen(creq):
                     pass
-            except Exception as e:
+            except Exception:
                 # In case of some failure, remove remote fragments
                 dreq = urllib.request.Request(
                     url=abort_url,
                     method="DELETE",
                 )
-                with urllib.request.urlopen(creq) as cr:
+                with urllib.request.urlopen(dreq):
                     pass
-                raise e
+                raise
 
         # Now, time to attach the file to the entry
         JSON_DATA = {
@@ -924,17 +917,19 @@ class DataversePublisher(AbstractTokenExportPlugin):
             + urllib.parse.quote(draft_entry.pid, safe="/:")
         )
 
-    EXPORT_FORMATS: "Final[Set[str]]" = {
-        "ddi",
-        "oai_ddi",
-        "dcterms",
-        "oai_dc",
-        "schema.org",
-        "OAI_ORE",
-        "Datacite",
-        "oai_datacite",
-        "dataverse_json",
-    }
+    EXPORT_FORMATS: "Final[FrozenSet[str]]" = frozenset(
+        (
+            "ddi",
+            "oai_ddi",
+            "dcterms",
+            "oai_dc",
+            "schema.org",
+            "OAI_ORE",
+            "Datacite",
+            "oai_datacite",
+            "dataverse_json",
+        )
+    )
 
     def _export_metadata_raw(
         self, draft_entry: "DraftEntry", format: "str" = "dcterms"
@@ -980,7 +975,8 @@ class DataversePublisher(AbstractTokenExportPlugin):
             with self.sword_opener(req) as bH:
                 root = ElementTree.parse(bH)
                 link_elem = root.find(
-                    f".//{self.ATOM_PREFIX}:id", namespaces=self.XML_NS
+                    f".//{self.ATOM_PREFIX}:id",
+                    namespaces=cast("Dict[str, str]", self.XML_NS),
                 )
                 if link_elem is None:
                     return None
@@ -1008,8 +1004,8 @@ class DataversePublisher(AbstractTokenExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Mapping[str, Any]":
         """
         This method updates the draft record metadata,
@@ -1219,7 +1215,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
                 retval = json.load(bH)
                 if isinstance(retval, dict) and retval.get("status") == "OK":
                     return cast("Mapping[str, Any]", retval.get("data", {}))
-        except:
+        except BaseException:
             self.logger.exception(
                 f"Unable to fetch info about {draft_entry.pid} Dataverse entry at {self.api_prefix}"
             )

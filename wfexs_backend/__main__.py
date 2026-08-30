@@ -75,12 +75,11 @@ import yaml
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
-YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
 YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
 try:
-    from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
+    from yaml import CDumper as YAMLDumper
 except ImportError:
-    from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
+    from yaml import Dumper as YAMLDumper
 
 from .security_context import SecurityContextVault
 from .side_caches import populate_side_caches
@@ -590,7 +589,7 @@ def processCacheCommand(
             contentsI = sorted(
                 cH.list(
                     *args.cache_command_args,
-                    destdir=cPath,
+                    cache_dir=cPath,
                     acceptGlob=args.filesAsGlobs,
                     cascade=args.doCacheCascade,
                 ),
@@ -634,7 +633,7 @@ def processCacheCommand(
             contentsD = sorted(
                 cH.list(
                     *args.cache_command_args,
-                    destdir=cPath,
+                    cache_dir=cPath,
                     acceptGlob=args.filesAsGlobs,
                     cascade=args.doCacheCascade,
                 ),
@@ -675,7 +674,7 @@ def processCacheCommand(
                     lambda x: "\t".join([x[0].uri, x[1].as_posix()]),
                     cH.remove(
                         *args.cache_command_args,
-                        destdir=cPath,
+                        cache_dir=cPath,
                         acceptGlob=args.filesAsGlobs,
                         doRemoveFiles=args.doCacheRecursively,
                         cascade=args.doCacheCascade,
@@ -698,7 +697,7 @@ def processCacheCommand(
             # Then, inject new occurrence
             cH.inject(
                 cast("URIType", injected_uri),
-                destdir=cPath,
+                cache_dir=cPath,
                 finalCachedFilename=pathlib.Path(finalCachedFilename),
                 clonable=clonable,
             )
@@ -710,7 +709,7 @@ def processCacheCommand(
     elif args.cache_command == WfExS_Cache_Commands.Validate:
         for metaUri, validated, metaStructure in cH.validate(
             *args.cache_command_args,
-            destdir=cPath,
+            cache_dir=cPath,
             acceptGlob=args.filesAsGlobs,
             cascade=args.doCacheCascade,
         ):
@@ -730,7 +729,7 @@ def processCacheCommand(
                         vault = SecurityContextVault.FromFile(
                             pathlib.Path(secContextFilename)
                         )
-                    except:
+                    except BaseException:
                         logger.exception(
                             f"ERROR: security context file {secContextFilename} is corrupted"
                         )
@@ -892,7 +891,7 @@ def processStagedWorkdirCommand(
                     engineName = mStatus_List.workflow_type
 
                     wfPID = mStatus_List.pid
-                except:
+                except BaseException:
                     logger.exception(f"Error unmarshalling {instance_id}")
                 finally:
                     wfInstance.cleanup()
@@ -976,7 +975,7 @@ def processStagedWorkdirCommand(
                                 "FAILED" if staged_exec.exitVal != 0 else "DONE",
                             )
                         )
-                    except Exception as e:
+                    except BaseException:
                         logger.exception(
                             f"Error while executing {instance_id} ({nickname})"
                         )
@@ -1014,7 +1013,7 @@ def processStagedWorkdirCommand(
                         logger.info(
                             f"\t- Instance {wfSetup.instance_id} (nickname '{wfSetup.nickname}') job id {job_id}"
                         )
-                    except Exception as e:
+                    except BaseException:
                         logger.exception(
                             f"Error while queueing {instance_id} ({nickname})"
                         )
@@ -1048,7 +1047,7 @@ def processStagedWorkdirCommand(
 * Nickname: {nickname}
 * Created: {creation.astimezone().isoformat()}
 * Secure (encrypted)? {is_encrypted}
-{repr(mStatus)}
+{mStatus!r}
 * Is damaged? {is_damaged}
 """)
     elif args.staged_workdir_command in (
@@ -1126,7 +1125,7 @@ def processStagedWorkdirCommand(
                                     f"ERROR: workflow was never executed at staged workdir {instance_id} ({nickname})",
                                 )
                                 retval = 1
-                    except Exception as e:
+                    except BaseException:
                         logger.exception(
                             f"Error while creating RO-Crate for {instance_id} ({nickname})"
                         )
@@ -1263,9 +1262,9 @@ def _get_wfexs_argparse_internal(
         description="Command to run. It must be one of these",
     )
 
-    ap_i = genParserSub(sp, WfExS_Commands.Init)
+    ap_i = genParserSub(sp, WfExS_Commands.Init)  # noqa: F841
 
-    ap_psd = genParserSub(sp, WfExS_Commands.PopulateSideCaches)
+    ap_psd = genParserSub(sp, WfExS_Commands.PopulateSideCaches)  # noqa: F841
 
     ap_c = genParserSub(sp, WfExS_Commands.Cache)
     ap_c.add_argument(
@@ -1362,31 +1361,37 @@ def _get_wfexs_argparse_internal(
         "export_contents_command_args", help="Optional export names", nargs="*"
     )
 
-    ap_lf = genParserSub(sp, WfExS_Commands.ListFetchers)
-    ap_lp = genParserSub(sp, WfExS_Commands.ListPushers)
-    ap_lc = genParserSub(sp, WfExS_Commands.ListContainerFactories)
-    ap_lw = genParserSub(sp, WfExS_Commands.ListWorkflowEngines)
-    ap_ll = genParserSub(sp, WfExS_Commands.ListLicences)
-    ap_cv = genParserSub(sp, WfExS_Commands.ConfigValidate, preStageParams=True)
+    ap_lf = genParserSub(sp, WfExS_Commands.ListFetchers)  # noqa: F841
+    ap_lp = genParserSub(sp, WfExS_Commands.ListPushers)  # noqa: F841
+    ap_lc = genParserSub(sp, WfExS_Commands.ListContainerFactories)  # noqa: F841
+    ap_lw = genParserSub(sp, WfExS_Commands.ListWorkflowEngines)  # noqa: F841
+    ap_ll = genParserSub(sp, WfExS_Commands.ListLicences)  # noqa: F841
+    ap_cv = genParserSub(  # noqa: F841
+        sp, WfExS_Commands.ConfigValidate, preStageParams=True
+    )
 
-    ap_try = genParserSub(sp, WfExS_Commands.TryStage)
-    ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)
+    ap_try = genParserSub(sp, WfExS_Commands.TryStage)  # noqa: F841
+    ap_s = genParserSub(sp, WfExS_Commands.Stage, preStageParams=True)  # noqa: F841
 
-    ap_r_s = genParserSub(
+    ap_r_s = genParserSub(  # noqa: F841
         sp, WfExS_Commands.ReStage, preStageParams=True, postStageParams=True
     )
 
-    ap_imp = genParserSub(sp, WfExS_Commands.Import, preStageParams=True)
+    ap_imp = genParserSub(sp, WfExS_Commands.Import, preStageParams=True)  # noqa: F841
 
-    ap_m = genParserSub(sp, WfExS_Commands.MountWorkDir, postStageParams=True)
+    ap_m = genParserSub(  # noqa: F841
+        sp, WfExS_Commands.MountWorkDir, postStageParams=True
+    )
 
-    ap_es = genParserSub(
+    ap_es = genParserSub(  # noqa: F841
         sp, WfExS_Commands.ExportStage, postStageParams=True, crateParams=True
     )
 
-    ap_oe = genParserSub(sp, WfExS_Commands.OfflineExecute, postStageParams=True)
+    ap_oe = genParserSub(  # noqa: F841
+        sp, WfExS_Commands.OfflineExecute, postStageParams=True
+    )
 
-    ap_e = genParserSub(
+    ap_e = genParserSub(  # noqa: F841
         sp,
         WfExS_Commands.Execute,
         preStageParams=True,
@@ -1394,9 +1399,11 @@ def _get_wfexs_argparse_internal(
         exportParams=True,
     )
 
-    ap_er = genParserSub(sp, WfExS_Commands.ExportResults, postStageParams=True)
+    ap_er = genParserSub(  # noqa: F841
+        sp, WfExS_Commands.ExportResults, postStageParams=True
+    )
 
-    ap_ec = genParserSub(
+    ap_ec = genParserSub(  # noqa: F841
         sp, WfExS_Commands.ExportCrate, postStageParams=True, crateParams=True
     )
 
@@ -1786,7 +1793,7 @@ def main() -> None:
             )
             with workdir_id_file.open(mode="w", encoding="utf-8") as wiH:
                 wiH.write(wfSetup.instance_id)
-        except:
+        except BaseException:
             logger.exception(
                 f"The working directory id could not be saved into {workdir_id_file.as_posix()}"
             )

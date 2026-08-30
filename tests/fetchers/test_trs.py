@@ -32,10 +32,8 @@ if TYPE_CHECKING:
     )
 
     from wfexs_backend.common import (
-        RelPath,
         RepoTag,
         RepoURL,
-        TRS_Workflow_Descriptor,
         URIType,
     )
 
@@ -50,7 +48,6 @@ from wfexs_backend.scheme_catalog import (
 
 from wfexs_backend.fetchers import (
     RemoteRepo,
-    RepoGuessFlavor,
     RepoType,
 )
 

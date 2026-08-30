@@ -23,7 +23,6 @@ import logging
 
 import os
 import pathlib
-import sys
 import urllib.error
 
 from wfexs_backend.pushers import ExportPluginException
@@ -36,7 +35,6 @@ from typing import (
 
 if TYPE_CHECKING:
     from wfexs_backend.common import (
-        AbsPath,
         RelPath,
         SecurityContextConfig,
     )
@@ -92,7 +90,7 @@ def test_nextcloud_basic_fail_nouser() -> "None":
     Check Nextcloud plugin complains about missing user parameter
     """
     with pytest.raises(ExportPluginException):
-        nep = NextcloudExportPlugin(
+        NextcloudExportPlugin(
             pathlib.Path("/"),
             setup_block={"api-prefix": "", "base-directory": "/", "token": ""},
         )
@@ -104,7 +102,7 @@ def test_nextcloud_basic_fail_notoken() -> "None":
     Check Nextcloud plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
-        nep = NextcloudExportPlugin(
+        NextcloudExportPlugin(
             pathlib.Path("/"),
             setup_block={"api-prefix": "", "base-directory": "/", "user": ""},
         )
@@ -141,7 +139,7 @@ def test_nextcloud_basic(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "base-directory": file_params.extra["base-directory"],
     }
-    nep = NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
+    NextcloudExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -212,7 +210,7 @@ def test_nextcloud_book_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)
@@ -263,7 +261,7 @@ def test_nextcloud_book_draft_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)
@@ -324,7 +322,7 @@ def test_nextcloud_book_new_version_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None and (
             orig_booked_entry is None
@@ -389,7 +387,7 @@ def test_nextcloud_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)
@@ -454,7 +452,7 @@ def test_nextcloud_upload_stream_to_draft(file_params: "ParamTestData") -> "None
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)
@@ -517,7 +515,7 @@ def test_nextcloud_update_record_metadata_raw(file_params: "ParamTestData") -> "
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)
@@ -586,7 +584,7 @@ def test_nextcloud_update_record_metadata_facets(
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)
@@ -643,11 +641,11 @@ def test_nextcloud_publish_new_pid(file_params: "ParamTestData") -> "None":
         )
         logger.info(uploaded_file_meta)
 
+        now = datetime.datetime.now().astimezone()
         entry_metadata = {
-            "title": "My test upload at " + datetime.datetime.utcnow().isoformat(),
+            "title": "My test upload at " + now.isoformat(),
             "upload_type": "dataset",
-            "description": "This is my test upload at "
-            + datetime.datetime.utcnow().isoformat(),
+            "description": "This is my test upload at " + now.isoformat(),
         }
         updated_meta = nep.update_record_metadata(
             booked_entry,
@@ -668,7 +666,7 @@ def test_nextcloud_publish_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None and published_meta is None:
             nep.discard_booked_pid(booked_entry)
@@ -710,13 +708,12 @@ def test_nextcloud_push(file_params: "ParamTestData") -> "None":
     )
 
     booked_entry = None
-    published_meta = None
+    now = datetime.datetime.now().astimezone()
     try:
         entry_metadata = {
-            "title": "My test upload at " + datetime.datetime.utcnow().isoformat(),
+            "title": "My test upload at " + now.isoformat(),
             "upload_type": "dataset",
-            "description": "This is my test upload at "
-            + datetime.datetime.utcnow().isoformat(),
+            "description": "This is my test upload at " + now.isoformat(),
         }
 
         booked_entry = nep.book_pid()
@@ -742,14 +739,14 @@ def test_nextcloud_push(file_params: "ParamTestData") -> "None":
                 NoLicenceDescription,
             ],
         )
-        assert pushed_entries is not None
+        assert len(pushed_entries) > 0
         assert booked_entry.metadata is not None
         logger.info(f"Booked PID is {booked_entry.pid}")
     except urllib.error.HTTPError as he:
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             nep.discard_booked_pid(booked_entry)

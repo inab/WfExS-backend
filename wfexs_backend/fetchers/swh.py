@@ -44,7 +44,6 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Tuple,
-        Type,
         Union,
     )
 
@@ -56,7 +55,6 @@ if TYPE_CHECKING:
         AbsPath,
         AnyPath,
         PathLikePath,
-        ProgsMapping,
         RelPath,
         RepoTag,
         RepoURL,
@@ -500,7 +498,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
                             if not repo_destpath.exists():
                                 try:
                                     repo_destpath.mkdir(parents=True)
-                                except IOError:
+                                except OSError:
                                     errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(
                                         repoURL
                                     )
@@ -600,7 +598,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
                     if not os.path.exists(repo_destdir):
                         try:
                             os.makedirs(repo_destdir)
-                        except IOError:
+                        except OSError:
                             errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(
                                 repoURL
                             )
@@ -633,7 +631,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
                     raise FetcherException(
                         f"No fetch of {content_fetch_url} (assertion?)"
                     )
-            except FetcherException as fe:
+            except FetcherException:
                 raise
             except Exception as e:
                 raise FetcherException(

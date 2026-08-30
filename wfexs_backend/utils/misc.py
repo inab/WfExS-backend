@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import absolute_import
 
 import datetime
 import fnmatch
@@ -133,7 +131,7 @@ def _parse_isoformat_date(dtstr: "str") -> "Tuple[int, int, int]":
     # string of length exactly 10, and (though this is not used) ASCII-only
     year = int(dtstr[0:4])
     if dtstr[4] != "-":
-        raise ValueError("Invalid date separator: %s" % dtstr[4])
+        raise ValueError(f"Invalid date separator: {dtstr[4]}")
 
     month = int(dtstr[5:7])
 
@@ -212,7 +210,7 @@ def _parse_hh_mm_ss_ff(tstr: "str") -> "Tuple[int, int, int, int]":
             break
 
         if next_char != ":":
-            raise ValueError("Invalid time separator: %c" % next_char)
+            raise ValueError(f"Invalid time separator: {next_char}")
 
         pos += 1
 
@@ -409,7 +407,7 @@ def is_uri(the_uri: "str") -> "bool":
     try:
         result = urllib.parse.urlparse(the_uri)
         return result.scheme != ""
-    except:
+    except BaseException:
         return False
 
 

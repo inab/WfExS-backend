@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ import re
 import shutil
 import subprocess
 import tempfile
-import warnings
+from types import MappingProxyType
 
 from typing import (
     cast,
@@ -38,12 +38,10 @@ if TYPE_CHECKING:
         Any,
         ClassVar,
         Mapping,
-        MutableMapping,
         MutableSequence,
         NewType,
         Optional,
         Tuple,
-        Type,
         Union,
         Sequence,
     )
@@ -58,7 +56,6 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         AnyPath,
         PathLikePath,
         ProgsMapping,
@@ -70,29 +67,25 @@ if TYPE_CHECKING:
         URIType,
     )
 
-    from . import (
-        AbstractStatefulFetcher,
-    )
-
     try:
         from dulwich.client import LsRemoteResult  # type: ignore[attr-defined]
-    except:
+    except BaseException:
         LsRemoteResult: TypeAlias = Mapping[bytes, bytes]  # type: ignore[no-redef]
 
     try:
         from dulwich.refs import Ref  # type: ignore[attr-defined]
-    except:
+    except BaseException:
         Ref = NewType("Ref", bytes)  # type: ignore[no-redef, misc]
 
     try:
         from dulwich.objects import ObjectID  # type: ignore[attr-defined]
-    except:
+    except BaseException:
         # Hex SHA type
         ObjectID = NewType("ObjectID", bytes)  # type: ignore[no-redef,misc]
 
     try:
         from dulwich.objects import RawObjectID  # type: ignore[attr-defined]
-    except:
+    except BaseException:
         # Raw SHA type
         RawObjectID = NewType("RawObjectID", bytes)  # type: ignore[no-redef,misc]
 
@@ -140,12 +133,12 @@ class GitFetcher(AbstractSchemeRepoFetcher):
     HEAD_LABEL: "Final[Ref]" = cast("Ref", b"HEAD")  # type: ignore[redundant-cast]
     REFS_HEADS_PREFIX: "Final[bytes]" = b"refs/heads/"
     REFS_TAGS_PREFIX: "Final[bytes]" = b"refs/tags/"
-    GIT_SCHEMES: "Final[Sequence[str]]" = ["https", "git", "ssh", "file"]
+    GIT_SCHEMES: "Final[Sequence[str]]" = ("https", "git", "ssh", "file")
 
     def __init__(
         self,
         scheme_catalog: "SchemeCatalog",
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = MappingProxyType({}),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ):
         super().__init__(scheme_catalog, progs=progs, setup_block=setup_block)
@@ -200,7 +193,6 @@ class GitFetcher(AbstractSchemeRepoFetcher):
 
         sp_path = reparsedInputURL.path.split("/")
 
-        shortest_pre_path: "Optional[URIType]" = None
         longest_post_path: "Optional[Sequence[str]]" = None
         repo_type: "Optional[RepoType]" = None
         guessed_repo_flavor: "Optional[RepoGuessFlavor]" = None
@@ -230,7 +222,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             except (
                 dulwich.errors.NotGitRepository,
                 dulwich.errors.GitProtocolError,
-            ) as ngr:
+            ):
                 # Skip and continue
                 continue
         else:
@@ -264,8 +256,8 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                     ):
                         repo_type = RepoType.Git
                         guessed_repo_flavor = RepoGuessFlavor.BitBucket
-            except Exception as e:
-                pass
+            except Exception:
+                repo_type = None
 
         if repo_type != RepoType.Git:
             raise RepoGuessException(f"Unable to identify {remote_file} as a git repo")
@@ -321,7 +313,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                     path, cast("dulwich.repo.Repo", memory_repo)  # type: ignore[arg-type]
                 )
             else:
-                fetch_pack_result = transport.fetch(
+                fetch_pack_result = transport.fetch(  # noqa: F841
                     path.encode("utf-8"), cast("dulwich.repo.Repo", memory_repo)  # type: ignore[arg-type]
                 )
             try:
@@ -336,7 +328,6 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 ) from e
 
         # It is considered a git repo!
-        shortest_pre_path = cast("URIType", pre_path)
         longest_post_path = sp_path[pos:]
 
         if repo_type is None:
@@ -574,7 +565,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             else:
                 return None
 
-        except OfflineRepoGuessException as ogge:
+        except OfflineRepoGuessException:
             raise
         except RepoGuessException as gge:
             if not fail_ok:
@@ -825,7 +816,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 if not repo_destpath.exists():
                     try:
                         repo_destpath.mkdir(parents=True)
-                    except IOError:
+                    except OSError:
                         errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(
                             repoURL
                         )

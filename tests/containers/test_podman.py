@@ -27,7 +27,6 @@ from typing import (
 if TYPE_CHECKING:
     from wfexs_backend.common import (
         Fingerprint,
-        RelPath,
         URIType,
     )
 
@@ -45,7 +44,6 @@ from wfexs_backend.common import (
 
 from wfexs_backend.container_factories import (
     Container,
-    ContainerEngineException,
     ContainerFactoryException,
 )
 
@@ -72,7 +70,7 @@ def test_podman_basic(tmp_path: "pathlib.Path") -> "None":
     cachepath.mkdir(parents=True, exist_ok=True)
     stagedpath.mkdir(parents=True, exist_ok=True)
 
-    pcf = PodmanContainerFactory(
+    PodmanContainerFactory(
         simpleFileNameMethod=simpleTestContainerFileName,
         containersCacheDir=cachepath,
         stagedContainersDir=stagedpath,

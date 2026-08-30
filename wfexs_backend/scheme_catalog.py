@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,28 +16,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
-import copy
 import datetime
-import hashlib
 import importlib
 import inspect
-import json
 import logging
-import os
-import os.path
-import pathlib
 import re
-import shutil
-import traceback
 import types
 import urllib.parse
-import uuid
 
 from typing import (
     cast,
-    NamedTuple,
     Pattern,
     TYPE_CHECKING,
 )
@@ -48,13 +36,11 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         IO,
-        Iterator,
         Mapping,
         MutableMapping,
         MutableSequence,
         Optional,
         Sequence,
-        Set,
         Tuple,
         Type,
         Union,
@@ -68,23 +54,18 @@ if TYPE_CHECKING:
 
     from .common import (
         AbsPath,
-        AnyURI,
         Fingerprint,
+        MutableProgsMapping,
         PathLikePath,
         ProgsMapping,
         RelPath,
         SecurityContextConfig,
-        WritableSecurityContextConfig,
         URIType,
     )
 
     from .fetchers import (
         ProtocolFetcherReturn,
         StatefulFetcher,
-    )
-
-    from .security_context import (
-        SecurityContextVault,
     )
 
     class RelAbsDict(TypedDict):
@@ -118,13 +99,6 @@ if TYPE_CHECKING:
 
 from .common import (
     AbstractWfExSException,
-    Attribution,
-    ContentKind,
-    DefaultNoLicenceTuple,
-    LicenceDescription,
-    LicensedURI,
-    META_JSON_POSTFIX,
-    URIWithMetadata,
 )
 
 from .fetchers import (
@@ -133,24 +107,12 @@ from .fetchers import (
     AbstractStatefulStreamingFetcher,
     DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
-    FetcherException,
     FetcherInstanceException,
     InvalidFetcherException,
-    RemoteRepo,
 )
 
-from .utils.contents import link_or_copy
-from .utils.digests import (
-    ComputeDigestFromDirectory,
-    ComputeDigestFromFile,
-    stringifyFilenameDigest,
-)
 from .utils.misc import (
-    config_validate,
-    DatetimeEncoder,
     iter_namespace,
-    jsonFilterDecodeFromStream,
-    translate_glob_args,
 )
 
 
@@ -165,7 +127,9 @@ class SchemeCatalogImportException(SchemeCatalogException):
 class SchemeCatalog:
     def __init__(
         self,
-        scheme_handlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]" = dict(),
+        scheme_handlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]" = types.MappingProxyType(
+            {}
+        ),
     ):
         # Getting a logger focused on specific classes
         self.logger = logging.getLogger(
@@ -191,7 +155,7 @@ class SchemeCatalog:
         self,
         scheme: "str",
         handler: "Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]",
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = types.MappingProxyType({}),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ) -> None:
         """
@@ -249,7 +213,7 @@ class SchemeCatalog:
     def instantiateStatefulFetcher(
         self,
         statefulFetcher: "Type[StatefulFetcher]",
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = types.MappingProxyType({}),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ) -> "StatefulFetcher":
         """
@@ -259,17 +223,18 @@ class SchemeCatalog:
         if inspect.isclass(statefulFetcher):
             if issubclass(statefulFetcher, AbstractStatefulFetcher):
                 # Setting the default list of programs
-                mutable_progs = copy.copy(progs)
+                mutable_progs: "MutableProgsMapping" = dict(progs)
                 for prog in statefulFetcher.GetNeededPrograms():
                     mutable_progs.setdefault(prog, cast("RelPath", prog))
+                immutable_progs = types.MappingProxyType(mutable_progs)
                 try:
                     if issubclass(statefulFetcher, AbstractSchemeRepoFetcher):
                         instStatefulFetcher = statefulFetcher(
-                            self, progs=mutable_progs, setup_block=setup_block
+                            self, progs=immutable_progs, setup_block=setup_block
                         )
                     else:
                         instStatefulFetcher = statefulFetcher(
-                            progs=progs,
+                            progs=immutable_progs,
                             setup_block=setup_block,
                             scheme_catalog=self,
                         )
@@ -295,7 +260,7 @@ class SchemeCatalog:
         self,
         the_module_name: "str" = "wfexs_backend.fetchers",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = types.MappingProxyType({}),
     ) -> "Sequence[AbstractSchemeRepoFetcher]":
         try:
             the_module = importlib.import_module(the_module_name)
@@ -313,14 +278,14 @@ class SchemeCatalog:
         self,
         the_module: "ModuleType",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = types.MappingProxyType({}),
     ) -> "Sequence[AbstractSchemeRepoFetcher]":
         repo_fetchers: "MutableSequence[AbstractSchemeRepoFetcher]" = []
 
         for finder, module_name, ispkg in iter_namespace(the_module):
             try:
                 named_module = importlib.import_module(module_name)
-            except:
+            except BaseException:
                 self.logger.exception(
                     f"Skipping module {module_name} in order to gather scheme handlers, due errors:"
                 )
@@ -365,7 +330,7 @@ class SchemeCatalog:
         self,
         statefulSchemeHandler: "Type[AbstractStatefulFetcher]",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = types.MappingProxyType({}),
     ) -> "Sequence[AbstractSchemeRepoFetcher]":
         """
         This method adds scheme handlers (aka "fetchers") from
@@ -448,7 +413,7 @@ class SchemeCatalog:
         self,
         schemeHandlers: "Mapping[str, Union[DocumentedProtocolFetcher, DocumentedStatefulProtocolFetcher]]",
         fetchers_setup_block: "Optional[Mapping[str, Mapping[str, Any]]]" = None,
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = types.MappingProxyType({}),
     ) -> "Sequence[AbstractSchemeRepoFetcher]":
         """
         This method adds scheme handlers (aka "fetchers")
@@ -500,7 +465,7 @@ class SchemeCatalog:
                                 instSchemeInstance, AbstractSchemeRepoFetcher
                             ):
                                 repo_fetchers.append(instSchemeInstance)
-                    except Exception as e:
+                    except Exception:
                         self.logger.exception(
                             f"Error while instantiating handler implemented at {schemeHandler.fetcher_class} for scheme {lScheme}"
                         )

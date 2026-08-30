@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import atexit
 import os
 import subprocess
 import tempfile
@@ -30,13 +31,11 @@ if TYPE_CHECKING:
         Mapping,
         Optional,
         Sequence,
-        Type,
     )
 
     from typing_extensions import Final
 
     from ..common import (
-        AbsPath,
         PathLikePath,
         ProgsMapping,
         RelPath,
@@ -160,14 +159,13 @@ class FASPFetcher(AbstractStatefulFetcher):
                 f"Cannot download content from {remote_file} without credentials"
             )
 
-        faspKeyFilename = None
         if faspKey is not None:
             # Program expects to read the key from a file
             with tempfile.NamedTemporaryFile(
                 mode="w+", encoding="iso-8859-1", delete=False
             ) as tKey:
                 tKey.write(faspKey)
-                faspKeyFilename = tKey.name
+                atexit.register(os.unlink, tKey.name)
 
         # This is needed to isolate execution environment
         runEnv = dict()
@@ -205,7 +203,11 @@ class FASPFetcher(AbstractStatefulFetcher):
         with tempfile.NamedTemporaryFile() as ascp_stdout, tempfile.NamedTemporaryFile() as ascp_stderr:
             self.logger.debug(f'Running "{" ".join(ascp_params)}"')
             comp_proc = subprocess.run(
-                ascp_params, env=runEnv, stdout=ascp_stdout, stderr=ascp_stderr
+                ascp_params,
+                env=runEnv,
+                stdout=ascp_stdout,
+                stderr=ascp_stderr,
+                check=False,
             )
 
             # Did it finish properly?

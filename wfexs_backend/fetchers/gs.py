@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,7 +33,6 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         PathLikePath,
         SecurityContextConfig,
         URIType,
@@ -94,7 +93,7 @@ def downloadContentFrom_gs(
     except Exception as e:
         errmsg = f"Invalid bucket name {bucket_name} on {remote_file}"
         logger.exception(errmsg)
-        raise FetcherException(errmsg)
+        raise FetcherException(errmsg) from e
 
     # Build the blob
     try:
@@ -102,7 +101,7 @@ def downloadContentFrom_gs(
     except Exception as e:
         errmsg = f"Unable to create blob {prefix} for {remote_file}"
         logger.exception(errmsg)
-        raise FetcherException(errmsg)
+        raise FetcherException(errmsg) from e
 
     # Does the blob exist?
     metadata_payload: MutableSequence[Mapping[str, Any]] = []

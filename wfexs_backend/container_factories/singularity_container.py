@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import dataclasses
 import json
@@ -23,16 +22,15 @@ import os
 import os.path
 import pathlib
 import re
-import shutil
 import subprocess
 import tempfile
+from types import MappingProxyType
 from typing import (
     cast,
     NamedTuple,
     TYPE_CHECKING,
 )
 from urllib import parse
-import uuid
 
 from ..common import (
     META_JSON_POSTFIX,
@@ -44,6 +42,7 @@ from .. import common
 if TYPE_CHECKING:
     from typing import (
         Any,
+        FrozenSet,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -57,17 +56,14 @@ if TYPE_CHECKING:
         Final,
         NotRequired,
         Required,
-        TypedDict,
     )
 
     from ..common import (
-        AbsPath,
         AnyPath,
         ContainerTaggedName,
         ExitVal,
         Fingerprint,
         ProgsMapping,
-        RelPath,
         SymbolicName,
         URIType,
     )
@@ -75,7 +71,6 @@ if TYPE_CHECKING:
     from . import (
         AbstractImageManifestMetadata,
         ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ProcessorArchitecture,
     )
 
@@ -110,17 +105,19 @@ class FailedContainerTag(NamedTuple):
 
 
 class SingularityContainerFactory(ContainerFactory):
-    ACCEPTED_SING_SCHEMES: "Final[Set[str]]" = {
-        "library",
-        DOCKER_SCHEME,
-        "shub",
-        "oras",
-        "http",
-        "https",
-        "ftp",
-    }
+    ACCEPTED_SING_SCHEMES: "Final[FrozenSet[str]]" = frozenset(
+        (
+            "library",
+            DOCKER_SCHEME,
+            "shub",
+            "oras",
+            "http",
+            "https",
+            "ftp",
+        )
+    )
 
-    ACCEPTED_CONTAINER_TYPES = set(
+    ACCEPTED_CONTAINER_TYPES: "Final[FrozenSet[common.ContainerType]]" = frozenset(
         (
             common.ContainerType.Podman,
             common.ContainerType.UDocker,
@@ -128,6 +125,8 @@ class SingularityContainerFactory(ContainerFactory):
             common.ContainerType.Singularity,
         )
     )
+
+    DEFAULT_DOCKER_HELPER: "Final[DockerHelper]" = DockerHelper()
 
     def __init__(
         self,
@@ -171,7 +170,7 @@ class SingularityContainerFactory(ContainerFactory):
             matEnv = dict(os.environ)
             matEnv.update(self.environment)
             with tempfile.NamedTemporaryFile() as s_out, tempfile.NamedTemporaryFile() as s_err:
-                s_retval = subprocess.Popen(
+                s_retval = subprocess.Popen(  # noqa: F841
                     [self.runtime_cmd, "exec", "--userns", "/etc", "true"],
                     env=matEnv,
                     stdout=s_out,
@@ -199,16 +198,19 @@ class SingularityContainerFactory(ContainerFactory):
 
     @classmethod
     def AcceptsContainerType(
-        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+        cls,
+        container_type: "Union[common.ContainerType, Set[common.ContainerType], FrozenSet[common.ContainerType]]",
     ) -> "bool":
         return not cls.ACCEPTED_CONTAINER_TYPES.isdisjoint(
-            container_type if isinstance(container_type, set) else (container_type,)
+            container_type
+            if isinstance(container_type, (set, frozenset))
+            else (container_type,)
         )
 
     def _getContainerArchitecture(
         self,
         container_filename: "Union[AnyPath, os.PathLike[str]]",
-        matEnv: "Mapping[str, str]" = {},
+        matEnv: "Mapping[str, str]" = MappingProxyType({}),
     ) -> "Optional[ProcessorArchitecture]":
         if len(matEnv) == 0:
             matEnv = dict(os.environ)
@@ -489,8 +491,8 @@ STDERR
     def _materializeSingleContainerSing(
         self,
         tag: "ContainerTaggedName",
-        matEnv: "Mapping[str, str]" = {},
-        dhelp: "DockerHelper" = DockerHelper(),
+        matEnv: "Mapping[str, str]" = MappingProxyType({}),
+        dhelp: "DockerHelper" = DEFAULT_DOCKER_HELPER,
         containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
@@ -530,12 +532,13 @@ STDERR
                         ):
                             metadata = cast("SingularityManifest", raw_metadata)
                             registryServer = metadata["registryServer"]
-                            registryType = metadata.get("registryType", "docker")
+                            # Unused
+                            # registryType = metadata.get("registryType", "docker")
+                            # alias = metadata.get("alias")
+                            # manifest = metadata.get("manifest")
                             repo = metadata["repo"]
-                            alias = metadata.get("alias")
                             partial_fingerprint = metadata.get("dcd")
                             imageSignature_in_metadata = metadata.get("image_signature")
-                            manifest = metadata.get("manifest")
                             if partial_fingerprint is not None:
                                 usableRegistryServer = (
                                     DEFAULT_DOCKER_REGISTRY
@@ -564,15 +567,16 @@ STDERR
                                 )
                         else:
                             registryServer = ""
-                            registryType = None
+                            # Unused
+                            # registryType = None
+                            # alias = ""
+                            # manifest = None
                             repo = ""
-                            alias = ""
                             partial_fingerprint = ""
                             imageSignature_in_metadata = None
-                            manifest = None
                             fingerprint = cast("Fingerprint", tag_name)
 
-                except Exception as e:
+                except Exception:
                     # Some problem happened parsing the existing metadata
                     self.logger.exception(
                         f"Error while reading or parsing {localContainerPathMeta}. Discarding it"
@@ -630,8 +634,10 @@ STDERR
                 if tmpContainerPath.exists():
                     try:
                         tmpContainerPath.unlink()
-                    except:
-                        pass
+                    except BaseException:
+                        self.logger.debug(
+                            f"Temporary container path {tmpContainerPath} from {singTag} not removed"
+                        )
                 self.logger.error(errstr)
 
                 return FailedContainerTag(
@@ -760,7 +766,7 @@ STDERR
         containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
-        injectable_containers: "Sequence[Container]" = [],
+        injectable_containers: "Sequence[Container]" = (),
     ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
@@ -773,7 +779,7 @@ STDERR
 
         matEnv = dict(os.environ)
         matEnv.update(self.environment)
-        dhelp = DockerHelper()
+        dhelp = self.DEFAULT_DOCKER_HELPER
 
         for tag in tagList:
             # If we cannot materialize it we cannot accept it
@@ -801,7 +807,7 @@ STDERR
                 matched_container, was_redeployed = self.deploySingleContainer(
                     tag_to_use, containers_dir=containers_dir, force=force
                 )
-            except ContainerFactoryException as cfe:
+            except ContainerFactoryException:
                 matched_container = self._materializeSingleContainerSing(
                     tag_to_use,
                     matEnv=matEnv,
@@ -961,7 +967,7 @@ STDERR
         except Exception as e:
             errmsg = f"Problems extracting SIF metadata at {containerPathMeta} or {containerPath}"
             self.logger.exception(errmsg)
-            raise ContainerFactoryException(errmsg)
+            raise ContainerFactoryException(errmsg) from e
 
         imageSignature = self.cc_handler._computeFingerprint(containerPath)
 

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,12 +15,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
-import copy
 import datetime
 import functools
-import itertools
 import json
 import logging
 import os
@@ -54,6 +51,7 @@ from ..common import (
 if TYPE_CHECKING:
     from typing import (
         Any,
+        FrozenSet,
         IO,
         Iterator,
         Mapping,
@@ -72,13 +70,10 @@ if TYPE_CHECKING:
 
     from ..common import (
         AbsPath,
-        AnyPath,
-        EngineMode,
         EngineVersion,
         ExitVal,
         ExpectedOutput,
         Fingerprint,
-        MaterializedOutput,
         ProgsMapping,
         RelPath,
         SymbolicName,
@@ -105,7 +100,6 @@ if TYPE_CHECKING:
 
     from . import (
         EngineLocalConfig,
-        EnginePath,
         WorkflowEngineVersionStr,
     )
 
@@ -150,12 +144,12 @@ DEFAULT_STATIC_PS_CMDS = [
 ]
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def _tzstring() -> "str":
     try:
         with open("/etc/timezone", "r") as tzreader:
             tzstring = tzreader.readline().rstrip()
-    except:
+    except BaseException:
         # The default for the worst case
         tzstring = "Europe/Madrid"
 
@@ -184,18 +178,22 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
     ENGINE_NAME = "nextflow"
 
-    SUPPORTED_CONTAINER_TYPES = {
-        ContainerType.NoContainer,
-        ContainerType.Singularity,
-        ContainerType.Docker,
-        ContainerType.Podman,
-    }
+    SUPPORTED_CONTAINER_TYPES = frozenset(
+        (
+            ContainerType.NoContainer,
+            ContainerType.Singularity,
+            ContainerType.Docker,
+            ContainerType.Podman,
+        )
+    )
 
-    SUPPORTED_SECURE_EXEC_CONTAINER_TYPES = {
-        ContainerType.NoContainer,
-        ContainerType.Singularity,
-        #   ContainerType.Podman,
-    }
+    SUPPORTED_SECURE_EXEC_CONTAINER_TYPES = frozenset(
+        (
+            ContainerType.NoContainer,
+            ContainerType.Singularity,
+            #   ContainerType.Podman,
+        )
+    )
 
     def __init__(
         self,
@@ -381,11 +379,11 @@ class NextflowWorkflowEngine(WorkflowEngine):
         return False
 
     @classmethod
-    def SupportedContainerTypes(cls) -> "Set[ContainerType]":
+    def SupportedContainerTypes(cls) -> "FrozenSet[ContainerType]":
         return cls.SUPPORTED_CONTAINER_TYPES
 
     @classmethod
-    def SupportedSecureExecContainerTypes(cls) -> "Set[ContainerType]":
+    def SupportedSecureExecContainerTypes(cls) -> "FrozenSet[ContainerType]":
         return cls.SUPPORTED_SECURE_EXEC_CONTAINER_TYPES
 
     @property
@@ -455,7 +453,6 @@ class NextflowWorkflowEngine(WorkflowEngine):
 
         nfConfig: "Optional[pathlib.Path]" = None
         candidateNf: "Optional[RelPath]" = None
-        candidateConfig: "Optional[RelPath]" = None
         newNxfConfigs: "MutableSequence[pathlib.Path]" = []
         only_names = ["manifest", "nextflow"]
         absoluteCandidateNf: "Optional[pathlib.Path]" = None
@@ -765,7 +762,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                                 )
                                 rel_local_template = cast(
                                     "RelPath",
-                                    local_template.relative_to(nfDir).as_posix(),
+                                    abs_local_template.relative_to(nfDir).as_posix(),
                                 )
                                 nxfScripts.append(rel_local_template)
                             else:
@@ -1139,7 +1136,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
             # FIXME: should it be something more restrictive?
             homedir = os.path.expanduser("~")
 
-            nextflow_install_dir = self.weCacheDir / nextflow_version
+            # nextflow_install_dir = self.weCacheDir / nextflow_version
             nxf_home = self.nxf_home
             nxf_assets_dir = self.nxf_assets
             try:
@@ -1513,8 +1510,8 @@ class NextflowWorkflowEngine(WorkflowEngine):
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
-        context_inputs: "Sequence[MaterializedInput]" = [],
-        context_environment: "Sequence[MaterializedInput]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = (),
+        context_environment: "Sequence[MaterializedInput]" = (),
         remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
@@ -1611,7 +1608,7 @@ STDERR
                         self.logger.warning(
                             f"RECOMMENDATION: Param {linear_local_path_param} has default relative paths {rel_paths} to the repo. It should be set to a remote location based on the workflow repository URI {remote_repo}"
                         )
-        except:
+        except BaseException:
             self.logger.debug(
                 "Failed groovy parsing of config parameters, using pattern based one"
             )
@@ -1659,7 +1656,7 @@ STDERR
         for regMatch in self.RegistryPat.finditer(flat_stdout):
             try:
                 container_registries[ContainerType(regMatch[1])] = regMatch[2]
-            except:
+            except BaseException:
                 self.logger.debug(f"Failed to assign registry {regMatch[1]}")
 
         perform_tag_parsing = True
@@ -1703,11 +1700,11 @@ STDERR
         # and main workflow for
         # container ['"]([^'"]+)['"]
         assert localWf.relPath is not None
-        wfEntrypoint = (
-            localWf.relPath
-            if os.path.isabs(localWf.relPath)
-            else os.path.join(localWf.dir, localWf.relPath)
-        )
+        # wfEntrypoint = (
+        #     localWf.relPath
+        #     if os.path.isabs(localWf.relPath)
+        #     else os.path.join(localWf.dir, localWf.relPath)
+        # )
 
         # Subworkflow / submodule include detection
         nfDir = matWorkflowEngine.workflow.dir
@@ -1823,14 +1820,14 @@ STDERR
                     # Now, update the global cache dir
                     if not offline:
                         self._update_global_groovy_cache()
-                except Exception as e:
+                except Exception:
                     errstr = f"Failed to parse file {relNxfScript} with groovy parser while looking for plugins"
                     self.logger.warning(errstr)
 
             plugins.extend(l_plugins)
 
         # And materialize/install them
-        pluginsline = ",".join(map(lambda plugin: plugin.label, plugins))
+        # pluginsline = ",".join(map(lambda plugin: plugin.label, plugins))
         if len(plugins) > 0:
             for plugin in plugins:
                 (
@@ -2041,6 +2038,7 @@ STDERR
         queued = datetime.datetime.fromtimestamp(
             psutil.Process(job_pid).create_time()
         ).astimezone()
+        min_utc = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
         yield StagedExecution(
             status=ExecutionStatus.Queued,
             job_id=job_id,
@@ -2053,8 +2051,8 @@ STDERR
             matCheckOutputs=[],
             outputsDir=outputsDir,
             queued=queued,
-            started=datetime.datetime.min,
-            ended=datetime.datetime.min,
+            started=min_utc,
+            ended=min_utc,
             logfile=[],
             profiles=profiles,
         )
@@ -2206,7 +2204,7 @@ podman.runOptions = '{volFlag} {self.cacheWorkflowInputsDir}:{self.cacheWorkflow
                 )
             elif self.container_factory.containerType == ContainerType.NoContainer:
                 print(
-                    f"""
+                    """
 docker.enabled = false
 singularity.enabled = false
 podman.enabled = false
@@ -2311,16 +2309,18 @@ wfexs_allParams()
             try:
                 with inputsFileName.open(mode="w+", encoding="utf-8") as yF:
                     yaml.safe_dump(nxpParams, yF)
-            except IOError as error:
+            except OSError as error:
                 raise WorkflowEngineException(
                     "ERROR: cannot create input declarations file {}, {}".format(
                         inputsFileName, error
                     )
-                )
+                ) from error
         else:
             raise WorkflowEngineException("No parameter was specified! Bailing out")
 
-        runName = "WfExS-run_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+        runName = "WfExS-run_" + datetime.datetime.now().astimezone().strftime(
+            "%Y%m%dT%H%M%S"
+        )
 
         nxf_params: "MutableSequence[str]" = [
             "-log",
@@ -2370,7 +2370,7 @@ wfexs_allParams()
             outputsDir=outputsDir,
             queued=queued,
             started=started,
-            ended=datetime.datetime.min,
+            ended=min_utc,
             diagram=dagFile,
             logfile=[
                 stdoutFilename,
@@ -2416,7 +2416,6 @@ wfexs_allParams()
         # Creating the materialized outputs
         matOutputs = self.identifyMaterializedOutputs(matInputs, outputs, outputsDir)
 
-        relOutputsDir = cast("RelPath", os.path.relpath(outputsDir, self.workDir))
         yield StagedExecution(
             status=ExecutionStatus.Finished,
             exitVal=launch_retval,
@@ -2444,8 +2443,8 @@ wfexs_allParams()
         registries: "Mapping[ContainerType, str]",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
-        context_inputs: "Sequence[MaterializedInput]" = [],
-        context_environment: "Sequence[MaterializedInput]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = (),
+        context_environment: "Sequence[MaterializedInput]" = (),
     ) -> "Mapping[str, Optional[ContainerTaggedName]]":
         # TODO: implement usage of materialized environment variables
         if len(context_inputs) == 0:  # Is list of materialized inputs empty?
@@ -2468,8 +2467,6 @@ wfexs_allParams()
 
         # Custom variables setup
         runEnv = dict(os.environ)
-        optStaticBinsMonkeyPatch = ""
-        optWritable = None
 
         # The list of environment variables to be whitelisted
         runEnv["TZ"] = _tzstring()
@@ -2517,18 +2514,18 @@ wfexs_allParams()
         try:
             with inputsFileName.open(mode="w+", encoding="utf-8") as yF:
                 yaml.safe_dump(nxpParams, yF)
-        except IOError as error:
+        except OSError as error:
             raise WorkflowEngineException(
                 "ERROR: cannot create input declarations file {}, {}".format(
                     inputsFileName, error
                 )
-            )
+            ) from error
         if len(nxpParams) == 0:
             self.logger.warning(
                 "No parameter was specified! It is going to bail out!!!"
             )
 
-        runName = "WfExS-run_" + datetime.datetime.now().strftime("%Y%m%dT%H%M%S")
+        # runName = "WfExS-run_" + datetime.datetime.now().astimezone().strftime("%Y%m%dT%H%M%S")
 
         nxf_params: "MutableSequence[str]" = [
             "inspect",

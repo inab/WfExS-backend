@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import atexit
-import copy
 import hashlib
 import inspect
 import io
@@ -31,7 +28,6 @@ import shutil
 import tempfile
 import urllib.parse
 import sys
-import warnings
 
 from typing import (
     cast,
@@ -46,7 +42,6 @@ if sys.version_info[:2] < (3, 11):
 
 from . import (
     AbstractSchemeRepoFetcher,
-    DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
     FetcherException,
     MaterializedRepo,
@@ -97,15 +92,12 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         PathLikePath,
-        ProgsMapping,
         RelPath,
         RepoTag,
         RepoURL,
         SecurityContextConfig,
         SymbolicName,
-        TRS_Workflow_Descriptor,
         URIType,
     )
 
@@ -301,7 +293,9 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             parsed_putative_tool_uri = urllib.parse.urlparse(putative_tool_uri)
             trs_service_netloc = parsed_putative_tool_uri.netloc
             # Detecting workflowhub derivatives
-            is_wh = parsed_putative_tool_uri.netloc.endswith("workflowhub.eu")
+            is_wh = parsed_putative_tool_uri.netloc.endswith(  # noqa: F841
+                "workflowhub.eu"
+            )
 
             # Time to try guessing everything
             tool_wfexs_meta = {
@@ -702,7 +696,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 if not repo_destpath.exists():
                     try:
                         repo_destpath.mkdir(parents=True)
-                    except IOError:
+                    except OSError:
                         errstr = "ERROR: Unable to create intermediate directories for repo {}. ".format(
                             remote_file
                         )
@@ -977,7 +971,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                             file_url, absfile, {"headers": {"Accept": accept_val}}
                         )
                         metadata_array.extend(metaelem)
-                    except FetcherException as fe:
+                    except FetcherException:
                         if file_desc.get("file_type") in (
                             "PRIMARY_DESCRIPTOR",
                             "SECONDARY_DESCRIPTOR",
@@ -1089,7 +1083,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     fail_ok=True,
                     offline=True,
                 )
-            except OfflineRepoGuessException as orge:
+            except OfflineRepoGuessException:
                 self.logger.error(
                     f"While building pid for {remote_repo.repo_url} called code which should be safe offline"
                 )
@@ -1154,7 +1148,9 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         # For cases where the URI is not one of the native schemes
         # fallback to INTERNAL_TRS_SCHEME_PREFIX
         if parsedInputURL.scheme not in self.GetSchemeHandlers():
-            the_remote_file = self.INTERNAL_TRS_SCHEME_PREFIX + ":" + remote_file
+            the_remote_file = cast(
+                "URIType", self.INTERNAL_TRS_SCHEME_PREFIX + ":" + remote_file
+            )
         else:
             the_remote_file = remote_file
 
@@ -1208,7 +1204,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             repo_desc = {}
         augmented_metadata_array = [
             URIWithMetadata(
-                uri=remote_file, metadata=repo_desc, preferredName=preferredName
+                uri=the_remote_file, metadata=repo_desc, preferredName=preferredName
             ),
             *metadata_array,
         ]

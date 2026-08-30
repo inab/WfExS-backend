@@ -8,14 +8,17 @@ from typing import (
     Sequence,
     Tuple,
 )
+from typing_extensions import (
+    TypeAlias,
+)
 from .exceptions import JSONPathError as JSONPathError
 
 # Inspired by https://stackoverflow.com/a/53639221
-JSONVal = (
-    None | bool | str | float | int | Sequence["JSONVal"] | Mapping[str, "JSONVal"]
+JSONVal: TypeAlias = (
+    None | bool | str | float | int | Sequence[JSONVal] | Mapping[str, JSONVal]
 )
 
-FilterFn = Callable[[JSONVal], bool]
+FilterFn: TypeAlias = Callable[[JSONVal], bool]
 
 logger: Logger
 auto_id_field: Optional[str]

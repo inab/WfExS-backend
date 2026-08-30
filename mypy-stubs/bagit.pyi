@@ -1,9 +1,6 @@
 # Based on https://github.com/common-workflow-language/cwltool/blob/b1a1a0be2bfcaadfa79137a44eb4f27e5233c8d5/mypy-stubs/bagit.pyi
 
-import argparse
 from typing import Any, Dict, Iterator, List, MutableMapping, Optional, Sequence, Tuple
-
-from _typeshed import Incomplete
 
 TRANSLATION_CATALOG: Any
 MODULE_NAME: Any

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,8 +35,6 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Tuple,
-        Type,
-        Union,
     )
 
     from typing_extensions import (
@@ -46,7 +44,6 @@ if TYPE_CHECKING:
     from jsonschema.exceptions import ValidationError
 
     from .common import (
-        AnyPath,
         RelPath,
         SecurityContextConfig,
     )
@@ -56,13 +53,6 @@ if TYPE_CHECKING:
     )
 
 import yaml
-
-YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
-YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
-try:
-    from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
-except ImportError:
-    from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
 
 from .common import (
     AbstractWfExSException,

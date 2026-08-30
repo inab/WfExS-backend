@@ -21,17 +21,12 @@ import logging
 
 import os
 import pathlib
-import sys
-import urllib.error
-
-import pytest
 
 from wfexs_backend.common import (
     CacheType,
     GeneratedContent,
 )
 
-from wfexs_backend.pushers import ExportPluginException
 from wfexs_backend.pushers.cache_export import CacheExportPlugin
 
 from wfexs_backend.wfexs_backend import WfExSBackend
@@ -44,8 +39,6 @@ from typing import (
 if TYPE_CHECKING:
     from py.path.local import LocalPath  # type: ignore[import]
     from wfexs_backend.common import (
-        AbsPath,
-        SecurityContextConfig,
         URIType,
     )
 
@@ -127,6 +120,7 @@ def test_cache_push(tmpdir: "LocalPath") -> "None":
         config_directory=tmpdir.strpath,
         key_prefix="crypt4gh",
     )
+    assert bootstrap_ok
     wfexs = WfExSBackend(
         local_config=test_local_config,
         config_directory=config_directory,
@@ -155,6 +149,7 @@ def test_cache_push(tmpdir: "LocalPath") -> "None":
             NoLicenceDescription,
         ],
     )
+    assert len(pushed_contents) > 0
 
     # Fifth, check
     # cH, cPath = wfexs.getCacheHandler(CacheType.Input)

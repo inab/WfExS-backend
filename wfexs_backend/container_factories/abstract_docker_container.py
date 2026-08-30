@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,19 +15,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import copy
 import lzma
-import os
 import tempfile
-import atexit
-import platform
 import shutil
 import subprocess
 import abc
-import logging
-import inspect
 
 from typing import (
     cast,
@@ -41,10 +35,6 @@ magic = lazy_import("magic")
 
 import pgzip
 
-from ..common import (
-    AbstractWfExSException,
-)
-
 if TYPE_CHECKING:
     import pathlib
     from types import (
@@ -53,11 +43,10 @@ if TYPE_CHECKING:
 
     from typing import (
         Any,
-        IO,
+        FrozenSet,
         Mapping,
         MutableMapping,
         MutableSequence,
-        Optional,
         Sequence,
         Set,
         Tuple,
@@ -65,23 +54,17 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import (
-        TypeAlias,
-        TypedDict,
         Final,
+        TypeAlias,
     )
 
     from ..common import (
-        AbsPath,
-        AnyPath,
-        ContainerTaggedName,
         ExitVal,
         Fingerprint,
-        RelPath,
     )
 
     from . import (
         AbstractImageManifestMetadata,
-        Container,
     )
 
     DockerLikeManifest: TypeAlias = Mapping[str, Any]
@@ -105,7 +88,7 @@ DOCKER_PROTO = DOCKER_URI_PREFIX + "//"
 
 
 class AbstractDockerContainerFactory(ContainerFactory):
-    ACCEPTED_CONTAINER_TYPES = set(
+    ACCEPTED_CONTAINER_TYPES: "Final[FrozenSet[common.ContainerType]]" = frozenset(
         (
             common.ContainerType.Docker,
             common.ContainerType.UDocker,
@@ -115,10 +98,13 @@ class AbstractDockerContainerFactory(ContainerFactory):
 
     @classmethod
     def AcceptsContainerType(
-        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+        cls,
+        container_type: "Union[common.ContainerType, Set[common.ContainerType], FrozenSet[common.ContainerType]]",
     ) -> "bool":
         return not cls.ACCEPTED_CONTAINER_TYPES.isdisjoint(
-            container_type if isinstance(container_type, set) else (container_type,)
+            container_type
+            if isinstance(container_type, (set, frozenset))
+            else (container_type,)
         )
 
     @classmethod

@@ -12,7 +12,6 @@
 # 2023 Python Software Foundation; All Rights Reserved
 
 import contextlib
-import functools
 import inspect
 import io
 import itertools
@@ -22,7 +21,6 @@ import pathlib
 import posixpath
 import shutil
 import stat
-import sys
 import time
 
 from typing import (
@@ -33,11 +31,8 @@ from typing import (
 import zipfile
 
 if TYPE_CHECKING:
-    import os
-
     from typing import (
         Any,
-        Dict,
         Generator,
         IO,
         Iterable,
@@ -47,12 +42,12 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Set,
-        Tuple,
         Union,
     )
 
     from typing_extensions import (
         Literal,
+        Self,
     )
 
 
@@ -124,7 +119,7 @@ class CompleteDirs(zipfile.ZipFile):
         return _dedupe(_difference(as_dirs, names))
 
     def namelist(self) -> "List[str]":
-        names = super(CompleteDirs, self).namelist()
+        names = super().namelist()
         return names + list(self._implied_dirs(names))
 
     def _name_set(self) -> "Set[str]":
@@ -166,10 +161,12 @@ class CompleteDirs(zipfile.ZipFile):
             return cls(source)
 
         # Only allow for FastPath when supplied zipfile is read-only
-        if "r" not in source.mode:
-            cls = CompleteDirs
+        if "r" in source.mode:
+            clazz = CompleteDirs
+        else:
+            clazz = cls
 
-        res = cls.__new__(cls)
+        res = clazz.__new__(clazz)
         return res
 
 
@@ -183,14 +180,14 @@ class FastLookup(CompleteDirs):
         self.__names: "List[str]"
         with contextlib.suppress(AttributeError):
             return self.__names  # type: ignore[no-any-return] # pylint: disable=access-member-before-definition
-        self.__names = super(FastLookup, self).namelist()
+        self.__names = super().namelist()
         return self.__names
 
     def _name_set(self) -> "Set[str]":
         self.__lookup: "Set[str]"
         with contextlib.suppress(AttributeError):
             return self.__lookup  # type: ignore[no-any-return] # pylint: disable=access-member-before-definition
-        self.__lookup = super(FastLookup, self)._name_set()
+        self.__lookup = super()._name_set()
         return self.__lookup
 
 
@@ -285,7 +282,7 @@ class ZipfilePath(pathlib.Path):
     # _flavour = pathlib._posix_flavour
     __repr = "{self.__class__.__name__}({self._root.filename!r}, {self._at!r})"
 
-    def __new__(cls, *args: "Any", **kwargs: "Any") -> "ZipfilePath":
+    def __new__(cls, *args: "Any", **kwargs: "Any") -> "Self":
         self = object.__new__(cls)
         return self
 
