@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import datetime
 import json
 import logging
@@ -1612,7 +1613,7 @@ STDERR
                         if isinstance(value_type, str):
                             classType = value_type
                             value_type = {"type": classType}
-                        elif isinstance(value_type, dict):
+                        elif isinstance(value_type, collections.abc.Mapping):
                             classType = value_type["type"]
                         else:
                             self.logger.debug(

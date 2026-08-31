@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import abc
+import collections.abc
 import enum
 import logging
 from types import MappingProxyType
@@ -177,7 +178,9 @@ class AbstractStatefulFetcher(abc.ABC):
         )
         # This is used to resolve program names
         self.progs = progs
-        self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+        self.setup_block = (
+            setup_block if isinstance(setup_block, collections.abc.Mapping) else dict()
+        )
         self.scheme_catalog = scheme_catalog
 
     @abc.abstractmethod

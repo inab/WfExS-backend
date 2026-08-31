@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import datetime
 import importlib
 import inspect
@@ -146,7 +147,7 @@ class SchemeCatalog:
         self, schemeHandlers: "Mapping[str, DocumentedProtocolFetcher]"
     ) -> None:
         # No validation is done here about validness of schemes
-        if isinstance(schemeHandlers, dict):
+        if isinstance(schemeHandlers, collections.abc.Mapping):
             self.schemeHandlers.update(schemeHandlers)
         else:
             raise InvalidFetcherException("Unable to add raw scheme handlers")
@@ -202,7 +203,7 @@ class SchemeCatalog:
         schemeHandlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]",
     ) -> None:
         # No validation is done here about validness of schemes
-        if isinstance(schemeHandlers, dict):
+        if isinstance(schemeHandlers, collections.abc.Mapping):
             for scheme, clazz in schemeHandlers.items():
                 self.bypassSchemeHandler(scheme, clazz)
         else:
@@ -297,7 +298,7 @@ class SchemeCatalog:
             skipit = True
             for name, obj in inspect.getmembers(named_module):
                 if name == "SCHEME_HANDLERS":
-                    if isinstance(obj, dict):
+                    if isinstance(obj, collections.abc.Mapping):
                         self.addSchemeHandlers(
                             obj,
                             fetchers_setup_block=fetchers_setup_block,

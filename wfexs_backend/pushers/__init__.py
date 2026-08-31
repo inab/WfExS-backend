@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import abc
+import collections.abc
 import logging
 from typing import (
     cast,
@@ -84,7 +85,9 @@ class AbstractExportPlugin(abc.ABC):
         )
         # This is used to resolve paths
         self.refdir = refdir
-        self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+        self.setup_block = (
+            setup_block if isinstance(setup_block, collections.abc.Mapping) else dict()
+        )
 
         # This is the default value for the preferred PID
         # which can be updated through a call to book_pid

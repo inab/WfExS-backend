@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
+import collections.abc
 import functools
 import json
 import logging
@@ -374,7 +374,7 @@ def deep_update(
     """
     This method was borrowed from pydantic
     """
-    updated_mapping = cast("MutableMapping[KeyType, DeepValType]", copy.copy(mapping))
+    updated_mapping = cast("MutableMapping[KeyType, DeepValType]", dict(mapping))
     # updated_mapping = copy.copy(mapping)
     for updating_mapping in updating_mappings:
         for k, v in updating_mapping.items():
@@ -453,7 +453,7 @@ def extract_nested_assignments(
             block_statements = cast("RuleNode", a_block_statements)
             subcontext = extract_nested_assignments(block_statements["children"])
 
-            if (name in context) and isinstance(context[name], dict):
+            if (name in context) and isinstance(context[name], collections.abc.Mapping):
                 context[name] = cast(
                     "ContextAssignments",
                     deep_update(cast("ContextAssignments", context[name]), subcontext),
@@ -532,7 +532,9 @@ def extract_nested_assignments(
                     nested[subname] = list(
                         extract_values_as_pairs(child["children"][2])
                     )
-                    if name in context and isinstance(context[name], dict):
+                    if name in context and isinstance(
+                        context[name], collections.abc.Mapping
+                    ):
                         context[name] = cast(
                             "ContextAssignments",
                             deep_update(

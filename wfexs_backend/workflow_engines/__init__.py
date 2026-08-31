@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import copy
 import os
 import pathlib
@@ -204,7 +205,7 @@ class MaterializedWorkflowEngine(NamedTuple):
     def _mapping_fixes(
         cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
     ) -> "Mapping[str, Any]":
-        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["engine_path"] = pathlib.Path(orig["engine_path"])
         if workdir is not None and not dest["engine_path"].is_absolute():
             dest["engine_path"] = (workdir / dest["engine_path"]).resolve()
@@ -242,7 +243,7 @@ class StagedExecution(NamedTuple):
     def _mapping_fixes(
         cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
     ) -> "Mapping[str, Any]":
-        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest = cast("MutableMapping[str, Any]", dict(orig))
 
         for keypath in ("outputsDir", "outputMetaDir", "diagram"):
             keyval = orig.get(keypath)
@@ -1098,7 +1099,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         This method is used to identify outputs by either file glob descriptions
         or matching with a mapping
         """
-        if not isinstance(outputsMapping, dict):
+        if not isinstance(outputsMapping, collections.abc.Mapping):
             outputsMapping = {}
 
         matInputHash: "Mapping[SymbolicParamName, MaterializedInputValues]" = {

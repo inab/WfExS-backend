@@ -147,7 +147,7 @@ def unmarshall_namedtuple(
             return clazz
 
         if "_type" in obj:  # originally namedtuple
-            objn = cast("MutableMapping[str, Any]", copy.copy(obj))
+            objn = cast("MutableMapping[str, Any]", dict(obj))
             theTypeName = objn.pop("_type")
             try:
                 clazz = myglobals[theTypeName]
@@ -201,7 +201,7 @@ def unmarshall_namedtuple(
         fields_list = list(
             zip(c_objn_keys, _recurse_u(c_objn.values(), myglobals, workdir))
         )
-        if issubclass(clazz, dict):
+        if issubclass(clazz, collections.abc.Mapping):
             objres = clazz(fields_list)
         else:
             fields = dict(fields_list)

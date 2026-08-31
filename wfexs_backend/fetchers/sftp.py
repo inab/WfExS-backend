@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import logging
 import os
 import paramiko
@@ -165,7 +166,7 @@ def fetchSSHURL(
     password = parsedInputURL.password
 
     # Sanitizing possible ill-formed inputs
-    if not isinstance(secContext, dict):
+    if not isinstance(secContext, collections.abc.Mapping):
         secContext = {}
 
     # Although username and password could be obtained from URL,

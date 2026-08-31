@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
+import collections.abc
 import datetime
 
 # import http.cookiejar
@@ -724,7 +724,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
             upload_urls_mapping: "Optional[Mapping[str,str]]" = upload_desc.get(
                 "data", {}
             ).get("urls")
-            if not isinstance(upload_urls_mapping, dict):
+            if not isinstance(upload_urls_mapping, collections.abc.Mapping):
                 raise ExportPluginException()
 
             # Sorting the URLs in a list
@@ -1025,7 +1025,7 @@ class DataversePublisher(AbstractTokenExportPlugin):
             assert existing_entry.metadata is not None
             cleaned_metadata = cast("MutableMapping[str, Any]", existing_entry.metadata)
         else:
-            cleaned_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+            cleaned_metadata = cast("MutableMapping[str, Any]", dict(metadata))
 
         if cleaned_metadata.get("versionState") != "DRAFT":
             cleaned_metadata["versionNumber"] += 1
@@ -1049,16 +1049,16 @@ class DataversePublisher(AbstractTokenExportPlugin):
 
             # But first, we have to locate already declared instances
             for field in fields:
-                if not isinstance(field, dict):
+                if not isinstance(field, collections.abc.Mapping):
                     continue
 
                 typeName = field.get("typeName")
                 if typeName == "title" and title is not None:
-                    title_field = field
+                    title_field = dict(field)
                 elif typeName == "author" and len(resolved_orcids) > 0:
-                    authors_field = field
+                    authors_field = dict(field)
                 elif typeName == "dsDescription" and description is not None:
-                    description_field = field
+                    description_field = dict(field)
 
             # This part of the code is needed because there could happen
             # no title or description was previously provided

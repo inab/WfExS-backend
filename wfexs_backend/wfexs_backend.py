@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import atexit
+import collections.abc
 import copy
 import datetime
 import hashlib
@@ -497,7 +498,7 @@ class WfExSBackend:
             + self.__class__.__name__
         )
 
-        if not isinstance(local_config, dict):
+        if not isinstance(local_config, collections.abc.Mapping):
             # Minimal bootstrapping for embedded cases
             _, local_config, config_directory = self.bootstrap_config(
                 {}, config_directory
@@ -526,7 +527,7 @@ class WfExSBackend:
                 assert isinstance(pathC, list)
 
                 for command_block in pathC:
-                    assert isinstance(command_block, dict)
+                    assert isinstance(command_block, collections.abc.Mapping)
 
                     if "key" in command_block and "path" in command_block:
                         key_path.append(
@@ -1240,7 +1241,7 @@ class WfExSBackend:
             with workflowMetaFilename.open(mode="r", encoding="utf-8") as wcf:
                 workflow_meta = unmarshall_namedtuple(yaml.safe_load(wcf))
 
-            if not isinstance(workflow_meta, dict):
+            if not isinstance(workflow_meta, collections.abc.Mapping):
                 workflow_meta = {}
         else:
             self.logger.info("Validating inline configuration")

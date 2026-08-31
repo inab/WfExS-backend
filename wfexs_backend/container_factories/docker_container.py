@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import dataclasses
 import json
 import os
@@ -204,7 +205,7 @@ STDERR
         self, fingerprint: "str", tag: "ContainerTaggedName"
     ) -> "Fingerprint":
         # Should we enrich it?
-        if isinstance(tag.registries, dict) and (
+        if isinstance(tag.registries, collections.abc.Mapping) and (
             ContainerType.Docker in tag.registries
         ):
             registry = tag.registries[ContainerType.Docker]

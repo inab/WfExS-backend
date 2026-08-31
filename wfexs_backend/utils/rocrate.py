@@ -2888,7 +2888,7 @@ WHERE   {
         # This postprocessing is needed to declare the parameters
         # which are really outputs
         if not workflow_type.has_explicit_outputs:
-            new_params = cast("MutableParamsBlock", copy.copy(params))
+            new_params = cast("MutableParamsBlock", dict(params))
             for output_name, output_decl in outputs.items():
                 if not output_decl.get("syntheticOutput", False):
                     # Additional check
@@ -2909,7 +2909,7 @@ WHERE   {
         # Beware!! This is a tweak!!
         profiles: "Optional[Sequence[str]]" = params.get("-profile")
         if profiles is not None:
-            new_params = cast("MutableParamsBlock", copy.copy(params))
+            new_params = cast("MutableParamsBlock", dict(params))
             del new_params["-profile"]
             params = new_params
 

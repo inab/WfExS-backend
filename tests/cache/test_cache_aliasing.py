@@ -24,6 +24,7 @@ import filecmp
 import logging
 import os
 import pathlib
+import shutil
 
 from typing import (
     cast,
@@ -65,7 +66,7 @@ def test_cache_file(
     tmp_path = tmppath / "cached-content.txt"
 
     # The tmp path holds a copy of the first file
-    sample_path_1.copy(tmp_path)
+    shutil.copy2(sample_path_1.as_posix(), tmp_path.as_posix())
     with tmp_path.open(mode="rb") as tH:
         fingerprint_1 = wfexs_backend.utils.digests.ComputeDigestFromFileLike(
             tH,
@@ -84,7 +85,7 @@ def test_cache_file(
     assert filecmp.cmp(tmp_path, cached_content.path)
 
     # Now, overwrite the contents at tmp path
-    sample_path_2.copy(tmp_path)
+    shutil.copy2(sample_path_2.as_posix(), tmp_path.as_posix())
     with tmp_path.open(mode="rb") as tH:
         fingerprint_2 = wfexs_backend.utils.digests.ComputeDigestFromFileLike(
             tH,

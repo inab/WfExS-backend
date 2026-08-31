@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import http.client
 import shutil
 import string
@@ -129,8 +130,8 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
         username = parsedInputURL.username
         password = parsedInputURL.password
 
-        if isinstance(secContext, dict):
-            headers = secContext.get("headers", {}).copy()
+        if isinstance(secContext, collections.abc.Mapping):
+            headers = dict(secContext.get("headers", {}))
             token = secContext.get("token")
             token_header = secContext.get("token_header")
             username = secContext.get("username", username)

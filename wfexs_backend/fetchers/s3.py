@@ -20,6 +20,7 @@ import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
 import botocore.exceptions
+import collections.abc
 from urllib.parse import urlparse
 
 from typing import (
@@ -72,7 +73,7 @@ def downloadContentFrom_s3(
     prefix = prefix[1:]
     local_path = cachedFilename
 
-    if isinstance(secContext, dict):
+    if isinstance(secContext, collections.abc.Mapping):
         access_key = secContext.get("access_key")
         secret_key = secContext.get("secret_key")
     else:

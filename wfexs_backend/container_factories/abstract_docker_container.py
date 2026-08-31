@@ -16,7 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import lzma
 import tempfile
 import shutil
@@ -119,7 +118,7 @@ class AbstractDockerContainerFactory(ContainerFactory):
         some_trimmed = False
         for manifest in manifests:
             # Copy the manifest
-            trimmed_manifest = cast("MutableDockerLikeManifest", copy.copy(manifest))
+            trimmed_manifest = cast("MutableDockerLikeManifest", dict(manifest))
             # And trim the keys
             for key in self.trimmable_manifest_keys():
                 if key in trimmed_manifest:

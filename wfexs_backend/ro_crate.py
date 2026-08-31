@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import atexit
+import collections.abc
 import errno
 import http.client
 import inspect
@@ -863,11 +864,11 @@ class WorkflowRunROCrate:
                         agent["name"] = agent_name
 
                     emails_dict = resolved_orcid.record.get("emails", {})
-                    if isinstance(emails_dict, dict):
+                    if isinstance(emails_dict, collections.abc.Mapping):
                         emails = emails_dict.get("emails", [])
                         if isinstance(emails, list):
                             for email_entry in emails:
-                                if isinstance(email_entry, dict):
+                                if isinstance(email_entry, collections.abc.Mapping):
                                     the_email = email_entry.get("value")
                                     if the_email is not None:
                                         contact_point = ContactPoint(

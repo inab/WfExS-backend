@@ -16,7 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import datetime
 import hashlib
 import inspect
@@ -59,6 +58,7 @@ if TYPE_CHECKING:
         AnyURI,
         Fingerprint,
         RelPath,
+        SecurityContextConfig,
         WritableSecurityContextConfig,
         URIType,
     )
@@ -792,12 +792,12 @@ class CacheHandler:
         metadata_array = []
         licences: "MutableSequence[URIType]" = []
         # The security context could be augmented, so avoid side effects
+        currentSecContext: "SecurityContextConfig" = dict()
         if vault is not None and sec_context_name is not None:
             # TODO: revise this
             secContext = vault.getContext("", sec_context_name)
-            currentSecContext = copy.copy(secContext)
-        else:
-            currentSecContext = dict()
+            if secContext is not None:
+                currentSecContext = dict(secContext)
 
         relFinalCachedFilename: "Optional[RelPath]"
         finalCachedFilename: "Optional[pathlib.Path]"
@@ -929,7 +929,7 @@ class CacheHandler:
                 else:
                     # Prepare the attachedSecContext
                     usableSecContext = cast(
-                        "WritableSecurityContextConfig", copy.copy(currentSecContext)
+                        "WritableSecurityContextConfig", dict(currentSecContext)
                     )
                     if attachedSecContext is not None:
                         usableSecContext.update(attachedSecContext)

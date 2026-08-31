@@ -16,12 +16,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import copy
 import datetime
 import functools
 import json
 import os
 import re
+from types import MappingProxyType
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -70,16 +72,20 @@ from .abstract_token_sandboxed_export import (
 )
 
 # These are the supported JSON Schema validators
-INTROSPECT_VALIDATOR_MAPPER: "Mapping[str, Type[jsonschema.validators._Validator]]" = {
-    j_valid.META_SCHEMA["$schema"]: cast(
-        "Type[jsonschema.validators._Validator]", j_valid
+INTROSPECT_VALIDATOR_MAPPER: "Mapping[str, Type[jsonschema.validators._Validator]]" = (
+    MappingProxyType(
+        {
+            j_valid.META_SCHEMA["$schema"]: cast(
+                "Type[jsonschema.validators._Validator]", j_valid
+            )
+            for j_valid in filter(
+                lambda j_val: hasattr(j_val, "META_SCHEMA")
+                and isinstance(j_val.META_SCHEMA, collections.abc.Mapping),
+                jsonschema.validators.__dict__.values(),
+            )
+        }
     )
-    for j_valid in filter(
-        lambda j_val: hasattr(j_val, "META_SCHEMA")
-        and isinstance(j_val.META_SCHEMA, dict),
-        jsonschema.validators.__dict__.values(),
-    )
-}
+)
 
 
 class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
@@ -337,7 +343,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         ):
             # Removing banned keys
             patched_entry_metadata = cast(
-                "MutableMapping[str, Any]", copy.copy(entry_metadata)
+                "MutableMapping[str, Any]", dict(entry_metadata)
             )
             for banned_key in self.BANNED_SCHEMA_KEYS:
                 patched_entry_metadata.pop(banned_key, None)
@@ -426,7 +432,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
         # Setting the minimum needed metadata
         minimal_metadata: "MutableMapping[str, Any]"
         if metadata is not None:
-            minimal_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+            minimal_metadata = cast("MutableMapping[str, Any]", dict(metadata))
         else:
             minimal_metadata = {
                 "titles": [
@@ -879,7 +885,7 @@ class B2SHAREPublisher(AbstractTokenSandboxedExportPlugin):
                 updated_metadata = record.get("metadata")
                 assert updated_metadata is not None
             else:
-                updated_metadata = cast("MutableMapping[str, Any]", copy.copy(metadata))
+                updated_metadata = cast("MutableMapping[str, Any]", dict(metadata))
 
             if title is not None:
                 updated_metadata["titles"] = [

@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import atexit
+import collections.abc
 import os
 import subprocess
 import tempfile
@@ -109,7 +110,7 @@ class FASPFetcher(AbstractStatefulFetcher):
         explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
         # Sanitizing possible ill-formed inputs
-        if not isinstance(secContext, dict):
+        if not isinstance(secContext, collections.abc.Mapping):
             secContext = {}
 
         orig_remote_file = remote_file

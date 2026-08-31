@@ -17,6 +17,7 @@
 # limitations under the License.
 
 import atexit
+import collections.abc
 import copy
 import datetime
 import fnmatch
@@ -60,10 +61,11 @@ from .common import (
     SingleExecutionStats,
 )
 
-from .fetchers import (
+from .fetchers import (  # noqa: F401
     FetcherException,
     # Next ones are needed for correct unmarshalling
     RemoteRepo,
+    RepoGuessFlavor,
     RepoType,
 )
 
@@ -587,18 +589,20 @@ class WF:
         else:
             self.paranoidMode = self.wfexs.getDefaultParanoidMode()
 
-        if not isinstance(workflow_config, dict):
-            workflow_config = dict()
+        if isinstance(workflow_config, collections.abc.Mapping):
+            workflow_config_rw = dict(workflow_config)
+        else:
+            workflow_config_rw = dict()
 
         # The container type first is looked up at the workflow configuration
         # and later at the local configuration
-        container_type_str = workflow_config.get("containerType")
+        container_type_str = workflow_config_rw.get("containerType")
         if container_type_str is None:
             self.explicit_container_type = False
             container_type_str = self.wfexs.local_config.get("tools", dict()).get(
                 "containerType", DEFAULT_CONTAINER_TYPE.value
             )
-            workflow_config["containerType"] = container_type_str
+            workflow_config_rw["containerType"] = container_type_str
         else:
             self.explicit_container_type = True
         # This property should mutate after unmarshalling the config
@@ -638,8 +642,8 @@ class WF:
                 workflow_meta["trs_endpoint"] = trs_endpoint
             if prefer_upstream_source is not None:
                 workflow_meta["prefer_upstream_source"] = prefer_upstream_source
-            if workflow_config is not None:
-                workflow_meta["workflow_config"] = workflow_config
+            if len(workflow_config_rw) > 0:
+                workflow_meta["workflow_config"] = workflow_config_rw
             if params is not None:
                 workflow_meta["params"] = params
             if enabled_profiles is not None:
@@ -659,17 +663,17 @@ class WF:
             if not isinstance(vault, SecurityContextVault):
                 vault = SecurityContextVault()
 
-            if not isinstance(params, dict):
+            if not isinstance(params, collections.abc.Mapping):
                 params = dict()
 
-            if not isinstance(outputs, dict):
+            if not isinstance(outputs, collections.abc.Mapping):
                 outputs = dict()
 
-            if not isinstance(placeholders, dict):
+            if not isinstance(placeholders, collections.abc.Mapping):
                 placeholders = dict()
 
             # Workflow-specific
-            self.workflow_config = workflow_config
+            self.workflow_config = workflow_config_rw
 
             self.vault = vault
 
@@ -746,7 +750,7 @@ class WF:
         if checkSecure:
             self.secure = workdir_instance.isSecure()
         else:
-            self.secure = (len(public_key_filenames) > 0) or workflow_config.get(
+            self.secure = (len(public_key_filenames) > 0) or workflow_config_rw.get(
                 "secure", True
             )
 
@@ -1061,7 +1065,7 @@ class WF:
         new_params_meta = cls.__read_yaml_config(replaced_parameters_filename)
 
         if (
-            not isinstance(base_workflow_meta, dict)
+            not isinstance(base_workflow_meta, collections.abc.Mapping)
             or "params" not in base_workflow_meta
         ):
             raise WFException(
@@ -1091,7 +1095,9 @@ class WF:
             )
 
         # Last, merge
-        workflow_meta = copy.deepcopy(base_workflow_meta)
+        workflow_meta = cast(
+            "WritableWorkflowMetaConfigBlock", copy.deepcopy(base_workflow_meta)
+        )
         transferred_items: "MutableMapping[str, Set[str]]" = dict()
         for t_key in transferrable_keys:
             if t_key in new_params_meta:
@@ -2030,7 +2036,7 @@ class WF:
         ), "Workflow engine not properly identified or set up"
 
         # Process outputs now we have an engine
-        if isinstance(self.outputs, dict):
+        if isinstance(self.outputs, collections.abc.Mapping):
             assert self.outputs_to_inject is not None
             outputs = list(self.outputs.values())
             if (len(outputs) == 0 and len(self.outputs_to_inject) == 0) or (
@@ -2220,7 +2226,7 @@ class WF:
             return retvals, was_simple
 
         members: "Sequence[MemberPattern]" = []
-        if isinstance(remote_file_f, dict):
+        if isinstance(remote_file_f, collections.abc.Mapping):
             remote_file = remote_file_f
             # The value of the attributes is superseded
             remote_url = remote_file["uri"]
@@ -2722,12 +2728,12 @@ class WF:
                 return_input_uri.append(return_i_uri)  # type: ignore[arg-type]
                 if return_i_uri != i_uri:
                     some_formatted = True
-        elif isinstance(input_uri, dict):
+        elif isinstance(input_uri, collections.abc.Mapping):
             i_uri = input_uri["uri"]
             return_i_uri = cast("URIType", self._formatStringFromPlaceHolders(i_uri))
             some_formatted = return_i_uri != i_uri
             if some_formatted:
-                return_input_uri = copy.copy(input_uri)
+                return_input_uri = cast("Sch_LicensedURI", dict(input_uri))
                 return_input_uri["uri"] = return_i_uri
             else:
                 return_input_uri = input_uri
@@ -2754,7 +2760,7 @@ class WF:
             # We are here for the
             path_tokens = (*prefix_tokens, key)
             linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
-            if isinstance(raw_inputs, dict):
+            if isinstance(raw_inputs, collections.abc.Mapping):
                 inputs = cast("Sch_Param", raw_inputs)
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
@@ -2808,9 +2814,10 @@ class WF:
                         # We have to autofill this with the outputs directory,
                         # so results are properly stored (without escaping the jail)
                         if inputs.get("autoFill", False):
+                            formatted_inputs: "Sch_Param"
                             if prefrel_formatted:
                                 some_formatted = True
-                                formatted_inputs = copy.copy(inputs)
+                                formatted_inputs = cast("Sch_Param", dict(inputs))
                                 if formatted_preferred_name_conf is not None:
                                     formatted_inputs["preferred-name"] = (
                                         formatted_preferred_name_conf
@@ -2879,7 +2886,7 @@ class WF:
                         # Something has to be changed
                         if was_formatted:
                             some_formatted = True
-                            formatted_inputs = copy.copy(inputs)
+                            formatted_inputs = cast("Sch_Param", dict(inputs))
                             assert formatted_remote_files is not None
                             formatted_inputs["url"] = formatted_remote_files
                             if "secondary-urls" in inputs:
@@ -2939,8 +2946,8 @@ class WF:
 
                         # Last, copy only when needed
                         if formatted_val_inputs != val_inputs:
-                            formatted_inputs = copy.copy(
-                                formatted_params.get(key, inputs)
+                            formatted_inputs = cast(
+                                "Sch_Param", dict(formatted_params.get(key, inputs))
                             )
                             formatted_inputs["value"] = formatted_val_inputs
 
@@ -3005,7 +3012,9 @@ class WF:
 
         tabconf = inputs.get(config_key)
         encoding_format = ContentWithURIsMIMEs.get(config_key)
-        if not isinstance(tabconf, dict) or not isinstance(encoding_format, str):
+        if not isinstance(tabconf, collections.abc.Mapping) or not isinstance(
+            encoding_format, str
+        ):
             raise WFException(
                 f"Content with uris {path_tokens} must have a declaration of these types: {', '.join(ContentWithURIsMIMEs.keys())}"
             )
@@ -3365,8 +3374,13 @@ class WF:
 
         the_failed_uris: "MutableSequence[str]" = []
 
-        paramsIter: "Iterable[Tuple[Union[str, int], Any]]" = (
-            params.items() if isinstance(params, dict) else enumerate(params)
+        paramsIter = cast(
+            "Iterable[Tuple[Union[str, int], Any]]",
+            (
+                params.items()
+                if isinstance(params, collections.abc.Mapping)
+                else enumerate(params)
+            ),
         )
         for key, inputs in paramsIter:
             # We are here for the
@@ -3374,7 +3388,7 @@ class WF:
             path_tokens = (*prefix_tokens, str_key)
             # This is needed for complicated cases where the key name contains a dot
             linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
-            if isinstance(inputs, dict):
+            if isinstance(inputs, collections.abc.Mapping):
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
                     for inputKind in ContentKind:
@@ -3933,7 +3947,11 @@ class WF:
         # TODO: implement parsing of outputs
         outputsIter = cast(
             "Iterable[Tuple[Union[str, int], Sch_Output]]",
-            outputs.items() if isinstance(outputs, dict) else enumerate(outputs),
+            (
+                outputs.items()
+                if isinstance(outputs, collections.abc.Mapping)
+                else enumerate(outputs)
+            ),
         )
 
         for outputKey, outputDesc in outputsIter:
@@ -4410,7 +4428,7 @@ class WF:
                 if action.setup is not None:
                     # Clone it
                     a_setup_block = cast(
-                        "WritableSecurityContextConfig", copy.copy(action.setup)
+                        "WritableSecurityContextConfig", dict(action.setup)
                     )
                 else:
                     a_setup_block = None
@@ -4427,7 +4445,7 @@ class WF:
                     # Merging both setup blocks
                     if a_setup_block is None:
                         a_setup_block = cast(
-                            "WritableSecurityContextConfig", copy.copy(setup_block)
+                            "WritableSecurityContextConfig", dict(setup_block)
                         )
                     else:
                         a_setup_block.update(setup_block)
@@ -4748,14 +4766,14 @@ This is an enumeration of the types of collected contents:
                     self.formatted_environment, _ = self.formatParams(self.environment)
 
                     # The right moment to rescue this?
-                    if isinstance(self.workflow_config, dict):
+                    if isinstance(self.workflow_config, collections.abc.Mapping):
                         container_type_str = self.workflow_config.get("containerType")
                         if container_type_str is not None:
                             self.explicit_container_type = True
                             self.container_type_str = container_type_str
 
                     defaultActionsM = workflow_meta.get("default_actions")
-                    if isinstance(defaultActionsM, dict):
+                    if isinstance(defaultActionsM, collections.abc.Mapping):
                         default_actions = list(defaultActionsM.values())
                         if len(default_actions) == 0 or isinstance(
                             default_actions[0], ExportAction
@@ -5070,7 +5088,7 @@ This is an enumeration of the types of collected contents:
                             )
 
                         # Process outputs now we have an engine
-                        if isinstance(self.outputs, dict):
+                        if isinstance(self.outputs, collections.abc.Mapping):
                             assert self.engine is not None
                             assert self.outputs_to_inject is not None
                             outputs = list(self.outputs.values())
@@ -5107,10 +5125,13 @@ This is an enumeration of the types of collected contents:
                         and self.materializedEngine is not None
                     ):
                         self.explicit_container_type = True
-                        new_workflow_config = cast(
-                            "WritableWorkflowConfigBlock",
-                            copy.copy(self.workflow_config),
-                        )
+                        if self.workflow_config is not None:
+                            new_workflow_config = cast(
+                                "WritableWorkflowConfigBlock",
+                                dict(self.workflow_config),
+                            )
+                        else:
+                            new_workflow_config = dict()
                         new_workflow_config["containerType"] = self.container_type_str
                         self.workflow_config = new_workflow_config
                         self.marshallConfig(overwrite=True)
@@ -5322,7 +5343,7 @@ This is an enumeration of the types of collected contents:
             workdir=self.workDir,
         )
 
-        if isinstance(execution_read, dict):
+        if isinstance(execution_read, collections.abc.Mapping):
             executions = [execution_read]
         else:
             executions = execution_read

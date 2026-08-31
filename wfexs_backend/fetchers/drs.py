@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import io
 import json
 
@@ -162,7 +163,7 @@ def downloadContentFromDRS(
         if netloc is None:
             netloc = ""
         headers = dict()
-        if isinstance(secContext, dict):
+        if isinstance(secContext, collections.abc.Mapping):
             headers = secContext.get("headers", {})
             token = secContext.get("token")
             token_header = secContext.get("token_header")

@@ -17,7 +17,6 @@
 # limitations under the License.
 
 import abc
-import copy
 from dataclasses import dataclass
 import datetime
 import enum
@@ -398,7 +397,7 @@ class MaterializedContent(NamedTuple):
     def _mapping_fixes(
         cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
     ) -> "Mapping[str, Any]":
-        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["local"] = pathlib.Path(orig["local"])
         if workdir is not None and not dest["local"].is_absolute():
             dest["local"] = (workdir / dest["local"]).resolve()
@@ -592,7 +591,7 @@ class AbstractGeneratedContent(abc.ABC):
     def _mapping_fixes(
         cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
     ) -> "Mapping[str, Any]":
-        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["local"] = pathlib.Path(orig["local"])
         if workdir is not None and not dest["local"].is_absolute():
             dest["local"] = (workdir / dest["local"]).resolve()
@@ -678,7 +677,7 @@ class LocalWorkflow(NamedTuple):
     def _mapping_fixes(
         cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
     ) -> "Mapping[str, Any]":
-        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["dir"] = pathlib.Path(orig["dir"])
         if workdir is not None and not dest["dir"].is_absolute():
             dest["dir"] = (workdir / dest["dir"]).resolve()

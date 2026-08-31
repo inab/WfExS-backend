@@ -17,7 +17,6 @@
 # limitations under the License.
 
 import abc
-import copy
 from typing import (
     cast,
     TYPE_CHECKING,
@@ -65,7 +64,7 @@ class AbstractTokenSandboxedExportPlugin(AbstractTokenExportPlugin):
 
         self.sandbox = bool(setup_block["sandbox"])
 
-        new_setup_block = cast("WritableSecurityContextConfig", copy.copy(setup_block))
+        new_setup_block = cast("WritableSecurityContextConfig", dict(setup_block))
         # This code expects the children to implement it
         new_setup_block["api-prefix"] = self.get_api_prefix()
 

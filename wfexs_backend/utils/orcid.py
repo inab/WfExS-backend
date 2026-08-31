@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import io
 import json
 import re
@@ -99,7 +100,7 @@ def validate_orcid(
 
             return (
                 None
-                if not isinstance(public_record, dict)
+                if not isinstance(public_record, collections.abc.Mapping)
                 or public_record.get("lastModifiedTime") is None
                 else ResolvedORCID(
                     orcid=possible_orcid,

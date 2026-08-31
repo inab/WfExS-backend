@@ -514,9 +514,7 @@ class ZenodoExportPlugin(AbstractTokenSandboxedExportPlugin):
                     modifiable_metadata = fetched_metadata.get("metadata", {})
                     assert modifiable_metadata is not None
             else:
-                modifiable_metadata = cast(
-                    "MutableMapping[str, Any]", copy.copy(metadata)
-                )
+                modifiable_metadata = cast("MutableMapping[str, Any]", dict(metadata))
 
             if title is not None:
                 modifiable_metadata["title"] = title

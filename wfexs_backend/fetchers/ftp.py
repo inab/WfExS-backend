@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 from typing import (
     TYPE_CHECKING,
 )
@@ -88,7 +89,7 @@ def fetchFTPURL(
     if parsedInputURL.port is not None:
         connParams["PORT"] = parsedInputURL.port
 
-    if isinstance(secContext, dict):
+    if isinstance(secContext, collections.abc.Mapping):
         # There could be some corner cases where an empty
         # dictionary, or a dictionary without the needed keys
         # has been provided

@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 from google.cloud import storage  # type: ignore[import]
 from urllib.parse import urlparse
 import logging
@@ -71,7 +72,7 @@ def downloadContentFrom_gs(
     local_path = cachedFilename
 
     # Does the security context contain credentials
-    if isinstance(secContext, dict):
+    if isinstance(secContext, collections.abc.Mapping):
         credentials = secContext.get("gs_credentials")
     else:
         credentials = None

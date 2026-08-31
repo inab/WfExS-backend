@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 import datetime
 import functools
 import json
@@ -144,7 +145,7 @@ DEFAULT_STATIC_PS_CMDS = [
 ]
 
 
-@functools.lru_cache
+@functools.lru_cache(maxsize=16)
 def _tzstring() -> "str":
     try:
         with open("/etc/timezone", "r") as tzreader:
@@ -487,7 +488,9 @@ class NextflowWorkflowEngine(WorkflowEngine):
                 if a_process.name != ERROR_PROCESS_NAME:
                     some_process = True
                     break
-            if isinstance(interesting_assignments.get("manifest"), dict):
+            if isinstance(
+                interesting_assignments.get("manifest"), collections.abc.Mapping
+            ):
                 # This is a nextflow config
                 nfConfig = firstPath
                 newNxfConfigs.append(firstPath)
@@ -572,7 +575,7 @@ class NextflowWorkflowEngine(WorkflowEngine):
                     # But first, check the manifest availability
                     # to obtain the entrypoint
                     manifest = interesting_assignments.get("manifest")
-                    if isinstance(manifest, dict):
+                    if isinstance(manifest, collections.abc.Mapping):
                         putativeCandidateNfVals = manifest.get("mainScript")
                         if putativeCandidateNfVals is not None:
                             for putativeCandidateNfVal in putativeCandidateNfVals:
@@ -1490,10 +1493,10 @@ class NextflowWorkflowEngine(WorkflowEngine):
                         self.logger.warning(
                             f"FIXME: Unhandled values on {rel_key} from {params}"
                         )
-            elif isinstance(val, dict):
+            elif isinstance(val, collections.abc.Mapping):
                 found_params.update(
                     self._findLocalPathParams(
-                        cast("ContextAssignments", val),
+                        cast("ContextAssignments", val),  # type: ignore[redundant-cast]
                         workflow_dir,
                         parents=(*parents, rel_key),
                     )
@@ -1582,7 +1585,7 @@ STDERR
                 ro_cache_path=self.global_groovy_cache_dir,
             )
 
-            if isinstance(params_assignment.get("params"), dict):
+            if isinstance(params_assignment.get("params"), collections.abc.Mapping):
                 local_path_params = self._findLocalPathParams(
                     cast("ContextAssignments", params_assignment["params"]), localWf.dir
                 )
@@ -1774,9 +1777,9 @@ STDERR
                 # Matching at least one DSL declaration
                 if dslVer is None:
                     nextFl = interesting_assignments.get("nextflow")
-                    if isinstance(nextFl, dict):
+                    if isinstance(nextFl, collections.abc.Mapping):
                         nextEnb = nextFl.get("enable")
-                        if isinstance(nextEnb, dict):
+                        if isinstance(nextEnb, collections.abc.Mapping):
                             dslVerVal = nextEnb.get("dsl")
                             if isinstance(dslVerVal, list):
                                 dslVer = dslVerVal[0][1]
@@ -1967,7 +1970,7 @@ STDERR
         for key, val in allExecutionParams.items():
             path_tokens = (*prefix_tokens, key)
             linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
-            if isinstance(val, dict):
+            if isinstance(val, collections.abc.Mapping):
                 newAugmentedInputs = self.augmentNextflowInputs(
                     matHash, val, prefix_tokens=path_tokens
                 )
