@@ -98,11 +98,11 @@ def test_cache_file(
     # fetched_dir = tmppath / "DOWN"
 
     ## Now, get both the cache handler and the path
-    cH, cPath = wfBackend.getCacheHandler(CacheType.Input)
+    cH = wfBackend.getCacheHandler(CacheType.Input)
+    assert cH is not None, "Unable to obtain Input cache type"
     cached_content_2 = cH.fetch(
         cast("URIType", tmp_path.as_uri()),
         offline=False,
-        cache_dir=cPath,
     )
 
     # cached_content_2 = wfBackend.cacheFetch(

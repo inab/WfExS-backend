@@ -633,9 +633,14 @@ class WfExSBackend:
         ) = dict()
         # scheme_catalog is created on first use
         self.scheme_catalog = SchemeCatalog()
-        # cacheHandler is created on first use
-        self.cacheHandler = CacheHandler(
-            self.cacheDir, scheme_catalog=self.scheme_catalog
+        # cacheHandlers are created on first use
+        self.cacheHandlers = MappingProxyType(
+            {
+                cache_type: CacheHandler(
+                    cache_type_path, scheme_catalog=self.scheme_catalog
+                )
+                for cache_type, cache_type_path in self.cachePathMap.items()
+            }
         )
 
         fetchers_setup_block = local_config.get("fetchers-setup")
@@ -706,10 +711,8 @@ class WfExSBackend:
     def repo_fetchers(self) -> "Sequence[AbstractSchemeRepoFetcher]":
         return sorted(self._repo_fetchers, key=lambda f: f.PRIORITY, reverse=True)
 
-    def getCacheHandler(
-        self, cache_type: "CacheType"
-    ) -> "Tuple[CacheHandler, Optional[pathlib.Path]]":
-        return self.cacheHandler, self.cachePathMap.get(cache_type)
+    def getCacheHandler(self, cache_type: "CacheType") -> "Optional[CacheHandler]":
+        return self.cacheHandlers.get(cache_type)
 
     def findAndAddWorkflowEnginesFromModuleName(
         self,
@@ -1666,10 +1669,13 @@ class WfExSBackend:
         :param vault: The security context which has to be passed to
         the fetchers, in case they have to be used
         """
+        cache_handler = self.getCacheHandler(cacheType)
+        assert (
+            cache_handler is not None
+        ), f"Could not locate cache of type {cacheType!s}"
         if cacheType != CacheType.Workflow:
-            return self.cacheHandler.fetch(
+            return cache_handler.fetch(
                 remote_file,
-                cache_dir=self.cachePathMap[cacheType],
                 offline=offline,
                 ignoreCache=ignoreCache,
                 registerInCache=registerInCache,
@@ -1726,6 +1732,8 @@ class WfExSBackend:
     ) -> "Optional[Tuple[RemoteRepo, AbstractSchemeRepoFetcher]]":
         remote_repo: "Optional[RemoteRepo]" = None
         fetcher: "Optional[AbstractSchemeRepoFetcher]" = None
+        gw_cache_handler = self.getCacheHandler(CacheType.Workflow)
+        assert gw_cache_handler is not None, "Failed to get cache handler for workflows"
         guess_cache = self.cacheWorkflowDir / "guess-cache"
 
         if not ignoreCache:
@@ -1737,7 +1745,7 @@ class WfExSBackend:
                 # licences: "Tuple[URIType, ...]"
                 # fingerprint: "Optional[Fingerprint]" = None
                 # clonable: "bool" = True
-                cached_content = self.cacheHandler.fetch(
+                cached_content = gw_cache_handler.fetch(
                     cast("URIType", wf_url),
                     offline=True,
                     cache_dir=guess_cache,
@@ -1788,7 +1796,7 @@ class WfExSBackend:
                                 ),
                                 tC,
                             )
-                        self.cacheHandler.inject(
+                        gw_cache_handler.inject(
                             cast("URIType", wf_url),
                             cache_dir=guess_cache,
                             tempCachedFilename=temp_cached,
@@ -2002,6 +2010,8 @@ class WfExSBackend:
         to this one is returned.
         """
 
+        w_cache_handler = self.getCacheHandler(CacheType.Workflow)
+        assert w_cache_handler is not None
         # This is needed in case a proposed fetcher is already set
         # by the caller of this method (discouraged)
         if fetcher is None:
@@ -2053,9 +2063,8 @@ class WfExSBackend:
             # Give the chance to register the current fetched repo in the corresponding cache
             if registerInCache:
                 kind = ContentKind.Directory if repo_path.is_dir() else ContentKind.File
-                self.cacheHandler.inject(
+                w_cache_handler.inject(
                     cast("URIType", remote_url),
-                    cache_dir=self.cacheWorkflowDir,
                     fetched_metadata_array=augmented_metadata_array,
                     finalCachedFilename=repo_path,
                     inputKind=kind,
@@ -2381,10 +2390,11 @@ class WfExSBackend:
         :return:
         """
 
+        cr_cache_handler = self.getCacheHandler(CacheType.ROCrate)
+        assert cr_cache_handler is not None
         try:
-            cached_rocrate = self.cacheHandler.fetch(
+            cached_rocrate = cr_cache_handler.fetch(
                 roCrateURL,
-                cache_dir=self.cacheROCrateDir,
                 offline=offline,
                 ignoreCache=ignoreCache,
             )
@@ -2460,17 +2470,20 @@ class WfExSBackend:
         assert firstParsedURI is not None
 
         # Assure workflow inputs directory exists before the next step
-        workflowInputs_destdir: "pathlib.Path"
+        workflowInputs_destdir: "Optional[pathlib.Path]"
         if isinstance(dest, CacheType):
-            workflowInputs_destdir = self.cachePathMap[dest]
+            cache_handler = self.getCacheHandler(dest)
+            workflowInputs_destdir = None
         else:
+            cache_handler = self.getCacheHandler(CacheType.Input)
             workflowInputs_destdir = dest
+        assert cache_handler is not None
 
         self.logger.info(
             "downloading workflow input: {}".format(" or ".join(remote_uris))
         )
 
-        cached_content = self.cacheHandler.fetch(
+        cached_content = cache_handler.fetch(
             remote_file,
             cache_dir=workflowInputs_destdir,
             offline=offline,

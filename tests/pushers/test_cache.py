@@ -152,7 +152,7 @@ def test_cache_push(tmpdir: "LocalPath") -> "None":
     assert len(pushed_contents) > 0
 
     # Fifth, check
-    # cH, cPath = wfexs.getCacheHandler(CacheType.Input)
+    # cH = wfexs.getCacheHandler(CacheType.Input)
     logger.info(
         wfexs.cacheFetch(
             cast("URIType", "the:test"), cacheType=CacheType.Input, offline=True

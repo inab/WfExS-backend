@@ -580,8 +580,8 @@ def processCacheCommand(
     """
     logger.info(f"\t- Subcommand {args.cache_command} {args.cache_type}")
 
-    cH, cPath = wfBackend.getCacheHandler(args.cache_type)
-    assert cPath is not None
+    cH = wfBackend.getCacheHandler(args.cache_type)
+    assert cH is not None
     retval = 0
     if args.cache_command in (WfExS_Cache_Commands.List, WfExS_Cache_Commands.Status):
         the_path: "Union[AbsPath, str, URIType]"
@@ -589,7 +589,6 @@ def processCacheCommand(
             contentsI = sorted(
                 cH.list(
                     *args.cache_command_args,
-                    cache_dir=cPath,
                     acceptGlob=args.filesAsGlobs,
                     cascade=args.doCacheCascade,
                 ),
@@ -633,7 +632,6 @@ def processCacheCommand(
             contentsD = sorted(
                 cH.list(
                     *args.cache_command_args,
-                    cache_dir=cPath,
                     acceptGlob=args.filesAsGlobs,
                     cascade=args.doCacheCascade,
                 ),
@@ -674,7 +672,6 @@ def processCacheCommand(
                     lambda x: "\t".join([x[0].uri, x[1].as_posix()]),
                     cH.remove(
                         *args.cache_command_args,
-                        cache_dir=cPath,
                         acceptGlob=args.filesAsGlobs,
                         doRemoveFiles=args.doCacheRecursively,
                         cascade=args.doCacheCascade,
@@ -697,7 +694,6 @@ def processCacheCommand(
             # Then, inject new occurrence
             cH.inject(
                 cast("URIType", injected_uri),
-                cache_dir=cPath,
                 finalCachedFilename=pathlib.Path(finalCachedFilename),
                 clonable=clonable,
             )
@@ -709,7 +705,6 @@ def processCacheCommand(
     elif args.cache_command == WfExS_Cache_Commands.Validate:
         for metaUri, validated, metaStructure in cH.validate(
             *args.cache_command_args,
-            cache_dir=cPath,
             acceptGlob=args.filesAsGlobs,
             cascade=args.doCacheCascade,
         ):
