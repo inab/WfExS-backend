@@ -2422,6 +2422,7 @@ class WfExSBackend:
         registerInCache: "bool" = True,
         keep_cache_licence: "bool" = True,
         default_clonable: "bool" = True,
+        no_cache_dir: "Optional[pathlib.Path]" = None,
     ) -> "MaterializedContent":
         """
         Download remote file or directory / dataset.
@@ -2491,6 +2492,7 @@ class WfExSBackend:
             registerInCache=registerInCache,
             vault=vault,
             default_clonable=default_clonable,
+            no_cache_dir=no_cache_dir,
         )
         # TODO: Properly test alternatives
         downloaded_uri = firstURI.uri

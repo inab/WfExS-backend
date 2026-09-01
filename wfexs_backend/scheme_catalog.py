@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 
     from typing import (
         Any,
+        FrozenSet,
         IO,
         Mapping,
         MutableMapping,
@@ -126,6 +127,8 @@ class SchemeCatalogImportException(SchemeCatalogException):
 
 
 class SchemeCatalog:
+    NO_CACHE_SCHEMES: "Final[FrozenSet[str]]" = frozenset(("file", "data"))
+
     def __init__(
         self,
         scheme_handlers: "Mapping[str, Union[DocumentedStatefulProtocolFetcher, DocumentedProtocolFetcher]]" = types.MappingProxyType(
@@ -348,7 +351,10 @@ class SchemeCatalog:
         )
 
     def get(self, scheme: "str") -> "Optional[DocumentedProtocolFetcher]":
-        return self.schemeHandlers.get(scheme)
+        return self.schemeHandlers.get(scheme.lower())
+
+    def is_no_cache_scheme(self, scheme: "str") -> "bool":
+        return scheme.lower() in self.NO_CACHE_SCHEMES
 
     def getSchemeHandler(
         self, the_remote_file: "URIType"

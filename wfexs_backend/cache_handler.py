@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     )
 
     from typing_extensions import (
+        Final,
         NotRequired,
         TypedDict,
     )
@@ -151,7 +152,7 @@ class CacheHandlerSchemeException(CacheHandlerException):
 
 
 class CacheHandler:
-    CACHE_METADATA_SCHEMA = cast("RelPath", "cache-metadata.json")
+    CACHE_METADATA_SCHEMA: "Final[RelPath]" = cast("RelPath", "cache-metadata.json")
 
     def __init__(
         self,
@@ -740,28 +741,35 @@ class CacheHandler:
         vault: "Optional[SecurityContextVault]" = None,
         sec_context_name: "Optional[str]" = None,
         default_clonable: "bool" = True,
+        no_cache_dir: "Optional[pathlib.Path]" = None,
     ) -> "CachedContent":
+        if ignoreCache and not registerInCache:
+            assert (
+                cache_dir is not None and not cache_dir.samefile(self.cacheDir)
+            ) or no_cache_dir is not None, "When ignoreCache is true and registerInCache is false, no_cache_dir must be set or cache_dir must be set to something different of the official cache dir"
+
         if cache_dir is None:
             cache_dir = self.cacheDir
+        elif no_cache_dir is None and not cache_dir.samefile(self.cacheDir):
+            no_cache_dir = cache_dir
 
         # The directory with the content, whose name is based on sha256
-        if not cache_dir.exists():
-            try:
-                cache_dir.mkdir(parents=True)
-            except OSError:
-                errstr = (
-                    "ERROR: Unable to create directory for fetched contents {}.".format(
-                        cache_dir
+        for a_cache_dir in (cache_dir, no_cache_dir):
+            if a_cache_dir is not None and not a_cache_dir.exists():
+                try:
+                    a_cache_dir.mkdir(parents=True)
+                except OSError as ose:
+                    errstr = "ERROR: Unable to create directory for fetched contents {}.".format(
+                        a_cache_dir
                     )
-                )
-                raise CacheHandlerException(errstr)
+                    raise CacheHandlerException(errstr) from ose
 
         # The directory where the symlinks derived from SHA1 obtained from URIs
         # to the content are placed
         hashDir = self.getHashDir(cache_dir)
-
-        # This filename will only be used when content is being fetched
-        tempCachedFilename = cache_dir / ("caching-" + str(uuid.uuid4()))
+        no_hashDir: "Optional[pathlib.Path]" = (
+            None if no_cache_dir is None else self.getHashDir(no_cache_dir)
+        )
 
         # This is an iterative process, where the URI is resolved and peeled until a basic fetching protocol is reached
         # inputKind: "Union[ContentKind, LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]]" = remote_file
@@ -808,6 +816,7 @@ class CacheHandler:
             # provide the very same content
             altInputs = inputKind if isinstance(inputKind, list) else [inputKind]
             uncachedInputs = list()
+            metaStructure: "Optional[CacheMetadataDict]" = None
 
             for a_remote_file in altInputs:
                 attachedSecContext = None
@@ -840,16 +849,27 @@ class CacheHandler:
                     else:
                         parsedInputURL = urllib.parse.urlparse(the_remote_file + "#")
 
+                # As of RFC3986, schemes are case insensitive
+                theScheme = parsedInputURL.scheme.lower()
+                no_cache_this_scheme = self.scheme_catalog.is_no_cache_scheme(theScheme)
+
+                the_hashDir = (
+                    no_hashDir
+                    if no_hashDir is not None
+                    and (no_cache_this_scheme or (not registerInCache and ignoreCache))
+                    else hashDir
+                )
+
                 # uriCachedFilename is going to be always a symlink
                 (
                     uriMetaCachedFilename,
                     uriCachedFilename,
                     absUriCachedFilename,
-                ) = self._genUriMetaCachedFilename(hashDir, the_remote_file)
+                ) = self._genUriMetaCachedFilename(the_hashDir, the_remote_file)
 
                 # TODO: check cached state in future database
                 # Cleaning up
-                if registerInCache and ignoreCache:
+                if not no_cache_this_scheme and registerInCache and ignoreCache:
                     # Removing the metadata
                     if uriMetaCachedFilename.exists():
                         uriMetaCachedFilename.unlink()
@@ -861,13 +881,15 @@ class CacheHandler:
                     # it could be referenced by other symlinks
 
                 refetch = (
-                    not registerInCache
+                    no_cache_this_scheme
+                    or not registerInCache
                     or ignoreCache
                     or not uriMetaCachedFilename.exists()
                     or os.stat(uriMetaCachedFilename).st_size == 0
                 )
 
-                metaStructure: "Optional[CacheMetadataDict]" = None
+                # Clean sheet for this iteration
+                metaStructure = None
                 if not refetch:
                     try:
                         metaStructure = self._parseMetaStructure(uriMetaCachedFilename)
@@ -897,7 +919,7 @@ class CacheHandler:
                                 "RelPath", os.readlink(absUriCachedFilename)
                             )
                         finalCachedFilename = (
-                            hashDir / relFinalCachedFilename
+                            the_hashDir / relFinalCachedFilename
                         ).resolve()
 
                         if not finalCachedFilename.exists():
@@ -939,6 +961,10 @@ class CacheHandler:
                         if prefixSecContext is not None:
                             usableSecContext.update(prefixSecContext)
 
+                    # Last, a hint for the future
+                    if not default_clonable:
+                        usableSecContext["prefer_symlink"] = True
+
                     uncachedInputs.append(
                         (
                             the_remote_file,
@@ -949,6 +975,7 @@ class CacheHandler:
                     )
 
             if metaStructure is not None:
+                # Cache hit!
                 cached_fetched_metadata_array = list(
                     map(
                         lambda rm: URIWithMetadata(
@@ -967,7 +994,7 @@ class CacheHandler:
                 licences.extend(the_licences)
                 if "fingerprint" in metaStructure:
                     final_fingerprint = metaStructure["fingerprint"]
-                clonable = metaStructure.get("clonable", True)
+                clonable = metaStructure.get("clonable", default_clonable)
             elif offline:
                 # As this is a handler for online resources, comply with offline mode
                 raise CacheOfflineException(
@@ -987,6 +1014,24 @@ class CacheHandler:
                     # Content is fetched here
                     # As of RFC3986, schemes are case insensitive
                     theScheme = parsedInputURL.scheme.lower()
+                    no_cache_this_scheme = self.scheme_catalog.is_no_cache_scheme(
+                        theScheme
+                    )
+                    if no_cache_this_scheme:
+                        if no_cache_dir is None and self.cacheDir.samefile(cache_dir):
+                            errmsg = f"It is not allowed to keep cached contents from {theScheme} scheme (while pre-processing {remote_file})."
+                            self.logger.error(errmsg)
+                            che = CacheHandlerException(errmsg)
+                            if nested_exception is not None:
+                                raise che from nested_exception
+                            else:
+                                raise che
+                        chosen_cache_dir = (
+                            cache_dir if no_cache_dir is None else no_cache_dir
+                        )
+                    else:
+                        chosen_cache_dir = cache_dir
+
                     schemeHandler = self.scheme_catalog.get(theScheme)
 
                     try:
@@ -1000,6 +1045,20 @@ class CacheHandler:
                                 raise che from nested_exception
                             else:
                                 raise che
+
+                        # This filename will only be used when content is being fetched
+                        tempCachedFilename = chosen_cache_dir / (
+                            "caching-" + str(uuid.uuid4())
+                        )
+                        the_hashDir = (
+                            no_hashDir
+                            if no_hashDir is not None
+                            and (
+                                no_cache_this_scheme
+                                or (not registerInCache and ignoreCache)
+                            )
+                            else hashDir
+                        )
 
                         # TODO: this code is partially redundant with
                         # the one in SchemeHandler method fetch
@@ -1027,7 +1086,7 @@ class CacheHandler:
                                     uriCachedFilename,
                                     absUriCachedFilename,
                                 ) = self._genUriMetaCachedFilename(
-                                    hashDir, the_remote_file
+                                    the_hashDir, the_remote_file
                                 )
 
                             # Overwrite the licence if it is explicitly returned
@@ -1036,13 +1095,13 @@ class CacheHandler:
 
                             # The cache entry is injected
                             finalCachedFilename, fingerprint = self._inject(
-                                hashDir,
+                                the_hashDir,
                                 LicensedURI(uri=the_remote_file, licences=the_licences),
-                                cache_dir=cache_dir,
+                                cache_dir=chosen_cache_dir,
                                 fetched_metadata_array=pfr.metadata_array,
                                 tempCachedFilename=tempCachedFilename,
                                 inputKind=inputKind,
-                                clonable=clonable,
+                                clonable=default_clonable,
                             )
                             final_fingerprint = fingerprint
 
@@ -1056,7 +1115,7 @@ class CacheHandler:
                                 tempCachedFilename.rename(finalCachedFilename)
 
                                 next_input_file = os.path.relpath(
-                                    finalCachedFilename, hashDir
+                                    finalCachedFilename, the_hashDir
                                 )
                             else:
                                 next_input_file = hashlib.sha1(

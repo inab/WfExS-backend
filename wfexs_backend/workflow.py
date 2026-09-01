@@ -2348,7 +2348,7 @@ class WF:
         if not cacheable:
             ignoreCache = True
             assert isinstance(storeDir, pathlib.Path)
-            cloneToStore = True
+            # cloneToStore = True
         # Trying to preserve what it is returned by the cache
         # unless we are explicitly feeding a licence
         matContent = self.wfexs.downloadContent(
@@ -2360,6 +2360,7 @@ class WF:
             registerInCache=cacheable,
             keep_cache_licence=alt_is_plain,
             default_clonable=cloneToStore,
+            no_cache_dir=inputDestDir,
         )
 
         # Now, time to create the link
