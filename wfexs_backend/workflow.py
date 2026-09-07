@@ -594,6 +594,12 @@ class WF:
         else:
             workflow_config_rw = dict()
 
+        # These two configuration elements are need to decide whether
+        # to propagate this set up
+        self._clone_all_inputs_by_default: "bool" = workflow_config_rw.get(
+            wfexs.CLONE_ALL_INPUTS_KEY, wfexs.clone_all_inputs_by_default
+        )
+
         # The container type first is looked up at the workflow configuration
         # and later at the local configuration
         container_type_str = workflow_config_rw.get("containerType")
@@ -3402,7 +3408,7 @@ class WF:
                             )
                         )
 
-                    clonable = inputs.get("clonable", True)
+                    clonable = inputs.get("clonable", self._clone_all_inputs_by_default)
                     if inputKind in (
                         ContentKind.File,
                         ContentKind.Directory,

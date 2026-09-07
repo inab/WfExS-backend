@@ -11,6 +11,11 @@
 			"type": "string",
 			"minLength": 1
 		},
+		"clone_all_inputs_by_default": {
+			"title": "Clone inputs by default in every staging operation by default?",
+			"description": "Default value about cloning an input dataset onto every working directory",
+			"type": "boolean"
+		},
 		"crypt4gh": {
 			"title": "Installation Crypt4GH key setup",
 			"description": "WfExS-backend needs an encryption key for several tasks, like encrypting and decrypting random keys of encrypted working directories. When this block does not exist, WfExS-backend.py creates the installation's keys, and updates the configuration file",

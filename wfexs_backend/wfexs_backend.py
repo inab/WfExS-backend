@@ -246,6 +246,8 @@ class WfExSBackend:
     CRYPT4GH_PUBKEY_KEY: "Final[str]" = "pub"
     CRYPT4GH_PASSPHRASE_KEY: "Final[str]" = "passphrase"
 
+    CLONE_ALL_INPUTS_KEY: "Final[str]" = "clone_all_inputs_by_default"
+
     SCHEMAS_REL_DIR: "Final[str]" = "schemas"
     CONFIG_SCHEMA: "Final[RelPath]" = cast("RelPath", "config.json")
     _PassGen: "ClassVar[Optional[WfExSPassphraseGenerator]]" = None
@@ -609,6 +611,12 @@ class WfExSBackend:
         cacheWorkflowInputsDir = cacheDir / "wf-inputs"
         cacheWorkflowInputsDir.mkdir(parents=True, exist_ok=True)
         self.cachePathMap[CacheType.Input] = cacheWorkflowInputsDir
+
+        # This configuration element is needed later to decide whether
+        # to clone or not clone by default
+        self._clone_all_inputs_by_default: "bool" = local_config.get(
+            self.CLONE_ALL_INPUTS_KEY, True
+        )
 
         # This directory will be used to store the intermediate
         # and final results before they are sent away
@@ -1092,6 +1100,10 @@ class WfExSBackend:
 
     def enableDefaultParanoidMode(self) -> None:
         self.defaultParanoidMode = True
+
+    @property
+    def clone_all_inputs_by_default(self) -> "bool":
+        return self._clone_all_inputs_by_default
 
     def tryWorkflowURI(
         self,
