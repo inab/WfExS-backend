@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,11 +16,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import abc
+import collections.abc
 import enum
 import logging
+from types import MappingProxyType
 
 from typing import (
     cast,
@@ -34,11 +34,8 @@ if TYPE_CHECKING:
         Any,
         Callable,
         ClassVar,
-        Iterable,
         IO,
         Mapping,
-        MutableMapping,
-        MutableSequence,
         Optional,
         Sequence,
         Tuple,
@@ -56,7 +53,6 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         AnyURI,
         ContentKind,
         PathLikePath,
@@ -90,7 +86,6 @@ class ProtocolFetcherReturn(NamedTuple):
 
 if TYPE_CHECKING:
     from mypy_extensions import DefaultNamedArg
-    import os
 
     ProtocolFetcher: TypeAlias = Callable[
         [
@@ -170,7 +165,7 @@ class AbstractStatefulFetcher(abc.ABC):
 
     def __init__(
         self,
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = MappingProxyType({}),
         setup_block: "Optional[Mapping[str, Any]]" = None,
         scheme_catalog: "Optional[SchemeCatalog]" = None,
     ):
@@ -183,7 +178,9 @@ class AbstractStatefulFetcher(abc.ABC):
         )
         # This is used to resolve program names
         self.progs = progs
-        self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+        self.setup_block = (
+            setup_block if isinstance(setup_block, collections.abc.Mapping) else dict()
+        )
         self.scheme_catalog = scheme_catalog
 
     @abc.abstractmethod
@@ -333,7 +330,7 @@ class AbstractSchemeRepoFetcher(AbstractStatefulFetcher):
     def __init__(
         self,
         scheme_catalog: "SchemeCatalog",
-        progs: "ProgsMapping" = dict(),
+        progs: "ProgsMapping" = MappingProxyType({}),
         setup_block: "Optional[Mapping[str, Any]]" = None,
     ):
         """

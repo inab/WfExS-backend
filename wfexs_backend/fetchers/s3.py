@@ -20,6 +20,7 @@ import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
 import botocore.exceptions
+import collections.abc
 from urllib.parse import urlparse
 
 from typing import (
@@ -35,7 +36,6 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         PathLikePath,
         SecurityContextConfig,
         URIType,
@@ -73,7 +73,7 @@ def downloadContentFrom_s3(
     prefix = prefix[1:]
     local_path = cachedFilename
 
-    if isinstance(secContext, dict):
+    if isinstance(secContext, collections.abc.Mapping):
         access_key = secContext.get("access_key")
         secret_key = secContext.get("secret_key")
     else:
@@ -101,7 +101,7 @@ def downloadContentFrom_s3(
         kind = ContentKind.File
     except botocore.exceptions.ClientError as error:
         if error.response["Error"]["Code"] != "NoSuchKey":
-            raise error
+            raise
 
         # This happens when the object is not a file
         blob_prefix = prefix
@@ -133,8 +133,8 @@ def downloadContentFrom_s3(
                         errmsg = f'Error downloading {key["Key"]} from {remote_file} to {local_blob_filename}'
                         logger.exception(errmsg)
                         raise FetcherException(errmsg) from e
-        except FetcherException as fe:
-            raise fe
+        except FetcherException:
+            raise
         except Exception as e:
             errmsg = f"Error paginating {prefix} from {remote_file} to {local_path}"
             logger.exception(errmsg)

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
+import collections.abc
 import io
 import json
 
@@ -35,7 +34,6 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         PathLikePath,
         SecurityContextConfig,
         URIType,
@@ -67,8 +65,10 @@ def query_n2t(
     scheme: "str",
     the_id: "str",
     remote_file: "URIType",
-    metadata_array: "MutableSequence[URIWithMetadata]" = [],
+    metadata_array: "Optional[MutableSequence[URIWithMetadata]]" = None,
 ) -> "Tuple[URIType, MutableSequence[URIWithMetadata]]":
+    if metadata_array is None:
+        metadata_array = []
     query_url = cast("URIType", N2T_NET_SERVICE + scheme + ":")
     gathered_meta = {"fetched": query_url}
 
@@ -163,7 +163,7 @@ def downloadContentFromDRS(
         if netloc is None:
             netloc = ""
         headers = dict()
-        if isinstance(secContext, dict):
+        if isinstance(secContext, collections.abc.Mapping):
             headers = secContext.get("headers", {})
             token = secContext.get("token")
             token_header = secContext.get("token_header")
@@ -200,7 +200,6 @@ def downloadContentFromDRS(
 
         http_fetcher = HTTPFetcher()
         gathered_meta = {"fetched": object_metadata_url}
-        metadata = None
         try:
             metaio = io.BytesIO()
             _, metametaio, _ = http_fetcher.streamfetch(

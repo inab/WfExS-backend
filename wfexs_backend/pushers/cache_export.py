@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import absolute_import
 
 import os
 import pathlib
@@ -38,7 +36,6 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         ClassVar,
-        IO,
         Mapping,
         Optional,
         Sequence,
@@ -51,18 +48,14 @@ if TYPE_CHECKING:
         LicenceDescription,
         RelPath,
         ResolvedORCID,
-        SecurityContextConfig,
         SymbolicName,
         URIType,
         URIWithMetadata,
     )
 
-    from ..workflow import WF
-
 from ..utils.contents import link_or_copy
 
 from . import (
-    AbstractExportPlugin,
     DraftEntry,
 )
 from .abstract_contexted_export import AbstractContextedExportPlugin
@@ -85,8 +78,8 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Optional[DraftEntry]":
         # We are starting to learn whether we already have a PID
         preferred_id = (
@@ -133,8 +126,8 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
@@ -159,7 +152,6 @@ class CacheExportPlugin(AbstractContextedExportPlugin):
         # Create temporary destination directory (if needed)
         tmpdir = None
         source: "Optional[pathlib.Path]" = None
-        metadata = None
         try:
             if len(items) > 1:
                 tmpdir = tempfile.mkdtemp(dir=self.tempdir, suffix="export")

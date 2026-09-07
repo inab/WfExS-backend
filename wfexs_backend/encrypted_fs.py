@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import enum
 import pathlib
@@ -33,8 +32,6 @@ if TYPE_CHECKING:
     )
 
     from .common import (
-        AbsPath,
-        AnyPath,
         RelPath,
     )
 
@@ -95,7 +92,7 @@ def _mountEncFS(
                 stderr=encfs_init_stderr,
                 cwd=uniqueRawWorkDir,
             )
-        except IOError as ioe:
+        except OSError as ioe:
             errstr = f"Could not init/mount directory encryption FUSE using {encfsCommand} (maybe was not found)"
             raise EncryptedFSException(errstr) from ioe
 

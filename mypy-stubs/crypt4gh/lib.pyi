@@ -5,13 +5,11 @@ from .header import CompoundKey
 from collections.abc import Generator
 from io import BytesIO
 from logging import Logger
-from pathlib import Path
 from typing import (
     Callable,
     IO,
     Optional,
     Sequence,
-    Tuple,
 )
 
 LOG: Logger

@@ -15,11 +15,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import atexit
+import collections.abc
 import copy
-import dataclasses
 import datetime
 import fnmatch
 import inspect
@@ -31,14 +30,11 @@ import pathlib
 import platform
 import re
 import shutil
-import subprocess
 import sys
 import tarfile
 import tempfile
-import threading
-import time
+from types import MappingProxyType
 import uuid
-import warnings
 import zipfile
 
 import psutil
@@ -49,7 +45,7 @@ from typing import (
     Dict,
     NamedTuple,
     # This one might be needed for proper unmarshalling
-    Pattern,
+    Pattern,  # noqa: F401
     TYPE_CHECKING,
     TypeVar,
 )
@@ -65,7 +61,7 @@ from .common import (
     SingleExecutionStats,
 )
 
-from .fetchers import (
+from .fetchers import (  # noqa: F401
     FetcherException,
     # Next ones are needed for correct unmarshalling
     RemoteRepo,
@@ -85,16 +81,11 @@ from .utils.orcid import (
 )
 
 if TYPE_CHECKING:
-    from os import (
-        PathLike,
-    )
-
     from typing import (
         Any,
-        ClassVar,
+        FrozenSet,
         IO,
         Iterable,
-        Iterator,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -117,9 +108,7 @@ if TYPE_CHECKING:
     )
 
     from .common import (
-        AbsPath,
         AnyContent,
-        AnyPath,
         EngineVersion,
         ExitVal,
         GlobPattern,
@@ -152,10 +141,6 @@ if TYPE_CHECKING:
 
     from .pushers import (
         AbstractExportPlugin,
-    )
-
-    from .utils.licences import (
-        LicenceMatcher,
     )
 
     Sch_PlainURI = URIType
@@ -273,10 +258,6 @@ from .workflow_engines import (
     WorkflowType,
 )
 
-from .pushers import (
-    ExportPluginException,
-)
-
 from .pushers.abstract_contexted_export import (
     AbstractContextedExportPlugin,
 )
@@ -359,14 +340,12 @@ from .workflow_engines import (
 
 from .utils.contents import (
     bin2dataurl,
-    link_or_copy,
     link_or_copy_pathlib,
     link_or_symlink_pathlib,
 )
 from .utils.marshalling_handling import marshall_namedtuple, unmarshall_namedtuple
 from .utils.misc import (
     config_validate,
-    get_maximum_file_descriptors,
     is_uri,
 )
 from .utils.zipfile_path import path_relative_to
@@ -379,8 +358,8 @@ if TYPE_CHECKING:
     from .wfexs_backend import WfExSBackend
 
 # This code needs exception groups
-if sys.version_info[:2] < (3, 11):
-    from exceptiongroup import ExceptionGroup
+# if sys.version_info[:2] < (3, 11):
+#     from exceptiongroup import ExceptionGroup
 
 
 # Related export namedtuples
@@ -399,7 +378,7 @@ class ExportAction(NamedTuple):
     setup: "Optional[SecurityContextConfig]"
     preferred_scheme: "Optional[str]"
     preferred_id: "Optional[str]"
-    licences: "Sequence[str]" = []
+    licences: "Sequence[str]" = ()
     title: "Optional[str]" = None
     description: "Optional[str]" = None
     custom_metadata: "Optional[Mapping[str, Any]]" = None
@@ -457,15 +436,19 @@ class WFLoggerAdapter(_LoggerAdapter):
 TAR_MIME: "Final[str]" = "application/x-tar"
 ZIP_MIME: "Final[str]" = "application/zip"
 
-ARCHIVE_MAPPING = {ZIP_MIME, TAR_MIME}
+ARCHIVE_MAPPING: "Final[FrozenSet[str]]" = frozenset((ZIP_MIME, TAR_MIME))
 
-TAR_COMPRESS_MIME = {
-    "application/gzip",
-    "application/x-bzip2",
-    "application/x-xz",
-    "application/x-lzma",
-    # "application/x-lzip",
-}
+TAR_COMPRESS_MIME: "Final[FrozenSet[str]]" = frozenset(
+    (
+        "application/gzip",
+        "application/x-bzip2",
+        "application/x-xz",
+        "application/x-lzma",
+        # "application/x-lzip",
+    )
+)
+
+MIN_UTC = datetime.datetime.min.replace(tzinfo=datetime.timezone.utc)
 
 
 class WF:
@@ -516,10 +499,10 @@ class WF:
         vault: "Optional[SecurityContextVault]" = None,
         instanceId: "Optional[WfExSInstanceId]" = None,
         nickname: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
+        orcids: "Sequence[str]" = (),
         rawWorkDir: "Optional[pathlib.Path]" = None,
         paranoid_mode: "Optional[bool]" = None,
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         fail_ok: "bool" = False,
@@ -527,8 +510,8 @@ class WF:
         cached_workflow: "Optional[LocalWorkflow]" = None,
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
-        preferred_containers: "Sequence[Container]" = [],
-        preferred_operational_containers: "Sequence[Container]" = [],
+        preferred_containers: "Sequence[Container]" = (),
+        preferred_operational_containers: "Sequence[Container]" = (),
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Minimal,
         strict_reproducibility_level: "bool" = False,
         workdir_instance: "Optional[Workdir]" = None,
@@ -606,18 +589,26 @@ class WF:
         else:
             self.paranoidMode = self.wfexs.getDefaultParanoidMode()
 
-        if not isinstance(workflow_config, dict):
-            workflow_config = dict()
+        if isinstance(workflow_config, collections.abc.Mapping):
+            workflow_config_rw = dict(workflow_config)
+        else:
+            workflow_config_rw = dict()
+
+        # These two configuration elements are need to decide whether
+        # to propagate this set up
+        self._clone_all_inputs_by_default: "bool" = workflow_config_rw.get(
+            wfexs.CLONE_ALL_INPUTS_KEY, wfexs.clone_all_inputs_by_default
+        )
 
         # The container type first is looked up at the workflow configuration
         # and later at the local configuration
-        container_type_str = workflow_config.get("containerType")
+        container_type_str = workflow_config_rw.get("containerType")
         if container_type_str is None:
             self.explicit_container_type = False
             container_type_str = self.wfexs.local_config.get("tools", dict()).get(
                 "containerType", DEFAULT_CONTAINER_TYPE.value
             )
-            workflow_config["containerType"] = container_type_str
+            workflow_config_rw["containerType"] = container_type_str
         else:
             self.explicit_container_type = True
         # This property should mutate after unmarshalling the config
@@ -657,8 +648,8 @@ class WF:
                 workflow_meta["trs_endpoint"] = trs_endpoint
             if prefer_upstream_source is not None:
                 workflow_meta["prefer_upstream_source"] = prefer_upstream_source
-            if workflow_config is not None:
-                workflow_meta["workflow_config"] = workflow_config
+            if len(workflow_config_rw) > 0:
+                workflow_meta["workflow_config"] = workflow_config_rw
             if params is not None:
                 workflow_meta["params"] = params
             if enabled_profiles is not None:
@@ -678,17 +669,17 @@ class WF:
             if not isinstance(vault, SecurityContextVault):
                 vault = SecurityContextVault()
 
-            if not isinstance(params, dict):
+            if not isinstance(params, collections.abc.Mapping):
                 params = dict()
 
-            if not isinstance(outputs, dict):
+            if not isinstance(outputs, collections.abc.Mapping):
                 outputs = dict()
 
-            if not isinstance(placeholders, dict):
+            if not isinstance(placeholders, collections.abc.Mapping):
                 placeholders = dict()
 
             # Workflow-specific
-            self.workflow_config = workflow_config
+            self.workflow_config = workflow_config_rw
 
             self.vault = vault
 
@@ -765,7 +756,7 @@ class WF:
         if checkSecure:
             self.secure = workdir_instance.isSecure()
         else:
-            self.secure = (len(public_key_filenames) > 0) or workflow_config.get(
+            self.secure = (len(public_key_filenames) > 0) or workflow_config_rw.get(
                 "secure", True
             )
 
@@ -960,7 +951,6 @@ class WF:
             if parsedRepoURL.scheme == "":
                 if (self.trs_endpoint is not None) and len(self.trs_endpoint) > 0:
                     parsedTRSURL = urllib.parse.urlparse(self.trs_endpoint)
-                    trs_steps: "Sequence[str]" = parsedTRSURL.path.split("/")
                     pid_steps = ["", urllib.parse.quote(the_pid, safe="")]
 
                     if self.version_id is not None:
@@ -1081,7 +1071,7 @@ class WF:
         new_params_meta = cls.__read_yaml_config(replaced_parameters_filename)
 
         if (
-            not isinstance(base_workflow_meta, dict)
+            not isinstance(base_workflow_meta, collections.abc.Mapping)
             or "params" not in base_workflow_meta
         ):
             raise WFException(
@@ -1096,8 +1086,7 @@ class WF:
         # Now, trim everything but what it is allowed
         existing_keys = set(new_params_meta.keys())
         for t_key in transferrable_keys:
-            if t_key in existing_keys:
-                existing_keys.remove(t_key)
+            existing_keys.discard(t_key)
 
         if len(existing_keys) > 0:
             for key in existing_keys:
@@ -1112,7 +1101,9 @@ class WF:
             )
 
         # Last, merge
-        workflow_meta = copy.deepcopy(base_workflow_meta)
+        workflow_meta = cast(
+            "WritableWorkflowMetaConfigBlock", copy.deepcopy(base_workflow_meta)
+        )
         transferred_items: "MutableMapping[str, Set[str]]" = dict()
         for t_key in transferrable_keys:
             if t_key in new_params_meta:
@@ -1180,8 +1171,8 @@ class WF:
         workflowMetaFilename: "pathlib.Path",
         securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
@@ -1212,8 +1203,8 @@ class WF:
         workflow_meta: "WritableWorkflowMetaConfigBlock",
         securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
@@ -1221,8 +1212,8 @@ class WF:
         cached_workflow: "Optional[LocalWorkflow]" = None,
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
-        preferred_containers: "Sequence[Container]" = [],
-        preferred_operational_containers: "Sequence[Container]" = [],
+        preferred_containers: "Sequence[Container]" = (),
+        preferred_operational_containers: "Sequence[Container]" = (),
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
     ) -> "WF":
@@ -1274,8 +1265,8 @@ class WF:
         securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         replaced_parameters_filename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
@@ -1306,7 +1297,6 @@ class WF:
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None
         the_containers: "Sequence[Container]" = []
-        the_operational_containers: "Sequence[Container]" = []
         cached_workflow: "Optional[LocalWorkflow]" = None
         cached_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None
         if reproducibility_level >= ReproducibilityLevel.Full:
@@ -1365,10 +1355,6 @@ class WF:
             if wfInstance.materializedEngine is not None:
                 if wfInstance.materializedEngine.containers is not None:
                     the_containers = wfInstance.materializedEngine.containers
-                if wfInstance.materializedEngine.operational_containers is not None:
-                    the_operational_containers = (
-                        wfInstance.materializedEngine.operational_containers
-                    )
 
         if reproducibility_level >= ReproducibilityLevel.Metadata:
             if wfInstance.remote_repo is not None and wfInstance.engineDesc is not None:
@@ -1461,8 +1447,8 @@ class WF:
         securityContextsConfigFilename: "Optional[pathlib.Path]" = None,
         replaced_parameters_filename: "Optional[pathlib.Path]" = None,
         nickname_prefix: "Optional[str]" = None,
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         secure: "bool" = True,
@@ -1503,7 +1489,10 @@ class WF:
         )
 
         workflow_pid = wfexs.gen_workflow_pid(repo)
-        logging.debug(
+        logger = logging.getLogger(
+            dict(inspect.getmembers(cls))["__module__"] + "::" + cls.__name__
+        )
+        logger.debug(
             f"Repo {repo} workflow type {workflow_type} container factory {container_type}"
         )
         workflow_meta: "WritableWorkflowMetaConfigBlock" = {
@@ -1526,7 +1515,7 @@ class WF:
         if container_type is not None:
             workflow_meta["workflow_config"]["containerType"] = container_type.value
 
-        logging.debug(f"{json.dumps(workflow_meta, indent=4)}")
+        logger.debug(f"{json.dumps(workflow_meta, indent=4)}")
 
         if replaced_parameters_filename is not None:
             workflow_meta, replaced_items = cls.__merge_params_from_file(
@@ -1615,8 +1604,8 @@ class WF:
         wfexs: "WfExSBackend",
         workflow_meta: "WorkflowMetaConfigBlock",
         vault: "SecurityContextVault",
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
@@ -1624,8 +1613,8 @@ class WF:
         cached_workflow: "Optional[LocalWorkflow]" = None,
         cached_inputs: "Optional[Sequence[MaterializedInput]]" = None,
         cached_environment: "Optional[Sequence[MaterializedInput]]" = None,
-        preferred_containers: "Sequence[Container]" = [],
-        preferred_operational_containers: "Sequence[Container]" = [],
+        preferred_containers: "Sequence[Container]" = (),
+        preferred_operational_containers: "Sequence[Container]" = (),
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
     ) -> "WF":
@@ -1706,8 +1695,8 @@ class WF:
         cls,
         wfexs: "WfExSBackend",
         workflow_meta: "WorkflowMetaConfigBlock",
-        orcids: "Sequence[str]" = [],
-        public_key_filenames: "Sequence[pathlib.Path]" = [],
+        orcids: "Sequence[str]" = (),
+        public_key_filenames: "Sequence[pathlib.Path]" = (),
         private_key_filename: "Optional[pathlib.Path]" = None,
         private_key_passphrase: "Optional[str]" = None,
         paranoidMode: "bool" = False,
@@ -1845,7 +1834,7 @@ class WF:
 
                     if issue_warning:
                         self.logger.warning(
-                            f"Injected workflow has a different relPath from the injected repo"
+                            "Injected workflow has a different relPath from the injected repo"
                         )
                 else:
                     (
@@ -2053,7 +2042,7 @@ class WF:
         ), "Workflow engine not properly identified or set up"
 
         # Process outputs now we have an engine
-        if isinstance(self.outputs, dict):
+        if isinstance(self.outputs, collections.abc.Mapping):
             assert self.outputs_to_inject is not None
             outputs = list(self.outputs.values())
             if (len(outputs) == 0 and len(self.outputs_to_inject) == 0) or (
@@ -2121,10 +2110,10 @@ class WF:
         ignoreCache: "bool" = False,
         injectable_repo: "Optional[Tuple[RemoteRepo, WorkflowType]]" = None,
         injectable_workflow: "Optional[LocalWorkflow]" = None,
-        injectable_containers: "Sequence[Container]" = [],
-        injectable_operational_containers: "Sequence[Container]" = [],
-        context_inputs: "Sequence[MaterializedInput]" = [],
-        context_environment: "Sequence[MaterializedInput]" = [],
+        injectable_containers: "Sequence[Container]" = (),
+        injectable_operational_containers: "Sequence[Container]" = (),
+        context_inputs: "Sequence[MaterializedInput]" = (),
+        context_environment: "Sequence[MaterializedInput]" = (),
     ) -> None:
         if self.materializedEngine is None:
             # Only inject on first try
@@ -2223,7 +2212,7 @@ class WF:
         remote_file_f: "Sch_InputURI_Fetchable",
         contextName: "Optional[str]" = None,
         licences: "Tuple[URIType, ...]" = DefaultNoLicenceTuple,
-        attributions: "Sequence[Attribution]" = [],
+        attributions: "Sequence[Attribution]" = (),
         default_member_glob: "Optional[str]" = None,
     ) -> "Tuple[Sequence[LicensedURI], bool]":
         was_simple = False
@@ -2243,7 +2232,7 @@ class WF:
             return retvals, was_simple
 
         members: "Sequence[MemberPattern]" = []
-        if isinstance(remote_file_f, dict):
+        if isinstance(remote_file_f, collections.abc.Mapping):
             remote_file = remote_file_f
             # The value of the attributes is superseded
             remote_url = remote_file["uri"]
@@ -2263,9 +2252,7 @@ class WF:
 
             # Reconstruction of the attributions
             rawAttributions = remote_file.get("attributions")
-            parsed_attributions = Attribution.ParseRawAttributions(
-                remote_file.get("attributions")
-            )
+            parsed_attributions = Attribution.ParseRawAttributions(rawAttributions)
             # Only overwrite in this case
             if len(parsed_attributions) > 0:
                 attributions = parsed_attributions
@@ -2363,6 +2350,11 @@ class WF:
             contextName=contextName,
             default_member_glob=globExplode,
         )
+        # If it cannot be cached, already cached contents should also be ignored
+        if not cacheable:
+            ignoreCache = True
+            assert isinstance(storeDir, pathlib.Path)
+            # cloneToStore = True
         # Trying to preserve what it is returned by the cache
         # unless we are explicitly feeding a licence
         matContent = self.wfexs.downloadContent(
@@ -2374,6 +2366,7 @@ class WF:
             registerInCache=cacheable,
             keep_cache_licence=alt_is_plain,
             default_clonable=cloneToStore,
+            no_cache_dir=inputDestDir,
         )
 
         # Now, time to create the link
@@ -2430,10 +2423,10 @@ class WF:
             resolved_any = False
             if resolved_local.is_dir():
                 for member in matContent.licensed_uri.members:
-                    got_one = False
-                    resolved_one = False
+                    # got_one = False
+                    # resolved_one = False
                     for exp in resolved_local.glob(member.glob):
-                        got_one = True
+                        # got_one = True
                         try:
                             rel_path = exp.relative_to(resolved_local)
                             if expectedKind == ContentKind.File and not exp.is_file():
@@ -2458,7 +2451,7 @@ class WF:
                         exp_resolved = pretty_local_exp.resolve()
                         try:
                             exp_resolved.relative_to(realPrettyLocal)
-                            resolved_one = True
+                            # resolved_one = True
                             resolved_any = True
 
                             # Checking whether local name hardening is needed
@@ -2722,7 +2715,7 @@ class WF:
                 https://docs.python.org/3/library/stdtypes.html#str.format_map
                 """
                 the_string = the_string.format_map(DefaultMissing(placeholders))
-            except:
+            except BaseException:
                 # Ignore failures
                 self.logger.warning(
                     f"Failed to format (revise placeholders): {the_string}"
@@ -2742,12 +2735,12 @@ class WF:
                 return_input_uri.append(return_i_uri)  # type: ignore[arg-type]
                 if return_i_uri != i_uri:
                     some_formatted = True
-        elif isinstance(input_uri, dict):
+        elif isinstance(input_uri, collections.abc.Mapping):
             i_uri = input_uri["uri"]
             return_i_uri = cast("URIType", self._formatStringFromPlaceHolders(i_uri))
             some_formatted = return_i_uri != i_uri
             if some_formatted:
-                return_input_uri = copy.copy(input_uri)
+                return_input_uri = cast("Sch_LicensedURI", dict(input_uri))
                 return_input_uri["uri"] = return_i_uri
             else:
                 return_input_uri = input_uri
@@ -2774,7 +2767,7 @@ class WF:
             # We are here for the
             path_tokens = (*prefix_tokens, key)
             linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
-            if isinstance(raw_inputs, dict):
+            if isinstance(raw_inputs, collections.abc.Mapping):
                 inputs = cast("Sch_Param", raw_inputs)
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
@@ -2828,9 +2821,10 @@ class WF:
                         # We have to autofill this with the outputs directory,
                         # so results are properly stored (without escaping the jail)
                         if inputs.get("autoFill", False):
+                            formatted_inputs: "Sch_Param"
                             if prefrel_formatted:
                                 some_formatted = True
-                                formatted_inputs = copy.copy(inputs)
+                                formatted_inputs = cast("Sch_Param", dict(inputs))
                                 if formatted_preferred_name_conf is not None:
                                     formatted_inputs["preferred-name"] = (
                                         formatted_preferred_name_conf
@@ -2855,7 +2849,7 @@ class WF:
                             continue
 
                         if inputKind == ContentKind.Directory:
-                            globExplode = inputs.get("globExplode")
+                            globExplode = inputs.get("globExplode")  # noqa: F841
 
                     # Processing url and secondary-urls
                     if ("url" in inputs) and (
@@ -2899,7 +2893,7 @@ class WF:
                         # Something has to be changed
                         if was_formatted:
                             some_formatted = True
-                            formatted_inputs = copy.copy(inputs)
+                            formatted_inputs = cast("Sch_Param", dict(inputs))
                             assert formatted_remote_files is not None
                             formatted_inputs["url"] = formatted_remote_files
                             if "secondary-urls" in inputs:
@@ -2959,10 +2953,8 @@ class WF:
 
                         # Last, copy only when needed
                         if formatted_val_inputs != val_inputs:
-                            formatted_inputs = copy.copy(
-                                formatted_params[key]
-                                if key in formatted_params
-                                else inputs
+                            formatted_inputs = cast(
+                                "Sch_Param", dict(formatted_params.get(key, inputs))
                             )
                             formatted_inputs["value"] = formatted_val_inputs
 
@@ -3027,7 +3019,9 @@ class WF:
 
         tabconf = inputs.get(config_key)
         encoding_format = ContentWithURIsMIMEs.get(config_key)
-        if not isinstance(tabconf, dict) or not isinstance(encoding_format, str):
+        if not isinstance(tabconf, collections.abc.Mapping) or not isinstance(
+            encoding_format, str
+        ):
             raise WFException(
                 f"Content with uris {path_tokens} must have a declaration of these types: {', '.join(ContentWithURIsMIMEs.keys())}"
             )
@@ -3055,25 +3049,28 @@ class WF:
         # It has to exist
         assert (remote_files is not None) or (inline_values is not None)
 
-        secondary_remote_files: "Sch_InputURI" = []
+        # secondary_remote_files: "Sch_InputURI" = []
 
         # We are sending the context name thinking in the future,
         # as it could contain potential hints for authenticated access
         contextName = inputs.get("security-context")
         # This is only for the paranoid mode
         cacheable = inputs.get("cacheable", True)
-        if self.paranoidMode:
-            ignoreCache = False
+        # If it cannot be cached, also ignore already cached contents
+        if not cacheable:
+            this_ignoreCache = True
+            cloneToStore = True
+        elif self.paranoidMode:
+            this_ignoreCache = False
+        elif remote_files is not None:
+            this_ignoreCache = ignoreCache
+        else:
+            this_ignoreCache = True
 
         if not cacheable and not cloneToStore:
             self.logger.warning(
                 "Current staging scenario can lead to unexpected errors in case of cache miss, as neither caching nor cloning are allowed"
             )
-
-        if remote_files is not None:
-            this_ignoreCache = ignoreCache
-        else:
-            this_ignoreCache = True
 
         preferred_name_conf = cast("Optional[RelPath]", inputs.get("preferred-name"))
         if isinstance(preferred_name_conf, str):
@@ -3146,7 +3143,7 @@ class WF:
                     cloneToStore=cloneToStore,
                     expectedKind=ContentKind.File,
                 )
-            except:
+            except BaseException:
                 self.logger.exception(
                     f"Error while fetching primary content with URIs {remote_file}"
                 )
@@ -3206,7 +3203,7 @@ class WF:
                             ignoreCache=this_ignoreCache,
                             cloneToStore=cloneToStore,
                         )
-                    except:
+                    except BaseException:
                         self.logger.exception(
                             f"Error while fetching secondary content with URIs {secondary_remote_file}"
                         )
@@ -3356,7 +3353,9 @@ class WF:
         workflowInputs_destdir: "pathlib.Path",
         workflowExtrapolatedInputs_destdir: "pathlib.Path",
         prefix_tokens: "Tuple[str, ...]" = tuple(),
-        injectable_inputs_dict: "Mapping[Tuple[str, ...], MaterializedInput]" = {},
+        injectable_inputs_dict: "Mapping[Tuple[str, ...], MaterializedInput]" = MappingProxyType(
+            {}
+        ),
         lastInput: "int" = 0,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
@@ -3382,8 +3381,13 @@ class WF:
 
         the_failed_uris: "MutableSequence[str]" = []
 
-        paramsIter: "Iterable[Tuple[Union[str, int], Any]]" = (
-            params.items() if isinstance(params, dict) else enumerate(params)
+        paramsIter = cast(
+            "Iterable[Tuple[Union[str, int], Any]]",
+            (
+                params.items()
+                if isinstance(params, collections.abc.Mapping)
+                else enumerate(params)
+            ),
         )
         for key, inputs in paramsIter:
             # We are here for the
@@ -3391,7 +3395,7 @@ class WF:
             path_tokens = (*prefix_tokens, str_key)
             # This is needed for complicated cases where the key name contains a dot
             linearKey = MaterializedInput.path_tokens_2_linear_key(path_tokens)
-            if isinstance(inputs, dict):
+            if isinstance(inputs, collections.abc.Mapping):
                 inputClass = inputs.get("c-l-a-s-s")
                 if inputClass is not None:
                     for inputKind in ContentKind:
@@ -3404,7 +3408,7 @@ class WF:
                             )
                         )
 
-                    clonable = inputs.get("clonable", True)
+                    clonable = inputs.get("clonable", self._clone_all_inputs_by_default)
                     if inputKind in (
                         ContentKind.File,
                         ContentKind.Directory,
@@ -3522,9 +3526,13 @@ class WF:
 
                                 secondary_remote_files = inputs.get("secondary-urls")
                                 cacheable = inputs.get("cacheable", True)
-                                this_ignoreCache = (
-                                    False if self.paranoidMode else ignoreCache
-                                )
+                                # If it cannot be cached, then ignore already cached contents
+                                if not cacheable:
+                                    this_ignoreCache = True
+                                elif self.paranoidMode:
+                                    this_ignoreCache = False
+                                else:
+                                    this_ignoreCache = ignoreCache
                             else:
                                 contextName = None
                                 secondary_remote_files = None
@@ -3633,7 +3641,7 @@ class WF:
                                             ),
                                         )
                                         remote_pairs.extend(t_remote_pairs)
-                                    except Exception as e:
+                                    except Exception:
                                         self.logger.exception(
                                             f"Error while fetching primary URI {remote_file}"
                                         )
@@ -3687,7 +3695,7 @@ class WF:
                                             secondary_remote_pairs.extend(
                                                 t_secondary_remote_pairs
                                             )
-                                        except:
+                                        except BaseException:
                                             self.logger.exception(
                                                 f"Error while fetching secondary URI {secondary_remote_file}"
                                             )
@@ -3908,19 +3916,23 @@ class WF:
         assert self.workDir is not None
         return bagit.make_bag(self.workDir.as_posix())
 
-    DefaultCardinality = "1"
-    CardinalityMapping: "Mapping[str, Tuple[int, int]]" = {
-        "1": (1, 1),
-        "?": (0, 1),
-        "*": (0, sys.maxsize),
-        "+": (1, sys.maxsize),
-    }
+    DefaultCardinality: "Final[str]" = "1"
+    CardinalityMapping: "Final[Mapping[str, Tuple[int, int]]]" = MappingProxyType(
+        {
+            "1": (1, 1),
+            "?": (0, 1),
+            "*": (0, sys.maxsize),
+            "+": (1, sys.maxsize),
+        }
+    )
 
-    OutputClassMapping = {
-        ContentKind.File.name: ContentKind.File,
-        ContentKind.Directory.name: ContentKind.Directory,
-        ContentKind.Value.name: ContentKind.Value,
-    }
+    OutputClassMapping: "Final[Mapping[str, ContentKind]]" = MappingProxyType(
+        {
+            ContentKind.File.name: ContentKind.File,
+            ContentKind.Directory.name: ContentKind.Directory,
+            ContentKind.Value.name: ContentKind.Value,
+        }
+    )
 
     def parseExpectedOutputs(
         self,
@@ -3942,7 +3954,11 @@ class WF:
         # TODO: implement parsing of outputs
         outputsIter = cast(
             "Iterable[Tuple[Union[str, int], Sch_Output]]",
-            outputs.items() if isinstance(outputs, dict) else enumerate(outputs),
+            (
+                outputs.items()
+                if isinstance(outputs, collections.abc.Mapping)
+                else enumerate(outputs)
+            ),
         )
 
         for outputKey, outputDesc in outputsIter:
@@ -4092,8 +4108,8 @@ class WF:
             matCheckOutputs=[],
             outputsDir=self.outputsDir,
             queued=queued,
-            started=datetime.datetime.min,
-            ended=datetime.datetime.min,
+            started=MIN_UTC,
+            ended=MIN_UTC,
             status=ExecutionStatus.Queued,
             job_id=job_id,
             job_pid=job_pid,
@@ -4210,8 +4226,8 @@ class WF:
                 matCheckOutputs=[],
                 outputsDir=self.outputsDir,
                 queued=queued,
-                started=datetime.datetime.min,
-                ended=datetime.datetime.min,
+                started=MIN_UTC,
+                ended=MIN_UTC,
                 status=ExecutionStatus.Queued,
                 job_id=job_id,
                 job_pid=job_pid,
@@ -4247,8 +4263,8 @@ class WF:
                 matCheckOutputs=[],
                 outputsDir=self.outputsDir,
                 queued=queued,
-                started=datetime.datetime.min,
-                ended=datetime.datetime.min,
+                started=MIN_UTC,
+                ended=MIN_UTC,
                 status=ExecutionStatus.Queued,
                 job_id=job_id,
                 job_pid=job_pid,
@@ -4274,7 +4290,7 @@ class WF:
         self,
         exportActionsFile: "Optional[pathlib.Path]" = None,
         securityContextFile: "Optional[pathlib.Path]" = None,
-        action_ids: "Sequence[SymbolicName]" = [],
+        action_ids: "Sequence[SymbolicName]" = (),
         fail_ok: "bool" = False,
     ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
         if exportActionsFile is not None:
@@ -4311,7 +4327,7 @@ class WF:
                     )
                     failed_orcids.append(orcid)
 
-            except FetcherException as fe:
+            except FetcherException:
                 self.logger.exception(f"Error resolving ORCID {orcid}")
                 failed_orcids.append(orcid)
 
@@ -4370,10 +4386,10 @@ class WF:
         self,
         actions: "Optional[Sequence[ExportAction]]" = None,
         vault: "Optional[SecurityContextVault]" = None,
-        action_ids: "Sequence[SymbolicName]" = [],
+        action_ids: "Sequence[SymbolicName]" = (),
         fail_ok: "bool" = False,
-        op_licences: "Sequence[str]" = [],
-        op_orcids: "Sequence[str]" = [],
+        op_licences: "Sequence[str]" = (),
+        op_orcids: "Sequence[str]" = (),
     ) -> "Tuple[Sequence[MaterializedExportAction], Sequence[Tuple[ExportAction, Exception]]]":
         # The precondition
         if self.unmarshallExport(offline=True, fail_ok=True) is None:
@@ -4419,7 +4435,7 @@ class WF:
                 if action.setup is not None:
                     # Clone it
                     a_setup_block = cast(
-                        "WritableSecurityContextConfig", copy.copy(action.setup)
+                        "WritableSecurityContextConfig", dict(action.setup)
                     )
                 else:
                     a_setup_block = None
@@ -4436,7 +4452,7 @@ class WF:
                     # Merging both setup blocks
                     if a_setup_block is None:
                         a_setup_block = cast(
-                            "WritableSecurityContextConfig", copy.copy(setup_block)
+                            "WritableSecurityContextConfig", dict(setup_block)
                         )
                     else:
                         a_setup_block.update(setup_block)
@@ -4682,7 +4698,7 @@ This is an enumeration of the types of collected contents:
         ), "Working directory should not be corrupted beyond basic usage"
 
         if self.configMarshalled is None:
-            config_unmarshalled = True
+            # config_unmarshalled = True
             workflow_meta_filename = self.metaDir / WORKDIR_WORKFLOW_META_FILE
             workflow_meta_filename_lock = workflow_meta_filename.with_name(
                 Workdir.LOCKFILE_PREFIX + workflow_meta_filename.name
@@ -4757,14 +4773,14 @@ This is an enumeration of the types of collected contents:
                     self.formatted_environment, _ = self.formatParams(self.environment)
 
                     # The right moment to rescue this?
-                    if isinstance(self.workflow_config, dict):
+                    if isinstance(self.workflow_config, collections.abc.Mapping):
                         container_type_str = self.workflow_config.get("containerType")
                         if container_type_str is not None:
                             self.explicit_container_type = True
                             self.container_type_str = container_type_str
 
                     defaultActionsM = workflow_meta.get("default_actions")
-                    if isinstance(defaultActionsM, dict):
+                    if isinstance(defaultActionsM, collections.abc.Mapping):
                         default_actions = list(defaultActionsM.values())
                         if len(default_actions) == 0 or isinstance(
                             default_actions[0], ExportAction
@@ -4776,8 +4792,8 @@ This is an enumeration of the types of collected contents:
                             )
                     else:
                         self.default_actions = None
-            except IOError as ioe:
-                config_unmarshalled = False
+            except OSError as ioe:
+                # config_unmarshalled = False
                 self.logger.log(
                     logging.WARNING if fail_ok else logging.ERROR,
                     "Marshalled config file {} I/O errors".format(
@@ -4787,7 +4803,7 @@ This is an enumeration of the types of collected contents:
                 if not fail_ok:
                     raise WFException("ERROR opening/reading config file") from ioe
             except TypeError as te:
-                config_unmarshalled = False
+                # config_unmarshalled = False
                 self.logger.log(
                     logging.WARNING if fail_ok else logging.ERROR,
                     "Marshalled config file {} unmarshalling errors".format(
@@ -4797,7 +4813,7 @@ This is an enumeration of the types of collected contents:
                 if not fail_ok:
                     raise WFException("ERROR unmarshalling config file") from te
             except Exception as e:
-                config_unmarshalled = False
+                # config_unmarshalled = False
                 self.logger.exception(
                     "Marshalled config file {} misc errors".format(
                         workflow_meta_filename
@@ -4809,7 +4825,7 @@ This is an enumeration of the types of collected contents:
             if workflow_meta is not None:
                 valErrors = config_validate(workflow_meta, self.STAGE_DEFINITION_SCHEMA)
                 if len(valErrors) > 0:
-                    config_unmarshalled = False
+                    # config_unmarshalled = False
                     errstr = f"ERROR in workflow staging definition block {workflow_meta_filename}: {valErrors}"
                     self.logger.error(errstr)
                     if not fail_ok:
@@ -4909,7 +4925,7 @@ This is an enumeration of the types of collected contents:
                 os.path.getctime(marshalled_stage_file)
             ).astimezone()
         elif not exist_ok:
-            raise WFException(f"Marshalled stage file already exists")
+            raise WFException("Marshalled stage file already exists")
 
         return self.stageMarshalled
 
@@ -5079,7 +5095,7 @@ This is an enumeration of the types of collected contents:
                             )
 
                         # Process outputs now we have an engine
-                        if isinstance(self.outputs, dict):
+                        if isinstance(self.outputs, collections.abc.Mapping):
                             assert self.engine is not None
                             assert self.outputs_to_inject is not None
                             outputs = list(self.outputs.values())
@@ -5116,10 +5132,13 @@ This is an enumeration of the types of collected contents:
                         and self.materializedEngine is not None
                     ):
                         self.explicit_container_type = True
-                        new_workflow_config = cast(
-                            "WritableWorkflowConfigBlock",
-                            copy.copy(self.workflow_config),
-                        )
+                        if self.workflow_config is not None:
+                            new_workflow_config = cast(
+                                "WritableWorkflowConfigBlock",
+                                dict(self.workflow_config),
+                            )
+                        else:
+                            new_workflow_config = dict()
                         new_workflow_config["containerType"] = self.container_type_str
                         self.workflow_config = new_workflow_config
                         self.marshallConfig(overwrite=True)
@@ -5167,7 +5186,7 @@ This is an enumeration of the types of collected contents:
                                 staged_executions,
                                 creation_timestamp,
                             ) = self._unmarshallExecuteFH(emF)
-                    except:
+                    except BaseException:
                         self.logger.error(
                             f"Unable to unmarshall executions metadata file {marshalled_execution_file}"
                         )
@@ -5331,7 +5350,7 @@ This is an enumeration of the types of collected contents:
             workdir=self.workDir,
         )
 
-        if isinstance(execution_read, dict):
+        if isinstance(execution_read, collections.abc.Mapping):
             executions = [execution_read]
         else:
             executions = execution_read
@@ -5434,7 +5453,7 @@ This is an enumeration of the types of collected contents:
                             psutil.Process(job_pid).create_time()
                         ).astimezone()
 
-                        queued = execution.get("queued", datetime.datetime.min)
+                        queued = execution.get("queued", MIN_UTC)
                         if queued_proc != queued:
                             job_status = ExecutionStatus.Died
                     except (psutil.NoSuchProcess, ValueError, TypeError):
@@ -5454,7 +5473,7 @@ This is an enumeration of the types of collected contents:
                 diagram=diagram,
                 logfile=logfiles,
                 profiles=profiles,
-                queued=execution.get("queued", datetime.datetime.min),
+                queued=execution.get("queued", MIN_UTC),
                 status=job_status,
                 job_id=job_id,
                 job_pid=job_pid,
@@ -5498,7 +5517,7 @@ This is an enumeration of the types of collected contents:
                                 run_export_actions,
                                 creation_timestamp,
                             ) = self._unmarshallExportFH(emF)
-                    except:
+                    except BaseException:
                         self.logger.error(
                             f"Unable to unmarshall exports metadata file {marshalled_export_file}"
                         )
@@ -5608,21 +5627,23 @@ This is an enumeration of the types of collected contents:
 
         return run_export_actions, creation_timestamp
 
-    ExportROCrate2Payloads: "Final[Mapping[str, CratableItem]]" = {
-        "": NoCratableItem,
-        "inputs": CratableItem.Inputs,
-        "outputs": CratableItem.Outputs,
-        "workflow": CratableItem.Workflow,
-        "containers": CratableItem.Containers,
-        "prospective": CratableItem.ProspectiveProvenance,
-        "full": CratableItem.RetrospectiveProvenance,
-    }
+    ExportROCrate2Payloads: "Final[Mapping[str, CratableItem]]" = MappingProxyType(
+        {
+            "": NoCratableItem,
+            "inputs": CratableItem.Inputs,
+            "outputs": CratableItem.Outputs,
+            "workflow": CratableItem.Workflow,
+            "containers": CratableItem.Containers,
+            "prospective": CratableItem.ProspectiveProvenance,
+            "full": CratableItem.RetrospectiveProvenance,
+        }
+    )
 
     def locateExportItems(
         self,
         items: "Sequence[ExportItem]",
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
         crate_pid: "Optional[str]" = None,
     ) -> "Sequence[AnyContent]":
         """
@@ -5892,8 +5913,8 @@ This is an enumeration of the types of collected contents:
         self,
         filename: "Optional[pathlib.Path]" = None,
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
         crate_pid: "Optional[str]" = None,
     ) -> "pathlib.Path":
         """
@@ -5970,8 +5991,8 @@ This is an enumeration of the types of collected contents:
         self,
         filename: "Optional[pathlib.Path]" = None,
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
         crate_pid: "Optional[str]" = None,
     ) -> "pathlib.Path":
         """

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 # limitations under the License.
 
 import logging
-from typing import TYPE_CHECKING
 
 from rocrate.model.metadata import (
     LegacyMetadata,
@@ -28,10 +27,7 @@ from .utils.licences import LicenceMatcherSingleton
 from .utils.passphrase_wrapper import WfExSPassGenSingleton
 from .utils.pyld_caching import pyld_cache_initialize
 
-if TYPE_CHECKING:
-    from typing import (
-        Sequence,
-    )
+logger = logging.getLogger(__name__)
 
 
 def populate_side_caches() -> "None":
@@ -46,12 +42,12 @@ def populate_side_caches() -> "None":
     """
 
     # First, the list of words
-    logging.info("Populating passphrase generator cache (lists of words)")
+    logger.info("Populating passphrase generator cache (lists of words)")
     pw = WfExSPassGenSingleton()
     pw.initialize()
 
     # Then, most common JSON-LD contexts.
-    logging.info(
+    logger.info(
         "Populating common JSON-LD contexts cache (needed for offline JSON-LD parsing)"
     )
     pyld_cache_initialize(
@@ -63,5 +59,5 @@ def populate_side_caches() -> "None":
     )
 
     # Last, the list of licences
-    logging.info("Populating list of licences cache (list fetched from SPDX)")
-    lm = LicenceMatcherSingleton()
+    logger.info("Populating list of licences cache (list fetched from SPDX)")
+    LicenceMatcherSingleton()

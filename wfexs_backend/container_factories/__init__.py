@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,9 +15,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
-import copy
 import dataclasses
 import json
 import os
@@ -31,6 +29,7 @@ import abc
 import logging
 import inspect
 import uuid
+from types import MappingProxyType
 
 from typing import (
     cast,
@@ -49,6 +48,7 @@ if TYPE_CHECKING:
         Any,
         Callable,
         ClassVar,
+        FrozenSet,
         Mapping,
         MutableMapping,
         MutableSequence,
@@ -69,14 +69,10 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
-        AnyPath,
-        ContainerTaggedName,
         Fingerprint,
         PathlibLike,
         ProgsMapping,
         RelPath,
-        SymbolicName,
         URIType,
     )
 
@@ -407,7 +403,7 @@ class ContainerCacheHandler:
                                 "image_signature"
                             )
                             trusted_copy = imageSignature_in_metadata == imageSignature
-                    except:
+                    except BaseException:
                         trusted_copy = False
                 else:
                     trusted_copy = False
@@ -562,7 +558,7 @@ class ContainerFactory(abc.ABC):
         self.simpleFileNameMethod = simpleFileNameMethod
 
         if progs_mapping is None:
-            progs_mapping = dict()
+            progs_mapping = MappingProxyType({})
         self.progs_mapping = progs_mapping
 
         # Getting a logger focused on specific classes
@@ -646,7 +642,8 @@ class ContainerFactory(abc.ABC):
     @classmethod
     @abc.abstractmethod
     def AcceptsContainerType(
-        cls, container_type: "Union[common.ContainerType, Set[common.ContainerType]]"
+        cls,
+        container_type: "Union[common.ContainerType, Set[common.ContainerType], FrozenSet[common.ContainerType]]",
     ) -> "bool":
         pass
 
@@ -722,7 +719,7 @@ STDERR
         containers_dir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
-        injectable_containers: "Sequence[Container]" = [],
+        injectable_containers: "Sequence[Container]" = (),
     ) -> "Sequence[Container]":
         """
         It is assured the containers are materialized
@@ -755,7 +752,7 @@ STDERR
                     container, was_redeployed = self.deploySingleContainer(
                         tag_to_use, containers_dir=containers_dir, force=force
                     )
-                except ContainerFactoryException as cfe:
+                except ContainerFactoryException:
                     container = self.materializeSingleContainer(
                         tag_to_use,
                         containers_dir=containers_dir,

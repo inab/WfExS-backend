@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ import os
 import pathlib
 
 from typing import (
-    cast,
     TYPE_CHECKING,
 )
 
@@ -35,6 +34,9 @@ if TYPE_CHECKING:
         Type,
         Union,
     )
+    from typing_extensions import (
+        Final,
+    )
     from wfexs_backend.wfexs_backend import (
         WfExSConfigBlock,
     )
@@ -43,12 +45,11 @@ import yaml
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
-YAMLLoader: "Type[Union[yaml.Loader, yaml.CLoader]]"
 YAMLDumper: "Type[Union[yaml.Dumper, yaml.CDumper]]"
 try:
-    from yaml import CLoader as YAMLLoader, CDumper as YAMLDumper
+    from yaml import CDumper as YAMLDumper
 except ImportError:
-    from yaml import Loader as YAMLLoader, Dumper as YAMLDumper
+    from yaml import Dumper as YAMLDumper
 
 
 from wfexs_backend.wfexs_backend import WfExSBackend
@@ -60,14 +61,18 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+REL_CACHE_DIR: "Final[str]" = "CACHE"
+PARENT_REL_WORK_DIR: "Final[str]" = "WORKDIRS"
+
+
 @pytest.mark.filterwarnings("ignore:.*:pytest.PytestReturnNotNoneWarning")
 def test_wfexsbackend_bootstrap(
     tmppath: "pathlib.Path",
 ) -> "Tuple[WfExSConfigBlock, pathlib.Path]":
     bootstrap_ok, test_local_config, config_directory = WfExSBackend.bootstrap_config(
         local_config_ro={
-            "cacheDir": "CACHE",
-            "workDir": "WORKDIRS",
+            "cacheDir": REL_CACHE_DIR,
+            "workDir": PARENT_REL_WORK_DIR,
         },
         config_directory=tmppath,
         key_prefix="crypt4gh",
@@ -79,8 +84,8 @@ def test_wfexsbackend_bootstrap(
 
     assert bootstrap_ok
     assert config_directory.is_dir()
-    assert (tmppath / "WORKDIRS").is_dir()
-    assert not (tmppath / "CACHE").exists()
+    assert (tmppath / PARENT_REL_WORK_DIR).is_dir()
+    assert not (tmppath / REL_CACHE_DIR).exists()
 
     return test_local_config, config_directory
 

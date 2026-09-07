@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import os
 
 from typing import (
@@ -27,29 +25,15 @@ from typing import (
 
 if TYPE_CHECKING:
     from typing import (
-        Any,
-        Callable,
-        Iterable,
-        IO,
         Mapping,
-        MutableMapping,
-        MutableSequence,
         Optional,
-        Sequence,
-        Tuple,
-        Type,
-        Union,
     )
 
     from ..common import (
         AbsPath,
         PathLikePath,
-        ProgsMapping,
         RelPath,
-        RepoURL,
-        RepoTag,
         SecurityContextConfig,
-        SymbolicName,
         URIType,
     )
 
@@ -100,6 +84,7 @@ def fetchFile(
         )
     # Efficient linking of data
     force_copy = parsedInputURL.fragment == "copy"
+    prefer_symlink = secContext is not None and secContext.get("prefer_symlink", False)
     metadata = {}
     the_remote_file = remote_file
     # Only impersonate under very specific conditions
@@ -113,7 +98,10 @@ def fetchFile(
                 force_copy = True
                 metadata["injected"] = True
                 metadata["impersonated"] = True
-    link_or_copy(localPath, cachedFilename, force_copy=force_copy)
+    if prefer_symlink:
+        os.symlink(localPath, cachedFilename)
+    else:
+        link_or_copy(localPath, cachedFilename, force_copy=force_copy)
 
     return ProtocolFetcherReturn(
         kind_or_resolved=kind,

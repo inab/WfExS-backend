@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,19 +16,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 
 from typing import (
     cast,
-    NamedTuple,
     TYPE_CHECKING,
 )
 
 if TYPE_CHECKING:
     from typing import (
         ClassVar,
-        Mapping,
         MutableMapping,
         Optional,
         Sequence,
@@ -40,12 +36,9 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         URIType,
     )
 
-import copy
-import inspect
 import json
 import logging
 import os.path
@@ -552,7 +545,7 @@ class LicenceMatcher:
         spdx_source = cast("URIType", self.SPDX_JSON_URL_TEMPLATE.format(spdx_version))
         try:
             cached_content = self.cacheHandler.fetch(
-                spdx_source, destdir=self.cacheDir, offline=False
+                spdx_source, cache_dir=self.cacheDir, offline=False
             )
 
             # This it should be superfluous
@@ -586,11 +579,10 @@ class LicenceMatcher:
                             for the_long_lic in uri_lics:
                                 dict_long_licences[the_long_lic] = lic
 
-        except CacheHandlerException as che:
+        except CacheHandlerException:
             self.logger.debug(
                 f"Error while fetching or parsing version {spdx_version} of SPDX from {spdx_source}"
             )
-            pass
 
         self.dict_short_licences = dict_short_licences
         self.dict_long_licences = dict_long_licences

@@ -7,7 +7,6 @@ from typing import (
 
 from ..utils import is_url as is_url
 from .data_entity import DataEntity as DataEntity
-from .entity import EntityRef
 from ..rocrate import ROCrate
 
 class FileOrDir(DataEntity):

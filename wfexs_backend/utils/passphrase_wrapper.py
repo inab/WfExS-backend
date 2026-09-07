@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import inspect
 import logging
@@ -24,6 +23,7 @@ import pathlib
 import random
 import secrets
 import tempfile
+from types import MappingProxyType
 from typing import (
     cast,
     NamedTuple,
@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from typing_extensions import Final
 
     from ..common import (
-        AbsPath,
         URIType,
     )
 
@@ -75,44 +74,48 @@ class WfExSPassphraseGenerator:
     DEFAULT_PASSPHRASE_LENGTH: "Final[int]" = 6
     WFEXS_PASSPHRASE_SCHEME: "Final[str]" = "wfexs.funny-passphrase"
 
-    DEFAULT_WORD_SETS: "Mapping[str, Sequence[RemoteWordlistResource]]" = {
-        "eff-long": [
-            RemoteWordlistResource(
-                "https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt",
-                substart=8,
-            )
-        ],
-        "cain": [
-            # Originally
-            # https://wiki.skullsecurity.org/index.php/Passwords
-            # and http://downloads.skullsecurity.org/passwords/cain.txt.bz2
-            RemoteWordlistResource(
-                "https://github.com/duyet/bruteforce-database/raw/233b5e59a87b96ec696ddcb33b8a37709ca6aa8a/cain.txt"
-            ),
-        ],
-        "adjectives": [
-            RemoteWordlistResource(
-                WiktionaryFetcher.WIKTIONARY_PROTO + ":Spanish/adjectives"
-            ),
-            RemoteWordlistResource(
-                WiktionaryFetcher.WIKTIONARY_PROTO + ":Catalan/adjectives"
-            ),
-            RemoteWordlistResource(
-                WiktionaryFetcher.WIKTIONARY_PROTO + ":English/adjectives"
-            ),
-        ],
-        "nouns": [
-            RemoteWordlistResource(
-                WiktionaryFetcher.WIKTIONARY_PROTO + ":Spanish/nouns"
-            ),
-            RemoteWordlistResource(
-                WiktionaryFetcher.WIKTIONARY_PROTO + ":Catalan/nouns"
-            ),
-            RemoteWordlistResource(
-                WiktionaryFetcher.WIKTIONARY_PROTO + ":English/nouns"
-            ),
-        ],
-    }
+    DEFAULT_WORD_SETS: "Final[Mapping[str, Sequence[RemoteWordlistResource]]]" = (
+        MappingProxyType(
+            {
+                "eff-long": [
+                    RemoteWordlistResource(
+                        "https://www.eff.org/files/2016/07/18/eff_large_wordlist.txt",
+                        substart=8,
+                    )
+                ],
+                "cain": [
+                    # Originally
+                    # https://wiki.skullsecurity.org/index.php/Passwords
+                    # and http://downloads.skullsecurity.org/passwords/cain.txt.bz2
+                    RemoteWordlistResource(
+                        "https://github.com/duyet/bruteforce-database/raw/233b5e59a87b96ec696ddcb33b8a37709ca6aa8a/cain.txt"
+                    ),
+                ],
+                "adjectives": [
+                    RemoteWordlistResource(
+                        WiktionaryFetcher.WIKTIONARY_PROTO + ":Spanish/adjectives"
+                    ),
+                    RemoteWordlistResource(
+                        WiktionaryFetcher.WIKTIONARY_PROTO + ":Catalan/adjectives"
+                    ),
+                    RemoteWordlistResource(
+                        WiktionaryFetcher.WIKTIONARY_PROTO + ":English/adjectives"
+                    ),
+                ],
+                "nouns": [
+                    RemoteWordlistResource(
+                        WiktionaryFetcher.WIKTIONARY_PROTO + ":Spanish/nouns"
+                    ),
+                    RemoteWordlistResource(
+                        WiktionaryFetcher.WIKTIONARY_PROTO + ":Catalan/nouns"
+                    ),
+                    RemoteWordlistResource(
+                        WiktionaryFetcher.WIKTIONARY_PROTO + ":English/nouns"
+                    ),
+                ],
+            }
+        )
+    )
 
     MIN_RAND_CHARS: "Final[int]" = 5
     MAX_RAND_CHARS: "Final[int]" = 13
@@ -171,7 +174,7 @@ class WfExSPassphraseGenerator:
                 indexed_filename = None
                 try:
                     i_cached_content = self.cacheHandler.fetch(
-                        wordlist_internal_uri, destdir=self.cacheDir, offline=True
+                        wordlist_internal_uri, cache_dir=self.cacheDir, offline=True
                     )
 
                     # This if should be superfluous
@@ -185,7 +188,7 @@ class WfExSPassphraseGenerator:
                         # Time to fetch the wordlist
                         i_cached_content = self.cacheHandler.fetch(
                             cast("URIType", word_set_uri),
-                            destdir=self.cacheDir,
+                            cache_dir=self.cacheDir,
                             offline=False,
                         )
 
@@ -200,7 +203,7 @@ class WfExSPassphraseGenerator:
                             # And inject it in the cache
                             indexed_filename, _ = self.cacheHandler.inject(
                                 wordlist_internal_uri,
-                                destdir=self.cacheDir,
+                                cache_dir=self.cacheDir,
                                 tempCachedFilename=pathlib.Path(
                                     tmp_indexed_filename.name
                                 ),
@@ -253,7 +256,7 @@ class WfExSPassphraseGenerator:
                     num=passphrase_length,
                     subset=cast("Sequence[Union[str, int]]", chosen_wordlist),
                 )
-            except Exception as e:
+            except Exception:  # noqa: S110
                 # If something happens, gracefully fallback
                 pass
 

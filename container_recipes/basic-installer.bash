@@ -218,7 +218,27 @@ if [ -z "$envDir" ]; then
 
 		# Checking whether the environment exists
 		if [ ! -f "${envDir}" ] ; then
+			set +e
 			python3 -m venv "${envDir}"
+			retval=$?
+			set -e
+			if [ "$retval" -ne 0 ] ; then
+				python3 -mvenv --without-pip "${envDir}"
+				# Forcing the installation through the get-pip route
+				downloadDir="$(mktemp -d --tmpdir wfexs_installer.XXXXXXXXXXX)"
+				PYVER="$("${envDir}"/bin/python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))')"
+				GET_PIP_URL=https://bootstrap.pypa.io/pip/${PYVER}/get-pip.py
+				( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${GET_PIP_URL}" )
+				set +e
+				"${envDir}"/bin/python "${downloadDir}"/get-pip.py
+				retval=$?
+				set -e
+				if [ "$retval" -ne 0 ] ; then
+					failed=1
+					echo "ERROR: Command $cmd not found in PATH, could not be installed through get-pip.py and needed for the installation"
+					exit 1
+				fi
+			fi
 		fi
 
 		# Activating the python environment
@@ -232,9 +252,20 @@ if [ -z "$envDir" ]; then
 			retval=$?
 			set -e
 			if [ "$retval" -ne 0 ] ; then
-				failed=1
-				echo "ERROR: Command $cmd not found in PATH and needed for the installation"
-				exit 1
+				# Forcing the installation through the get-pip route
+				downloadDir="$(mktemp -d --tmpdir wfexs_installer.XXXXXXXXXXX)"
+				PYVER="$(python -c 'import sys; print("{}.{}".format(sys.version_info.major, sys.version_info.minor))')"
+				GET_PIP_URL=https://bootstrap.pypa.io/pip/${PYVER}/get-pip.py
+				( trap - EXIT ERR ; cd "${downloadDir}" && curl -f -L -O "${GET_PIP_URL}" )
+				set +e
+				python "${downloadDir}"/get-pip.py
+				retval=$?
+				set -e
+				if [ "$retval" -ne 0 ] ; then
+					failed=1
+					echo "ERROR: Command $cmd not found in PATH, could not be installed through get-pip.py and needed for the installation"
+					exit 1
+				fi
 			fi
 		done
 

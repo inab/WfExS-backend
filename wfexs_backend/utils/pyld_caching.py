@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 from typing import (
     TYPE_CHECKING,
@@ -31,7 +30,6 @@ if TYPE_CHECKING:
     )
 
 import asyncio
-import aiohttp
 from aiohttp_client_cache.session import CachedSession
 from aiohttp_client_cache.backends.sqlite import SQLiteBackend
 import os.path
@@ -39,6 +37,7 @@ import pyld  # type: ignore[import, import-untyped]
 from pyld.documentloader.aiohttp import _ensure_background_loop  # type: ignore[import, import-untyped]
 import re
 import string
+from types import MappingProxyType
 import urllib.parse
 import xdg.BaseDirectory
 
@@ -150,8 +149,8 @@ def aiohttp_caching_document_loader(
                             return await async_loader(doc["documentUrl"], headers)
                     doc["document"] = await response.json(content_type=None)
                     return doc
-        except pyld.jsonld.JsonLdError as e:
-            raise e
+        except pyld.jsonld.JsonLdError:
+            raise
         except Exception as cause:
             raise pyld.jsonld.JsonLdError(
                 "Could not retrieve a JSON-LD document from the URL.",
@@ -160,7 +159,7 @@ def aiohttp_caching_document_loader(
             ) from cause
 
     def loader(
-        url: "str", options: "Mapping[str, Mapping[str, str]]" = {}
+        url: "str", options: "Mapping[str, Mapping[str, str]]" = MappingProxyType({})
     ) -> "Mapping[str, Any]":
         """
         Retrieves JSON-LD at the given URL synchronously.
@@ -205,7 +204,7 @@ def hook_pyld_cache(cache_file: "str") -> "None":
     )
 
 
-def pyld_cache_initialize(initial_contexts: "Sequence[str]" = []) -> "None":
+def pyld_cache_initialize(initial_contexts: "Sequence[str]" = ()) -> "None":
     """
     This method hooks the caching system to pyld, so context resolution
     does not need to connect to internet.

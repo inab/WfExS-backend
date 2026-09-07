@@ -1,7 +1,6 @@
 from logging import Logger
 from typing import (
     Any,
-    Callable,
 )
 
 LOG: Logger

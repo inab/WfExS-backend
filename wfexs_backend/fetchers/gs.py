@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections.abc
 from google.cloud import storage  # type: ignore[import]
 from urllib.parse import urlparse
 import logging
@@ -33,7 +34,6 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         PathLikePath,
         SecurityContextConfig,
         URIType,
@@ -72,7 +72,7 @@ def downloadContentFrom_gs(
     local_path = cachedFilename
 
     # Does the security context contain credentials
-    if isinstance(secContext, dict):
+    if isinstance(secContext, collections.abc.Mapping):
         credentials = secContext.get("gs_credentials")
     else:
         credentials = None
@@ -94,7 +94,7 @@ def downloadContentFrom_gs(
     except Exception as e:
         errmsg = f"Invalid bucket name {bucket_name} on {remote_file}"
         logger.exception(errmsg)
-        raise FetcherException(errmsg)
+        raise FetcherException(errmsg) from e
 
     # Build the blob
     try:
@@ -102,7 +102,7 @@ def downloadContentFrom_gs(
     except Exception as e:
         errmsg = f"Unable to create blob {prefix} for {remote_file}"
         logger.exception(errmsg)
-        raise FetcherException(errmsg)
+        raise FetcherException(errmsg) from e
 
     # Does the blob exist?
     metadata_payload: MutableSequence[Mapping[str, Any]] = []

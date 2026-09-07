@@ -1,7 +1,3 @@
-from typing import (
-    Any,
-)
-
 __all__ = ["same_string_type_as", "as_str", "as_str_path", "raise_for_empty_path"]
 
 def same_string_type_as(

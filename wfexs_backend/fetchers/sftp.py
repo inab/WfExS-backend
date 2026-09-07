@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
+import collections.abc
 import logging
 import os
 import paramiko
@@ -33,40 +32,23 @@ from typing import (
 
 if TYPE_CHECKING:
     from typing import (
-        Any,
-        Callable,
-        Iterable,
-        IO,
         Mapping,
-        MutableMapping,
         MutableSequence,
         Optional,
-        Sequence,
         Tuple,
-        Type,
         Union,
     )
 
     from typing_extensions import (
         Literal,
         NotRequired,
-        Required,
         TypedDict,
     )
-
-    from _typeshed import SupportsRead
-    from ssl import SSLContext
-    from mypy_extensions import DefaultNamedArg
 
     from ..common import (
         AbsPath,
         PathLikePath,
-        ProgsMapping,
-        RelPath,
-        RepoURL,
-        RepoTag,
         SecurityContextConfig,
-        SymbolicName,
         URIType,
     )
 
@@ -87,6 +69,9 @@ from ..common import (
     ContentKind,
     URIWithMetadata,
 )
+
+# Logger of this module
+logger = logging.getLogger(__name__)
 
 
 def sftpCopy(
@@ -128,7 +113,7 @@ def sftpCopy(
                     server_name = (
                         None if sftp_channel is None else sftp_channel.getpeername()
                     )
-                    logging.warning(
+                    logger.warning(
                         f"Corner case where either paramiko or server {server_name} is not providing stats for {rPath}"
                     )
             kind = ContentKind.Directory
@@ -181,7 +166,7 @@ def fetchSSHURL(
     password = parsedInputURL.password
 
     # Sanitizing possible ill-formed inputs
-    if not isinstance(secContext, dict):
+    if not isinstance(secContext, collections.abc.Mapping):
         secContext = {}
 
     # Although username and password could be obtained from URL,

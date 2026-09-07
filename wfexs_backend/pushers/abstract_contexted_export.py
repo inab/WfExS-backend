@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,32 +16,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 from typing import (
     TYPE_CHECKING,
 )
 
 if TYPE_CHECKING:
     import pathlib
-    from os import (
-        PathLike,
-    )
 
     from typing import (
-        Any,
         Optional,
         Sequence,
-        Union,
     )
 
     from ..common import (
-        AbsPath,
         LicenceDescription,
         PathLikePath,
         ResolvedORCID,
         SecurityContextConfig,
-        URIType,
     )
 
     from ..wfexs_backend import WfExSBackend
@@ -59,8 +50,8 @@ class AbstractContextedExportPlugin(AbstractExportPlugin):
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(

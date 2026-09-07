@@ -145,7 +145,7 @@ def loadCSVParams(paramsFilename: "str") -> "Sequence[Mapping[str, Any]]":
         try:
             decoded = rawCSV.decode("utf-8")
             guessedEncoding = "utf-8"
-        except:
+        except BaseException:
             decoded = rawCSV.decode(guessedEncoding)
 
         sep = "\t"

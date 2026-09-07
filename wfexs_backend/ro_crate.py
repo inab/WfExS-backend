@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,10 +15,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import atexit
-import copy
+import collections.abc
 import errno
 import http.client
 import inspect
@@ -29,9 +28,9 @@ import pathlib
 import shutil
 import subprocess
 import tempfile
+from types import MappingProxyType
 from typing import (
     cast,
-    NamedTuple,
     TYPE_CHECKING,
 )
 import warnings
@@ -51,14 +50,8 @@ if TYPE_CHECKING:
         Union,
     )
 
-    from typing_extensions import (
-        Final,
-    )
-
     from .common import (
-        AbsPath,
         AbstractGeneratedContent,
-        AnyPath,
         EngineVersion,
         ExpectedOutput,
         Fingerprint,
@@ -66,8 +59,6 @@ if TYPE_CHECKING:
         PathLikePath,
         ProgsMapping,
         RelPath,
-        RepoTag,
-        RepoURL,
         StagedSetup,
         SymbolicParamName,
         SymbolicOutputName,
@@ -89,7 +80,6 @@ if TYPE_CHECKING:
     from .workflow_engines import (
         MaterializedWorkflowEngine,
         StagedExecution,
-        WorkflowType,
         WorkflowEngineVersionStr,
     )
 
@@ -98,7 +88,6 @@ if TYPE_CHECKING:
     )
 
 import urllib.parse
-import uuid
 
 from .utils.misc import (
     is_uri,
@@ -106,12 +95,10 @@ from .utils.misc import (
 )
 from .utils.rocrate import (
     ContainerType2AdditionalType,
-    ContainerTypeMetadata,
     ContainerTypeMetadataDetails,
     WFEXS_TERMS_CONTEXT,
     WFEXS_TERMS_NAMESPACE,
     WORKFLOW_RUN_CONTEXT,
-    WORKFLOW_RUN_NAMESPACE,
 )
 
 from .workflow_engines import (
@@ -153,7 +140,6 @@ from .utils.contents import (
 )
 
 from .utils.digests import (
-    ComputeDigestFromDirectory,
     ComputeDigestFromFile,
     ComputeDigestFromObject,
     hexDigest,
@@ -420,7 +406,7 @@ class FixedFile(FixedMixin, rocrate.model.file.File):  # type: ignore[misc]
 
 
 class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
-    TYPES = ["ContainerImage", "SoftwareApplication"]
+    TYPES: "Sequence[str]" = ("ContainerImage", "SoftwareApplication")
 
     def __init__(
         self,
@@ -481,7 +467,7 @@ class ContainerImage(rocrate.model.entity.Entity):  # type: ignore[misc]
 
 # Multiple inheritance order does matter when super is called!!!!
 class MaterializedContainerImage(ContainerImage, FixedFile):  # type: ignore[misc]
-    TYPES = ["File", "ContainerImage", "SoftwareApplication"]
+    TYPES = ("File", "ContainerImage", "SoftwareApplication")
 
     def __init__(
         self,
@@ -515,7 +501,7 @@ class MaterializedContainerImage(ContainerImage, FixedFile):  # type: ignore[mis
 
 
 class WorkflowDiagram(FixedFile):  # type: ignore[misc]
-    TYPES = ["File", "ImageObject"]
+    TYPES = ("File", "ImageObject")
 
     def _empty(self) -> "Mapping[str, Any]":
         return {
@@ -525,7 +511,7 @@ class WorkflowDiagram(FixedFile):  # type: ignore[misc]
 
 
 class SourceCodeFile(FixedFile):  # type: ignore[misc]
-    TYPES = ["File", "SoftwareSourceCode"]
+    TYPES = ("File", "SoftwareSourceCode")
 
     def _empty(self) -> "Mapping[str, Any]":
         return {
@@ -564,12 +550,12 @@ class FixedDataset(FixedMixin, rocrate.model.dataset.Dataset):  # type: ignore[m
 
 
 class FixedWorkflow(FixedMixin, rocrate.model.computationalworkflow.ComputationalWorkflow):  # type: ignore[misc]
-    TYPES = [
+    TYPES = (
         "File",
         "SoftwareSourceCode",
         "ComputationalWorkflow",
         "SoftwareApplication",
-    ]
+    )
 
 
 class FixedROCrate(rocrate.rocrate.ROCrate):  # type: ignore[misc]
@@ -785,11 +771,11 @@ class WorkflowRunROCrate:
         arch: "Optional[ProcessorArchitecture]",
         staged_setup: "StagedSetup",
         payloads: "CratableItem" = NoCratableItem,
-        licences: "Sequence[LicenceDescription]" = [],
-        orcids: "Sequence[Union[str, ResolvedORCID]]" = [],
-        progs: "ProgsMapping" = {},
+        licences: "Sequence[LicenceDescription]" = (),
+        orcids: "Sequence[Union[str, ResolvedORCID]]" = (),
+        progs: "ProgsMapping" = MappingProxyType({}),
         tempdir: "Optional[pathlib.Path]" = None,
-        scheme_desc: "Sequence[Tuple[str, str, int]]" = [],
+        scheme_desc: "Sequence[Tuple[str, str, int]]" = (),
         crate_pid: "Optional[str]" = None,
         licence_matcher: "Optional[LicenceMatcher]" = None,
     ):
@@ -831,10 +817,10 @@ class WorkflowRunROCrate:
             licence_matcher = LicenceMatcherSingleton()
         self.licence_matcher = licence_matcher
 
-        if localWorkflow.relPath is not None:
-            wf_local_path = localWorkflow.dir / localWorkflow.relPath
-        else:
-            wf_local_path = localWorkflow.dir
+        # if localWorkflow.relPath is not None:
+        #     wf_local_path = localWorkflow.dir / localWorkflow.relPath
+        # else:
+        #     wf_local_path = localWorkflow.dir
 
         self.arch = arch
         self.containerEngineOs = containerEngineOs
@@ -878,11 +864,11 @@ class WorkflowRunROCrate:
                         agent["name"] = agent_name
 
                     emails_dict = resolved_orcid.record.get("emails", {})
-                    if isinstance(emails_dict, dict):
+                    if isinstance(emails_dict, collections.abc.Mapping):
                         emails = emails_dict.get("emails", [])
                         if isinstance(emails, list):
                             for email_entry in emails:
-                                if isinstance(email_entry, dict):
+                                if isinstance(email_entry, collections.abc.Mapping):
                                     the_email = email_entry.get("value")
                                     if the_email is not None:
                                         contact_point = ContactPoint(
@@ -901,7 +887,7 @@ class WorkflowRunROCrate:
 
                     self.crate.add(agent)
                     self._agents.append(agent)
-            except FetcherException as fe:
+            except FetcherException:
                 self.logger.exception(f"Error validating ORCID {orcid}")
 
         if len(failed_orcids) > 0:
@@ -1461,7 +1447,7 @@ you can find here an almost complete list of the possible ones:
                     # TODO: emit a warning or raise a exception
                     return None
 
-                if the_uri.startswith("http") or the_uri.startswith("ftp"):
+                if the_uri.startswith(("http", "ftp")):
                     # See https://github.com/ResearchObject/ro-crate/pull/259
                     uri_key = "contentUrl"
                 else:
@@ -2033,7 +2019,7 @@ you can find here an almost complete list of the possible ones:
             clazz=SourceCodeFile if is_soft_source else FixedFile,
         )
         if the_uri is not None:
-            if the_uri.startswith("http") or the_uri.startswith("ftp"):
+            if the_uri.startswith(("http", "ftp")):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
             else:
@@ -2231,11 +2217,11 @@ you can find here an almost complete list of the possible ones:
             the_path = the_workflow.dir
 
         wf_url: "Optional[str]" = None
-        wf_entrypoint_url: "Optional[str]" = None
+        # wf_entrypoint_url: "Optional[str]" = None
         if remote_repo is not None:
             if remote_repo.web_url is not None:
                 wf_url = remote_repo.web_url
-                wf_entrypoint_url = wf_url
+                # wf_entrypoint_url = wf_url
             else:
                 wf_url = remote_repo.repo_url.replace(".git", "/")
                 if remote_repo.tag is not None:
@@ -2265,16 +2251,16 @@ you can find here an almost complete list of the possible ones:
                     if the_workflow.relPath is not None:
                         wf_entrypoint_path.append(the_workflow.relPath)
 
-                    wf_entrypoint_url = urllib.parse.urlunparse(
-                        (
-                            "https",
-                            "raw.githubusercontent.com",
-                            "/".join(wf_entrypoint_path),
-                            "",
-                            "",
-                            "",
-                        )
-                    )
+                    # wf_entrypoint_url = urllib.parse.urlunparse(
+                    #     (
+                    #         "https",
+                    #         "raw.githubusercontent.com",
+                    #         "/".join(wf_entrypoint_path),
+                    #         "",
+                    #         "",
+                    #         "",
+                    #     )
+                    # )
 
                 elif "gitlab" in parsed_repo_url.netloc:
                     parsed_repo_path = parsed_repo_url.path.split("/")
@@ -2289,16 +2275,16 @@ you can find here an almost complete list of the possible ones:
                             ["-", "raw", remote_repo.tag, the_workflow.relPath]
                         )
 
-                    wf_entrypoint_url = urllib.parse.urlunparse(
-                        (
-                            parsed_repo_url.scheme,
-                            parsed_repo_url.netloc,
-                            "/".join(wf_entrypoint_path),
-                            "",
-                            "",
-                            "",
-                        )
-                    )
+                    # wf_entrypoint_url = urllib.parse.urlunparse(
+                    #     (
+                    #         parsed_repo_url.scheme,
+                    #         parsed_repo_url.netloc,
+                    #         "/".join(wf_entrypoint_path),
+                    #         "",
+                    #         "",
+                    #         "",
+                    #     )
+                    # )
 
                 else:
                     self.logger.warning(
@@ -2402,7 +2388,7 @@ you can find here an almost complete list of the possible ones:
                     existing_operational_containers.append(added_operational_container)
 
         if the_uri is not None:
-            if the_uri.startswith("http") or the_uri.startswith("ftp"):
+            if the_uri.startswith(("http", "ftp")):
                 # See https://github.com/ResearchObject/ro-crate/pull/259
                 uri_key = "contentUrl"
             else:
@@ -2619,11 +2605,6 @@ you can find here an almost complete list of the possible ones:
         # as it is explained at https://www.researchobject.org/workflow-run-crate/profiles/workflow_run_crate
         assert self.staged_setup.inputs_dir is not None
         assert stagedExec.job_id is not None
-
-        outputsDir = cast(
-            "AbsPath",
-            os.path.normpath(os.path.join(self.work_dir, stagedExec.outputsDir)),
-        )
 
         crate_action = CreateAction(
             self.crate,
@@ -2900,7 +2881,6 @@ you can find here an almost complete list of the possible ones:
 
         # Processing the log files
         if len(stagedExec.logfile) > 0:
-            work_dir = pathlib.Path(self.work_dir)
             crate_coll: "Union[Collection, FixedFile, None]"
             if len(stagedExec.logfile) > 1:
                 crate_coll = self._add_collection_to_crate()
@@ -3049,7 +3029,7 @@ you can find here an almost complete list of the possible ones:
 
                         itemOutLocalSource = itemOutValues.local  # local source
                         # TODO: use exported results logs to complement this
-                        itemOutURISource = None
+                        # itemOutURISource = None
                         if isinstance(
                             itemOutValues, GeneratedDirectoryContent
                         ):  # if directory
@@ -3072,10 +3052,7 @@ you can find here an almost complete list of the possible ones:
                                         crate_coll = crate_dataset
 
                             else:
-                                errmsg = (
-                                    "ERROR: The output directory %s does not exist"
-                                    % itemOutLocalSource
-                                )
+                                errmsg = f"ERROR: The output directory {itemOutLocalSource} does not exist"
                                 self.logger.error(errmsg)
 
                         elif isinstance(itemOutValues, GeneratedContent):  # file
@@ -3094,10 +3071,7 @@ you can find here an almost complete list of the possible ones:
                                     crate_coll = crate_file
 
                             else:
-                                errmsg = (
-                                    "ERROR: The output file %s does not exist"
-                                    % itemOutLocalSource
-                                )
+                                errmsg = f"ERROR: The output file {itemOutLocalSource} does not exist"
                                 self.logger.error(errmsg)
 
                         else:
@@ -3231,7 +3205,7 @@ you can find here an almost complete list of the possible ones:
             )
 
             if the_uri is not None:
-                if the_uri.startswith("http") or the_uri.startswith("ftp"):
+                if the_uri.startswith(("http", "ftp")):
                     # See https://github.com/ResearchObject/ro-crate/pull/259
                     uri_key = "contentUrl"
                 else:

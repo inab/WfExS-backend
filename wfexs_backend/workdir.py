@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import datetime
 import inspect
@@ -52,24 +51,10 @@ if TYPE_CHECKING:
         Final,
     )
 
-    import pathlib
-
     from .common import (
         AbsPath,
         AnyPath,
-        ContainerType,
-        ExitVal,
-        LicenceDescription,
-        MarshallingStatus,
-        ProgsMapping,
         RelPath,
-        RepoTag,
-        RepoURL,
-        SecurityContextConfig,
-        StagedSetup,
-        SymbolicName,
-        TRS_Workflow_Descriptor,
-        URIType,
         WfExSInstanceId,
     )
 
@@ -101,7 +86,6 @@ from .encrypted_fs import (
 )
 
 from .utils.misc import (
-    config_validate,
     DatetimeEncoder,
     jsonFilterDecodeFromStream,
 )
@@ -153,10 +137,10 @@ class Workdir:
         assert encfs_type_str is not None
         try:
             encfs_type = EncryptedFSType(encfs_type_str)
-        except:
+        except BaseException as be:
             errmsg = f"Invalid default encryption filesystem {encfs_type_str}"
             logger.error(errmsg)
-            raise WorkdirException(errmsg)
+            raise WorkdirException(errmsg) from be
         if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
             errmsg = f"FIXME: Default encryption filesystem {encfs_type} mount procedure is not implemented"
             logger.fatal(errmsg)
@@ -193,7 +177,7 @@ class Workdir:
         uniqueRawWorkDir: "pathlib.Path",
         instanceId: "Optional[WfExSInstanceId]" = None,
         nickname: "Optional[str]" = None,
-        orcids: "Optional[Sequence[str]]" = [],
+        orcids: "Optional[Sequence[str]]" = (),
         create_ok: "bool" = False,
     ):
         # Getting a logger focused on specific classes
@@ -451,9 +435,9 @@ class Workdir:
 
         try:
             encfs_type = EncryptedFSType(encfs_type_str)
-        except:
+        except BaseException as be:
             errmsg = f"Invalid encryption filesystem {encfs_type_str} in working directory {self.raw_work_dir}"
-            raise WorkdirException(errmsg)
+            raise WorkdirException(errmsg) from be
 
         if encfs_type not in ENCRYPTED_FS_MOUNT_IMPLEMENTATIONS:
             errmsg = f"FIXME: Encryption filesystem {encfs_type_str} mount procedure needed by {self.raw_work_dir} is not implemented"
@@ -487,8 +471,8 @@ class Workdir:
         try:
             while not cond.wait(60) and workDir.is_dir():
                 pass
-        except:
-            logger.exception("Wakeup thread failed!")
+        except BaseException:
+            logger.exception("Wakeup thread for encrypted workdir failed!")
         finally:
             cond.release()
 
@@ -752,7 +736,7 @@ class Workdir:
                                 raise WorkdirException(errstr)
                 except LockError:
                     self.logger.warning(
-                        f"Other processes have a lock on the mount, skipping"
+                        "Other processes have a lock on the mount, skipping"
                     )
                 finally:
                     if self.lmL is not None:
@@ -760,7 +744,7 @@ class Workdir:
                         self.lmL = None
                     self.lmlock = None
             else:
-                self.logger.warning(f"Internal lock is not available")
+                self.logger.warning("Internal lock is not available")
 
             # This is needed to avoid double work
             self.do_unmount = False
@@ -780,7 +764,7 @@ class Workdir:
             with wlock.exclusive_lock():
                 try:
                     os.unlink(id_json_path)
-                except:
+                except BaseException:
                     self.logger.exception(
                         f"Exception while removing {self.ID_JSON_FILENAME} from {self.instance_id} {self.nickname}"
                     )

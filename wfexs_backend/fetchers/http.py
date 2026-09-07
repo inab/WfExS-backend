@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
+import collections.abc
 import http.client
-import os
 import shutil
 import string
 
@@ -35,12 +34,8 @@ if TYPE_CHECKING:
         Iterable,
         IO,
         Mapping,
-        MutableMapping,
-        MutableSequence,
         Optional,
         Sequence,
-        Tuple,
-        Type,
         Union,
     )
 
@@ -53,12 +48,6 @@ if TYPE_CHECKING:
     from mypy_extensions import DefaultNamedArg
 
     from ..common import (
-        AbsPath,
-        PathLikePath,
-        ProgsMapping,
-        RelPath,
-        RepoURL,
-        RepoTag,
         SecurityContextConfig,
         SymbolicName,
         URIType,
@@ -69,9 +58,7 @@ import urllib.parse
 import urllib.request
 
 from . import (
-    AbstractStatefulFetcher,
     AbstractStatefulStreamingFetcher,
-    DocumentedProtocolFetcher,
     DocumentedStatefulProtocolFetcher,
     FetcherException,
     ProtocolFetcherReturn,
@@ -143,8 +130,8 @@ class HTTPFetcher(AbstractStatefulStreamingFetcher):
         username = parsedInputURL.username
         password = parsedInputURL.password
 
-        if isinstance(secContext, dict):
-            headers = secContext.get("headers", {}).copy()
+        if isinstance(secContext, collections.abc.Mapping):
+            headers = dict(secContext.get("headers", {}))
             token = secContext.get("token")
             token_header = secContext.get("token_header")
             username = secContext.get("username", username)

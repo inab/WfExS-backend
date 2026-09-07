@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
 import dataclasses
 import json
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Tuple,
-        Union,
     )
 
     from typing_extensions import (
@@ -41,19 +39,15 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
-        AnyPath,
         ContainerTaggedName,
         Fingerprint,
         ProgsMapping,
-        RelPath,
         SymbolicName,
         URIType,
     )
 
     from . import (
         ContainerFileNamingMethod,
-        ContainerLocalConfig,
         ContainerOperatingSystem,
         ProcessorArchitecture,
     )
@@ -72,7 +66,6 @@ from . import (
     ContainerEngineException,
     ContainerFactoryException,
     DEFAULT_DOCKER_REGISTRY,
-    DOCKER_URI_PREFIX,
 )
 from .abstract_docker_container import (
     AbstractDockerContainerFactory,
@@ -80,18 +73,16 @@ from .abstract_docker_container import (
 )
 from ..utils.contents import (
     link_or_copy_pathlib,
-    real_unlink_if_exists,
 )
-from ..utils.digests import ComputeDigestFromFile
 
 
 class PodmanContainerFactory(AbstractDockerContainerFactory):
-    TRIMMABLE_MANIFEST_KEYS: "Final[Sequence[str]]" = [
+    TRIMMABLE_MANIFEST_KEYS: "Final[Sequence[str]]" = (
         "Digest",
         "RepoDigests",
         "Size",
         "VirtualSize",
-    ]
+    )
 
     @classmethod
     def trimmable_manifest_keys(cls) -> "Sequence[str]":
@@ -254,7 +245,7 @@ STDERR
 
         self.logger.info(f"downloading podman container: {tag_name} => {podmanPullTag}")
 
-        fetch_metadata = True
+        # fetch_metadata = True
         trusted_copy = False
         local_container_paths: (
             "Optional[Sequence[Tuple[pathlib.Path, pathlib.Path]]]"
@@ -297,8 +288,8 @@ STDERR
 
                         if trusted_copy:
                             trusted_copy = imageSignature == imageSignature_in_metadata
-                            fetch_metadata = not trusted_copy
-                except Exception as e:
+                            # fetch_metadata = not trusted_copy
+                except Exception:
                     self.logger.exception(
                         f"Problems extracting docker metadata at {localContainerPathMeta}"
                     )
@@ -391,8 +382,10 @@ STDERR
                 if tmpContainerPath.exists():
                     try:
                         tmpContainerPath.unlink()
-                    except:
-                        pass
+                    except BaseException:
+                        self.logger.debug(
+                            f"Temporary container path {tmpContainerPath} from {dockerTag} not removed"
+                        )
                 raise ContainerEngineException(errstr)
 
             # This is needed for the metadata
@@ -584,7 +577,7 @@ STDERR
                         ),
                         image_signature=imageSignature_in_metadata,
                     )
-        except Exception as e:
+        except Exception:
             errmsg = f"Problems extracting podman metadata at {containerPathMeta}"
             self.logger.exception(errmsg)
             raise ContainerFactoryException(errmsg)

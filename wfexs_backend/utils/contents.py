@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,8 +15,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from __future__ import absolute_import
 
 import logging
 import os
@@ -54,9 +52,7 @@ if TYPE_CHECKING:
     )
 
     from ..common import (
-        AbsPath,
         AbstractGeneratedContent,
-        AnyPath,
         ExpectedOutput,
         Fingerprint,
         LicensedURI,
@@ -233,7 +229,9 @@ def CWLDesc2Content(
     expectedOutput: "Optional[ExpectedOutput]" = None,
     doGenerateSignatures: "bool" = False,
 ) -> "Sequence[AbstractGeneratedContent]":
-    """ """
+    """
+    Function to map from CWL descriptions to subclasses of AbstractGeneratedContent
+    """
     matValues: "MutableSequence[AbstractGeneratedContent]" = []
 
     if not isinstance(cwlDescs, list):
@@ -399,15 +397,14 @@ def link_or_copy_pathlib(
             dest_parent.mkdir(parents=True)
 
     # Now, link or copy
-    link_condition = False
     try:
         link_condition = (
             not isinstance(src, ZipfilePath)
             and src.lstat().st_dev == dest_st_dev
             and not force_copy
         )
-    except:
-        pass
+    except BaseException:
+        link_condition = False
     if link_condition:
         try:
             if src.is_file():
@@ -454,7 +451,7 @@ def link_or_copy_pathlib(
                     try:
                         with src.open(mode="rb") as dummy:
                             readable = dummy.readable()
-                    except OSError as dummy_err:
+                    except OSError:
                         readable = False
                 else:
                     # Too difficult to guess
@@ -463,7 +460,7 @@ def link_or_copy_pathlib(
                 readable = True
 
             if not readable:
-                raise ose
+                raise
 
             force_copy = True
     else:
@@ -515,7 +512,7 @@ def link_or_symlink_pathlib(
     ), f"File {src.as_posix()} must exist to be linked or copied {src.exists()} {src.is_symlink()}"
 
     if isinstance(src, ZipfilePath):
-        raise Exception(f"Unable to symlink {src}, as it is within a ZIP archive")
+        raise TypeError(f"Unable to symlink {src}, as it is within a ZIP archive")
 
     # We should not deal with symlinks
     src = src.resolve()
@@ -542,15 +539,14 @@ def link_or_symlink_pathlib(
             dest_parent.mkdir(parents=True)
 
     # Now, link or symlink
-    link_condition = False
     try:
         link_condition = (
             not isinstance(src, ZipfilePath)
             and src.lstat().st_dev == dest_st_dev
             and not force_symlink
         )
-    except:
-        pass
+    except BaseException:
+        link_condition = False
 
     if link_condition:
         try:
@@ -578,7 +574,7 @@ def link_or_symlink_pathlib(
                     try:
                         with src.open(mode="rb") as dummy:
                             readable = dummy.readable()
-                    except OSError as dummy_err:
+                    except OSError:
                         readable = False
                 else:
                     # Too difficult to guess
@@ -587,7 +583,7 @@ def link_or_symlink_pathlib(
                 readable = True
 
             if not readable:
-                raise ose
+                raise
 
             force_symlink = True
     else:
@@ -611,20 +607,20 @@ def real_unlink_if_exists(the_path: "PathLikePath", fail_ok: "bool" = False) -> 
             canonical_to_be_erased = os.path.realpath(the_path)
             if os.path.exists(canonical_to_be_erased):
                 os.unlink(canonical_to_be_erased)
-        except Exception as e:
+        except Exception:
             if fail_ok:
-                raise e
+                raise
         try:
             os.unlink(the_path)
-        except Exception as e:
+        except Exception:
             if fail_ok:
-                raise e
+                raise
     elif os.path.exists(the_path):
         try:
             os.unlink(the_path)
-        except Exception as e:
+        except Exception:
             if fail_ok:
-                raise e
+                raise
 
 
 def bin2dataurl(content: "bytes") -> "URIType":

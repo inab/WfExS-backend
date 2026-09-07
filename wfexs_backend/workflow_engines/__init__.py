@@ -15,8 +15,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import absolute_import
 
+import collections.abc
 import copy
 import os
 import pathlib
@@ -28,6 +28,7 @@ import time
 import abc
 import glob
 import logging
+from types import MappingProxyType
 
 from typing import (
     cast,
@@ -39,7 +40,6 @@ from ..common import (
     AbstractWfExSException,
     ContainerType,
     ContentKind,
-    DEFAULT_CONTAINER_TYPE,
     DEFAULT_DOCKER_CMD,
     DEFAULT_ENGINE_MODE,
     EngineMode,
@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from typing import (
         Any,
         Callable,
+        FrozenSet,
         Iterator,
         Mapping,
         MutableSequence,
@@ -62,7 +63,6 @@ if TYPE_CHECKING:
         Optional,
         Pattern,
         Sequence,
-        Set,
         Tuple,
         Type,
         Union,
@@ -70,21 +70,19 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
+        Self,
         TypeAlias,
     )
 
     from ..common import (
         AbstractGeneratedContent,
         AbsPath,
-        AnyPath,
         ContainerTaggedName,
         EngineVersion,
-        ExecutionStatus,
         ExitVal,
         ExpectedOutput,
         Fingerprint,
         LocalWorkflow,
-        MaterializedContent,
         MaterializedInput,
         MaterializedInputValues,
         ProgsMapping,
@@ -95,7 +93,6 @@ if TYPE_CHECKING:
         SymbolicParamName,
         TRS_Workflow_Descriptor,
         URIType,
-        WFLangVersion,
     )
 
     from ..container_factories import (
@@ -208,7 +205,7 @@ class MaterializedWorkflowEngine(NamedTuple):
     def _mapping_fixes(
         cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
     ) -> "Mapping[str, Any]":
-        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["engine_path"] = pathlib.Path(orig["engine_path"])
         if workdir is not None and not dest["engine_path"].is_absolute():
             dest["engine_path"] = (workdir / dest["engine_path"]).resolve()
@@ -232,10 +229,10 @@ class StagedExecution(NamedTuple):
     outputsDir: "pathlib.Path"
     started: "datetime.datetime"
     ended: "datetime.datetime"
-    environment: "Sequence[MaterializedInput]" = []
+    environment: "Sequence[MaterializedInput]" = ()
     outputMetaDir: "Optional[pathlib.Path]" = None
     diagram: "Optional[pathlib.Path]" = None
-    logfile: "Sequence[pathlib.Path]" = []
+    logfile: "Sequence[pathlib.Path]" = ()
     profiles: "Optional[Sequence[str]]" = None
     queued: "Optional[datetime.datetime]" = None
     status: "ExecutionStatus" = ExecutionStatus.Finished
@@ -246,7 +243,7 @@ class StagedExecution(NamedTuple):
     def _mapping_fixes(
         cls, orig: "Mapping[str, Any]", workdir: "Optional[pathlib.Path]"
     ) -> "Mapping[str, Any]":
-        dest = cast("MutableMapping[str, Any]", copy.copy(orig))
+        dest = cast("MutableMapping[str, Any]", dict(orig))
 
         for keypath in ("outputsDir", "outputMetaDir", "diagram"):
             keyval = orig.get(keypath)
@@ -330,7 +327,7 @@ class AbstractWorkflowEngineType(abc.ABC):
         containersDir: "pathlib.Path",
         offline: "bool" = False,
         force: "bool" = False,
-        injectable_containers: "Sequence[Container]" = [],
+        injectable_containers: "Sequence[Container]" = (),
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         pass
 
@@ -374,8 +371,8 @@ class AbstractWorkflowEngineType(abc.ABC):
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
-        context_inputs: "Sequence[MaterializedInput]" = [],
-        context_environment: "Sequence[MaterializedInput]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = (),
+        context_environment: "Sequence[MaterializedInput]" = (),
         remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
@@ -404,16 +401,16 @@ class AbstractWorkflowEngineType(abc.ABC):
     def FromStagedSetup(
         cls,
         staged_setup: "StagedSetup",
-        container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
-            NoContainerFactory
-        ],
+        container_factory_classes: "Sequence[Type[ContainerFactory]]" = (
+            NoContainerFactory,
+        ),
         progs_mapping: "Optional[ProgsMapping]" = None,
         cache_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_inputs_dir: "Optional[pathlib.Path]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
         config_directory: "Optional[pathlib.Path]" = None,
-    ) -> "AbstractWorkflowEngineType":
+    ) -> "Self":
         pass
 
 
@@ -478,7 +475,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         self.engine_config = engine_config
 
         if progs_mapping is None:
-            progs_mapping = dict()
+            progs_mapping = MappingProxyType({})
         self.progs_mapping = progs_mapping
 
         if config_directory is None:
@@ -664,16 +661,16 @@ class WorkflowEngine(AbstractWorkflowEngineType):
     def FromStagedSetup(
         cls,
         staged_setup: "StagedSetup",
-        container_factory_classes: "Sequence[Type[ContainerFactory]]" = [
-            NoContainerFactory
-        ],
+        container_factory_classes: "Sequence[Type[ContainerFactory]]" = (
+            NoContainerFactory,
+        ),
         progs_mapping: "Optional[ProgsMapping]" = None,
         cache_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_dir: "Optional[pathlib.Path]" = None,
         cache_workflow_inputs_dir: "Optional[pathlib.Path]" = None,
         local_config: "Optional[EngineLocalConfig]" = None,
         config_directory: "Optional[pathlib.Path]" = None,
-    ) -> "AbstractWorkflowEngineType":
+    ) -> "Self":
         """
         Init method from staged setup instance
 
@@ -719,7 +716,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         else:
             try:
                 engine_mode = EngineMode(engine_mode)
-            except:
+            except BaseException:
                 raise WorkflowEngineException(
                     f"Unrecognized engine mode {engine_mode} for {cls.ENGINE_NAME}"
                 )
@@ -755,12 +752,12 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
     @classmethod
     @abc.abstractmethod
-    def SupportedContainerTypes(cls) -> "Set[ContainerType]":
+    def SupportedContainerTypes(cls) -> "FrozenSet[ContainerType]":
         pass
 
     @classmethod
     @abc.abstractmethod
-    def SupportedSecureExecContainerTypes(cls) -> "Set[ContainerType]":
+    def SupportedSecureExecContainerTypes(cls) -> "FrozenSet[ContainerType]":
         pass
 
     @classmethod
@@ -861,8 +858,8 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
         profiles: "Optional[Sequence[str]]" = None,
-        context_inputs: "Sequence[MaterializedInput]" = [],
-        context_environment: "Sequence[MaterializedInput]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = (),
+        context_environment: "Sequence[MaterializedInput]" = (),
         remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, Sequence[ContainerTaggedName]]":
         """
@@ -895,7 +892,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         containersDir: "Optional[pathlib.Path]" = None,
         offline: "bool" = False,
         force: "bool" = False,
-        injectable_containers: "Sequence[Container]" = [],
+        injectable_containers: "Sequence[Container]" = (),
     ) -> "Tuple[ContainerEngineVersionStr, Sequence[Container], ContainerOperatingSystem, ProcessorArchitecture]":
         if containersDir is None:
             containersDirPath = self.stagedContainersDir
@@ -1006,11 +1003,11 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         containersDir: "pathlib.Path",
         consolidatedWorkflowDir: "pathlib.Path",
         offline: "bool" = False,
-        injectable_containers: "Sequence[Container]" = [],
-        injectable_operational_containers: "Sequence[Container]" = [],
+        injectable_containers: "Sequence[Container]" = (),
+        injectable_operational_containers: "Sequence[Container]" = (),
         profiles: "Optional[Sequence[str]]" = None,
-        context_inputs: "Sequence[MaterializedInput]" = [],
-        context_environment: "Sequence[MaterializedInput]" = [],
+        context_inputs: "Sequence[MaterializedInput]" = (),
+        context_environment: "Sequence[MaterializedInput]" = (),
         remote_repo: "Optional[RemoteRepo]" = None,
     ) -> "Tuple[MaterializedWorkflowEngine, ContainerEngineVersionStr, ContainerOperatingSystem, ProcessorArchitecture]":
         matWfEngV2, listOfContainerTags = matWfEng.instance.materializeWorkflow(
@@ -1050,8 +1047,14 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                     offline=offline,
                     injectable_containers=injectable_operational_containers,
                 )
-            except:
-                logging.debug("FIXME materializing containers")
+            except BaseException:
+                # Getting a logger focused on specific classes
+                from inspect import getmembers as inspect_getmembers
+
+                logger = logging.getLogger(
+                    dict(inspect_getmembers(cls))["__module__"] + "::" + cls.__name__
+                )
+                logger.debug("FIXME materializing containers")
                 listOfOperationalContainers = []
         else:
             listOfOperationalContainers = []
@@ -1069,15 +1072,21 @@ class WorkflowEngine(AbstractWorkflowEngineType):
 
         return matWfEngV3, containerEngineStr, containerEngineOs, arch
 
-    GuessedCardinalityMapping = {
-        False: (0, 1),
-        True: (0, sys.maxsize),
-    }
+    GuessedCardinalityMapping: "Final[Mapping[bool, Tuple[int, int]]]" = (
+        MappingProxyType(
+            {
+                False: (0, 1),
+                True: (0, sys.maxsize),
+            }
+        )
+    )
 
-    GuessedOutputKindMapping: "Mapping[str, ContentKind]" = {
-        GeneratedDirectoryContent.__name__: ContentKind.Directory,
-        GeneratedContent.__name__: ContentKind.File,
-    }
+    GuessedOutputKindMapping: "Final[Mapping[str, ContentKind]]" = MappingProxyType(
+        {
+            GeneratedDirectoryContent.__name__: ContentKind.Directory,
+            GeneratedContent.__name__: ContentKind.File,
+        }
+    )
 
     def identifyMaterializedOutputs(
         self,
@@ -1090,7 +1099,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
         This method is used to identify outputs by either file glob descriptions
         or matching with a mapping
         """
-        if not isinstance(outputsMapping, dict):
+        if not isinstance(outputsMapping, collections.abc.Mapping):
             outputsMapping = {}
 
         matInputHash: "Mapping[SymbolicParamName, MaterializedInputValues]" = {
@@ -1223,7 +1232,7 @@ class WorkflowEngine(AbstractWorkflowEngineType):
                                     ) as mP:
                                         theValue = mP.read()
                                         expMatValues.append(theValue)
-                            except Exception as e:
+                            except Exception:
                                 self.logger.exception(
                                     f"Unable to read path {abs_matched_path} ({matchedPath}) from filled input {expectedOutput.fillFrom}"
                                 )

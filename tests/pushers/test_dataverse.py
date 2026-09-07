@@ -20,16 +20,12 @@ import pytest
 
 import copy
 import datetime
-import json
 import logging
 
 import pathlib
 
 import os
-import sys
 import urllib.error
-
-import pytest
 
 from wfexs_backend.pushers import ExportPluginException
 from wfexs_backend.pushers.dataverse_export import DataversePublisher
@@ -44,13 +40,10 @@ if TYPE_CHECKING:
         Any,
         Mapping,
         MutableMapping,
-        MutableSequence,
         Set,
     )
     from wfexs_backend.common import (
-        AbsPath,
         SecurityContextConfig,
-        URIType,
     )
     from pytest_param_files import (  # type: ignore[import]
         ParamTestData,
@@ -90,9 +83,7 @@ def test_dataverse_basic_fail_notoken() -> "None":
     Check Dataverse plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
-        dep = DataversePublisher(
-            pathlib.Path("/"), setup_block={"api-prefix": "example.org"}
-        )
+        DataversePublisher(pathlib.Path("/"), setup_block={"api-prefix": "example.org"})
 
 
 basic_deps = [
@@ -125,7 +116,7 @@ def test_dataverse_basic(file_params: "ParamTestData") -> "None":
         "api-prefix": file_params.extra["api-prefix"],
         "dataverse-id": file_params.extra["dataverse-id"],
     }
-    dep = DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
+    DataversePublisher(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -188,7 +179,7 @@ def test_dataverse_book_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             dep.discard_booked_pid(booked_entry)
@@ -235,7 +226,7 @@ def test_dataverse_book_draft_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             dep.discard_booked_pid(booked_entry)
@@ -301,7 +292,7 @@ def test_dataverse_book_new_version_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             logger.info(f"Discarding draft from {booked_entry.draft_id}")
@@ -367,7 +358,7 @@ def test_dataverse_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             dep.discard_booked_pid(booked_entry)
@@ -438,7 +429,7 @@ def test_dataverse_upload_stream_to_draft(file_params: "ParamTestData") -> "None
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             dep.discard_booked_pid(booked_entry)
@@ -492,7 +483,7 @@ def test_dataverse_update_record_metadata_raw(file_params: "ParamTestData") -> "
                     field_checks[typeName] = field
                     field["value"] = (
                         "My test upload updated at "
-                        + datetime.datetime.utcnow().isoformat()
+                        + datetime.datetime.now().astimezone().isoformat()
                     )
                 elif typeName == "author":
                     field_checks[typeName] = field
@@ -515,7 +506,7 @@ def test_dataverse_update_record_metadata_raw(file_params: "ParamTestData") -> "
                                 "multiple": False,
                                 "typeClass": "primitive",
                                 "value": "This is my test upload description updated at "
-                                + datetime.datetime.utcnow().isoformat(),
+                                + datetime.datetime.now().astimezone().isoformat(),
                             }
                         }
                     ]
@@ -550,7 +541,7 @@ def test_dataverse_update_record_metadata_raw(file_params: "ParamTestData") -> "
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             dep.discard_booked_pid(booked_entry)
@@ -609,12 +600,13 @@ def test_dataverse_update_record_metadata_facets(
                     ]
 
         # logger.info(json.dumps(entry_metadata, indent=4))
+        now = datetime.datetime.now().astimezone()
         updated_meta = dep.update_record_metadata(
             booked_entry,
             metadata=entry_metadata,
-            title="My test upload updated at " + datetime.datetime.utcnow().isoformat(),
+            title="My test upload updated at " + now.isoformat(),
             description="This is my test upload description updated at "
-            + datetime.datetime.utcnow().isoformat(),
+            + now.isoformat(),
             resolved_orcids=[
                 TEST_ORCID,
             ],
@@ -642,7 +634,7 @@ def test_dataverse_update_record_metadata_facets(
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             dep.discard_booked_pid(booked_entry)
@@ -699,7 +691,7 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
                     field_checks[typeName] = field
                     field["value"] = (
                         "My test published entry updated at "
-                        + datetime.datetime.utcnow().isoformat()
+                        + datetime.datetime.now().astimezone().isoformat()
                     )
                 elif typeName == "author":
                     field_checks[typeName] = field
@@ -722,7 +714,7 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
                                 "multiple": False,
                                 "typeClass": "primitive",
                                 "value": "This is my test published entry description updated at "
-                                + datetime.datetime.utcnow().isoformat(),
+                                + datetime.datetime.now().astimezone().isoformat(),
                             }
                         }
                     ]
@@ -767,7 +759,7 @@ def test_dataverse_publish_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None and published_meta is None:
             dep.discard_booked_pid(booked_entry)

@@ -5,3 +5,39 @@ requires = [
 ]
 build-backend = "setuptools.build_meta"
 
+[tool.ruff.lint]
+ignore = [
+	"BLE001",
+	"C401",
+	"C402",
+	"C405",
+	"C408",
+	"C417",
+	"EXE001",
+	"FLY002",
+	"FURB188",
+	"I001",
+	"PIE790",
+	"PIE808",
+	"PLR1730",
+	"PYI032",
+	"RUF009",
+	"RUF015",
+	"RUF022",
+	"RUF059",
+	"SIM102",
+	"SIM114",
+	"SIM115",
+	"SIM117",
+	"TRY002",
+	"UP006",
+	"UP007",
+	"UP009",
+	"UP030",
+	"UP032",
+	"UP035",
+	"UP036",
+	"UP037",
+	"UP043",
+	"UP045"
+]

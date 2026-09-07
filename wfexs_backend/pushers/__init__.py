@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,16 +16,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import abc
+import collections.abc
 import logging
 from typing import (
     cast,
     NamedTuple,
     TYPE_CHECKING,
 )
-import urllib.parse
 
 if TYPE_CHECKING:
     import pathlib
@@ -34,26 +32,18 @@ if TYPE_CHECKING:
         ClassVar,
         IO,
         Mapping,
-        MutableSequence,
         Optional,
         Sequence,
         Tuple,
         Union,
     )
 
-    from typing_extensions import Final
-
     from ..common import (
-        AbsPath,
         AnyContent,
         LicenceDescription,
-        MaterializedInput,
-        MaterializedOutput,
-        RelPath,
         ResolvedORCID,
         SecurityContextConfig,
         SymbolicName,
-        URIType,
         URIWithMetadata,
     )
 
@@ -82,8 +72,8 @@ class AbstractExportPlugin(abc.ABC):
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         import inspect
@@ -95,7 +85,9 @@ class AbstractExportPlugin(abc.ABC):
         )
         # This is used to resolve paths
         self.refdir = refdir
-        self.setup_block = setup_block if isinstance(setup_block, dict) else dict()
+        self.setup_block = (
+            setup_block if isinstance(setup_block, collections.abc.Mapping) else dict()
+        )
 
         # This is the default value for the preferred PID
         # which can be updated through a call to book_pid
@@ -113,8 +105,8 @@ class AbstractExportPlugin(abc.ABC):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
@@ -161,8 +153,8 @@ class AbstractExportPlugin(abc.ABC):
         initially_required_community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Optional[DraftEntry]":
         """
         This method is used to book a new PID,
@@ -244,8 +236,8 @@ class AbstractDraftedExportPlugin(AbstractExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Mapping[str, Any]":
         """
         This method updates the (draft or not) record metadata,
@@ -261,8 +253,8 @@ class AbstractDraftedExportPlugin(AbstractExportPlugin):
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
     ) -> "Mapping[str, Any]":
         """
         This method updates the (draft or not) record metadata,

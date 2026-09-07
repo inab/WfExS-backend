@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2024 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,14 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import absolute_import
-
 import abc
-import logging
 import os
 from typing import (
     cast,
-    NamedTuple,
     TYPE_CHECKING,
 )
 import urllib.error
@@ -33,28 +29,18 @@ if TYPE_CHECKING:
     import pathlib
     from typing import (
         Any,
-        ClassVar,
         Mapping,
-        MutableSequence,
         Optional,
         Sequence,
         Set,
-        Tuple,
-        Union,
     )
 
-    from typing_extensions import Final
-
     from ..common import (
-        AbsPath,
         AnyContent,
         LicenceDescription,
-        MaterializedInput,
-        MaterializedOutput,
         RelPath,
         ResolvedORCID,
         SecurityContextConfig,
-        SymbolicName,
         URIType,
     )
 
@@ -78,8 +64,8 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
         self,
         refdir: "pathlib.Path",
         setup_block: "Optional[SecurityContextConfig]" = None,
-        default_licences: "Sequence[LicenceDescription]" = [],
-        default_orcids: "Sequence[ResolvedORCID]" = [],
+        default_licences: "Sequence[LicenceDescription]" = (),
+        default_orcids: "Sequence[ResolvedORCID]" = (),
         default_preferred_id: "Optional[str]" = None,
     ):
         super().__init__(
@@ -132,8 +118,8 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
         preferred_id: "Optional[str]" = None,
         title: "Optional[str]" = None,
         description: "Optional[str]" = None,
-        licences: "Sequence[LicenceDescription]" = [],
-        resolved_orcids: "Sequence[ResolvedORCID]" = [],
+        licences: "Sequence[LicenceDescription]" = (),
+        resolved_orcids: "Sequence[ResolvedORCID]" = (),
         metadata: "Optional[Mapping[str, Any]]" = None,
         community_specific_metadata: "Optional[Mapping[str, Any]]" = None,
     ) -> "Sequence[URIWithMetadata]":
@@ -201,10 +187,10 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
             relitems.add(prefname)
 
             try:
-                upload_response = self.upload_file_to_draft(
+                upload_response = self.upload_file_to_draft(  # noqa: F841
                     booked_entry, str(item.local), prefname
                 )
-            except urllib.error.HTTPError as he:
+            except urllib.error.HTTPError:
                 failed = True
 
         if failed:
@@ -216,7 +202,7 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
         # Add metadata to the entry
         # Publish the entry
         # This might not be needed
-        meta_update = self.update_record_metadata(
+        meta_update = self.update_record_metadata(  # noqa: F841
             booked_entry,
             metadata=metadata,
             community_specific_metadata=community_specific_metadata,
@@ -227,7 +213,7 @@ class AbstractTokenExportPlugin(AbstractDraftedExportPlugin):
         )
 
         # Last, publish!
-        pub_update = self.publish_draft_record(booked_entry)
+        pub_update = self.publish_draft_record(booked_entry)  # noqa: F841
 
         shared_uris = []
         shared_uris.append(

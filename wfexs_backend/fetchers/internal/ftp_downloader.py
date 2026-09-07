@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,12 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import datetime
 import logging
 import os
 import pathlib
-import sys
-import time
+import warnings
 
 from typing import (
     TYPE_CHECKING,
@@ -29,9 +27,6 @@ from typing import (
 
 if TYPE_CHECKING:
     from typing import (
-        Any,
-        Coroutine,
-        Mapping,
         MutableSequence,
         Sequence,
         Tuple,
@@ -41,12 +36,16 @@ if TYPE_CHECKING:
 
     from typing_extensions import (
         Final,
+        Self,
     )
 
     CT = TypeVar("CT")
 
 import ftplib
-import ftputil
+
+with warnings.catch_warnings():
+    warnings.simplefilter("ignore")
+    import ftputil
 
 import ftputil.session
 
@@ -118,7 +117,7 @@ class FTPDownloader:
             + self.__class__.__name__
         )
 
-    def __enter__(self) -> "FTPDownloader":
+    def __enter__(self) -> "Self":
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):  # type: ignore
@@ -159,11 +158,11 @@ class FTPDownloader:
                             downloaded_path.append(dest_file)
                     elif ftp_host.path.isdir(full_name):
                         directories.append((full_name, name))
-            except Exception as e:
+            except Exception:
                 retries -= 1
                 self.logger.debug("Left {} tries".format(retries))
                 if retries == 0:
-                    raise e
+                    raise
 
         if downloaded_path:
             self.logger.debug(
@@ -210,7 +209,7 @@ class FTPDownloader:
         self,
         download_from_dir: "str",
         upload_to_dir: "str" = ".",
-        exclude_ext: "Sequence[str]" = [],
+        exclude_ext: "Sequence[str]" = (),
     ) -> "Sequence[pathlib.Path]":
         destpath = os.path.abspath(upload_to_dir)
         utdPath = pathlib.Path(destpath)
@@ -247,7 +246,7 @@ class FTPDownloader:
         self,
         download_path: "str",
         upload_path: "str",
-        exclude_ext: "Sequence[str]" = [],
+        exclude_ext: "Sequence[str]" = (),
     ) -> "Union[pathlib.Path, Sequence[pathlib.Path]]":
         """
         This method returns a pathlib.Path when a file is fetched

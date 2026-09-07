@@ -621,6 +621,11 @@
 		"workflow_config": {
 			"type": "object",
 			"properties": {
+				"clone_all_inputs_by_default": {
+					"title": "Clone all inputs by default?",
+					"description": "Default value about cloning an input dataset onto the working directory",
+					"type": "boolean"
+				},
 				"secure": {
 					"type": "boolean"
 				},

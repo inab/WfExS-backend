@@ -24,22 +24,17 @@ import logging
 import pathlib
 
 import os
-import sys
 import urllib.error
-
-import pytest
 
 from wfexs_backend.pushers import ExportPluginException
 from wfexs_backend.pushers.zenodo_export import ZenodoExportPlugin
 
 from typing import (
-    cast,
     TYPE_CHECKING,
 )
 
 if TYPE_CHECKING:
     from wfexs_backend.common import (
-        AbsPath,
         SecurityContextConfig,
     )
     from pytest_param_files import (  # type: ignore[import]
@@ -91,7 +86,7 @@ def test_zenodo_basic_fail_notoken() -> "None":
     Check Zenodo plugin complains about missing token parameter
     """
     with pytest.raises(ExportPluginException):
-        zep = ZenodoExportPlugin(pathlib.Path("/"), setup_block={"sandbox": True})
+        ZenodoExportPlugin(pathlib.Path("/"), setup_block={"sandbox": True})
 
 
 basic_deps = [
@@ -120,7 +115,7 @@ def test_zenodo_basic(file_params: "ParamTestData") -> "None":
         "token": file_params.extra["token"],
         "sandbox": file_params.extra["sandbox"],
     }
-    zep = ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
+    ZenodoExportPlugin(pathlib.Path("/tofill"), setup_block=setup_block)
     # assert file_params.expected.rstrip() == "Other"
     # file_params.assert_expected("Other", rstrip=True)
 
@@ -175,7 +170,7 @@ def test_zenodo_book_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             zep.discard_booked_pid(booked_entry)
@@ -218,7 +213,7 @@ def test_zenodo_book_draft_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             zep.discard_booked_pid(booked_entry)
@@ -265,7 +260,7 @@ def test_zenodo_book_new_version_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             zep.discard_booked_pid(booked_entry)
@@ -315,7 +310,7 @@ def test_zenodo_upload_file_to_draft(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             zep.discard_booked_pid(booked_entry)
@@ -370,7 +365,7 @@ def test_zenodo_upload_stream_to_draft(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             zep.discard_booked_pid(booked_entry)
@@ -424,7 +419,7 @@ def test_zenodo_update_record_metadata_raw(file_params: "ParamTestData") -> "Non
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             zep.discard_booked_pid(booked_entry)
@@ -482,7 +477,7 @@ def test_zenodo_update_record_metadata_facets(file_params: "ParamTestData") -> "
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None:
             zep.discard_booked_pid(booked_entry)
@@ -531,11 +526,11 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
         )
         logger.info(uploaded_file_meta)
 
+        now = datetime.datetime.now().astimezone()
         entry_metadata = {
-            "title": "My test upload at " + datetime.datetime.utcnow().isoformat(),
+            "title": "My test upload at " + now.isoformat(),
             "upload_type": "dataset",
-            "description": "This is my test upload at "
-            + datetime.datetime.utcnow().isoformat(),
+            "description": "This is my test upload at " + now.isoformat(),
         }
         updated_meta = zep.update_record_metadata(
             booked_entry,
@@ -560,7 +555,7 @@ def test_zenodo_publish_new_pid(file_params: "ParamTestData") -> "None":
         irbytes = he.read()
         logger.error(f"Error {he.url} {he.code} {he.reason} . Server report:")
         logger.error(irbytes.decode())
-        raise he
+        raise
     finally:
         if booked_entry is not None and published_meta is None:
             zep.discard_booked_pid(booked_entry)
