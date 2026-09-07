@@ -42,6 +42,7 @@ if TYPE_CHECKING:
         Optional,
         Sequence,
         Set,
+        Type,
         Union,
     )
 
@@ -161,6 +162,7 @@ class CompleteDirs(zipfile.ZipFile):
             return cls(source)
 
         # Only allow for FastPath when supplied zipfile is read-only
+        clazz: "Type[CompleteDirs]"
         if "r" in source.mode:
             clazz = CompleteDirs
         else:
