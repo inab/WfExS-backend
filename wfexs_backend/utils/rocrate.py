@@ -1951,7 +1951,7 @@ WHERE   {
                         fileid_path = fileid_path[1:]
                     if len(fileid_path) > 0 and fileid_path[-1] == "":
                         fileid_path = fileid_path[0:-1]
-                    self.logger.error(f"GUESSI {inputrow.fileid} {parsed_fileid}")
+                    # self.logger.debug(f"GUESSI {inputrow.fileid} {parsed_fileid}")
 
                 # Time to transfer the additional properties
                 if kindobj == ContentKind.ContentWithURIs:
