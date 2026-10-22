@@ -18,7 +18,7 @@ WORKDIR	/
 # hadolint ignore=DL3008
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	apt-get update && \
-	apt-get install -y --no-install-recommends wget build-essential git libxml2-dev libxslt-dev zlib1g-dev && \
+	apt-get install -y --no-install-recommends wget build-essential git libxml2-dev libxslt-dev zlib1g-dev pkg-config libssl-dev && \
 	wget -nv -O /tmp/rust-installer.sh https://sh.rustup.rs && \
 	chmod +x /tmp/rust-installer.sh && \
 	/tmp/rust-installer.sh -y && \
