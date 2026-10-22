@@ -5,8 +5,8 @@ Stage: build
 %arguments
 # The default images of python are based on debian
 # These arguments help customizing what it is included in the generated image
-wfexs_checkout=eb5d0f0fc95c60e545b0c96ec8da0efff0a7d74b
-apptainer_version=1.4.3
+wfexs_checkout=e790c0b39fb077e8269641da5d89358876b8d6e7
+apptainer_version=1.5.4
 # JDK version parameters
 JDK_MAJOR_VER=11
 # Nested arguments are not allowed
@@ -31,7 +31,7 @@ cd /
 # Install preconditions (including apptainer)
 DPKG_ARCH=$(dpkg --print-architecture) && \
 apt-get update && \
-apt-get install -y --no-install-recommends wget build-essential git libxml2-dev libxslt-dev zlib1g-dev && \
+apt-get install -y --no-install-recommends wget build-essential git libxml2-dev libxslt-dev zlib1g-dev pkg-config libssl-dev && \
 wget -nv -O /tmp/rust-installer.sh https://sh.rustup.rs && \
 chmod +x /tmp/rust-installer.sh && \
 /tmp/rust-installer.sh -y && \

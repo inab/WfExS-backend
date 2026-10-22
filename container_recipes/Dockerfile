@@ -10,15 +10,16 @@ RUN	git clone --filter=blob:none --no-checkout https://github.com/jmfernandez/su
 	gcc -static -o suid_entrypoint suid_entrypoint.c
 
 # The default images of python are based on debian
+# FROM	python:3.14-slim-trixie AS podman_build
 FROM	pypy:3.11-slim-trixie AS podman_build
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
-ARG	apptainer_version=1.4.3
+ARG	apptainer_version=1.5.4
 WORKDIR	/
 # Install apptainer
 # hadolint ignore=DL3008
 RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	apt-get update && \
-	apt-get install -y --no-install-recommends wget build-essential git libxml2-dev libxslt-dev zlib1g-dev && \
+	apt-get install -y --no-install-recommends wget build-essential git libxml2-dev libxslt-dev zlib1g-dev pkg-config libssl-dev && \
 	wget -nv -O /tmp/rust-installer.sh https://sh.rustup.rs && \
 	chmod +x /tmp/rust-installer.sh && \
 	/tmp/rust-installer.sh -y && \
@@ -28,7 +29,7 @@ RUN	DPKG_ARCH=$(dpkg --print-architecture) && \
 	apt-get install -y --no-install-recommends ./*.deb
 # Install WfExS, trusting the installers in the commit rather than the
 # one in the docker recipe
-ARG	wfexs_checkout=eb5d0f0fc95c60e545b0c96ec8da0efff0a7d74b
+ARG	wfexs_checkout=e790c0b39fb077e8269641da5d89358876b8d6e7
 # hadolint ignore=DL3003,DL3013
 RUN	git clone --filter=blob:none --no-checkout https://github.com/inab/WfExS-backend.git && \
 	cd WfExS-backend && \
@@ -75,9 +76,11 @@ RUN	apt-get install -y --no-install-recommends curl libmagic1 graphviz && \
 	BUSYBOX_VER="${BUSYBOX_VER}" \
 	bash /full-installer.bash
 
+# FROM	python:3.14-slim-trixie AS podman_image
 FROM	pypy:3.11-slim-trixie AS podman_image
 COPY	--from=podman_build /podman_containers_nokeyring.conf /etc/containers/containers.conf
 COPY	--from=podman_build /opt/pypy /opt/pypy
+#COPY	--from=podman_build --link /usr/local /usr/local
 COPY	--from=podman_build /*.deb /tmp/
 SHELL	["/bin/bash", "-o", "pipefail", "-c"]
 
