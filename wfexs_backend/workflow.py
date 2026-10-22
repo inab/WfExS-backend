@@ -2319,6 +2319,7 @@ class WF:
             kind=(
                 ContentKind.Directory if pretty_local_exp.is_dir() else ContentKind.File
             ),
+            clonable=matContent.clonable,
             # Lazy evaluation of fingerprint,
             # so do not compute it here
             reference_uri=matContent.licensed_uri,
@@ -2643,6 +2644,7 @@ class WF:
                         prettyFilename=prettyRelname,
                         metadata_array=matContent.metadata_array,
                         kind=ContentKind.Directory,
+                        clonable=matContent.clonable,
                         # Lazy evaluation of fingerprint,
                         # so do not compute it here
                         reference_uri=matContent.licensed_uri,
@@ -2685,6 +2687,7 @@ class WF:
                 kind=matContent.kind,
                 metadata_array=matContent.metadata_array,
                 fingerprint=matContent.fingerprint,
+                clonable=matContent.clonable,
             )
             remote_pairs.append(remote_pair)
 
@@ -3335,6 +3338,7 @@ class WF:
                     licensed_uri=injectable.licensed_uri,
                     prettyFilename=pretty_filename,
                     kind=injectable.kind,
+                    clonable=injectable.clonable,
                     metadata_array=injectable.metadata_array,
                     fingerprint=injectable.fingerprint,
                     reference_uri=injectable.reference_uri,
@@ -3745,6 +3749,7 @@ class WF:
                                                 inputDestPath.name,
                                             ),
                                             kind=contentKind,
+                                            clonable=clonable,
                                         )
                                     ],
                                     disclosable=inputs.get("disclosable", True),

@@ -400,15 +400,13 @@ class MaterializedContent(NamedTuple):
         dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["local"] = pathlib.Path(orig["local"])
         if workdir is not None and not dest["local"].is_absolute():
-            dest["local"] = (workdir / dest["local"]).resolve()
+            dest["local"] = workdir / dest["local"]
 
         extra = orig.get("extrapolated_local")
         if extra is not None:
             dest["extrapolated_local"] = pathlib.Path(extra)
             if workdir is not None and not dest["extrapolated_local"].is_absolute():
-                dest["extrapolated_local"] = (
-                    workdir / dest["extrapolated_local"]
-                ).resolve()
+                dest["extrapolated_local"] = workdir / dest["extrapolated_local"]
 
         return dest
 
@@ -594,7 +592,7 @@ class AbstractGeneratedContent(abc.ABC):
         dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["local"] = pathlib.Path(orig["local"])
         if workdir is not None and not dest["local"].is_absolute():
-            dest["local"] = (workdir / dest["local"]).resolve()
+            dest["local"] = workdir / dest["local"]
 
         return dest
 
@@ -680,7 +678,7 @@ class LocalWorkflow(NamedTuple):
         dest = cast("MutableMapping[str, Any]", dict(orig))
         dest["dir"] = pathlib.Path(orig["dir"])
         if workdir is not None and not dest["dir"].is_absolute():
-            dest["dir"] = (workdir / dest["dir"]).resolve()
+            dest["dir"] = workdir / dest["dir"]
 
         return dest
 

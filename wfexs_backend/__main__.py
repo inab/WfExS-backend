@@ -970,12 +970,23 @@ def processStagedWorkdirCommand(
                                 "FAILED" if staged_exec.exitVal != 0 else "DONE",
                             )
                         )
+                        retval = staged_exec.exitVal
                     except BaseException:
                         logger.exception(
                             f"Error while executing {instance_id} ({nickname})"
                         )
+                        retval = 4
                     finally:
                         wfInstance.cleanup()
+                else:
+                    logger.error(
+                        f"Staged workdir {instance_id} ({nickname}) is damaged",
+                    )
+                    retval = 2
+
+                # Break early is something ugly has happened
+                if retval != 0:
+                    break
     elif (
         args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.OfflineQueueExecute
     ):
@@ -1012,8 +1023,18 @@ def processStagedWorkdirCommand(
                         logger.exception(
                             f"Error while queueing {instance_id} ({nickname})"
                         )
+                        retval = 4
                     finally:
                         wfInstance.cleanup()
+                else:
+                    logger.error(
+                        f"Staged workdir {instance_id} ({nickname}) is damaged",
+                    )
+                    retval = 2
+
+                # Break early is something ugly has happened
+                if retval != 0:
+                    break
     elif args.staged_workdir_command == WfExS_Staged_WorkDir_Commands.Status:
         if len(args.staged_workdir_command_args) > 0:
             for (
@@ -1033,6 +1054,8 @@ def processStagedWorkdirCommand(
                 if wfSetup is None:
                     is_damaged = True
                     is_encrypted = "(unknown)"
+                    # Some of the reported entries through status is damaged
+                    retval = 2
                 else:
                     is_damaged = wfSetup.is_damaged
                     is_encrypted = wfSetup.is_encrypted
@@ -1119,18 +1142,23 @@ def processStagedWorkdirCommand(
                                 logger.error(
                                     f"ERROR: workflow was never executed at staged workdir {instance_id} ({nickname})",
                                 )
-                                retval = 1
+                                retval = 3
                     except BaseException:
                         logger.exception(
                             f"Error while creating RO-Crate for {instance_id} ({nickname})"
                         )
+                        retval = 4
                     finally:
                         wfInstance.cleanup()
                 else:
                     logger.error(
                         f"Staged workdir {instance_id} ({nickname}) is damaged",
                     )
-                    retval = 1
+                    retval = 2
+
+                # Break earlier, in case some issue happened
+                if retval != 0:
+                    break
         else:
             logger.error(
                 f"ERROR: subcommand {args.staged_workdir_command} takes two positional parameters: the staged workdir name or id and the path where to store the RO-Crate",
@@ -1142,7 +1170,7 @@ def processStagedWorkdirCommand(
             f"Unable to match staged workdirs for next patterns, ids or files: {unmatched_args}"
         )
 
-    # Thi
+    # This code can be either provided by WfExS or by a workflow execution
     return retval
 
 
