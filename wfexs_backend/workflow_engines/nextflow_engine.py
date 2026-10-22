@@ -1604,7 +1604,7 @@ STDERR
                                 )
                             ):
                                 self.logger.warning(
-                                    f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
+                                    f"WARNING1: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
                                 )
                             break
                     else:
@@ -1643,7 +1643,7 @@ STDERR
                                     )
                                 ):
                                     self.logger.warning(
-                                        f"WARNING: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
+                                        f"WARNING2: Param {linear_local_path_param} should be either a File or a Directory. Current relative values: {rel_paths}"
                                     )
                                 break
                         else:
