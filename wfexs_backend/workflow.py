@@ -3211,6 +3211,7 @@ class WF:
                             f"Error while fetching secondary content with URIs {secondary_remote_file}"
                         )
                         the_failed_uris.append(secondary_remote_file)
+                        continue
 
                     # Rescuing the correspondence to be used later
                     for t_secondary_remote_pair in t_secondary_remote_pairs:
