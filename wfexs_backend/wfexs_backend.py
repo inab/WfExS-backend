@@ -1187,6 +1187,9 @@ class WfExSBackend:
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
         retrospective_first: "bool" = True,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "WF":
         # Let's check whether it is a local file
         # or a remote RO-Crate
@@ -1221,6 +1224,9 @@ class WfExSBackend:
             reproducibility_level=reproducibility_level,
             strict_reproducibility_level=strict_reproducibility_level,
             retrospective_first=retrospective_first,
+            default_disclosable=default_disclosable,
+            default_cacheable=default_cacheable,
+            default_clonable=default_clonable,
         )
 
     def parseAndValidateSecurityContextFile(

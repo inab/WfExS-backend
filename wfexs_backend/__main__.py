@@ -284,6 +284,48 @@ def genParserSub(
                 help="Retrospective provenance is first inspected",
             )
 
+            ap_.add_argument(
+                "--no-disclosable-default",
+                dest="default_disclosable",
+                action="store_false",
+                default=True,
+                help="Contents associated to default parameters cannot be disclosed",
+            )
+            ap_.add_argument(
+                "--disclosable-default",
+                dest="default_disclosable",
+                action="store_true",
+                help="Contents associated to default parameters can be disclosed",
+            )
+
+            ap_.add_argument(
+                "--no-clonable-default",
+                dest="default_clonable",
+                action="store_false",
+                default=True,
+                help="Contents associated to default parameters cannot be cloned",
+            )
+            ap_.add_argument(
+                "--clonable-default",
+                dest="default_clonable",
+                action="store_true",
+                help="Contents associated to default parameters can be cloned",
+            )
+
+            ap_.add_argument(
+                "--no-cacheable-default",
+                dest="default_cacheable",
+                action="store_false",
+                default=True,
+                help="Contents associated to default parameters cannot be cached",
+            )
+            ap_.add_argument(
+                "--cacheable-default",
+                dest="default_cacheable",
+                action="store_true",
+                help="Contents associated to default parameters can be cached",
+            )
+
         not_restage = command not in (WfExS_Commands.Import, WfExS_Commands.ReStage)
         ap_.add_argument(
             "-W",
@@ -1765,6 +1807,9 @@ def main() -> None:
             reproducibility_level=ReproducibilityLevel(args.reproducibility_level),
             strict_reproducibility_level=args.strict_reproducibility_level,
             retrospective_first=args.retrospective_first,
+            default_disclosable=args.default_disclosable,
+            default_cacheable=args.default_cacheable,
+            default_clonable=args.default_clonable,
         )
     else:
         logger.error(

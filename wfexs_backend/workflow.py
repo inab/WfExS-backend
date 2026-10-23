@@ -1456,6 +1456,9 @@ class WF:
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
         retrospective_first: "bool" = True,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1486,6 +1489,9 @@ class WF:
             strict_reproducibility_level=strict_reproducibility_level,
             retrospective_first=retrospective_first,
             payload_dir=payload_dir,
+            default_disclosable=default_disclosable,
+            default_cacheable=default_cacheable,
+            default_clonable=default_clonable,
         )
 
         workflow_pid = wfexs.gen_workflow_pid(repo)
