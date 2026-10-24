@@ -2446,10 +2446,14 @@ class WfExSBackend:
         Download remote file or directory / dataset.
 
         :param remote_file: URL or CURIE to download remote file
-        :param contextName:
-        :param workflowInputs_destdir:
-        :param offline:
-        :type remote_file: str
+        :param dest: Either a cache type or an explicit path
+        :param vault: The optional key/values associated to this request
+        :param offline: if true, no new fetch can be performed
+        :param ignoreCache: if true and there is a copy in the cache, ignore it
+        :param registerInCache: if true, and a new fetch is performed, register it in cache
+        :param default_clonable: the value of the clonable flag in case a new fetch is performed
+        :param no_cache_dir: alternate store path when registerInCache is false
+        :type remote_file: str | list[str]
         """
 
         # Preparation of needed structures
