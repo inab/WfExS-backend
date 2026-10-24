@@ -1456,6 +1456,9 @@ class WF:
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
         retrospective_first: "bool" = True,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "WF":
         """
         This class method creates a new staged working directory
@@ -1486,6 +1489,9 @@ class WF:
             strict_reproducibility_level=strict_reproducibility_level,
             retrospective_first=retrospective_first,
             payload_dir=payload_dir,
+            default_disclosable=default_disclosable,
+            default_cacheable=default_cacheable,
+            default_clonable=default_clonable,
         )
 
         workflow_pid = wfexs.gen_workflow_pid(repo)
@@ -2342,9 +2348,18 @@ class WF:
         hardenPrettyLocal: "bool" = False,
         prettyRelname: "Optional[RelPath]" = None,
         ignoreCache: "bool" = False,
-        cloneToStore: "bool" = True,
+        do_clone: "bool" = True,
         expectedKind: "Optional[ContentKind]" = None,
     ) -> "Sequence[MaterializedContent]":
+        """
+        :param offline: if true, no new fetch can be performed
+        :param cacheable: if true, a copy can be kept in the cache
+        :param ignoreCache: if true and there is a copy in the cache, ignore it
+        :param do_clone: if true, a link or copy from the original
+                         location is performed, if false, a link or
+                         symlink from the original location is perforemd
+        """
+
         # Embedding the context
         alt_remote_file, alt_is_plain = self._buildLicensedURI(
             remote_file,
@@ -2355,7 +2370,7 @@ class WF:
         if not cacheable:
             ignoreCache = True
             assert isinstance(storeDir, pathlib.Path)
-            # cloneToStore = True
+            # do_clone = True
         # Trying to preserve what it is returned by the cache
         # unless we are explicitly feeding a licence
         matContent = self.wfexs.downloadContent(
@@ -2366,7 +2381,7 @@ class WF:
             ignoreCache=ignoreCache,
             registerInCache=cacheable,
             keep_cache_licence=alt_is_plain,
-            default_clonable=cloneToStore,
+            default_clonable=do_clone,
             no_cache_dir=inputDestDir,
         )
 
@@ -3014,12 +3029,13 @@ class WF:
         lastInput: "int" = 0,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
-        cloneToStore: "bool" = True,
+        do_clone: "bool" = True,
     ) -> "Tuple[Sequence[MaterializedInput], int, Sequence[str]]":
         # Current code for ContentWithURIs is only implemented for
         # tabular contents
         config_key = "tabular"
 
+        # This is at the level of the tab file itself
         tabconf = inputs.get(config_key)
         encoding_format = ContentWithURIsMIMEs.get(config_key)
         if not isinstance(tabconf, collections.abc.Mapping) or not isinstance(
@@ -3062,7 +3078,6 @@ class WF:
         # If it cannot be cached, also ignore already cached contents
         if not cacheable:
             this_ignoreCache = True
-            cloneToStore = True
         elif self.paranoidMode:
             this_ignoreCache = False
         elif remote_files is not None:
@@ -3070,7 +3085,7 @@ class WF:
         else:
             this_ignoreCache = True
 
-        if not cacheable and not cloneToStore:
+        if not cacheable and not do_clone:
             self.logger.warning(
                 "Current staging scenario can lead to unexpected errors in case of cache miss, as neither caching nor cloning are allowed"
             )
@@ -3143,7 +3158,7 @@ class WF:
                     prefix=str(lastInput) + "_",
                     prettyRelname=pretty_relname,
                     ignoreCache=this_ignoreCache,
-                    cloneToStore=cloneToStore,
+                    do_clone=do_clone,
                     expectedKind=ContentKind.File,
                 )
             except BaseException:
@@ -3204,13 +3219,14 @@ class WF:
                             globExplode=None,
                             prefix=str(lastInput) + "_",
                             ignoreCache=this_ignoreCache,
-                            cloneToStore=cloneToStore,
+                            do_clone=do_clone,
                         )
                     except BaseException:
                         self.logger.exception(
                             f"Error while fetching secondary content with URIs {secondary_remote_file}"
                         )
                         the_failed_uris.append(secondary_remote_file)
+                        continue
 
                     # Rescuing the correspondence to be used later
                     for t_secondary_remote_pair in t_secondary_remote_pairs:
@@ -3372,8 +3388,12 @@ class WF:
         :param workflowInputs_destdir:
         :param workflowExtrapolatedInputs_destdir:
         :param prefix_tokens:
-        :param lastInput:
-        :param offline:
+        :param injectable_inputs_dict: This one is used to propagate inputs
+               obtained from a WRROC or a base working directory.
+        :param lastInput: This counter is internally used to help building
+               disambiguated destination names.
+        :param offline: if true, no new fetch can be performed
+        :param ignoreCache: if true and there is a copy in the cache, ignore it
         :type params: dict
         :type prefix_tokens: Tuple[str, ...]
         """
@@ -3637,7 +3657,7 @@ class WF:
                                             prefix=str(lastInput) + "_",
                                             prettyRelname=pretty_relname,
                                             ignoreCache=this_ignoreCache,
-                                            cloneToStore=clonable,
+                                            do_clone=clonable,
                                             expectedKind=(
                                                 inputKind
                                                 if inputKind != ContentKind.Value  # type: ignore[comparison-overlap]
@@ -3693,7 +3713,7 @@ class WF:
                                                     globExplode,
                                                     prefix=str(lastInput) + "_",
                                                     ignoreCache=this_ignoreCache,
-                                                    cloneToStore=clonable,
+                                                    do_clone=clonable,
                                                 )
                                             )
                                             secondary_remote_pairs.extend(
@@ -3770,7 +3790,7 @@ class WF:
                             lastInput=lastInput,
                             offline=offline,
                             ignoreCache=this_ignoreCache,
-                            cloneToStore=clonable,
+                            do_clone=clonable,
                         )
                         theInputs.extend(theNewInputs)
                         the_failed_uris.extend(new_failed_uris)

@@ -1776,6 +1776,9 @@ WHERE   {
         default_licences: "Sequence[str]",
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qinputs = rdflib.plugins.sparql.prepareQuery(
@@ -1790,7 +1793,14 @@ WHERE   {
         )
 
         return self.__parseInputsResults(
-            qinputsres, g, default_licences, public_name, payload_dir=payload_dir
+            qinputsres,
+            g,
+            default_licences,
+            public_name,
+            payload_dir=payload_dir,
+            default_disclosable=default_disclosable,
+            default_cacheable=default_cacheable,
+            default_clonable=default_clonable,
         )
 
     def _parseInputsFromMainEntity(
@@ -1800,6 +1810,9 @@ WHERE   {
         default_licences: "Sequence[str]",
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwinputs = rdflib.plugins.sparql.prepareQuery(
@@ -1814,7 +1827,14 @@ WHERE   {
         )
 
         return self.__parseInputsResults(
-            qwinputsres, g, default_licences, public_name, payload_dir=payload_dir
+            qwinputsres,
+            g,
+            default_licences,
+            public_name,
+            payload_dir=payload_dir,
+            default_disclosable=default_disclosable,
+            default_cacheable=default_cacheable,
+            default_clonable=default_clonable,
         )
 
     def __processPayloadInput(
@@ -1884,6 +1904,9 @@ WHERE   {
         default_licences: "Sequence[str]",
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "Tuple[ParamsBlock, Optional[Sequence[MaterializedInput]]]":
         params: "MutableParamsBlock" = {}
         cached_inputs_hash: "MutableMapping[str, MaterializedInput]" = {}
@@ -1938,6 +1961,9 @@ WHERE   {
                     param_last,
                     {
                         "c-l-a-s-s": kindobj.name,
+                        "disclosable": default_disclosable,
+                        "cacheable": default_cacheable,
+                        "clonable": default_clonable,
                     },
                 )
                 assert valobj is not None
@@ -2096,6 +2122,9 @@ WHERE   {
         default_licences: "Sequence[str]",
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qenv = rdflib.plugins.sparql.prepareQuery(
@@ -2110,7 +2139,14 @@ WHERE   {
         )
 
         return self.__parseEnvResults(
-            qenvres, g, default_licences, public_name, payload_dir=payload_dir
+            qenvres,
+            g,
+            default_licences,
+            public_name,
+            payload_dir=payload_dir,
+            default_disclosable=default_disclosable,
+            default_cacheable=default_cacheable,
+            default_clonable=default_clonable,
         )
 
     def _parseEnvFromMainEntity(
@@ -2120,6 +2156,9 @@ WHERE   {
         default_licences: "Sequence[str]",
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         # Get the list of inputs
         qwenv = rdflib.plugins.sparql.prepareQuery(
@@ -2134,7 +2173,14 @@ WHERE   {
         )
 
         return self.__parseEnvResults(
-            qwenvres, g, default_licences, public_name, payload_dir=payload_dir
+            qwenvres,
+            g,
+            default_licences,
+            public_name,
+            payload_dir=payload_dir,
+            default_disclosable=default_disclosable,
+            default_cacheable=default_cacheable,
+            default_clonable=default_clonable,
         )
 
     def __parseEnvResults(
@@ -2144,6 +2190,9 @@ WHERE   {
         default_licences: "Sequence[str]",
         public_name: "str",
         payload_dir: "Optional[pathlib.Path]" = None,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "Tuple[EnvironmentBlock, Optional[Sequence[MaterializedInput]]]":
         """
         This method is (almost) identical to __parseInputsResults
@@ -2187,6 +2236,9 @@ WHERE   {
                     env_name,
                     {
                         "c-l-a-s-s": kindobj.name,
+                        "disclosable": default_disclosable,
+                        "cacheable": default_cacheable,
+                        "clonable": default_clonable,
                     },
                 )
 
@@ -2689,6 +2741,9 @@ WHERE   {
         reproducibility_level: "ReproducibilityLevel" = ReproducibilityLevel.Metadata,
         strict_reproducibility_level: "bool" = False,
         payload_dir: "Optional[pathlib.Path]" = None,
+        default_disclosable: "bool" = True,
+        default_cacheable: "bool" = True,
+        default_clonable: "bool" = True,
     ) -> "Tuple[RemoteRepo, WorkflowType, Optional[Union[EngineVersion, WFLangVersion]], ContainerType, ParamsBlock, Optional[Sequence[str]], EnvironmentBlock, OutputsBlock, Optional[LocalWorkflow], Sequence[Container], Optional[Sequence[MaterializedInput]], Optional[Sequence[MaterializedInput]]]":
         matched_crate, g = self.identifyROCrate(jsonld_obj, public_name)
         # Is it an RO-Crate?
@@ -2801,6 +2856,9 @@ WHERE   {
                             if reproducibility_level >= ReproducibilityLevel.Full
                             else None
                         ),
+                        default_disclosable=default_disclosable,
+                        default_cacheable=default_cacheable,
+                        default_clonable=default_clonable,
                     )
 
                     environment, cached_environment = self._parseEnvFromExecution(
@@ -2814,6 +2872,9 @@ WHERE   {
                             if reproducibility_level >= ReproducibilityLevel.Full
                             else None
                         ),
+                        default_disclosable=default_disclosable,
+                        default_cacheable=default_cacheable,
+                        default_clonable=default_clonable,
                     )
 
                     outputs = self._parseOutputsFromExecution(
@@ -2861,6 +2922,9 @@ WHERE   {
                     if reproducibility_level >= ReproducibilityLevel.Full
                     else None
                 ),
+                default_disclosable=default_disclosable,
+                default_cacheable=default_cacheable,
+                default_clonable=default_clonable,
             )
 
             environment, cached_environment = self._parseEnvFromMainEntity(
@@ -2873,6 +2937,9 @@ WHERE   {
                     if reproducibility_level >= ReproducibilityLevel.Full
                     else None
                 ),
+                default_disclosable=default_disclosable,
+                default_cacheable=default_cacheable,
+                default_clonable=default_clonable,
             )
 
         if len(outputs) == 0:
