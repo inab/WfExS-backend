@@ -743,10 +743,19 @@ class CacheHandler:
         default_clonable: "bool" = True,
         no_cache_dir: "Optional[pathlib.Path]" = None,
     ) -> "CachedContent":
-        if ignoreCache and not registerInCache:
+        """
+        :param offline: if true, no new fetch can be performed
+        :param ignoreCache: if true and there is a copy in the cache, ignore it
+        :param registerInCache: if true, and a new fetch is performed, register it in cache
+        :param default_clonable: the value of the clonable flag in case a new fetch is performed
+        :param no_cache_dir: alternate store path when registerInCache is false
+        """
+        if not registerInCache:
+            ignoreCache = True
+
             assert (
                 cache_dir is not None and not cache_dir.samefile(self.cacheDir)
-            ) or no_cache_dir is not None, "When ignoreCache is true and registerInCache is false, no_cache_dir must be set or cache_dir must be set to something different of the official cache dir"
+            ) or no_cache_dir is not None, "When registerInCache is false, no_cache_dir must be set or cache_dir must be set to something different of the official cache dir"
 
         if cache_dir is None:
             cache_dir = self.cacheDir
