@@ -12,7 +12,7 @@ bcrypt==5.0.0
 boto3==1.7.84
 botocore==1.10.84
 cachetools==6.2.6
-certifi==2026.10.18
+certifi==2026.10.23
 cffi==2.0.0
 charset-normalizer==3.5.2
 click==8.1.8
