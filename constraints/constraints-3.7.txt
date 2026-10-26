@@ -15,7 +15,7 @@ botocore==1.33.13
 CacheControl==0.13.1
 cached-property==1.5.2
 cachetools==5.5.2
-certifi==2026.10.18
+certifi==2026.10.23
 cffi==1.15.1
 charset-normalizer==3.5.2
 click==8.1.8
