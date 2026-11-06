@@ -88,7 +88,9 @@ def describeGitRepo(repo: "str") -> "Tuple[str, str, str]":
             except AttributeError:
                 continue
             tags[tag] = (
-                datetime.datetime(*time.gmtime(commit.commit_time)[:6]),  # noqa: DTZ001
+                datetime.datetime(  # noqa: DTZ001,RUF100
+                    *time.gmtime(commit.commit_time)[:6]
+                ),
                 commit.id.decode("ascii"),
             )
 
