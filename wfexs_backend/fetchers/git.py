@@ -67,6 +67,8 @@ if TYPE_CHECKING:
         URIType,
     )
 
+    from . import ParseResult_str
+
     try:
         from dulwich.client import LsRemoteResult  # type: ignore[attr-defined]
     except BaseException:
@@ -90,7 +92,8 @@ if TYPE_CHECKING:
         RawObjectID = NewType("RawObjectID", bytes)  # type: ignore[no-redef,misc]
 
 
-from urllib import parse, request
+import urllib.parse
+import urllib.request
 
 from dulwich.client import get_transport_and_path
 
@@ -174,13 +177,13 @@ class GitFetcher(AbstractSchemeRepoFetcher):
     @classmethod
     def _find_git_repo_in_uri(
         cls,
-        remote_file: "Union[URIType, parse.ParseResult]",
+        remote_file: "Union[URIType, ParseResult_str]",
         offline: "bool" = False,
     ) -> "Tuple[RemoteRepo, Sequence[str], Sequence[RepoTag]]":
-        if isinstance(remote_file, parse.ParseResult):
+        if isinstance(remote_file, urllib.parse.ParseResult):
             parsedInputURL = remote_file
         else:
-            parsedInputURL = parse.urlparse(remote_file)
+            parsedInputURL = urllib.parse.urlparse(remote_file)
 
         # Getting the tag or branch in cases like https://github.com/inab/WfExS-backend.git@0.2.0
         repoTag: "Optional[str]" = None
@@ -205,7 +208,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             if pre_path == "":
                 pre_path = "/"
             # Remove fragments
-            remote_uri_anc = parse.urlunparse(
+            remote_uri_anc = urllib.parse.urlunparse(
                 reparsedInputURL._replace(path=pre_path, fragment="")
             )
 
@@ -227,10 +230,12 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 continue
         else:
             # Metadata is all we really need
-            remote_uri_anc = parse.urlunparse(reparsedInputURL._replace(fragment=""))
-            req = request.Request(remote_uri_anc, method="HEAD")
+            remote_uri_anc = urllib.parse.urlunparse(
+                reparsedInputURL._replace(fragment="")
+            )
+            req = urllib.request.Request(remote_uri_anc, method="HEAD")
             try:
-                with request.urlopen(req) as resp:
+                with urllib.request.urlopen(req) as resp:
                     # Is it gitlab?
                     if list(
                         filter(
@@ -346,7 +351,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         # Getting the repoRelPath (if available)
         the_rel_path: "Optional[RelPath]" = None
         if len(reparsedInputURL.fragment) > 0:
-            frag_qs = parse.parse_qs(reparsedInputURL.fragment)
+            frag_qs = urllib.parse.parse_qs(reparsedInputURL.fragment)
             subDirArr = frag_qs.get("subdirectory", [])
             if len(subDirArr) > 0:
                 the_rel_path = cast(
@@ -368,7 +373,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
     @classmethod
     def GuessRepoParams(
         cls,
-        wf_url: "Union[URIType, parse.ParseResult]",
+        wf_url: "Union[URIType, ParseResult_str]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
         offline: "bool" = False,
@@ -385,10 +390,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         web_url: "Optional[URIType]" = None
 
         # Deciding which is the input
-        if isinstance(wf_url, parse.ParseResult):
+        if isinstance(wf_url, urllib.parse.ParseResult):
             parsed_wf_url = wf_url
         else:
-            parsed_wf_url = parse.urlparse(wf_url)
+            parsed_wf_url = urllib.parse.urlparse(wf_url)
 
         # These are the usual URIs which can be understood by pip
         # See https://pip.pypa.io/en/stable/cli/pip_install/#git
@@ -402,14 +407,14 @@ class GitFetcher(AbstractSchemeRepoFetcher):
 
                 gh_path_split = parsed_wf_url.path.split("/")
                 gh_path = "/".join(gh_path_split[:2])
-                gh_post_path = list(map(parse.unquote_plus, gh_path_split[2:]))
+                gh_post_path = list(map(urllib.parse.unquote_plus, gh_path_split[2:]))
                 if len(gh_post_path) > 0:
                     repoTag = gh_post_path[0]
                     if len(gh_post_path) > 1:
                         repoRelPath = "/".join(gh_post_path[1:])
 
-                repoURL = parse.urlunparse(
-                    parse.ParseResult(
+                repoURL = urllib.parse.urlunparse(
+                    urllib.parse.ParseResult(
                         scheme="https",
                         netloc=GITHUB_NETLOC,
                         path=gh_path,
@@ -438,7 +443,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 wf_path = found_params[1]
                 repo_branches_tags = found_params[2]
                 if len(wf_path) > 1 and (wf_path[0] in ("blob", "tree")):
-                    wf_path_tag = list(map(parse.unquote_plus, wf_path[1:]))
+                    wf_path_tag = list(map(urllib.parse.unquote_plus, wf_path[1:]))
 
                     tag_relpath = "/".join(wf_path_tag)
                     for repo_branch_tag in repo_branches_tags:
@@ -462,14 +467,16 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             ):
                 repoType = RepoType.Git
                 guessedRepoFlavor = RepoGuessFlavor.GitHub
-                wf_path = list(map(parse.unquote_plus, parsed_wf_url.path.split("/")))
+                wf_path = list(
+                    map(urllib.parse.unquote_plus, parsed_wf_url.path.split("/"))
+                )
                 if len(wf_path) >= 3:
                     # Rebuilding it
                     repoGitPath = wf_path[:3]
                     repoGitPath[-1] += ".git"
 
                     # Rebuilding repo git path
-                    repoURL = parse.urlunparse(
+                    repoURL = urllib.parse.urlunparse(
                         ("https", GITHUB_NETLOC, "/".join(repoGitPath), "", "", "")
                     )
 
@@ -515,9 +522,9 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                         and (":" in parsed_wf_url.path)
                     ):
                         gitScheme = "ssh"
-                        parsed_wf_url = parse.urlparse(
+                        parsed_wf_url = urllib.parse.urlparse(
                             f"{gitScheme}://"
-                            + parse.urlunparse(parsed_wf_url).replace(":", "/")
+                            + urllib.parse.urlunparse(parsed_wf_url).replace(":", "/")
                         )
                     else:
                         if logger is not None:
@@ -529,8 +536,8 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 elif parsed_wf_url.scheme.startswith(cls.GIT_PROTO_PREFIX):
                     gitScheme = parsed_wf_url.scheme[len(cls.GIT_PROTO_PREFIX) :]
                     denorm_parsed_wf_url = parsed_wf_url._replace(scheme=gitScheme)
-                    parsed_wf_url = parse.urlparse(
-                        parse.urlunparse(denorm_parsed_wf_url)
+                    parsed_wf_url = urllib.parse.urlparse(
+                        urllib.parse.urlunparse(denorm_parsed_wf_url)
                     )
                 else:
                     gitScheme = parsed_wf_url.scheme
@@ -552,8 +559,8 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                         new_netloc[:colon_pos] + "/" + new_netloc[colon_pos + 1 :]
                     )
                     denorm_parsed_wf_url = parsed_wf_url._replace(netloc=new_netloc)
-                    parsed_wf_url = parse.urlparse(
-                        parse.urlunparse(denorm_parsed_wf_url)
+                    parsed_wf_url = urllib.parse.urlparse(
+                        urllib.parse.urlunparse(denorm_parsed_wf_url)
                     )
 
                 found_params = cls._find_git_repo_in_uri(parsed_wf_url, offline=offline)
@@ -631,7 +638,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         """
         if remote_repo.repo_type not in (RepoType.Git, None):
             return None
-        parsed_wf_url = parse.urlparse(remote_repo.repo_url)
+        parsed_wf_url = urllib.parse.urlparse(remote_repo.repo_url)
 
         retval: "Optional[str]" = None
         if parsed_wf_url.scheme == "":
@@ -641,7 +648,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 and ("@" in parsed_wf_url.path)
                 and (":" in parsed_wf_url.path)
             ):
-                parsed_wf_url = parse.urlparse("ssh://" + remote_repo.repo_url)
+                parsed_wf_url = urllib.parse.urlparse("ssh://" + remote_repo.repo_url)
             else:
                 return None
 
@@ -655,16 +662,16 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             if len(checkout) > 0:
                 gh_path += "@" + checkout
             if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
-                fragment = parse.urlencode(
+                fragment = urllib.parse.urlencode(
                     [("subdirectory", remote_repo.rel_path)],
                     safe="/",
-                    quote_via=parse.quote,
+                    quote_via=urllib.parse.quote,
                 )
             else:
                 fragment = ""
 
-            retval = parse.urlunparse(
-                parse.ParseResult(
+            retval = urllib.parse.urlunparse(
+                urllib.parse.ParseResult(
                     scheme="git+https",
                     netloc=GITHUB_NETLOC,
                     path=gh_path,
@@ -688,16 +695,16 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 if len(checkout) > 0:
                     gh_path += "@" + checkout
                 if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
-                    fragment = parse.urlencode(
+                    fragment = urllib.parse.urlencode(
                         [("subdirectory", remote_repo.rel_path)],
                         safe="/",
-                        quote_via=parse.quote,
+                        quote_via=urllib.parse.quote,
                     )
                 else:
                     fragment = ""
 
-                retval = parse.urlunparse(
-                    parse.ParseResult(
+                retval = urllib.parse.urlunparse(
+                    urllib.parse.ParseResult(
                         scheme="git+" + parsed_wf_url.scheme,
                         netloc=GITHUB_NETLOC,
                         path=gh_path,
@@ -713,10 +720,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                 if len(checkout) > 0:
                     retval += "@" + checkout
                 if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
-                    fragment = parse.urlencode(
+                    fragment = urllib.parse.urlencode(
                         [("subdirectory", remote_repo.rel_path)],
                         safe="/",
-                        quote_via=parse.quote,
+                        quote_via=urllib.parse.quote,
                     )
                     retval += "#" + fragment
 
@@ -727,7 +734,9 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             if parsed_wf_url.scheme.startswith(self.GIT_PROTO_PREFIX):
                 gitScheme = parsed_wf_url.scheme[len(self.GIT_PROTO_PREFIX) :]
                 denorm_parsed_wf_url = parsed_wf_url._replace(scheme=gitScheme)
-                parsed_wf_url = parse.urlparse(parse.urlunparse(denorm_parsed_wf_url))
+                parsed_wf_url = urllib.parse.urlparse(
+                    urllib.parse.urlunparse(denorm_parsed_wf_url)
+                )
             else:
                 gitScheme = parsed_wf_url.scheme
 
@@ -748,8 +757,8 @@ class GitFetcher(AbstractSchemeRepoFetcher):
                         new_netloc[:colon_pos] + "/" + new_netloc[colon_pos + 1 :]
                     )
                     denorm_parsed_wf_url = parsed_wf_url._replace(netloc=new_netloc)
-                    parsed_wf_url = parse.urlparse(
-                        parse.urlunparse(denorm_parsed_wf_url)
+                    parsed_wf_url = urllib.parse.urlparse(
+                        urllib.parse.urlunparse(denorm_parsed_wf_url)
                     )
 
                 newpath = parsed_wf_url.path
@@ -769,10 +778,10 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             if len(checkout) > 0:
                 retval += "@" + checkout
             if remote_repo.rel_path is not None and len(remote_repo.rel_path) > 0:
-                fragment = parse.urlencode(
+                fragment = urllib.parse.urlencode(
                     [("subdirectory", remote_repo.rel_path)],
                     safe="/",
-                    quote_via=parse.quote,
+                    quote_via=urllib.parse.quote,
                 )
                 retval += "#" + fragment
 
@@ -975,7 +984,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         secContext: "Optional[SecurityContextConfig]" = None,
         explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
-        parsedInputURL = parse.urlparse(remote_file)
+        parsedInputURL = urllib.parse.urlparse(remote_file)
 
         # These are the usual URIs which can be understood by pip
         # See https://pip.pypa.io/en/stable/cli/pip_install/#git
@@ -995,8 +1004,8 @@ class GitFetcher(AbstractSchemeRepoFetcher):
             else:
                 gh_path_gh.append(gh_path_split[1] + ".git")
 
-            redir_url = parse.urlunparse(
-                parse.ParseResult(
+            redir_url = urllib.parse.urlunparse(
+                urllib.parse.ParseResult(
                     scheme=self.GIT_PROTO_PREFIX + "https",
                     netloc=GITHUB_NETLOC,
                     path="/".join(gh_path_gh),
@@ -1029,7 +1038,7 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         # Getting the repoRelPath (if available)
         repoRelPath: "Optional[str]" = None
         if len(parsedInputURL.fragment) > 0:
-            frag_qs = parse.parse_qs(parsedInputURL.fragment)
+            frag_qs = urllib.parse.parse_qs(parsedInputURL.fragment)
             subDirArr = frag_qs.get("subdirectory", [])
             if len(subDirArr) > 0:
                 repoRelPath = subDirArr[0]
@@ -1037,7 +1046,9 @@ class GitFetcher(AbstractSchemeRepoFetcher):
         # Now, reassemble the repoURL, to be used by git client
         repoURL = cast(
             "RepoURL",
-            parse.urlunparse((gitScheme, parsedInputURL.netloc, gitPath, "", "", "")),
+            urllib.parse.urlunparse(
+                (gitScheme, parsedInputURL.netloc, gitPath, "", "", "")
+            ),
         )
 
         materialized_repo_return = self.materialize_repo_from_repo(
