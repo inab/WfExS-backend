@@ -30,7 +30,7 @@ from typing import (
     NamedTuple,
     TYPE_CHECKING,
 )
-from urllib import parse
+import urllib.parse
 
 from ..common import (
     META_JSON_POSTFIX,
@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         Final,
         NotRequired,
         Required,
+        TypeAlias,
     )
 
     from ..common import (
@@ -81,6 +82,15 @@ if TYPE_CHECKING:
         alias: Required[Optional[str]]
         dcd: NotRequired[str]
         manifest: NotRequired[Mapping[str, Any]]
+
+    # Borrowed from wfexs_backend.fetchers, in order to avoid
+    # a hell of imports
+    import sys
+
+    if sys.version_info < (3, 15):
+        ParseResult_str: TypeAlias = urllib.parse.ParseResult
+    else:
+        ParseResult_str: TypeAlias = urllib.parse.ParseResult[str]
 
 
 from . import (
@@ -390,24 +400,24 @@ STDERR
     def _genSingTag(
         self,
         tag: "ContainerTaggedName",
-    ) -> "Tuple[str, parse.ParseResult, str, bool]":
+    ) -> "Tuple[str, ParseResult_str, str, bool]":
         # It is not an absolute URL, we are prepending the docker://
         tag_name = tag.origTaggedName
-        parsedTag = parse.urlparse(tag_name)
+        parsedTag = urllib.parse.urlparse(tag_name)
         if parsedTag.scheme in self.ACCEPTED_SING_SCHEMES:
             singTag = tag_name
             isDocker = parsedTag.scheme == DOCKER_SCHEME
         else:
             if parsedTag.scheme == "":
                 singTag = "docker://" + tag_name
-                parsedTag = parse.urlparse(singTag)
+                parsedTag = urllib.parse.urlparse(singTag)
             else:
                 parsedTag = parsedTag._replace(
                     scheme=DOCKER_SCHEME,
                     netloc=parsedTag.scheme + ":" + parsedTag.path,
                     path="",
                 )
-                singTag = parse.urlunparse(parsedTag)
+                singTag = urllib.parse.urlunparse(parsedTag)
             # Assuming it is docker
             isDocker = True
 
@@ -423,7 +433,7 @@ STDERR
                 # Bare case
                 if len(parsedTag.path) <= 1:
                     singTag = f"docker://{registry}/library/{parsedTag.netloc}"
-                    parsedTag = parse.urlparse(singTag)
+                    parsedTag = urllib.parse.urlparse(singTag)
                 elif "/" not in parsedTag.path[1:]:
                     if "." in parsedTag.netloc:
                         singTag = f"docker://{parsedTag.netloc}/library{parsedTag.path}"
@@ -431,7 +441,7 @@ STDERR
                         singTag = (
                             f"docker://{registry}/{parsedTag.netloc}{parsedTag.path}"
                         )
-                    parsedTag = parse.urlparse(singTag)
+                    parsedTag = urllib.parse.urlparse(singTag)
                 # Last case, it already has a registry declared
 
         # Now, the singPullTag

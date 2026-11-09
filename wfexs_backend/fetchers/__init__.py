@@ -28,6 +28,8 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import urllib.parse
+
 if TYPE_CHECKING:
     import pathlib
     from typing import (
@@ -77,6 +79,13 @@ if TYPE_CHECKING:
         relpath: NotRequired[RelPath]
         repotype: NotRequired[str]
 
+    import sys
+
+    if sys.version_info < (3, 15):
+        ParseResult_str: TypeAlias = urllib.parse.ParseResult
+    else:
+        ParseResult_str: TypeAlias = urllib.parse.ParseResult[str]
+
 
 class ProtocolFetcherReturn(NamedTuple):
     kind_or_resolved: "Union[AnyURI, ContentKind, Sequence[AnyURI]]"
@@ -106,8 +115,6 @@ if TYPE_CHECKING:
         ],
         ProtocolFetcherReturn,
     ]
-
-from urllib import parse
 
 from ..common import (
     AbstractWfExSException,
@@ -217,8 +224,8 @@ class AbstractStatefulFetcher(abc.ABC):
     @staticmethod
     def ParseAndRemoveCredentials(
         remote_file: "URIType",
-    ) -> "Tuple[parse.ParseResult, URIType]":
-        parsedInputURL = parse.urlparse(remote_file)
+    ) -> "Tuple[ParseResult_str, URIType]":
+        parsedInputURL = urllib.parse.urlparse(remote_file)
         if parsedInputURL.username is not None:
             assert parsedInputURL.hostname is not None
             netloc = parsedInputURL.hostname
@@ -227,7 +234,7 @@ class AbstractStatefulFetcher(abc.ABC):
             # Now the credentials are properly removed
             remote_file = cast(
                 "URIType",
-                parse.urlunparse(
+                urllib.parse.urlunparse(
                     (
                         parsedInputURL.scheme,
                         netloc,
@@ -388,7 +395,7 @@ class AbstractSchemeRepoFetcher(AbstractStatefulFetcher):
     @abc.abstractmethod
     def GuessRepoParams(
         cls,
-        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        orig_wf_url: "Union[URIType, ParseResult_str]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
         offline: "bool" = False,

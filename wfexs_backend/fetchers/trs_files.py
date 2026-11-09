@@ -34,8 +34,6 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from urllib import parse
-
 # This code needs exception groups
 if sys.version_info[:2] < (3, 11):
     from exceptiongroup import ExceptionGroup
@@ -91,6 +89,8 @@ if TYPE_CHECKING:
         Final,
     )
 
+    from . import ParseResult_str
+
     from ..common import (
         PathLikePath,
         RelPath,
@@ -143,7 +143,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
     @classmethod
     def GuessTRSParams(
         cls,
-        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        orig_wf_url: "Union[URIType, ParseResult_str]",
         override_version_id: "Optional[WFVersionId]" = None,
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
@@ -162,17 +162,17 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
         # Deciding which is the input
         wf_url: "RepoURL"
-        parsed_wf_url: "parse.ParseResult"
-        if isinstance(orig_wf_url, parse.ParseResult):
+        parsed_wf_url: "ParseResult_str"
+        if isinstance(orig_wf_url, urllib.parse.ParseResult):
             parsed_wf_url = orig_wf_url
-            wf_url = cast("RepoURL", parse.urlunparse(orig_wf_url))
+            wf_url = cast("RepoURL", urllib.parse.urlunparse(orig_wf_url))
         else:
             wf_url = cast("RepoURL", orig_wf_url)
-            parsed_wf_url = parse.urlparse(orig_wf_url)
+            parsed_wf_url = urllib.parse.urlparse(orig_wf_url)
 
         if parsed_wf_url.scheme in HTTPFetcher.GetSchemeHandlers():
             wf_url = cast("RepoURL", cls.INTERNAL_TRS_SCHEME_PREFIX + ":" + wf_url)
-            parsed_wf_url = parse.urlparse(wf_url)
+            parsed_wf_url = urllib.parse.urlparse(wf_url)
 
         metadata_array: "MutableSequence[URIWithMetadata]" = []
         putative_tool_uri: "Optional[URIType]" = None
@@ -577,7 +577,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
     @classmethod
     def GuessRepoParams(
         cls,
-        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        orig_wf_url: "Union[URIType, ParseResult_str]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
         offline: "bool" = False,
@@ -758,7 +758,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
             # BEWARE! The relpath could contain references to parent directories
             # escaping from the URL to be built and from the download "sandbox"
-            frp_parsed = parse.urlparse(file_rel_path)
+            frp_parsed = urllib.parse.urlparse(file_rel_path)
             is_abs_url = frp_parsed.scheme in ("http", "https", "ftp")
 
             if is_abs_url:
@@ -768,7 +768,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
             descriptor_url = cast(
                 "URIType",
-                descriptor_base_url + parse.quote(file_rel_path, safe="/"),
+                descriptor_base_url + urllib.parse.quote(file_rel_path, safe="/"),
             )
             try:
                 descmetaio = io.BytesIO()
@@ -829,7 +829,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                 if file_rel_path is not None:
                     # BEWARE! The relpath could contain references to parent directories
                     # escaping from the URL to be built and from the download "sandbox"
-                    frp_parsed = parse.urlparse(file_rel_path)
+                    frp_parsed = urllib.parse.urlparse(file_rel_path)
                     is_abs_url = frp_parsed.scheme in ("http", "https", "ftp")
                     if is_abs_url:
                         # An absolute URL, like in the case of DDBJ TRS implementation
@@ -837,7 +837,8 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     else:
                         file_url = cast(
                             "URIType",
-                            descriptor_base_url + parse.quote(file_rel_path, safe="/"),
+                            descriptor_base_url
+                            + urllib.parse.quote(file_rel_path, safe="/"),
                         )
                     local_rel_path = file_rel_2_url[file_rel_path][len(prefix_url) :]
                     absfile = (abs_download_dir / local_rel_path).resolve()
@@ -874,7 +875,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             for file_desc in metadata:
                 file_rel_path = file_desc.get("path")
                 if file_rel_path is not None:
-                    frp_parsed = parse.urlparse(file_rel_path)
+                    frp_parsed = urllib.parse.urlparse(file_rel_path)
                     if frp_parsed.scheme in ("http", "https", "ftp"):
                         # An absolute URL, like in the case of DDBJ TRS implementation
                         # A mixure of resource might be catastrophic, the code is doing
@@ -913,7 +914,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
 
                     # BEWARE! The relpath could contain references to parent directories
                     # escaping from the URL to be built and from the download "sandbox"
-                    frp_parsed = parse.urlparse(file_rel_path)
+                    frp_parsed = urllib.parse.urlparse(file_rel_path)
                     is_abs_url = frp_parsed.scheme in ("http", "https", "ftp")
                     if is_abs_url:
                         # An absolute URL, like in the case of DDBJ TRS implementation
@@ -926,7 +927,8 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
                     else:
                         file_url = cast(
                             "URIType",
-                            descriptor_base_url + parse.quote(file_rel_path, safe="/"),
+                            descriptor_base_url
+                            + urllib.parse.quote(file_rel_path, safe="/"),
                         )
                         absfile = abs_download_dir / file_rel_path.lstrip("/")
 
@@ -1068,7 +1070,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         """
 
         # TODO: improve this to cover the different cases
-        parsedInputURL = parse.urlparse(remote_repo.repo_url)
+        parsedInputURL = urllib.parse.urlparse(remote_repo.repo_url)
         if remote_repo.repo_type is None and parsedInputURL.scheme in (
             self.INTERNAL_TRS_SCHEME_PREFIX,
             self.TRS_SCHEME_PREFIX,
@@ -1143,7 +1145,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
         :param secContext: The security context containing the credentials
         """
 
-        parsedInputURL = parse.urlparse(remote_file)
+        parsedInputURL = urllib.parse.urlparse(remote_file)
 
         # For cases where the URI is not one of the native schemes
         # fallback to INTERNAL_TRS_SCHEME_PREFIX
@@ -1155,7 +1157,7 @@ class GA4GHTRSFetcher(AbstractSchemeRepoFetcher):
             the_remote_file = remote_file
 
         # Getting the repoRelPath (if available)
-        params = parse.parse_qs(parsedInputURL.path, separator=";")
+        params = urllib.parse.parse_qs(parsedInputURL.path, separator=";")
         repoRelPath_l = params.get("path", [])
         repoRelPath: "Optional[str]"
         if len(repoRelPath_l) > 0:

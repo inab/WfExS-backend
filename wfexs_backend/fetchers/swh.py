@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # SPDX-License-Identifier: Apache-2.0
-# Copyright 2020-2025 Barcelona Supercomputing Center (BSC), Spain
+# Copyright 2020-2026 Barcelona Supercomputing Center (BSC), Spain
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ from typing import (
     cast,
     TYPE_CHECKING,
 )
-from urllib import parse
+import urllib.parse
 
 if TYPE_CHECKING:
     import logging
@@ -50,6 +50,8 @@ if TYPE_CHECKING:
     from typing_extensions import (
         Final,
     )
+
+    from . import ParseResult_str
 
     from ..common import (
         AbsPath,
@@ -94,13 +96,17 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
     SOFTWARE_HERITAGE_SCHEME: "Final[str]" = "swh"
     SWH_API_REST: "Final[str]" = "https://archive.softwareheritage.org/api/1/"
     SWH_API_REST_KNOWN: "Final[URIType]" = cast(
-        "URIType", parse.urljoin(SWH_API_REST, "known/")
+        "URIType", urllib.parse.urljoin(SWH_API_REST, "known/")
     )
-    SWH_API_REST_RESOLVE: "Final[str]" = parse.urljoin(SWH_API_REST, "resolve/")
-    SWH_API_REST_RELEASE: "Final[str]" = parse.urljoin(SWH_API_REST, "release/")
-    SWH_API_REST_REVISION: "Final[str]" = parse.urljoin(SWH_API_REST, "revision/")
-    SWH_API_REST_VAULT_FLAT: "Final[str]" = parse.urljoin(SWH_API_REST, "vault/flat/")
-    SWH_API_REST_CONTENT: "Final[str]" = parse.urljoin(SWH_API_REST, "content/")
+    SWH_API_REST_RESOLVE: "Final[str]" = urllib.parse.urljoin(SWH_API_REST, "resolve/")
+    SWH_API_REST_RELEASE: "Final[str]" = urllib.parse.urljoin(SWH_API_REST, "release/")
+    SWH_API_REST_REVISION: "Final[str]" = urllib.parse.urljoin(
+        SWH_API_REST, "revision/"
+    )
+    SWH_API_REST_VAULT_FLAT: "Final[str]" = urllib.parse.urljoin(
+        SWH_API_REST, "vault/flat/"
+    )
+    SWH_API_REST_CONTENT: "Final[str]" = urllib.parse.urljoin(SWH_API_REST, "content/")
 
     DIR_RETRIES: "Final[int]" = 60
     WAIT_SECS: "Final[int]" = 60
@@ -134,7 +140,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         # The service does not work with quoted identifiers, neither with
         # fully unquoted identifiers. Only the semicolons have to be
         # substituted
-        swh_quoted_id = the_id.replace(";", parse.quote(";"))
+        swh_quoted_id = the_id.replace(";", urllib.parse.quote(";"))
         resio = io.BytesIO()
         # urljoin cannot be used due working with URIs
         resolve_uri = cast("URIType", cls.SWH_API_REST_RESOLVE + swh_quoted_id + "/")
@@ -172,20 +178,20 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
     @classmethod
     def GuessRepoParams(
         cls,
-        orig_wf_url: "Union[URIType, parse.ParseResult]",
+        orig_wf_url: "Union[URIType, ParseResult_str]",
         logger: "Optional[logging.Logger]" = None,
         fail_ok: "bool" = False,
         offline: "bool" = False,
     ) -> "Optional[RemoteRepo]":
         # Deciding which is the input
         wf_url: "RepoURL"
-        parsed_wf_url: "parse.ParseResult"
-        if isinstance(orig_wf_url, parse.ParseResult):
+        parsed_wf_url: "ParseResult_str"
+        if isinstance(orig_wf_url, urllib.parse.ParseResult):
             parsed_wf_url = orig_wf_url
-            wf_url = cast("RepoURL", parse.urlunparse(orig_wf_url))
+            wf_url = cast("RepoURL", urllib.parse.urlunparse(orig_wf_url))
         else:
             wf_url = cast("RepoURL", orig_wf_url)
-            parsed_wf_url = parse.urlparse(orig_wf_url)
+            parsed_wf_url = urllib.parse.urlparse(orig_wf_url)
 
         if fail_ok and parsed_wf_url.scheme not in cls.GetSchemeHandlers():
             return None
@@ -249,7 +255,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         return None
         """
 
-        parsed_wf_url = parse.urlparse(remote_repo.repo_url)
+        parsed_wf_url = urllib.parse.urlparse(remote_repo.repo_url)
         if (
             parsed_wf_url.scheme not in self.GetSchemeHandlers()
             or remote_repo.repo_type not in (RepoType.SoftwareHeritage, None)
@@ -269,7 +275,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         repoURL = cast("RepoURL", repo.tag) if repo.tag is not None else repo.repo_url
         repoTag = repo.tag
 
-        parsed_wf_url = parse.urlparse(repoURL)
+        parsed_wf_url = urllib.parse.urlparse(repoURL)
         if (
             parsed_wf_url.scheme not in self.GetSchemeHandlers()
             or repo.repo_type not in (RepoType.SoftwareHeritage, None)
@@ -323,7 +329,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
                 relio = io.BytesIO()
                 release_uri = cast(
                     "URIType",
-                    parse.urljoin(
+                    urllib.parse.urljoin(
                         self.SWH_API_REST_RELEASE,
                         object_id + "/",
                     ),
@@ -361,7 +367,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
                 revision_uri = object_uri
                 object_uri = None
             else:
-                revision_uri = parse.urljoin(
+                revision_uri = urllib.parse.urljoin(
                     self.SWH_API_REST_REVISION,
                     object_id + "/",
                 )
@@ -684,7 +690,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
         secContext: "Optional[SecurityContextConfig]" = None,
         explicit_redirects: "bool" = False,
     ) -> "ProtocolFetcherReturn":
-        parsedInputURL = parse.urlparse(remote_file)
+        parsedInputURL = urllib.parse.urlparse(remote_file)
 
         # These are the usual URIs which can be understood by pip
         # See https://pip.pypa.io/en/stable/cli/pip_install/#git
@@ -692,7 +698,7 @@ class SoftwareHeritageFetcher(AbstractSchemeRepoFetcher):
             raise FetcherException(f"FIXME: Unhandled scheme {parsedInputURL.scheme}")
 
         # Getting the repoRelPath (if available)
-        params = parse.parse_qs(parsedInputURL.path, separator=";")
+        params = urllib.parse.parse_qs(parsedInputURL.path, separator=";")
         repoRelPath_l = params.get("path", [])
         repoRelPath: "Optional[str]"
         if len(repoRelPath_l) > 0:

@@ -25,6 +25,7 @@ import os
 import os.path
 import pathlib
 import shutil
+import sys
 import traceback
 import urllib.parse
 import uuid
@@ -63,6 +64,8 @@ if TYPE_CHECKING:
         WritableSecurityContextConfig,
         URIType,
     )
+
+    from .fetchers import ParseResult_str
 
     from .security_context import (
         SecurityContextVault,
@@ -453,7 +456,7 @@ class CacheHandler:
 
     def inject(
         self,
-        the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
+        the_remote_file: "Union[LicensedURI, ParseResult_str, URIType]",
         cache_dir: "Optional[pathlib.Path]" = None,
         fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
         finalCachedFilename: "Optional[pathlib.Path]" = None,
@@ -508,7 +511,7 @@ class CacheHandler:
     def _inject(
         self,
         hashDir: "pathlib.Path",
-        the_remote_file: "Union[LicensedURI, urllib.parse.ParseResult, URIType]",
+        the_remote_file: "Union[LicensedURI, ParseResult_str, URIType]",
         cache_dir: "pathlib.Path",
         fetched_metadata_array: "Optional[Sequence[URIWithMetadata]]" = None,
         finalCachedFilename: "Optional[pathlib.Path]" = None,
@@ -733,7 +736,7 @@ class CacheHandler:
 
     def fetch(
         self,
-        remote_file: "Union[AnyURI, urllib.parse.ParseResult, Sequence[AnyURI], Sequence[urllib.parse.ParseResult]]",
+        remote_file: "Union[AnyURI, ParseResult_str, Sequence[AnyURI], Sequence[ParseResult_str]]",
         offline: "bool",
         cache_dir: "Optional[pathlib.Path]" = None,
         ignoreCache: "bool" = False,
@@ -781,10 +784,16 @@ class CacheHandler:
         )
 
         # This is an iterative process, where the URI is resolved and peeled until a basic fetching protocol is reached
-        # inputKind: "Union[ContentKind, LicensedURI, urllib.parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[urllib.parse.ParseResult], Sequence[URIType]]" = remote_file
+        # inputKind: "Union[ContentKind, LicensedURI, ParseResult_str, URIType, Sequence[LicensedURI], Sequence[ParseResult_str], Sequence[URIType]]" = remote_file
         inputKind: "Union[ContentKind, AnyURI, Sequence[AnyURI]]"
         if isinstance(remote_file, urllib.parse.ParseResult):
-            inputKind = cast("URIType", urllib.parse.urlunparse(remote_file))
+            # This is needed to pass a mypy check
+            remote_file_copy: "ParseResult_str"
+            if sys.version_info < (3, 15):
+                remote_file_copy = remote_file
+            else:
+                remote_file_copy = cast("ParseResult_str", remote_file)
+            inputKind = cast("URIType", urllib.parse.urlunparse(remote_file_copy))
         elif isinstance(remote_file, LicensedURI):
             inputKind = remote_file
         elif isinstance(remote_file, (list, tuple)):

@@ -134,6 +134,8 @@ if TYPE_CHECKING:
         ProcessorArchitecture,
     )
 
+    from .fetchers import ParseResult_str
+
     from .workflow_engines import (
         AbstractWorkflowEngineType,
         WorkflowEngineVersionStr,
@@ -2294,7 +2296,7 @@ class WF:
     def __gen_mat_content(
         pretty_local_exp: "pathlib.Path",
         matContent: "MaterializedContent",
-        matParse: "urllib.parse.ParseResult",
+        matParse: "ParseResult_str",
         rel_path: "str",
         reference_size: "Optional[int]",
         reference_mime: "Optional[str]",

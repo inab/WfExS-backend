@@ -43,7 +43,6 @@ from typing import (
     Pattern,
     TYPE_CHECKING,
 )
-from urllib import parse
 
 # We have preference for the C based loader and dumper, but the code
 # should fallback to default implementations when C ones are not present
@@ -190,6 +189,8 @@ if TYPE_CHECKING:
         URIType,
         WfExSInstanceId,
     )
+
+    from .fetchers import ParseResult_str
 
     from .workflow_engines import (
         AbstractWorkflowEngineType,
@@ -1665,7 +1666,7 @@ class WfExSBackend:
 
     def cacheFetch(
         self,
-        remote_file: "Union[LicensedURI, parse.ParseResult, URIType, Sequence[LicensedURI], Sequence[parse.ParseResult], Sequence[URIType]]",
+        remote_file: "Union[LicensedURI, ParseResult_str, URIType, Sequence[LicensedURI], Sequence[ParseResult_str], Sequence[URIType]]",
         cacheType: "CacheType",
         offline: "bool",
         ignoreCache: "bool" = False,
@@ -1742,7 +1743,7 @@ class WfExSBackend:
 
     def guess_repo_params(
         self,
-        wf_url: "Union[URIType, parse.ParseResult]",
+        wf_url: "Union[URIType, ParseResult_str]",
         fail_ok: "bool" = False,
         offline: "bool" = False,
         ignoreCache: "bool" = False,
@@ -1791,7 +1792,7 @@ class WfExSBackend:
             except Exception as e:
                 self.logger.debug(f"Guessed {wf_url} not cached (exception {e})")
 
-        if isinstance(wf_url, parse.ParseResult):
+        if isinstance(wf_url, urllib.parse.ParseResult):
             parsedRepoURL = wf_url
         else:
             parsedRepoURL = urllib.parse.urlparse(wf_url)
@@ -2471,13 +2472,13 @@ class WfExSBackend:
         ), "The list of remote URIs to download should have at least one element"
 
         firstURI: "Optional[LicensedURI]" = None
-        firstParsedURI: "Optional[parse.ParseResult]" = None
+        firstParsedURI: "Optional[ParseResult_str]" = None
         remote_uris: "MutableSequence[URIType]" = []
         # Brief validation of correct uris
         for remote_uri_e in remote_uris_e:
             remote_uri = remote_uri_e.uri
 
-            parsedURI = parse.urlparse(remote_uri)
+            parsedURI = urllib.parse.urlparse(remote_uri)
             validableComponents = [parsedURI.scheme, parsedURI.path]
             if not all(validableComponents):
                 raise RuntimeError(
